@@ -1,2 +1,14 @@
 __pycache__/
 *.py[cod]
+
+# macOS filesystem metadata
+.DS_Store
+
+# LaTeX build artifacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
