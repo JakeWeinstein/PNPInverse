@@ -11,7 +11,7 @@ def generate_noisy_data(solver_params, noise_std=0.01, seed=None, print_interval
     ----------
     solver_params : list
         [n_species, order, dt, t_end, z_vals, D_vals,
-         a_vals, phi_applied, c0, phi0, params]
+         a_vals, phi_applied, c0_vals, phi0, params]
     noise_std : float, optional
         Standard deviation of additive Gaussian noise applied to each vector.
     seed : int, optional

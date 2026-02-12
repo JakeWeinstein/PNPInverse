@@ -1,0 +1,2736 @@
+d0,d1,success,time_s,failure_reason,failure_reason_short,nonlinear_iters,log_tail
+0.01,0.2,True,0.892287499998929,,Unknown,,step 0
+0.01,0.236674,True,1.006487874998129,,Unknown,,step 0
+0.01,0.280072,True,1.1014202079968527,,Unknown,,step 0
+0.01,0.331428,True,0.9116883749957196,,Unknown,,step 0
+0.01,0.392202,True,0.9420697499954258,,Unknown,,step 0
+0.01,0.464119,True,1.031056541003636,,Unknown,,step 0
+0.01,0.549224,False,0.9254583330039168,"ConvergenceError: Nonlinear solve failed to converge after 16 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,16,step 0
+0.01,0.649934,True,1.2117464580005617,,Unknown,,step 0
+0.01,0.769111,True,1.2247267499988084,,Unknown,,step 0
+0.01,0.910142,True,1.328845458003343,,Unknown,,step 0
+0.01,1.0,False,0.959194708004361,"ConvergenceError: Nonlinear solve failed to converge after 25 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,25,step 0
+0.01,1.061471,False,1.0051075420051347,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+0.01,1.077033,False,1.5142073329989216,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.01,1.12672,False,0.9722193339985097,"ConvergenceError: Nonlinear solve failed to converge after 26 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,26,step 0
+0.01,1.19598,False,1.0389959169988288,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+0.01,1.269498,False,1.3074314999976195,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.01,1.274526,False,0.9961239170006593,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.01,1.347535,False,1.1071844170000986,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+0.01,1.430369,False,1.2934985000028973,"ConvergenceError: Nonlinear solve failed to converge after 48 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,48,step 0
+0.01,1.508234,False,1.1409959590018843,"ConvergenceError: Nonlinear solve failed to converge after 18 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,18,step 0
+0.01,1.518294,False,1.1319209579960443,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.01,1.611625,False,1.1080605840033968,"ConvergenceError: Nonlinear solve failed to converge after 25 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,25,step 0
+0.01,1.710693,False,1.085679750001873,"ConvergenceError: Nonlinear solve failed to converge after 24 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,24,step 0
+0.01,1.784796,False,1.199167207996652,"ConvergenceError: Nonlinear solve failed to converge after 6 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,6,step 0
+0.01,1.81585,False,1.085603749997972,"ConvergenceError: Nonlinear solve failed to converge after 23 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,23,step 0
+0.01,1.927472,False,1.3082157080061734,"ConvergenceError: Nonlinear solve failed to converge after 46 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,46,step 0
+0.01,2.0,False,1.0498000419975142,"ConvergenceError: Nonlinear solve failed to converge after 17 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,17,step 0
+0.01,2.045955,False,1.121849499999371,"ConvergenceError: Nonlinear solve failed to converge after 18 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,18,step 0
+0.01,2.066933,False,1.0845835420041112,"ConvergenceError: Nonlinear solve failed to converge after 16 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,16,step 0
+0.01,2.11207,False,1.0942567079982837,"ConvergenceError: Nonlinear solve failed to converge after 16 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,16,step 0
+0.01,2.136106,False,1.123620000005758,"ConvergenceError: Nonlinear solve failed to converge after 13 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,13,step 0
+0.01,2.171721,False,1.0250253330013948,"ConvergenceError: Nonlinear solve failed to converge after 11 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,11,step 0
+0.01,2.207593,False,0.9705062080029165,"ConvergenceError: Nonlinear solve failed to converge after 27 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,27,step 0
+0.01,2.281473,False,0.9577900000003865,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.01,2.305218,False,1.0716906249945168,"ConvergenceError: Nonlinear solve failed to converge after 25 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,25,step 0
+0.01,2.357826,False,0.9656035840016557,"ConvergenceError: Nonlinear solve failed to converge after 26 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,26,step 0
+0.01,2.436734,False,0.9835046250009327,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+0.01,2.446921,False,0.9572817080043023,"ConvergenceError: Nonlinear solve failed to converge after 27 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,27,step 0
+0.01,2.499357,False,0.9235419169999659,"ConvergenceError: Nonlinear solve failed to converge after 20 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,20,step 0
+0.01,2.518283,False,1.1107344580013887,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.01,2.597335,False,1.0726066249990254,"ConvergenceError: Nonlinear solve failed to converge after 23 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,23,step 0
+0.01,2.602561,False,1.1789821249985835,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+0.01,2.689659,False,0.9899099999965983,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+0.01,2.756995,False,1.0722897079976974,"ConvergenceError: Nonlinear solve failed to converge after 45 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,45,step 0
+0.01,2.779672,False,0.9674372500012396,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+0.01,2.872698,False,1.212830500000564,"ConvergenceError: Nonlinear solve failed to converge after 58 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,58,step 0
+0.01,2.92647,False,1.016193833995203,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+0.01,2.957659,False,1.2142786670010537,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+0.01,2.968836,False,0.9938865830044961,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.01,3.068193,False,0.9772549170011189,"ConvergenceError: Nonlinear solve failed to converge after 26 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,26,step 0
+0.01,3.106362,False,1.034096707997378,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+0.01,3.170874,False,1.246066667001287,"ConvergenceError: Nonlinear solve failed to converge after 62 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,62,step 0
+0.01,3.276992,False,1.0210706660000142,"ConvergenceError: Nonlinear solve failed to converge after 24 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,24,step 0
+0.01,3.297312,False,0.9625802499940619,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.01,3.386661,False,0.9673573330001091,"ConvergenceError: Nonlinear solve failed to converge after 26 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,26,step 0
+0.01,3.5,False,1.001869625004474,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+0.011802,2.0,False,1.540970541005663,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,2.066933,False,1.5393416250008158,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,2.136106,False,1.4929471670038765,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,2.207593,False,1.4903949170038686,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,2.281473,False,1.4982730830015498,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,2.357826,False,1.567848792001314,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,2.436734,False,1.505352624997613,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,2.518283,False,1.5232035830049426,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,2.602561,False,1.518342291994486,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,2.689659,False,1.5230071249970933,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,2.779672,False,1.5479087919957237,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,2.872698,False,1.5965888749997248,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,2.968836,False,1.6280798750012764,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,3.068193,False,1.5771083340005134,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,3.170874,False,1.6003557080039172,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,3.276992,False,1.597021624998888,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,3.386661,False,1.5638512919977074,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.011802,3.5,False,1.679983624999295,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,1.0,True,1.3945735420056735,,Unknown,,step 0
+0.012058,1.061471,True,1.366245124998386,,Unknown,,step 0
+0.012058,1.12672,True,1.3440328340002452,,Unknown,,step 0
+0.012058,1.19598,True,1.3785753340052906,,Unknown,,step 0
+0.012058,1.269498,True,1.474677458005317,,Unknown,,step 0
+0.012058,1.347535,True,1.6576669589994708,,Unknown,,step 0
+0.012058,1.430369,False,1.7179901670024265,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,1.518294,False,1.5275778750001336,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,1.611625,False,1.7095814589993097,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,1.710693,False,1.487119375000475,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,1.81585,False,1.5192540830030339,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,1.927472,False,1.8695663340040483,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,2.045955,False,1.5910408750060014,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,2.171721,False,1.6740123329946073,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,2.305218,False,1.585223957998096,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,2.446921,False,1.6029764160048217,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,2.597335,False,1.6240823749976698,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,2.756995,False,1.6059873749982216,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,2.92647,False,1.628821042002528,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,3.106362,False,1.6432956669959822,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,3.297312,False,1.7986447079965728,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.012058,3.5,False,1.6832998339959886,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,2.0,False,1.740126999997301,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,2.066933,False,1.6335790840021218,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,2.136106,False,1.5192757080003503,"ConvergenceError: Nonlinear solve failed to converge after 56 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,56,step 0
+0.013928,2.207593,False,1.333583166997414,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,2.281473,False,1.4660590840067016,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,2.357826,False,1.4160150419993442,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,2.436734,False,1.432529459001671,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,2.518283,False,1.4674487500014948,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,2.602561,False,1.427692917000968,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,2.689659,False,1.4215188330053934,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,2.779672,False,1.4848777919978602,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,2.872698,False,1.4668529580012546,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,2.968836,False,1.4016019999980927,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,3.068193,False,1.5525368340022396,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,3.170874,False,1.5701697499971488,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,3.276992,False,1.4616979579950566,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,3.386661,False,1.5077088749967515,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013928,3.5,False,1.373902209001244,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013987,0.2,True,0.9251384579984006,,Unknown,,step 0
+0.013987,0.236674,True,0.9440713750009309,,Unknown,,step 0
+0.013987,0.280072,True,0.9562358749972191,,Unknown,,step 0
+0.013987,0.331428,True,0.9494174999999814,,Unknown,,step 0
+0.013987,0.392202,True,1.519204958996852,,Unknown,,step 0
+0.013987,0.464119,True,1.218922082996869,,Unknown,,step 0
+0.013987,0.549224,True,1.3295514580022427,,Unknown,,step 0
+0.013987,0.649934,True,1.2715624159973231,,Unknown,,step 0
+0.013987,0.769111,True,1.33048837500246,,Unknown,,step 0
+0.013987,0.910142,True,1.3288187080033822,,Unknown,,step 0
+0.013987,1.077033,True,1.3695777920002001,,Unknown,,step 0
+0.013987,1.274526,True,1.5518234580013086,,Unknown,,step 0
+0.013987,1.508234,True,1.6934635000070557,,Unknown,,step 0
+0.013987,1.784796,False,1.7415105830004904,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013987,2.11207,False,1.6204137500026263,"ConvergenceError: Nonlinear solve failed to converge after 56 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,56,step 0
+0.013987,2.499357,False,1.3976570829981938,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013987,2.957659,False,1.407956542003376,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.013987,3.5,False,1.3782105420032167,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,1.0,True,1.2783975420024944,,Unknown,,step 0
+0.014539,1.061471,True,1.3172564999986207,,Unknown,,step 0
+0.014539,1.12672,True,1.3197722080003587,,Unknown,,step 0
+0.014539,1.19598,True,1.3998494589977781,,Unknown,,step 0
+0.014539,1.269498,True,1.4660464160042466,,Unknown,,step 0
+0.014539,1.347535,True,1.4612772920008865,,Unknown,,step 0
+0.014539,1.430369,True,1.4830461660021683,,Unknown,,step 0
+0.014539,1.518294,True,1.5743445830012206,,Unknown,,step 0
+0.014539,1.611625,True,1.6671685419933056,,Unknown,,step 0
+0.014539,1.710693,False,1.663536332998774,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,1.81585,False,1.5854580410014023,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,1.927472,False,1.707523165998282,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,2.045955,False,1.3584134169941535,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,2.171721,False,1.3710723750045872,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,2.305218,False,1.378978749999078,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,2.446921,False,1.3918182909983443,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,2.597335,False,1.4584597080029198,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,2.756995,False,1.56995870800165,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,2.92647,False,1.4833114579960238,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,3.106362,False,1.402410417002102,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,3.297312,False,1.4854847500027972,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.014539,3.5,False,1.5386262920001172,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,2.0,True,1.6635951669959468,,Unknown,,step 0
+0.016438,2.066933,True,1.6656628750060918,,Unknown,,step 0
+0.016438,2.136106,False,1.6524464170070132,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,2.207593,False,1.3522418749998906,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,2.281473,False,1.3497555829962948,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,2.357826,False,1.3908642080059508,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,2.436734,False,1.3452827500004787,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,2.518283,False,1.354212042002473,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,2.602561,False,1.351296499997261,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,2.689659,False,1.347821916002431,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,2.779672,False,1.3697834580016206,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,2.872698,False,1.4839633329975186,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,2.968836,False,1.5919693750038277,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,3.068193,False,1.4330660830019042,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,3.170874,False,1.3775798749993555,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,3.276992,False,1.3390056250063935,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,3.386661,False,1.337167290999787,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.016438,3.5,False,1.5603689159979695,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.017531,1.0,True,1.3844521249993704,,Unknown,,step 0
+0.017531,1.061471,True,1.2604275410049013,,Unknown,,step 0
+0.017531,1.12672,True,1.3175669999982347,,Unknown,,step 0
+0.017531,1.19598,True,1.3260569999984,,Unknown,,step 0
+0.017531,1.269498,True,1.3171016659980523,,Unknown,,step 0
+0.017531,1.347535,True,1.3975788750030915,,Unknown,,step 0
+0.017531,1.430369,True,1.4622579580027377,,Unknown,,step 0
+0.017531,1.518294,True,1.5250919579993933,,Unknown,,step 0
+0.017531,1.611625,True,1.4653360419979435,,Unknown,,step 0
+0.017531,1.710693,True,1.415909041003033,,Unknown,,step 0
+0.017531,1.81585,True,1.365849291003542,,Unknown,,step 0
+0.017531,1.927472,True,1.6156817500013858,,Unknown,,step 0
+0.017531,2.045955,True,1.5369472079983098,,Unknown,,step 0
+0.017531,2.171721,False,1.3030547500020475,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.017531,2.305218,False,1.3717068750047474,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.017531,2.446921,False,1.3278719580048346,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.017531,2.597335,False,1.403312750000623,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.017531,2.756995,False,1.347654582998075,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.017531,2.92647,False,1.4233632500036038,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.017531,3.106362,False,1.3726730830021552,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.017531,3.297312,False,1.3418073749999166,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.017531,3.5,False,1.455295916995965,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,2.0,True,1.5196682499954477,,Unknown,,step 0
+0.019399,2.066933,True,1.5773027089962852,,Unknown,,step 0
+0.019399,2.136106,True,1.5954485420006677,,Unknown,,step 0
+0.019399,2.207593,False,1.3133650829986436,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,2.281473,False,1.310595832997933,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,2.357826,False,1.4429612500025542,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,2.436734,False,1.3613254160009092,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,2.518283,False,1.443244207999669,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,2.602561,False,1.43584374999773,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,2.689659,False,1.436791958003596,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,2.779672,False,1.426597915997263,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,2.872698,False,1.441634790993703,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,2.968836,False,1.4867809159986791,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,3.068193,False,1.4358376250020228,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,3.170874,False,1.5266669580014423,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,3.276992,False,1.529015582993452,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,3.386661,False,1.57042520899995,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019399,3.5,False,1.6056048329992336,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019563,0.2,True,0.9827717090010992,,Unknown,,step 0
+0.019563,0.236674,True,0.9294706249929732,,Unknown,,step 0
+0.019563,0.280072,True,1.1056378339999355,,Unknown,,step 0
+0.019563,0.331428,True,1.1934807500001625,,Unknown,,step 0
+0.019563,0.392202,True,0.994598124998447,,Unknown,,step 0
+0.019563,0.464119,True,1.2839060410042293,,Unknown,,step 0
+0.019563,0.549224,True,1.231545874994481,,Unknown,,step 0
+0.019563,0.649934,True,1.171966917005193,,Unknown,,step 0
+0.019563,0.769111,True,1.1690935830047238,,Unknown,,step 0
+0.019563,0.910142,True,1.160830499997246,,Unknown,,step 0
+0.019563,1.077033,True,1.3262606670032255,,Unknown,,step 0
+0.019563,1.274526,True,1.2750987500039628,,Unknown,,step 0
+0.019563,1.508234,True,1.3885013750041253,,Unknown,,step 0
+0.019563,1.784796,True,1.4553030000024592,,Unknown,,step 0
+0.019563,2.11207,True,1.6263491670033545,,Unknown,,step 0
+0.019563,2.499357,False,1.4076745419952204,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019563,2.957659,False,1.4027820409974083,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.019563,3.5,False,1.3550418750019162,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.02,0.3,True,0.9217115840001497,,Unknown,,step 0
+0.02,0.376923,True,0.9934175419984967,,Unknown,,step 0
+0.02,0.453846,True,1.1199649999980466,,Unknown,,step 0
+0.02,0.530769,True,1.1785381660010898,,Unknown,,step 0
+0.02,0.607692,True,1.1530633329966804,,Unknown,,step 0
+0.02,0.684615,True,1.1680148329978692,,Unknown,,step 0
+0.02,0.761538,True,1.2030914170027245,,Unknown,,step 0
+0.02,0.838462,True,1.2064476669984288,,Unknown,,step 0
+0.02,0.915385,True,1.211580542003503,,Unknown,,step 0
+0.02,0.992308,True,1.2247327500008396,,Unknown,,step 0
+0.02,1.069231,True,1.249205542000709,,Unknown,,step 0
+0.02,1.146154,True,1.2265562920001685,,Unknown,,step 0
+0.02,1.223077,True,1.3022640839990345,,Unknown,,step 0
+0.02,1.3,True,1.238916458998574,,Unknown,,step 0
+0.021138,1.0,True,1.1925583339980221,,Unknown,,step 0
+0.021138,1.061471,True,1.2270076659988263,,Unknown,,step 0
+0.021138,1.12672,True,1.2330848749988945,,Unknown,,step 0
+0.021138,1.19598,True,1.369357208997826,,Unknown,,step 0
+0.021138,1.269498,True,1.406032207996759,,Unknown,,step 0
+0.021138,1.347535,True,1.2419774579975638,,Unknown,,step 0
+0.021138,1.430369,True,1.2352142499948968,,Unknown,,step 0
+0.021138,1.518294,True,1.2673597920002067,,Unknown,,step 0
+0.021138,1.611625,True,1.289245749998372,,Unknown,,step 0
+0.021138,1.710693,True,1.3761592500013649,,Unknown,,step 0
+0.021138,1.81585,True,1.468826791999163,,Unknown,,step 0
+0.021138,1.927472,True,1.4484769999980927,,Unknown,,step 0
+0.021138,2.045955,True,1.4971248330039089,,Unknown,,step 0
+0.021138,2.171721,True,1.4904039589964668,,Unknown,,step 0
+0.021138,2.305218,True,1.539621249998163,,Unknown,,step 0
+0.021138,2.446921,False,1.3115432920021703,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.021138,2.597335,False,1.3117700840011821,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.021138,2.756995,False,1.3127274159996887,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.021138,2.92647,False,1.3298964579953463,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.021138,3.106362,False,1.3565159580030013,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.021138,3.297312,False,1.3317640000022948,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.021138,3.5,False,1.3463633330029552,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.022894,2.0,True,1.424906167005247,,Unknown,,step 0
+0.022894,2.066933,True,1.391465499997139,,Unknown,,step 0
+0.022894,2.136106,True,1.4093895840051118,,Unknown,,step 0
+0.022894,2.207593,True,1.4231217080014176,,Unknown,,step 0
+0.022894,2.281473,True,1.4804561659984756,,Unknown,,step 0
+0.022894,2.357826,True,1.4443637090007542,,Unknown,,step 0
+0.022894,2.436734,True,1.4977045839987113,,Unknown,,step 0
+0.022894,2.518283,True,1.510682790998544,,Unknown,,step 0
+0.022894,2.602561,False,1.3086067920012283,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.022894,2.689659,False,1.3083370410022326,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.022894,2.779672,False,1.317118874998414,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.022894,2.872698,False,1.315802958997665,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.022894,2.968836,False,1.3283338340042974,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.022894,3.068193,False,1.3257772919969284,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.022894,3.170874,False,1.3258229169950937,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.022894,3.276992,False,1.3313866250027786,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.022894,3.386661,False,1.3452389170051902,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.022894,3.5,False,1.335487208001723,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.025488,1.0,True,1.172357291005028,,Unknown,,step 0
+0.025488,1.061471,True,1.1491326249961276,,Unknown,,step 0
+0.025488,1.12672,True,1.1480305419972865,,Unknown,,step 0
+0.025488,1.19598,True,1.1400023750029504,,Unknown,,step 0
+0.025488,1.269498,True,1.128382667004189,,Unknown,,step 0
+0.025488,1.347535,True,1.152127790999657,,Unknown,,step 0
+0.025488,1.430369,True,1.1821795830037445,,Unknown,,step 0
+0.025488,1.518294,True,1.1715518339988193,,Unknown,,step 0
+0.025488,1.611625,True,1.2442176659969846,,Unknown,,step 0
+0.025488,1.710693,True,1.2608189579987084,,Unknown,,step 0
+0.025488,1.81585,True,1.3038278329986497,,Unknown,,step 0
+0.025488,1.927472,True,1.329082208998443,,Unknown,,step 0
+0.025488,2.045955,True,1.3742824159999145,,Unknown,,step 0
+0.025488,2.171721,True,1.441540250001708,,Unknown,,step 0
+0.025488,2.305218,True,1.4226069169963012,,Unknown,,step 0
+0.025488,2.446921,True,1.4797857500016107,,Unknown,,step 0
+0.025488,2.597335,True,1.458262084001035,,Unknown,,step 0
+0.025488,2.756995,True,1.5827248749992577,,Unknown,,step 0
+0.025488,2.92647,True,1.5014807500047027,,Unknown,,step 0
+0.025488,3.106362,True,1.486023416997341,,Unknown,,step 0
+0.025488,3.297312,True,1.4678542080000625,,Unknown,,step 0
+0.025488,3.5,True,1.4595623749992228,,Unknown,,step 0
+0.027019,2.0,True,1.3268271249980899,,Unknown,,step 0
+0.027019,2.066933,True,1.3031030829952215,,Unknown,,step 0
+0.027019,2.136106,True,1.3155421250048676,,Unknown,,step 0
+0.027019,2.207593,True,1.3513441660034005,,Unknown,,step 0
+0.027019,2.281473,True,1.3142912080002134,,Unknown,,step 0
+0.027019,2.357826,True,1.3259390420062118,,Unknown,,step 0
+0.027019,2.436734,True,1.4205603750015143,,Unknown,,step 0
+0.027019,2.518283,True,1.3906477080017794,,Unknown,,step 0
+0.027019,2.602561,True,1.3784295419973205,,Unknown,,step 0
+0.027019,2.689659,True,1.38337737499387,,Unknown,,step 0
+0.027019,2.779672,True,1.374195582997345,,Unknown,,step 0
+0.027019,2.872698,True,1.3821791660011513,,Unknown,,step 0
+0.027019,2.968836,True,1.3859893750050105,,Unknown,,step 0
+0.027019,3.068193,True,1.369111708998389,,Unknown,,step 0
+0.027019,3.170874,True,1.395720499996969,,Unknown,,step 0
+0.027019,3.276992,True,1.3941500410001026,,Unknown,,step 0
+0.027019,3.386661,True,1.3785306669960846,,Unknown,,step 0
+0.027019,3.5,True,1.393855957998312,,Unknown,,step 0
+0.027361,0.2,True,0.8977175830004853,,Unknown,,step 0
+0.027361,0.236674,True,0.9030341660036356,,Unknown,,step 0
+0.027361,0.280072,True,0.9048841659969185,,Unknown,,step 0
+0.027361,0.331428,True,0.9233351250004489,,Unknown,,step 0
+0.027361,0.392202,True,0.942905999996583,,Unknown,,step 0
+0.027361,0.464119,True,1.0256640000006882,,Unknown,,step 0
+0.027361,0.549224,True,1.033337875000143,,Unknown,,step 0
+0.027361,0.649934,True,1.0722046669980045,,Unknown,,step 0
+0.027361,0.769111,True,1.0940372080003726,,Unknown,,step 0
+0.027361,0.910142,True,1.1241873749968363,,Unknown,,step 0
+0.027361,1.077033,True,1.1352837920057937,,Unknown,,step 0
+0.027361,1.274526,True,1.1146982919963193,,Unknown,,step 0
+0.027361,1.508234,True,1.1511629580054432,,Unknown,,step 0
+0.027361,1.784796,True,1.311050875003275,,Unknown,,step 0
+0.027361,2.11207,True,1.3143458330014255,,Unknown,,step 0
+0.027361,2.499357,True,1.3643042920011794,,Unknown,,step 0
+0.027361,2.957659,True,1.3898472919972846,,Unknown,,step 0
+0.027361,3.5,False,1.3537890829975368,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.030733,1.0,True,1.1152173750015208,,Unknown,,step 0
+0.030733,1.061471,True,1.112745582999196,,Unknown,,step 0
+0.030733,1.12672,True,1.1184950829992886,,Unknown,,step 0
+0.030733,1.19598,True,1.1046374580037082,,Unknown,,step 0
+0.030733,1.269498,True,1.114892375000636,,Unknown,,step 0
+0.030733,1.347535,True,1.1362356659956276,,Unknown,,step 0
+0.030733,1.430369,True,1.154011625003477,,Unknown,,step 0
+0.030733,1.518294,True,1.350523291999707,,Unknown,,step 0
+0.030733,1.611625,True,1.1649018750031246,,Unknown,,step 0
+0.030733,1.710693,True,1.2909662079982809,,Unknown,,step 0
+0.030733,1.81585,True,1.3440552500032936,,Unknown,,step 0
+0.030733,1.927472,True,1.3832320000001346,,Unknown,,step 0
+0.030733,2.045955,True,1.484899167000549,,Unknown,,step 0
+0.030733,2.171721,True,1.347759167001641,,Unknown,,step 0
+0.030733,2.305218,False,1.182865958995535,"ConvergenceError: Nonlinear solve failed to converge after 33 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,33,step 0
+0.030733,2.446921,True,1.4316830839961767,,Unknown,,step 0
+0.030733,2.597335,False,1.228993292002997,"ConvergenceError: Nonlinear solve failed to converge after 48 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,48,step 0
+0.030733,2.756995,True,2.027721541999199,,Unknown,,step 0
+0.030733,2.92647,True,1.2868465409992496,,Unknown,,step 0
+0.030733,3.106362,False,1.1230331660044612,"ConvergenceError: Nonlinear solve failed to converge after 42 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,42,step 0
+0.030733,3.297312,False,0.9455089580005733,"ConvergenceError: Nonlinear solve failed to converge after 17 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,17,step 0
+0.030733,3.5,False,0.9006714170027408,"ConvergenceError: Nonlinear solve failed to converge after 12 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,12,step 0
+0.031887,2.0,True,1.321134958001494,,Unknown,,step 0
+0.031887,2.066933,False,1.464229917000921,"ConvergenceError: Nonlinear solve failed to converge after 78 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,78,step 0
+0.031887,2.136106,False,1.2536341670056572,"ConvergenceError: Nonlinear solve failed to converge after 59 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,59,step 0
+0.031887,2.207593,False,0.9223646249956801,"ConvergenceError: Nonlinear solve failed to converge after 17 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,17,step 0
+0.031887,2.281473,False,1.0185800420003943,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+0.031887,2.357826,False,1.278452416001528,"ConvergenceError: Nonlinear solve failed to converge after 55 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,55,step 0
+0.031887,2.436734,False,1.0957238329938264,"ConvergenceError: Nonlinear solve failed to converge after 40 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,40,step 0
+0.031887,2.518283,False,1.3176328749977984,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.031887,2.602561,True,1.3318293749980512,,Unknown,,step 0
+0.031887,2.689659,False,1.196126249997178,"ConvergenceError: Nonlinear solve failed to converge after 38 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,38,step 0
+0.031887,2.779672,True,1.8227721250004834,,Unknown,,step 0
+0.031887,2.872698,True,1.4659764579992043,,Unknown,,step 0
+0.031887,2.968836,True,1.4751896659945487,,Unknown,,step 0
+0.031887,3.068193,False,1.3830376249970868,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.031887,3.170874,True,1.5183844999992289,,Unknown,,step 0
+0.031887,3.276992,False,1.5862280829969677,"ConvergenceError: Nonlinear solve failed to converge after 17 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,17,step 0
+0.031887,3.386661,False,1.4027670419964124,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.031887,3.5,False,0.9260938750012428,"ConvergenceError: Nonlinear solve failed to converge after 15 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,15,step 0
+0.037057,1.0,True,1.1292273329963791,,Unknown,,step 0
+0.037057,1.061471,True,1.1001688340038527,,Unknown,,step 0
+0.037057,1.12672,True,1.324774000000616,,Unknown,,step 0
+0.037057,1.19598,True,1.119824958004756,,Unknown,,step 0
+0.037057,1.269498,True,1.1124362079935963,,Unknown,,step 0
+0.037057,1.347535,True,1.192955417005578,,Unknown,,step 0
+0.037057,1.430369,True,1.1286848749950877,,Unknown,,step 0
+0.037057,1.518294,True,1.1977102090022527,,Unknown,,step 0
+0.037057,1.611625,False,1.3943639999997686,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.037057,1.710693,False,1.0057382079976378,"ConvergenceError: Nonlinear solve failed to converge after 27 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,27,step 0
+0.037057,1.81585,False,0.9763975419991766,"ConvergenceError: Nonlinear solve failed to converge after 25 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,25,step 0
+0.037057,1.927472,False,0.9716310420044465,"ConvergenceError: Nonlinear solve failed to converge after 23 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,23,step 0
+0.037057,2.045955,False,1.460643041995354,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.037057,2.171721,False,1.0366534170025261,"ConvergenceError: Nonlinear solve failed to converge after 27 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,27,step 0
+0.037057,2.305218,False,1.0526534169985098,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+0.037057,2.446921,False,0.9314196249979432,"ConvergenceError: Nonlinear solve failed to converge after 16 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,16,step 0
+0.037057,2.597335,False,0.9788501659932081,"ConvergenceError: Nonlinear solve failed to converge after 21 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,21,step 0
+0.037057,2.756995,False,0.886921290999453,"ConvergenceError: Nonlinear solve failed to converge after 8 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,8,step 0
+0.037057,2.92647,False,1.039654166001128,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.037057,3.106362,False,1.0701709170025424,"ConvergenceError: Nonlinear solve failed to converge after 33 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,33,step 0
+0.037057,3.297312,False,0.9919859170040581,"ConvergenceError: Nonlinear solve failed to converge after 23 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,23,step 0
+0.037057,3.5,False,0.9484688329976052,"ConvergenceError: Nonlinear solve failed to converge after 16 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,16,step 0
+0.037633,2.0,False,1.1133740410004975,"ConvergenceError: Nonlinear solve failed to converge after 43 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,43,step 0
+0.037633,2.066933,False,1.304563750003581,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.037633,2.136106,False,0.9099372909986414,"ConvergenceError: Nonlinear solve failed to converge after 11 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,11,step 0
+0.037633,2.207593,False,0.9262376250044326,"ConvergenceError: Nonlinear solve failed to converge after 18 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,18,step 0
+0.037633,2.281473,False,0.9292901660010102,"ConvergenceError: Nonlinear solve failed to converge after 19 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,19,step 0
+0.037633,2.357826,False,0.9972015000021202,"ConvergenceError: Nonlinear solve failed to converge after 19 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,19,step 0
+0.037633,2.436734,False,0.9465744999979506,"ConvergenceError: Nonlinear solve failed to converge after 20 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,20,step 0
+0.037633,2.518283,False,0.914433125006326,"ConvergenceError: Nonlinear solve failed to converge after 14 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,14,step 0
+0.037633,2.602561,False,0.9864632089957013,"ConvergenceError: Nonlinear solve failed to converge after 18 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,18,step 0
+0.037633,2.689659,False,0.8782861250001588,"ConvergenceError: Nonlinear solve failed to converge after 11 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,11,step 0
+0.037633,2.779672,False,0.9161784999960219,"ConvergenceError: Nonlinear solve failed to converge after 15 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,15,step 0
+0.037633,2.872698,False,1.227470166006242,"ConvergenceError: Nonlinear solve failed to converge after 52 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,52,step 0
+0.037633,2.968836,False,1.2006125830012024,"ConvergenceError: Nonlinear solve failed to converge after 44 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,44,step 0
+0.037633,3.068193,False,1.0295458330001566,"ConvergenceError: Nonlinear solve failed to converge after 24 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,24,step 0
+0.037633,3.170874,False,1.1419305829986115,"ConvergenceError: Nonlinear solve failed to converge after 33 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,33,step 0
+0.037633,3.276992,False,0.9065287499979604,"ConvergenceError: Nonlinear solve failed to converge after 12 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,12,step 0
+0.037633,3.386661,False,0.9528937499999302,"ConvergenceError: Nonlinear solve failed to converge after 16 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,16,step 0
+0.037633,3.5,False,0.9942007080026087,"ConvergenceError: Nonlinear solve failed to converge after 24 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,24,step 0
+0.038269,0.2,True,0.8848211669974262,,Unknown,,step 0
+0.038269,0.236674,True,0.8927382920010132,,Unknown,,step 0
+0.038269,0.280072,True,0.9493175839961623,,Unknown,,step 0
+0.038269,0.331428,True,0.9101627499985625,,Unknown,,step 0
+0.038269,0.392202,True,0.9083997920024558,,Unknown,,step 0
+0.038269,0.464119,True,0.9372212090020184,,Unknown,,step 0
+0.038269,0.549224,True,0.9980539580064942,,Unknown,,step 0
+0.038269,0.649934,True,1.0535520420016837,,Unknown,,step 0
+0.038269,0.769111,True,1.08909070899972,,Unknown,,step 0
+0.038269,0.910142,True,1.0988115829968592,,Unknown,,step 0
+0.038269,1.077033,True,1.0881900000022142,,Unknown,,step 0
+0.038269,1.274526,True,1.1082131660004961,,Unknown,,step 0
+0.038269,1.508234,False,1.0040534590007155,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.038269,1.784796,False,1.004330250005296,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+0.038269,2.11207,False,0.9400095000019064,"ConvergenceError: Nonlinear solve failed to converge after 16 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,16,step 0
+0.038269,2.499357,False,0.9074218340028892,"ConvergenceError: Nonlinear solve failed to converge after 13 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,13,step 0
+0.038269,2.957659,False,1.014302042000054,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+0.038269,3.5,False,1.3761741249982151,"ConvergenceError: Nonlinear solve failed to converge after 72 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,72,step 0
+0.044413,2.0,False,0.896319792002032,"ConvergenceError: Nonlinear solve failed to converge after 13 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,13,step 0
+0.044413,2.066933,False,0.9754975830001058,"ConvergenceError: Nonlinear solve failed to converge after 18 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,18,step 0
+0.044413,2.136106,False,0.9838769589987351,"ConvergenceError: Nonlinear solve failed to converge after 12 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,12,step 0
+0.044413,2.207593,False,1.3686484999998356,"ConvergenceError: Nonlinear solve failed to converge after 54 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,54,step 0
+0.044413,2.281473,False,1.3247640000045067,"ConvergenceError: Nonlinear solve failed to converge after 67 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,67,step 0
+0.044413,2.357826,False,1.5443882910039974,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.044413,2.436734,False,1.0984964589952142,"ConvergenceError: Nonlinear solve failed to converge after 27 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,27,step 0
+0.044413,2.518283,False,1.1606977499977802,"ConvergenceError: Nonlinear solve failed to converge after 40 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,40,step 0
+0.044413,2.602561,False,0.9756282500020461,"ConvergenceError: Nonlinear solve failed to converge after 23 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,23,step 0
+0.044413,2.689659,False,1.076419500001066,"ConvergenceError: Nonlinear solve failed to converge after 34 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,34,step 0
+0.044413,2.779672,False,1.028131790997577,"ConvergenceError: Nonlinear solve failed to converge after 24 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,24,step 0
+0.044413,2.872698,False,1.0615495419988292,"ConvergenceError: Nonlinear solve failed to converge after 25 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,25,step 0
+0.044413,2.968836,False,1.020217083998432,"ConvergenceError: Nonlinear solve failed to converge after 21 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,21,step 0
+0.044413,3.068193,False,1.0945823340007337,"ConvergenceError: Nonlinear solve failed to converge after 33 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,33,step 0
+0.044413,3.170874,False,1.4938528330021654,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.044413,3.276992,False,1.067780124998535,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+0.044413,3.386661,False,1.1781798329975572,"ConvergenceError: Nonlinear solve failed to converge after 45 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,45,step 0
+0.044413,3.5,False,1.255076209003164,"ConvergenceError: Nonlinear solve failed to converge after 55 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,55,step 0
+0.044682,1.0,True,1.2451242079987423,,Unknown,,step 0
+0.044682,1.061471,True,1.0656251249965862,,Unknown,,step 0
+0.044682,1.12672,True,1.150209833002009,,Unknown,,step 0
+0.044682,1.19598,True,1.1143856670023524,,Unknown,,step 0
+0.044682,1.269498,False,0.9670610419998411,"ConvergenceError: Nonlinear solve failed to converge after 19 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,19,step 0
+0.044682,1.347535,False,1.0594640419949428,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+0.044682,1.430369,False,1.0212920420017326,"ConvergenceError: Nonlinear solve failed to converge after 22 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,22,step 0
+0.044682,1.518294,False,1.069559167000989,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+0.044682,1.611625,False,1.0485427919993526,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.044682,1.710693,False,1.0934367080044467,"ConvergenceError: Nonlinear solve failed to converge after 23 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,23,step 0
+0.044682,1.81585,False,0.9265284170032828,"ConvergenceError: Nonlinear solve failed to converge after 12 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,12,step 0
+0.044682,1.927472,False,0.9210132500011241,"ConvergenceError: Nonlinear solve failed to converge after 11 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,11,step 0
+0.044682,2.045955,False,1.4476183750011842,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.044682,2.171721,False,0.9701549579986022,"ConvergenceError: Nonlinear solve failed to converge after 20 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,20,step 0
+0.044682,2.305218,False,1.443036333002965,"ConvergenceError: Nonlinear solve failed to converge after 59 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,59,step 0
+0.044682,2.446921,False,1.3930202909978107,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.044682,2.597335,False,1.0662192910021986,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+0.044682,2.756995,False,1.0244971249994705,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+0.044682,2.92647,False,1.239979082994978,"ConvergenceError: Nonlinear solve failed to converge after 43 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,43,step 0
+0.044682,3.106362,False,1.3109557920033694,"ConvergenceError: Nonlinear solve failed to converge after 58 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,58,step 0
+0.044682,3.297312,False,1.048357625004428,"ConvergenceError: Nonlinear solve failed to converge after 35 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,35,step 0
+0.044682,3.5,False,0.9789160420041298,"ConvergenceError: Nonlinear solve failed to converge after 24 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,24,step 0
+0.045385,0.3,True,0.9021775419969345,,Unknown,,step 0
+0.045385,0.376923,True,0.9430442500015488,,Unknown,,step 0
+0.045385,0.453846,True,0.9540918749989942,,Unknown,,step 0
+0.045385,0.530769,True,0.9939910839966615,,Unknown,,step 0
+0.045385,0.607692,True,1.0126756669997121,,Unknown,,step 0
+0.045385,0.684615,True,1.0119902079968597,,Unknown,,step 0
+0.045385,0.761538,True,1.0554158330050996,,Unknown,,step 0
+0.045385,0.838462,True,1.1085053329952643,,Unknown,,step 0
+0.045385,0.915385,True,1.1106372499998542,,Unknown,,step 0
+0.045385,0.992308,True,1.0899087090001558,,Unknown,,step 0
+0.045385,1.069231,True,1.0996386250044452,,Unknown,,step 0
+0.045385,1.146154,True,1.1031340410045232,,Unknown,,step 0
+0.045385,1.223077,True,1.181878333001805,,Unknown,,step 0
+0.045385,1.3,False,1.1796128749992931,"ConvergenceError: Nonlinear solve failed to converge after 46 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,46,step 0
+0.052415,2.0,False,1.4080757499978063,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.052415,2.066933,False,1.4773771670006681,"ConvergenceError: Nonlinear solve failed to converge after 74 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,74,step 0
+0.052415,2.136106,False,0.9843639169994276,"ConvergenceError: Nonlinear solve failed to converge after 27 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,27,step 0
+0.052415,2.207593,False,1.1765452079998795,"ConvergenceError: Nonlinear solve failed to converge after 44 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,44,step 0
+0.052415,2.281473,False,1.151184916998318,"ConvergenceError: Nonlinear solve failed to converge after 44 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,44,step 0
+0.052415,2.357826,False,1.0097227500009467,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+0.052415,2.436734,False,1.3469063329976052,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.052415,2.518283,False,1.0425733329975628,"ConvergenceError: Nonlinear solve failed to converge after 38 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,38,step 0
+0.052415,2.602561,False,1.4081333340000128,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.052415,2.689659,False,1.472897457999352,"ConvergenceError: Nonlinear solve failed to converge after 76 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,76,step 0
+0.052415,2.779672,False,1.067614332998346,"ConvergenceError: Nonlinear solve failed to converge after 34 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,34,step 0
+0.052415,2.872698,False,1.141956334002316,"ConvergenceError: Nonlinear solve failed to converge after 34 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,34,step 0
+0.052415,2.968836,False,1.3673946249982691,"ConvergenceError: Nonlinear solve failed to converge after 69 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,69,step 0
+0.052415,3.068193,False,1.0013856250006938,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+0.052415,3.170874,False,1.1247648749995278,"ConvergenceError: Nonlinear solve failed to converge after 48 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,48,step 0
+0.052415,3.276992,False,0.9776956249988871,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+0.052415,3.386661,False,1.0569801250021555,"ConvergenceError: Nonlinear solve failed to converge after 35 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,35,step 0
+0.052415,3.5,False,1.1231597090009018,"ConvergenceError: Nonlinear solve failed to converge after 42 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,42,step 0
+0.053526,0.2,True,0.9105028329940978,,Unknown,,step 0
+0.053526,0.236674,True,0.9127309170071385,,Unknown,,step 0
+0.053526,0.280072,True,0.91103162500076,,Unknown,,step 0
+0.053526,0.331428,True,0.9444510840039584,,Unknown,,step 0
+0.053526,0.392202,True,0.9507247920046211,,Unknown,,step 0
+0.053526,0.464119,True,0.9630131250014529,,Unknown,,step 0
+0.053526,0.549224,True,0.9947605420020409,,Unknown,,step 0
+0.053526,0.649934,True,0.9929157500009751,,Unknown,,step 0
+0.053526,0.769111,True,1.0039444579961128,,Unknown,,step 0
+0.053526,0.910142,True,1.037932750004984,,Unknown,,step 0
+0.053526,1.077033,True,1.0436000409972621,,Unknown,,step 0
+0.053526,1.274526,False,1.0182604999936302,"ConvergenceError: Nonlinear solve failed to converge after 34 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,34,step 0
+0.053526,1.508234,False,0.9354669999956968,"ConvergenceError: Nonlinear solve failed to converge after 18 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,18,step 0
+0.053526,1.784796,False,1.0504785410012119,"ConvergenceError: Nonlinear solve failed to converge after 37 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,37,step 0
+0.053526,2.11207,False,0.9065821249969304,"ConvergenceError: Nonlinear solve failed to converge after 16 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,16,step 0
+0.053526,2.499357,False,0.9849324169990723,"ConvergenceError: Nonlinear solve failed to converge after 27 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,27,step 0
+0.053526,2.957659,False,1.3605577090056613,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.053526,3.5,False,1.197225250005431,"ConvergenceError: Nonlinear solve failed to converge after 54 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,54,step 0
+0.053877,1.0,True,1.0552797920026933,,Unknown,,step 0
+0.053877,1.061471,True,1.042020875000162,,Unknown,,step 0
+0.053877,1.12672,True,1.1007099580019712,,Unknown,,step 0
+0.053877,1.19598,False,1.034677167001064,"ConvergenceError: Nonlinear solve failed to converge after 33 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,33,step 0
+0.053877,1.269498,True,1.1136548750000657,,Unknown,,step 0
+0.053877,1.347535,False,1.3492815410063486,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.053877,1.430369,False,1.3539753749937518,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.053877,1.518294,True,1.1646564589973423,,Unknown,,step 0
+0.053877,1.611625,True,1.1495954999991227,,Unknown,,step 0
+0.053877,1.710693,False,1.0319742079955176,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+0.053877,1.81585,False,1.090268540996476,"ConvergenceError: Nonlinear solve failed to converge after 38 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,38,step 0
+0.053877,1.927472,False,0.937963000003947,"ConvergenceError: Nonlinear solve failed to converge after 21 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,21,step 0
+0.053877,2.045955,False,1.0185039999996661,"ConvergenceError: Nonlinear solve failed to converge after 34 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,34,step 0
+0.053877,2.171721,False,0.9322007919981843,"ConvergenceError: Nonlinear solve failed to converge after 16 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,16,step 0
+0.053877,2.305218,False,1.0804404580048868,"ConvergenceError: Nonlinear solve failed to converge after 35 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,35,step 0
+0.053877,2.446921,False,1.097954374999972,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+0.053877,2.597335,False,1.036944624996977,"ConvergenceError: Nonlinear solve failed to converge after 34 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,34,step 0
+0.053877,2.756995,False,1.4207536249959958,"ConvergenceError: Nonlinear solve failed to converge after 79 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,79,step 0
+0.053877,2.92647,False,1.181125165996491,"ConvergenceError: Nonlinear solve failed to converge after 49 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,49,step 0
+0.053877,3.106362,False,1.1174042080019717,"ConvergenceError: Nonlinear solve failed to converge after 40 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,40,step 0
+0.053877,3.297312,False,1.1685922920005396,"ConvergenceError: Nonlinear solve failed to converge after 46 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,46,step 0
+0.053877,3.5,False,1.535111583005346,"ConvergenceError: Nonlinear solve failed to converge after 71 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,71,step 0
+0.061859,2.0,False,1.4004748750012368,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.061859,2.066933,False,1.200896249996731,"ConvergenceError: Nonlinear solve failed to converge after 46 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,46,step 0
+0.061859,2.136106,False,1.1675669160031248,"ConvergenceError: Nonlinear solve failed to converge after 44 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,44,step 0
+0.061859,2.207593,False,1.0484246659980272,"ConvergenceError: Nonlinear solve failed to converge after 39 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,39,step 0
+0.061859,2.281473,False,1.0697626659966772,"ConvergenceError: Nonlinear solve failed to converge after 40 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,40,step 0
+0.061859,2.357826,False,1.0875967500032857,"ConvergenceError: Nonlinear solve failed to converge after 42 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,42,step 0
+0.061859,2.436734,False,1.3141880000039237,"ConvergenceError: Nonlinear solve failed to converge after 69 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,69,step 0
+0.061859,2.518283,True,1.3075062080024509,,Unknown,,step 0
+0.061859,2.602561,False,1.3381120420017396,"ConvergenceError: Nonlinear solve failed to converge after 77 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,77,step 0
+0.061859,2.689659,False,1.2982829999964451,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.061859,2.779672,False,1.2796131670038449,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.061859,2.872698,False,1.0202252919989405,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+0.061859,2.968836,False,1.2655399170034798,"ConvergenceError: Nonlinear solve failed to converge after 68 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,68,step 0
+0.061859,3.068193,False,1.38112474999798,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.061859,3.170874,False,1.2984614170054556,"ConvergenceError: Nonlinear solve failed to converge after 70 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,70,step 0
+0.061859,3.276992,False,1.104463666000811,"ConvergenceError: Nonlinear solve failed to converge after 50 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,50,step 0
+0.061859,3.386661,False,1.3099877080021542,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.061859,3.5,False,1.2033782090002205,"ConvergenceError: Nonlinear solve failed to converge after 62 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,62,step 0
+0.064963,1.0,True,1.0267061670019757,,Unknown,,step 0
+0.064963,1.061471,True,1.0571177500023623,,Unknown,,step 0
+0.064963,1.12672,True,1.152150250003615,,Unknown,,step 0
+0.064963,1.19598,True,1.1150864169976558,,Unknown,,step 0
+0.064963,1.269498,False,0.9297927919978974,"ConvergenceError: Nonlinear solve failed to converge after 17 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,17,step 0
+0.064963,1.347535,False,1.3040997500065714,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.064963,1.430369,False,1.2368596669984981,"ConvergenceError: Nonlinear solve failed to converge after 46 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,46,step 0
+0.064963,1.518294,False,0.9379992079993826,"ConvergenceError: Nonlinear solve failed to converge after 16 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,16,step 0
+0.064963,1.611625,False,1.363696833999711,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.064963,1.710693,False,0.9842793749994598,"ConvergenceError: Nonlinear solve failed to converge after 17 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,17,step 0
+0.064963,1.81585,False,1.3352433330001077,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.064963,1.927472,False,0.9843419159951736,"ConvergenceError: Nonlinear solve failed to converge after 26 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,26,step 0
+0.064963,2.045955,False,1.2182410410023294,"ConvergenceError: Nonlinear solve failed to converge after 62 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,62,step 0
+0.064963,2.171721,False,0.9935408339952119,"ConvergenceError: Nonlinear solve failed to converge after 27 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,27,step 0
+0.064963,2.305218,False,1.1197743750017253,"ConvergenceError: Nonlinear solve failed to converge after 44 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,44,step 0
+0.064963,2.446921,False,1.1005424589966424,"ConvergenceError: Nonlinear solve failed to converge after 43 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,43,step 0
+0.064963,2.597335,False,1.3971942920034053,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.064963,2.756995,False,1.0757942909986014,"ConvergenceError: Nonlinear solve failed to converge after 34 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,34,step 0
+0.064963,2.92647,False,1.2066186670053867,"ConvergenceError: Nonlinear solve failed to converge after 58 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,58,step 0
+0.064963,3.106362,False,0.9806908750033472,"ConvergenceError: Nonlinear solve failed to converge after 25 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,25,step 0
+0.064963,3.297312,False,1.2257990420039278,"ConvergenceError: Nonlinear solve failed to converge after 55 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,55,step 0
+0.064963,3.5,False,1.1335648340027547,"ConvergenceError: Nonlinear solve failed to converge after 48 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,48,step 0
+0.070769,0.3,True,0.9174162909985171,,Unknown,,step 0
+0.070769,0.376923,True,0.907921083002293,,Unknown,,step 0
+0.070769,0.453846,True,0.9206635000009555,,Unknown,,step 0
+0.070769,0.530769,True,0.9678988749947166,,Unknown,,step 0
+0.070769,0.607692,True,0.9035809999986668,,Unknown,,step 0
+0.070769,0.684615,True,1.0157794159968034,,Unknown,,step 0
+0.070769,0.761538,True,0.98609733300691,,Unknown,,step 0
+0.070769,0.838462,True,0.9936363749948214,,Unknown,,step 0
+0.070769,0.915385,True,0.9909724589961115,,Unknown,,step 0
+0.070769,0.992308,True,1.0113380830007372,,Unknown,,step 0
+0.070769,1.069231,True,1.0501932500046678,,Unknown,,step 0
+0.070769,1.146154,True,1.1242437079999945,,Unknown,,step 0
+0.070769,1.223077,False,1.0144107909945888,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.070769,1.3,False,1.1749626669989084,"ConvergenceError: Nonlinear solve failed to converge after 33 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,33,step 0
+0.073004,2.0,False,1.1721416250002221,"ConvergenceError: Nonlinear solve failed to converge after 43 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,43,step 0
+0.073004,2.066933,False,1.2071432080047089,"ConvergenceError: Nonlinear solve failed to converge after 49 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,49,step 0
+0.073004,2.136106,False,1.2431526250002207,"ConvergenceError: Nonlinear solve failed to converge after 62 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,62,step 0
+0.073004,2.207593,False,1.3183570420005708,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.073004,2.281473,False,1.2810785829933593,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.073004,2.357826,False,1.098886666004546,"ConvergenceError: Nonlinear solve failed to converge after 49 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,49,step 0
+0.073004,2.436734,False,1.2544960000013816,"ConvergenceError: Nonlinear solve failed to converge after 66 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,66,step 0
+0.073004,2.518283,False,1.1755115000050864,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+0.073004,2.602561,False,1.591652167000575,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.073004,2.689659,False,1.3686308339965763,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.073004,2.779672,False,1.0826342919972376,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+0.073004,2.872698,False,1.339799834000587,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.073004,2.968836,False,1.130421750000096,"ConvergenceError: Nonlinear solve failed to converge after 51 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,51,step 0
+0.073004,3.068193,False,1.1374346250013332,"ConvergenceError: Nonlinear solve failed to converge after 43 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,43,step 0
+0.073004,3.170874,False,1.089670749999641,"ConvergenceError: Nonlinear solve failed to converge after 39 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,39,step 0
+0.073004,3.276992,False,0.9957506249993457,"ConvergenceError: Nonlinear solve failed to converge after 25 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,25,step 0
+0.073004,3.386661,False,1.3398667500005104,"ConvergenceError: Nonlinear solve failed to converge after 69 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,69,step 0
+0.073004,3.5,False,1.058145583003352,"ConvergenceError: Nonlinear solve failed to converge after 42 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,42,step 0
+0.074865,0.2,True,0.8947999589945539,,Unknown,,step 0
+0.074865,0.236674,True,0.8979397920047631,,Unknown,,step 0
+0.074865,0.280072,True,0.9189078339986736,,Unknown,,step 0
+0.074865,0.331428,True,0.9648340829953668,,Unknown,,step 0
+0.074865,0.392202,True,0.9787937089931802,,Unknown,,step 0
+0.074865,0.464119,True,0.9651957909954945,,Unknown,,step 0
+0.074865,0.549224,True,1.0090169999966747,,Unknown,,step 0
+0.074865,0.649934,True,0.9424087910010712,,Unknown,,step 0
+0.074865,0.769111,True,0.9583294160038349,,Unknown,,step 0
+0.074865,0.910142,True,0.9887063749993104,,Unknown,,step 0
+0.074865,1.077033,True,1.0303134999994654,,Unknown,,step 0
+0.074865,1.274526,False,1.0528657079994446,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+0.074865,1.508234,False,0.9996596249984577,"ConvergenceError: Nonlinear solve failed to converge after 22 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,22,step 0
+0.074865,1.784796,False,1.0619516250008019,"ConvergenceError: Nonlinear solve failed to converge after 38 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,38,step 0
+0.074865,2.11207,False,0.9940334999992047,"ConvergenceError: Nonlinear solve failed to converge after 27 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,27,step 0
+0.074865,2.499357,False,1.0357524999999441,"ConvergenceError: Nonlinear solve failed to converge after 35 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,35,step 0
+0.074865,2.957659,False,1.022041124997486,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+0.074865,3.5,True,1.156797125004232,,Unknown,,step 0
+0.078331,1.0,True,1.0034405839978717,,Unknown,,step 0
+0.078331,1.061471,True,1.0202166250019218,,Unknown,,step 0
+0.078331,1.12672,True,1.054351291997591,,Unknown,,step 0
+0.078331,1.19598,False,1.012895333005872,"ConvergenceError: Nonlinear solve failed to converge after 17 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,17,step 0
+0.078331,1.269498,False,0.9887814579997212,"ConvergenceError: Nonlinear solve failed to converge after 21 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,21,step 0
+0.078331,1.347535,False,1.0941502079949714,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+0.078331,1.430369,False,1.022891749998962,"ConvergenceError: Nonlinear solve failed to converge after 24 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,24,step 0
+0.078331,1.518294,False,1.434160457996768,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.078331,1.611625,False,1.07166833300289,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+0.078331,1.710693,False,1.090661917005491,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+0.078331,1.81585,False,1.3710833329969319,"ConvergenceError: Nonlinear solve failed to converge after 45 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,45,step 0
+0.078331,1.927472,False,0.9895912499996484,"ConvergenceError: Nonlinear solve failed to converge after 26 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,26,step 0
+0.078331,2.045955,False,1.4133832499937853,"ConvergenceError: Nonlinear solve failed to converge after 73 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,73,step 0
+0.078331,2.171721,False,1.4860951250011567,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.078331,2.305218,False,1.1748225830015144,"ConvergenceError: Nonlinear solve failed to converge after 45 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,45,step 0
+0.078331,2.446921,False,1.0322559159976663,"ConvergenceError: Nonlinear solve failed to converge after 33 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,33,step 0
+0.078331,2.597335,False,1.1699566249953932,"ConvergenceError: Nonlinear solve failed to converge after 49 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,49,step 0
+0.078331,2.756995,False,1.081303166996804,"ConvergenceError: Nonlinear solve failed to converge after 39 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,39,step 0
+0.078331,2.92647,False,1.3955442500009667,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.078331,3.106362,False,1.1455354999998235,"ConvergenceError: Nonlinear solve failed to converge after 54 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,54,step 0
+0.078331,3.297312,False,1.3483029999988503,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.078331,3.5,False,0.9945355829986511,"ConvergenceError: Nonlinear solve failed to converge after 25 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,25,step 0
+0.086157,2.0,False,1.332921917004569,"ConvergenceError: Nonlinear solve failed to converge after 70 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,70,step 0
+0.086157,2.066933,False,1.3333064170001308,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.086157,2.136106,False,1.2919417500015697,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.086157,2.207593,False,1.31498479199945,"ConvergenceError: Nonlinear solve failed to converge after 78 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,78,step 0
+0.086157,2.281473,False,1.154358083003899,"ConvergenceError: Nonlinear solve failed to converge after 47 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,47,step 0
+0.086157,2.357826,False,1.007162875001086,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+0.086157,2.436734,False,1.0928852080032812,"ConvergenceError: Nonlinear solve failed to converge after 43 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,43,step 0
+0.086157,2.518283,False,1.5024212920034188,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.086157,2.602561,False,1.3513163340030587,"ConvergenceError: Nonlinear solve failed to converge after 68 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,68,step 0
+0.086157,2.689659,False,1.090267291998316,"ConvergenceError: Nonlinear solve failed to converge after 42 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,42,step 0
+0.086157,2.779672,False,1.3264794170027017,"ConvergenceError: Nonlinear solve failed to converge after 67 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,67,step 0
+0.086157,2.872698,False,1.0374044999989565,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+0.086157,2.968836,False,1.4033263749952312,"ConvergenceError: Nonlinear solve failed to converge after 79 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,79,step 0
+0.086157,3.068193,False,1.22552633399755,"ConvergenceError: Nonlinear solve failed to converge after 52 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,52,step 0
+0.086157,3.170874,False,1.1300245000020368,"ConvergenceError: Nonlinear solve failed to converge after 52 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,52,step 0
+0.086157,3.276992,False,1.1664032080007019,"ConvergenceError: Nonlinear solve failed to converge after 54 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,54,step 0
+0.086157,3.386661,False,1.2469484169996576,"ConvergenceError: Nonlinear solve failed to converge after 66 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,66,step 0
+0.086157,3.5,False,1.1566683749988442,"ConvergenceError: Nonlinear solve failed to converge after 46 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,46,step 0
+0.09445,1.0,True,1.084429624999757,,Unknown,,step 0
+0.09445,1.061471,True,1.0564250000024913,,Unknown,,step 0
+0.09445,1.12672,True,1.0259724169955007,,Unknown,,step 0
+0.09445,1.19598,True,1.0191985409983317,,Unknown,,step 0
+0.09445,1.269498,False,1.112617291000788,"ConvergenceError: Nonlinear solve failed to converge after 34 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,34,step 0
+0.09445,1.347535,False,1.1422528749972116,"ConvergenceError: Nonlinear solve failed to converge after 33 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,33,step 0
+0.09445,1.430369,False,1.2044977499972447,"ConvergenceError: Nonlinear solve failed to converge after 50 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,50,step 0
+0.09445,1.518294,True,1.1645530000023427,,Unknown,,step 0
+0.09445,1.611625,False,1.0599887079952168,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+0.09445,1.710693,False,1.0723906249986612,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+0.09445,1.81585,False,1.0604391250017215,"ConvergenceError: Nonlinear solve failed to converge after 40 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,40,step 0
+0.09445,1.927472,True,1.1435111250029877,,Unknown,,step 0
+0.09445,2.045955,False,1.0675019580012304,"ConvergenceError: Nonlinear solve failed to converge after 35 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,35,step 0
+0.09445,2.171721,False,1.0991993749994435,"ConvergenceError: Nonlinear solve failed to converge after 48 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,48,step 0
+0.09445,2.305218,True,1.1424905000021681,,Unknown,,step 0
+0.09445,2.446921,False,0.9659749999991618,"ConvergenceError: Nonlinear solve failed to converge after 25 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,25,step 0
+0.09445,2.597335,False,1.4089084590013954,"ConvergenceError: Nonlinear solve failed to converge after 78 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,78,step 0
+0.09445,2.756995,False,1.3159868750008172,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.09445,2.92647,False,1.4030636250026873,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.09445,3.106362,False,1.0365565410029376,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.09445,3.297312,False,1.0703710000016144,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+0.09445,3.5,False,1.1365447089992813,"ConvergenceError: Nonlinear solve failed to converge after 54 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,54,step 0
+0.096154,0.3,True,0.9379133330003242,,Unknown,,step 0
+0.096154,0.376923,True,0.9318175829976099,,Unknown,,step 0
+0.096154,0.453846,True,0.9003462500040769,,Unknown,,step 0
+0.096154,0.530769,True,0.9190795839967905,,Unknown,,step 0
+0.096154,0.607692,True,0.9614292089972878,,Unknown,,step 0
+0.096154,0.684615,True,1.003320124997117,,Unknown,,step 0
+0.096154,0.761538,True,0.9412773750009364,,Unknown,,step 0
+0.096154,0.838462,True,0.9275028749980265,,Unknown,,step 0
+0.096154,0.915385,True,0.9365045000013197,,Unknown,,step 0
+0.096154,0.992308,True,0.9313511250002193,,Unknown,,step 0
+0.096154,1.069231,True,0.9592148750016349,,Unknown,,step 0
+0.096154,1.146154,True,0.9808195830046316,,Unknown,,step 0
+0.096154,1.223077,False,0.9323598749979283,"ConvergenceError: Nonlinear solve failed to converge after 12 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,12,step 0
+0.096154,1.3,False,1.0758172080022632,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+0.10168,2.0,True,1.1752385829968262,,Unknown,,step 0
+0.10168,2.066933,False,1.0145029580016853,"ConvergenceError: Nonlinear solve failed to converge after 25 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,25,step 0
+0.10168,2.136106,False,1.045879082994361,"ConvergenceError: Nonlinear solve failed to converge after 27 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,27,step 0
+0.10168,2.207593,False,1.391594749999058,"ConvergenceError: Nonlinear solve failed to converge after 65 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,65,step 0
+0.10168,2.281473,False,1.3248069580004085,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.10168,2.357826,False,1.0352409579936648,"ConvergenceError: Nonlinear solve failed to converge after 24 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,24,step 0
+0.10168,2.436734,False,1.0188378750026459,"ConvergenceError: Nonlinear solve failed to converge after 37 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,37,step 0
+0.10168,2.518283,False,0.8469729170028586,"ConvergenceError: Nonlinear solve failed to converge after 23 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,23,step 0
+0.10168,2.602561,False,1.2016110829936224,"ConvergenceError: Nonlinear solve failed to converge after 56 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,56,step 0
+0.10168,2.689659,False,0.9075664999982109,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+0.10168,2.779672,False,1.2592626249970635,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.10168,2.872698,False,1.0433965419942979,"ConvergenceError: Nonlinear solve failed to converge after 45 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,45,step 0
+0.10168,2.968836,False,0.9731948749977164,"ConvergenceError: Nonlinear solve failed to converge after 33 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,33,step 0
+0.10168,3.068193,False,1.2876309999992372,"ConvergenceError: Nonlinear solve failed to converge after 60 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,60,step 0
+0.10168,3.170874,False,0.9550980830026674,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+0.10168,3.276992,False,1.4104482920010923,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+0.10168,3.386661,False,1.274712083999475,"ConvergenceError: Nonlinear solve failed to converge after 56 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,56,step 0
+0.10168,3.5,False,1.2541138750020764,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.104711,0.2,True,2.277998083001876,,Unknown,,step 0
+0.104711,0.236674,True,0.8261362499979441,,Unknown,,step 0
+0.104711,0.280072,True,0.7859520830024849,,Unknown,,step 0
+0.104711,0.331428,True,0.7956763330003014,,Unknown,,step 0
+0.104711,0.392202,True,1.920708249999734,,Unknown,,step 0
+0.104711,0.464119,True,1.370828958999482,,Unknown,,step 0
+0.104711,0.549224,True,1.09262608300196,,Unknown,,step 0
+0.104711,0.649934,True,1.1430549170036102,,Unknown,,step 0
+0.104711,0.769111,True,1.1520597499984433,,Unknown,,step 0
+0.104711,0.910142,True,1.123400374999619,,Unknown,,step 0
+0.104711,1.077033,True,1.1947528750024503,,Unknown,,step 0
+0.104711,1.274526,False,1.092154041005415,"ConvergenceError: Nonlinear solve failed to converge after 9 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,9,step 0
+0.104711,1.508234,False,1.361531874994398,"ConvergenceError: Nonlinear solve failed to converge after 37 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,37,step 0
+0.104711,1.784796,False,1.2466655829994124,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+0.104711,2.11207,False,1.5074751670035766,"ConvergenceError: Nonlinear solve failed to converge after 53 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,53,step 0
+0.104711,2.499357,False,1.6289399169982062,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.104711,2.957659,False,1.478754707997723,"ConvergenceError: Nonlinear solve failed to converge after 61 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,61,step 0
+0.104711,3.5,False,1.2157990409978083,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.113885,1.0,True,1.2437358749957639,,Unknown,,step 0
+0.113885,1.061471,True,0.9600626660030684,,Unknown,,step 0
+0.113885,1.12672,True,0.9996178750006948,,Unknown,,step 0
+0.113885,1.19598,True,0.934593040998152,,Unknown,,step 0
+0.113885,1.269498,True,1.3420808329974534,,Unknown,,step 0
+0.113885,1.347535,True,2.811323791000177,,Unknown,,step 0
+0.113885,1.430369,True,1.1827574579947395,,Unknown,,step 0
+0.113885,1.518294,False,1.2404977920014062,"ConvergenceError: Nonlinear solve failed to converge after 34 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,34,step 0
+0.113885,1.611625,False,1.4423628750009811,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+0.113885,1.710693,False,1.3050217499985592,"ConvergenceError: Nonlinear solve failed to converge after 37 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,37,step 0
+0.113885,1.81585,False,1.3173614170009387,"ConvergenceError: Nonlinear solve failed to converge after 44 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,44,step 0
+0.113885,1.927472,False,1.2461077080006362,"ConvergenceError: Nonlinear solve failed to converge after 37 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,37,step 0
+0.113885,2.045955,False,1.5108445410005515,"ConvergenceError: Nonlinear solve failed to converge after 57 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,57,step 0
+0.113885,2.171721,False,1.668355417001294,"ConvergenceError: Nonlinear solve failed to converge after 61 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,61,step 0
+0.113885,2.305218,False,1.2790573750025942,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+0.113885,2.446921,True,1.419836375003797,,Unknown,,step 0
+0.113885,2.597335,False,1.391925457995967,"ConvergenceError: Nonlinear solve failed to converge after 50 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,50,step 0
+0.113885,2.756995,False,1.5891940829969826,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.113885,2.92647,True,1.345344417000888,,Unknown,,step 0
+0.113885,3.106362,False,1.5247363750022487,"ConvergenceError: Nonlinear solve failed to converge after 45 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,45,step 0
+0.113885,3.297312,False,2.1359991249992163,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.113885,3.5,False,1.9014320420028525,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.12,2.0,False,1.3386156670021592,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+0.12,2.066933,False,1.6868199159944197,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.12,2.136106,False,1.3257676669963985,"ConvergenceError: Nonlinear solve failed to converge after 39 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,39,step 0
+0.12,2.207593,False,1.179410208002082,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+0.12,2.281473,False,1.6122651250043418,"ConvergenceError: Nonlinear solve failed to converge after 72 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,72,step 0
+0.12,2.357826,False,1.4374304590019165,"ConvergenceError: Nonlinear solve failed to converge after 55 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,55,step 0
+0.12,2.436734,False,1.7032798749933136,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.12,2.518283,True,1.4476712920004502,,Unknown,,step 0
+0.12,2.602561,False,1.5430316669953754,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.12,2.689659,False,1.2703342079985305,"ConvergenceError: Nonlinear solve failed to converge after 38 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,38,step 0
+0.12,2.779672,False,1.1387098749983124,"ConvergenceError: Nonlinear solve failed to converge after 21 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,21,step 0
+0.12,2.872698,False,1.6024694579973584,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.12,2.968836,False,1.7477908750006463,"ConvergenceError: Nonlinear solve failed to converge after 50 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,50,step 0
+0.12,3.068193,False,1.0545689589998801,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+0.12,3.170874,False,1.0880649590035318,"ConvergenceError: Nonlinear solve failed to converge after 47 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,47,step 0
+0.12,3.276992,False,2.7055607910006074,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+0.12,3.386661,False,1.5035260420045233,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.12,3.5,False,1.3086774999974295,"ConvergenceError: Nonlinear solve failed to converge after 50 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,50,step 0
+0.121538,0.3,True,1.1249871249965508,,Unknown,,step 0
+0.121538,0.376923,True,1.1124330419988837,,Unknown,,step 0
+0.121538,0.453846,True,1.0661414159985725,,Unknown,,step 0
+0.121538,0.530769,True,1.0800238340016222,,Unknown,,step 0
+0.121538,0.607692,True,1.1117399580034544,,Unknown,,step 0
+0.121538,0.684615,True,1.0813690000068163,,Unknown,,step 0
+0.121538,0.761538,True,1.0878660839953227,,Unknown,,step 0
+0.121538,0.838462,True,1.0846197919963743,,Unknown,,step 0
+0.121538,0.915385,True,1.3575743330002297,,Unknown,,step 0
+0.121538,0.992308,True,1.176382999998168,,Unknown,,step 0
+0.121538,1.069231,True,1.435711165999237,,Unknown,,step 0
+0.121538,1.146154,True,1.143195790995378,,Unknown,,step 0
+0.121538,1.223077,True,1.033733416996256,,Unknown,,step 0
+0.121538,1.3,True,0.9803218750021188,,Unknown,,step 0
+0.13732,1.12672,True,0.9491732090027654,,Unknown,,step 0
+0.13732,1.19598,True,0.991930374999356,,Unknown,,step 0
+0.13732,1.269498,True,0.9647605840000324,,Unknown,,step 0
+0.13732,1.347535,True,0.9542720829995233,,Unknown,,step 0
+0.13732,1.430369,True,0.9173618749991874,,Unknown,,step 0
+0.13732,1.518294,True,0.9990110420039855,,Unknown,,step 0
+0.13732,1.611625,True,0.9558118749991991,,Unknown,,step 0
+0.13732,1.710693,False,1.2652228340011789,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.13732,1.81585,False,0.8505365829987568,"ConvergenceError: Nonlinear solve failed to converge after 18 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,18,step 0
+0.13732,1.927472,False,0.9348467919990071,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+0.13732,2.045955,False,1.19851883299998,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.13732,2.171721,False,1.019009791998542,"ConvergenceError: Nonlinear solve failed to converge after 41 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,41,step 0
+0.13732,2.305218,True,1.0293822920066305,,Unknown,,step 0
+0.13732,2.446921,False,1.0428292079959647,"ConvergenceError: Nonlinear solve failed to converge after 53 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,53,step 0
+0.13732,2.597335,False,0.9833883750034147,"ConvergenceError: Nonlinear solve failed to converge after 37 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,37,step 0
+0.13732,2.756995,False,1.2156821669996134,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.13732,2.92647,True,1.054644083000312,,Unknown,,step 0
+0.13732,3.106362,False,1.1094036249996861,"ConvergenceError: Nonlinear solve failed to converge after 61 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,61,step 0
+0.13732,3.297312,False,1.1997027499965043,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.13732,3.5,False,1.032312000003003,"ConvergenceError: Nonlinear solve failed to converge after 48 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,48,step 0
+0.146455,0.2,True,0.8255703750037355,,Unknown,,step 0
+0.146455,0.236674,True,0.8283471249960712,,Unknown,,step 0
+0.146455,0.280072,True,0.8232337910012575,,Unknown,,step 0
+0.146455,0.331428,True,0.8327792920026695,,Unknown,,step 0
+0.146455,0.392202,True,0.8404777500036289,,Unknown,,step 0
+0.146455,0.464119,True,0.8378777079997235,,Unknown,,step 0
+0.146455,0.549224,True,0.8405614579969551,,Unknown,,step 0
+0.146455,0.649934,True,0.840647416000138,,Unknown,,step 0
+0.146455,0.769111,True,0.8474400409977534,,Unknown,,step 0
+0.146455,0.910142,True,0.853761124999437,,Unknown,,step 0
+0.146455,1.077033,True,0.8569940000015777,,Unknown,,step 0
+0.146455,1.274526,True,0.8800238750045537,,Unknown,,step 0
+0.146455,1.508234,True,0.9357384160030051,,Unknown,,step 0
+0.146455,1.784796,False,1.124380082997959,"ConvergenceError: Nonlinear solve failed to converge after 54 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,54,step 0
+0.146455,2.11207,False,1.0609429159958381,"ConvergenceError: Nonlinear solve failed to converge after 52 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,52,step 0
+0.146455,2.499357,True,1.1810677079993184,,Unknown,,step 0
+0.146455,2.957659,False,1.0212352909948095,"ConvergenceError: Nonlinear solve failed to converge after 39 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,39,step 0
+0.146455,3.5,False,0.932099500001641,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+0.146923,0.3,True,0.8406882080016658,,Unknown,,step 0
+0.146923,0.376923,True,0.8503518340003211,,Unknown,,step 0
+0.146923,0.453846,True,0.8523265830008313,,Unknown,,step 0
+0.146923,0.530769,True,0.8391198750032345,,Unknown,,step 0
+0.146923,0.607692,True,0.8515229170006933,,Unknown,,step 0
+0.146923,0.684615,True,0.8914660000009462,,Unknown,,step 0
+0.146923,0.761538,True,0.8538962910024566,,Unknown,,step 0
+0.146923,0.838462,True,0.8561144580016844,,Unknown,,step 0
+0.146923,0.915385,True,0.8576776659974712,,Unknown,,step 0
+0.146923,0.992308,True,0.8559287499956554,,Unknown,,step 0
+0.146923,1.069231,True,0.8650782920012716,,Unknown,,step 0
+0.146923,1.146154,True,0.8716940410013194,,Unknown,,step 0
+0.146923,1.223077,True,0.8870212910042028,,Unknown,,step 0
+0.146923,1.3,True,0.8889005000019097,,Unknown,,step 0
+0.165577,1.347535,True,0.8944700420033769,,Unknown,,step 0
+0.165577,1.430369,True,0.89650716700271,,Unknown,,step 0
+0.165577,1.518294,True,0.9083524169982411,,Unknown,,step 0
+0.165577,1.611625,True,0.9295054169997456,,Unknown,,step 0
+0.165577,1.710693,True,0.9509548749992973,,Unknown,,step 0
+0.165577,1.81585,True,0.959373666002648,,Unknown,,step 0
+0.165577,1.927472,True,1.1669475829985458,,Unknown,,step 0
+0.165577,2.045955,False,1.3026885830040555,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.165577,2.171721,False,1.240550375005114,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.165577,2.305218,False,0.9142585839945241,"ConvergenceError: Nonlinear solve failed to converge after 23 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,23,step 0
+0.165577,2.446921,True,1.0178825840048376,,Unknown,,step 0
+0.165577,2.597335,False,0.9901476250015548,"ConvergenceError: Nonlinear solve failed to converge after 39 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,39,step 0
+0.165577,2.756995,True,1.1192352090001805,,Unknown,,step 0
+0.165577,2.92647,False,0.9111377920053201,"ConvergenceError: Nonlinear solve failed to converge after 27 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,27,step 0
+0.165577,3.106362,True,1.133142124999722,,Unknown,,step 0
+0.165577,3.297312,False,0.9649504170010914,"ConvergenceError: Nonlinear solve failed to converge after 35 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,35,step 0
+0.165577,3.5,False,1.0111471249983879,"ConvergenceError: Nonlinear solve failed to converge after 40 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,40,step 0
+0.172308,0.3,True,0.8353689169962308,,Unknown,,step 0
+0.172308,0.376923,True,0.8269449590006843,,Unknown,,step 0
+0.172308,0.453846,True,0.8330062499953783,,Unknown,,step 0
+0.172308,0.530769,True,1.0349655419995543,,Unknown,,step 0
+0.172308,0.607692,True,0.9607673339996836,,Unknown,,step 0
+0.172308,0.684615,True,0.8578225000019302,,Unknown,,step 0
+0.172308,0.761538,True,0.8673475830000825,,Unknown,,step 0
+0.172308,0.838462,True,0.8521398750017397,,Unknown,,step 0
+0.172308,0.915385,True,0.8567974170000525,,Unknown,,step 0
+0.172308,0.992308,True,0.8569260000003851,,Unknown,,step 0
+0.172308,1.069231,True,0.8562794999961625,,Unknown,,step 0
+0.172308,1.146154,True,0.8609593749933993,,Unknown,,step 0
+0.172308,1.223077,True,0.8682509580030455,,Unknown,,step 0
+0.172308,1.3,True,0.8838978330022655,,Unknown,,step 0
+0.197692,0.3,True,0.8320831660021213,,Unknown,,step 0
+0.197692,0.376923,True,0.8401695830034441,,Unknown,,step 0
+0.197692,0.453846,True,0.8468870830038213,,Unknown,,step 0
+0.197692,0.530769,True,0.8567298749985639,,Unknown,,step 0
+0.197692,0.607692,True,0.8511129170001368,,Unknown,,step 0
+0.197692,0.684615,True,0.8500144169956911,,Unknown,,step 0
+0.197692,0.761538,True,0.8510568750061793,,Unknown,,step 0
+0.197692,0.838462,True,0.8559573750026175,,Unknown,,step 0
+0.197692,0.915385,True,0.8581898339980398,,Unknown,,step 0
+0.197692,0.992308,True,0.8557875830010744,,Unknown,,step 0
+0.197692,1.069231,True,0.8542522500065388,,Unknown,,step 0
+0.197692,1.146154,True,0.8597312080019037,,Unknown,,step 0
+0.197692,1.223077,True,0.9039070419967175,,Unknown,,step 0
+0.197692,1.3,True,0.8754155830029049,,Unknown,,step 0
+0.199649,1.611625,True,0.9082101669991971,,Unknown,,step 0
+0.199649,1.710693,True,0.931978041997354,,Unknown,,step 0
+0.199649,1.81585,True,0.9359417500018026,,Unknown,,step 0
+0.199649,1.927472,True,0.9612580829998478,,Unknown,,step 0
+0.199649,2.045955,True,0.983637124998495,,Unknown,,step 0
+0.199649,2.171721,True,1.0063240410017897,,Unknown,,step 0
+0.199649,2.305218,False,0.8696573749984964,"ConvergenceError: Nonlinear solve failed to converge after 15 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,15,step 0
+0.199649,2.446921,False,1.0503979579953011,"ConvergenceError: Nonlinear solve failed to converge after 42 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,42,step 0
+0.199649,2.597335,False,0.9487337910031783,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+0.199649,2.756995,False,0.922748999997566,"ConvergenceError: Nonlinear solve failed to converge after 24 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,24,step 0
+0.199649,2.92647,False,1.1709947499984992,"ConvergenceError: Nonlinear solve failed to converge after 58 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,58,step 0
+0.199649,3.106362,False,1.0476377090017195,"ConvergenceError: Nonlinear solve failed to converge after 43 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,43,step 0
+0.199649,3.297312,False,1.2512261669980944,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+0.199649,3.5,False,1.3128576669987524,"ConvergenceError: Nonlinear solve failed to converge after 56 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,56,step 0
+0.204841,0.2,True,0.8247945420007454,,Unknown,,step 0
+0.204841,0.236674,True,0.8290760000018054,,Unknown,,step 0
+0.204841,0.280072,True,0.8365640830015764,,Unknown,,step 0
+0.204841,0.331428,True,0.8449418749951292,,Unknown,,step 0
+0.204841,0.392202,True,0.8526054169997224,,Unknown,,step 0
+0.204841,0.464119,True,0.8473688750018482,,Unknown,,step 0
+0.204841,0.549224,True,0.8644322499967529,,Unknown,,step 0
+0.204841,0.649934,True,0.8652258340007393,,Unknown,,step 0
+0.204841,0.769111,True,0.8578996249998454,,Unknown,,step 0
+0.204841,0.910142,True,0.8562257910016342,,Unknown,,step 0
+0.204841,1.077033,True,0.9026360409989138,,Unknown,,step 0
+0.204841,1.274526,True,0.8629359169935924,,Unknown,,step 0
+0.204841,1.508234,True,0.8945004169945605,,Unknown,,step 0
+0.204841,1.784796,True,0.9359813749979367,,Unknown,,step 0
+0.204841,2.11207,True,0.9724462090016459,,Unknown,,step 0
+0.204841,2.499357,False,0.9553339590056567,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+0.204841,2.957659,False,0.9317461249956978,"ConvergenceError: Nonlinear solve failed to converge after 26 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,26,step 0
+0.204841,3.5,True,1.1820656660056557,,Unknown,,step 0
+0.223077,0.3,True,0.8399759999956586,,Unknown,,step 0
+0.223077,0.376923,True,0.8450129580014618,,Unknown,,step 0
+0.223077,0.453846,True,0.8503855410017422,,Unknown,,step 0
+0.223077,0.530769,True,0.8543432080041384,,Unknown,,step 0
+0.223077,0.607692,True,0.856771958002355,,Unknown,,step 0
+0.223077,0.684615,True,0.9001452079974115,,Unknown,,step 0
+0.223077,0.761538,True,0.8558115839987295,,Unknown,,step 0
+0.223077,0.838462,True,0.857941459005815,,Unknown,,step 0
+0.223077,0.915385,True,0.8573196669967729,,Unknown,,step 0
+0.223077,0.992308,True,0.8618797500021174,,Unknown,,step 0
+0.223077,1.069231,True,0.8571907080040546,,Unknown,,step 0
+0.223077,1.146154,True,0.8653717080014758,,Unknown,,step 0
+0.223077,1.223077,True,0.8685866249943501,,Unknown,,step 0
+0.223077,1.3,True,0.8652151249989402,,Unknown,,step 0
+0.240732,1.927472,True,0.9395662499955506,,Unknown,,step 0
+0.240732,2.045955,True,0.9637284170021303,,Unknown,,step 0
+0.240732,2.171721,True,0.9777686660017935,,Unknown,,step 0
+0.240732,2.305218,True,1.06144720800512,,Unknown,,step 0
+0.240732,2.446921,True,1.0026767500021379,,Unknown,,step 0
+0.240732,2.597335,True,1.0224873340048362,,Unknown,,step 0
+0.240732,2.756995,False,1.042298499996832,"ConvergenceError: Nonlinear solve failed to converge after 42 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,42,step 0
+0.240732,2.92647,True,1.171605791998445,,Unknown,,step 0
+0.240732,3.106362,False,0.9473834579985123,"ConvergenceError: Nonlinear solve failed to converge after 22 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,22,step 0
+0.240732,3.297312,False,0.9570241669935058,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+0.240732,3.5,False,1.062827624999045,"ConvergenceError: Nonlinear solve failed to converge after 52 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,52,step 0
+0.248462,0.3,True,0.8303478750021895,,Unknown,,step 0
+0.248462,0.376923,True,0.8424338330005412,,Unknown,,step 0
+0.248462,0.453846,True,0.8517114580026828,,Unknown,,step 0
+0.248462,0.530769,True,0.8885415409968118,,Unknown,,step 0
+0.248462,0.607692,True,0.8531160830025328,,Unknown,,step 0
+0.248462,0.684615,True,0.853655582999636,,Unknown,,step 0
+0.248462,0.761538,True,0.8562284579966217,,Unknown,,step 0
+0.248462,0.838462,True,0.8590992079989519,,Unknown,,step 0
+0.248462,0.915385,True,0.8638080000018817,,Unknown,,step 0
+0.248462,0.992308,True,0.8621953330002725,,Unknown,,step 0
+0.248462,1.069231,True,0.8579586250052671,,Unknown,,step 0
+0.248462,1.146154,True,0.8568597909979871,,Unknown,,step 0
+0.248462,1.223077,True,0.8626790830021491,,Unknown,,step 0
+0.248462,1.3,True,0.8654350409997278,,Unknown,,step 0
+0.273846,0.3,True,0.829321750003146,,Unknown,,step 0
+0.273846,0.376923,True,0.8463981669992791,,Unknown,,step 0
+0.273846,0.453846,True,0.8580012919992441,,Unknown,,step 0
+0.273846,0.530769,True,0.8515403749988764,,Unknown,,step 0
+0.273846,0.607692,True,0.856646375003038,,Unknown,,step 0
+0.273846,0.684615,True,0.8532542920002015,,Unknown,,step 0
+0.273846,0.761538,True,0.8589271250020829,,Unknown,,step 0
+0.273846,0.838462,True,0.8672981249983422,,Unknown,,step 0
+0.273846,0.915385,True,0.8912339579983382,,Unknown,,step 0
+0.273846,0.992308,True,0.8627509579964681,,Unknown,,step 0
+0.273846,1.069231,True,0.8620238750008866,,Unknown,,step 0
+0.273846,1.146154,True,0.8616180830067606,,Unknown,,step 0
+0.273846,1.223077,True,0.8608115840033861,,Unknown,,step 0
+0.273846,1.3,True,0.8512122079991968,,Unknown,,step 0
+0.286504,0.2,True,0.8346779159983271,,Unknown,,step 0
+0.286504,0.236674,True,0.8282520420034416,,Unknown,,step 0
+0.286504,0.280072,True,0.8570965410035569,,Unknown,,step 0
+0.286504,0.331428,True,0.8540765420038952,,Unknown,,step 0
+0.286504,0.392202,True,0.8678014170000097,,Unknown,,step 0
+0.286504,0.464119,True,0.841012208002212,,Unknown,,step 0
+0.286504,0.549224,True,0.8140446670004167,,Unknown,,step 0
+0.286504,0.649934,True,0.8170405839991872,,Unknown,,step 0
+0.286504,0.769111,True,0.8215294170004199,,Unknown,,step 0
+0.286504,0.910142,True,0.8230275419991813,,Unknown,,step 0
+0.286504,1.077033,True,0.826870750002854,,Unknown,,step 0
+0.286504,1.274526,True,0.8323823329992592,,Unknown,,step 0
+0.286504,1.508234,True,0.8463837079980294,,Unknown,,step 0
+0.286504,1.784796,True,0.8662344590047724,,Unknown,,step 0
+0.286504,2.11207,True,0.9165377090030233,,Unknown,,step 0
+0.286504,2.499357,True,0.9703003750037169,,Unknown,,step 0
+0.286504,2.957659,True,1.023964457999682,,Unknown,,step 0
+0.286504,3.5,True,1.0705564579984639,,Unknown,,step 0
+0.290269,2.446921,True,0.9584706249952433,,Unknown,,step 0
+0.290269,2.597335,True,0.9767688749998342,,Unknown,,step 0
+0.290269,2.756995,True,1.004763709002873,,Unknown,,step 0
+0.290269,2.92647,True,1.0172083340003155,,Unknown,,step 0
+0.290269,3.106362,True,1.0390205839939881,,Unknown,,step 0
+0.290269,3.297312,True,1.0446931249971385,,Unknown,,step 0
+0.290269,3.5,True,1.0557651249982882,,Unknown,,step 0
+0.299231,0.3,True,0.7996737919966108,,Unknown,,step 0
+0.299231,0.376923,True,0.8483111669993377,,Unknown,,step 0
+0.299231,0.453846,True,0.8227532079981756,,Unknown,,step 0
+0.299231,0.530769,True,0.8282526659968426,,Unknown,,step 0
+0.299231,0.607692,True,0.8287607499951264,,Unknown,,step 0
+0.299231,0.684615,True,0.8359209999980521,,Unknown,,step 0
+0.299231,0.761538,True,0.8324322089974885,,Unknown,,step 0
+0.299231,0.838462,True,0.8386045829975046,,Unknown,,step 0
+0.299231,0.915385,True,0.8983273340054438,,Unknown,,step 0
+0.299231,0.992308,True,0.8378435830018134,,Unknown,,step 0
+0.299231,1.069231,True,0.8421302910064696,,Unknown,,step 0
+0.299231,1.146154,True,0.8733967920052237,,Unknown,,step 0
+0.299231,1.223077,True,0.8950586249993648,,Unknown,,step 0
+0.299231,1.3,True,0.8527966249966994,,Unknown,,step 0
+0.324615,0.3,True,0.8154455840049195,,Unknown,,step 0
+0.324615,0.376923,True,0.8184402080005384,,Unknown,,step 0
+0.324615,0.453846,True,0.8248772079969058,,Unknown,,step 0
+0.324615,0.530769,True,0.8320669579989044,,Unknown,,step 0
+0.324615,0.607692,True,0.829541542007064,,Unknown,,step 0
+0.324615,0.684615,True,0.8417329170042649,,Unknown,,step 0
+0.324615,0.761538,True,0.8399671660008607,,Unknown,,step 0
+0.324615,0.838462,True,0.8420529580034781,,Unknown,,step 0
+0.324615,0.915385,True,0.8422315409989096,,Unknown,,step 0
+0.324615,0.992308,True,0.8455698749967269,,Unknown,,step 0
+0.324615,1.069231,True,0.8379217090041493,,Unknown,,step 0
+0.324615,1.146154,True,0.8832110000003013,,Unknown,,step 0
+0.324615,1.223077,True,0.8497437080004602,,Unknown,,step 0
+0.324615,1.3,True,0.8512679580016993,,Unknown,,step 0
+0.35,0.3,True,0.8204695419990458,,Unknown,,step 0
+0.35,0.376923,True,0.817021750001004,,Unknown,,step 0
+0.35,0.453846,True,0.8290419160039164,,Unknown,,step 0
+0.35,0.530769,True,0.8425193750008475,,Unknown,,step 0
+0.35,0.607692,True,0.8412683749993448,,Unknown,,step 0
+0.35,0.684615,True,0.842006124999898,,Unknown,,step 0
+0.35,0.761538,True,0.8457738750003045,,Unknown,,step 0
+0.35,0.838462,True,0.844361374998698,,Unknown,,step 0
+0.35,0.915385,True,0.8446985830014455,,Unknown,,step 0
+0.35,0.992308,True,0.8421608329954324,,Unknown,,step 0
+0.35,1.069231,True,0.844847790998756,,Unknown,,step 0
+0.35,1.146154,True,0.8512984580011107,,Unknown,,step 0
+0.35,1.223077,True,0.8480220420024125,,Unknown,,step 0
+0.35,1.3,True,0.8532299579965184,,Unknown,,step 0
+0.35,2.92647,True,1.017830500000855,,Unknown,,step 0
+0.35,3.106362,True,1.0372832079956424,,Unknown,,step 0
+0.35,3.297312,True,1.0426115000009304,,Unknown,,step 0
+0.35,3.5,True,1.0766037499997765,,Unknown,,step 0
+0.400722,0.2,True,0.8531186249965685,,Unknown,,step 0
+0.400722,0.236674,True,0.8376828749969718,,Unknown,,step 0
+0.400722,0.280072,True,0.862323708999611,,Unknown,,step 0
+0.400722,0.331428,True,0.8069593749969499,,Unknown,,step 0
+0.400722,0.392202,True,0.9130627089980408,,Unknown,,step 0
+0.400722,0.464119,True,0.7773940839979332,,Unknown,,step 0
+0.400722,0.549224,True,0.8434805409997352,,Unknown,,step 0
+0.400722,0.649934,True,1.1956833749936777,,Unknown,,step 0
+0.400722,0.769111,True,1.2938852090010187,,Unknown,,step 0
+0.400722,0.910142,True,1.1177110000062385,,Unknown,,step 0
+0.400722,1.077033,True,1.1525292500009527,,Unknown,,step 0
+0.400722,1.274526,True,1.2483488750003744,,Unknown,,step 0
+0.400722,1.508234,True,1.2525301669957116,,Unknown,,step 0
+0.400722,1.784796,True,1.204826041997876,,Unknown,,step 0
+0.400722,2.11207,True,1.2497482499966281,,Unknown,,step 0
+0.400722,2.499357,True,1.0123726249948959,,Unknown,,step 0
+0.400722,2.957659,True,1.062175874998502,,Unknown,,step 0
+0.400722,3.5,True,1.104852917000244,,Unknown,,step 0
+0.560475,0.2,True,0.8408696659971611,,Unknown,,step 0
+0.560475,0.236674,True,0.8284962910038303,,Unknown,,step 0
+0.560475,0.280072,True,0.8245422909967601,,Unknown,,step 0
+0.560475,0.331428,True,0.8269132919958793,,Unknown,,step 0
+0.560475,0.392202,True,0.8174380419950467,,Unknown,,step 0
+0.560475,0.464119,True,0.8173467089945916,,Unknown,,step 0
+0.560475,0.549224,True,0.8000012499978766,,Unknown,,step 0
+0.560475,0.649934,True,0.8019412080029724,,Unknown,,step 0
+0.560475,0.769111,True,0.8277210829983233,,Unknown,,step 0
+0.560475,0.910142,True,0.8224561669994728,,Unknown,,step 0
+0.560475,1.077033,True,0.8278434170060791,,Unknown,,step 0
+0.560475,1.274526,True,0.8323313330038218,,Unknown,,step 0
+0.560475,1.508234,True,0.8405330419991515,,Unknown,,step 0
+0.560475,1.784796,True,0.8504049999974086,,Unknown,,step 0
+0.560475,2.11207,True,0.8748195419975673,,Unknown,,step 0
+0.560475,2.499357,True,0.8994995409957482,,Unknown,,step 0
+0.560475,2.957659,True,0.9448766249988694,,Unknown,,step 0
+0.560475,3.5,True,0.9851827919992502,,Unknown,,step 0
+0.783915,0.2,True,0.8823638340036268,,Unknown,,step 0
+0.783915,0.236674,True,0.8574297080049291,,Unknown,,step 0
+0.783915,0.280072,True,0.844691165999393,,Unknown,,step 0
+0.783915,0.331428,True,0.8444417089995113,,Unknown,,step 0
+0.783915,0.392202,True,0.8439653329987777,,Unknown,,step 0
+0.783915,0.464119,True,0.8407538749961532,,Unknown,,step 0
+0.783915,0.549224,True,0.8365666249956121,,Unknown,,step 0
+0.783915,0.649934,True,0.8185440829984145,,Unknown,,step 0
+0.783915,0.769111,True,0.8523734160044114,,Unknown,,step 0
+0.783915,0.910142,True,0.810551000002306,,Unknown,,step 0
+0.783915,1.077033,True,0.8348770000011427,,Unknown,,step 0
+0.783915,1.274526,True,0.8388356249997742,,Unknown,,step 0
+0.783915,1.508234,True,0.8501972919984837,,Unknown,,step 0
+0.783915,1.784796,True,0.8425002500007395,,Unknown,,step 0
+0.783915,2.11207,True,0.8621515830018325,,Unknown,,step 0
+0.783915,2.499357,True,0.8705170419998467,,Unknown,,step 0
+0.783915,2.957659,True,0.9104970000043977,,Unknown,,step 0
+0.783915,3.5,True,0.9355649589997483,,Unknown,,step 0
+1.096433,0.2,True,0.8636445420052041,,Unknown,,step 0
+1.096433,0.236674,True,0.8650074589968426,,Unknown,,step 0
+1.096433,0.280072,True,0.849658333005209,,Unknown,,step 0
+1.096433,0.331428,True,0.8417949580034474,,Unknown,,step 0
+1.096433,0.392202,True,0.8887537089976831,,Unknown,,step 0
+1.096433,0.464119,True,0.8454325000056997,,Unknown,,step 0
+1.096433,0.549224,True,0.8410793750008452,,Unknown,,step 0
+1.096433,0.649934,True,0.8381754579968401,,Unknown,,step 0
+1.096433,0.769111,True,0.8362595829967177,,Unknown,,step 0
+1.096433,0.910142,True,0.8333390000043437,,Unknown,,step 0
+1.096433,1.077033,True,0.8145770830014953,,Unknown,,step 0
+1.096433,1.274526,True,0.8249792080023326,,Unknown,,step 0
+1.096433,1.508234,True,0.8338005829937174,,Unknown,,step 0
+1.096433,1.784796,True,0.840199374993972,,Unknown,,step 0
+1.096433,2.11207,True,0.8468138329990325,,Unknown,,step 0
+1.096433,2.499357,True,0.8533376670020516,,Unknown,,step 0
+1.096433,2.957659,True,0.8662117910062079,,Unknown,,step 0
+1.096433,3.5,True,0.8925951249984792,,Unknown,,step 0
+1.53354,0.2,True,0.9173821250005858,,Unknown,,step 0
+1.53354,0.236674,True,0.9266529580054339,,Unknown,,step 0
+1.53354,0.280072,True,0.8916429169985349,,Unknown,,step 0
+1.53354,0.331428,True,0.8746333750023041,,Unknown,,step 0
+1.53354,0.392202,True,0.8693997079972178,,Unknown,,step 0
+1.53354,0.464119,True,0.8635210419961368,,Unknown,,step 0
+1.53354,0.549224,True,0.8632564579966129,,Unknown,,step 0
+1.53354,0.649934,True,0.8510690000039176,,Unknown,,step 0
+1.53354,0.769111,True,0.8464763750016573,,Unknown,,step 0
+1.53354,0.910142,True,0.8473477919978905,,Unknown,,step 0
+1.53354,1.077033,True,0.8450094580039149,,Unknown,,step 0
+1.53354,1.274526,True,0.8399084999982733,,Unknown,,step 0
+1.53354,1.508234,True,0.8181770000010147,,Unknown,,step 0
+1.53354,1.784796,True,0.8322248339973157,,Unknown,,step 0
+1.53354,2.11207,True,0.8416540409962181,,Unknown,,step 0
+1.53354,2.499357,True,0.8411377500015078,,Unknown,,step 0
+1.53354,2.957659,True,0.851038000000699,,Unknown,,step 0
+1.53354,3.5,True,0.8991370000003371,,Unknown,,step 0
+1.601329,0.2,True,0.9256361659936374,,Unknown,,step 0
+1.687332,0.2,True,0.952063917000487,,Unknown,,step 0
+1.777955,0.2,False,0.9978398750026827,"ConvergenceError: Nonlinear solve failed to converge after 37 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,37,step 0
+1.777955,0.213631,True,0.9857995830025175,,Unknown,,step 0
+1.873444,0.2,False,1.2152883329981705,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+1.873444,0.213631,True,1.0626024169978336,,Unknown,,step 0
+1.873444,0.228192,True,0.9533447079957114,,Unknown,,step 0
+1.974062,0.2,False,1.2725657079936354,"ConvergenceError: Nonlinear solve failed to converge after 76 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,76,step 0
+1.974062,0.213631,True,1.0123419999945327,,Unknown,,step 0
+1.974062,0.228192,True,1.0397957500026678,,Unknown,,step 0
+1.974062,0.243745,True,0.9508735000054003,,Unknown,,step 0
+2.0,0.2,False,1.2220505839941325,"ConvergenceError: Nonlinear solve failed to converge after 72 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,72,step 0
+2.0,0.207602,True,0.9955691659997683,,Unknown,,step 0
+2.0,0.215494,True,1.0216177080001216,,Unknown,,step 0
+2.0,0.223685,True,1.046973958000308,,Unknown,,step 0
+2.0,0.232188,True,1.0020708750016638,,Unknown,,step 0
+2.0,0.241014,True,0.9565872919993126,,Unknown,,step 0
+2.048275,0.2,False,0.9956342090008548,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+2.048275,0.207602,True,1.028607041000214,,Unknown,,step 0
+2.048275,0.215494,False,1.4899603329977253,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.048275,0.223685,False,0.9503632910054876,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+2.048275,0.232188,True,0.9784474580010283,,Unknown,,step 0
+2.048275,0.241014,True,0.9776044999962323,,Unknown,,step 0
+2.048275,0.250176,True,0.9555389579982148,,Unknown,,step 0
+2.080084,0.2,False,1.0578333750017919,"ConvergenceError: Nonlinear solve failed to converge after 46 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,46,step 0
+2.080084,0.213631,False,0.8813900829991326,"ConvergenceError: Nonlinear solve failed to converge after 19 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,19,step 0
+2.080084,0.228192,False,0.9647315000038361,"ConvergenceError: Nonlinear solve failed to converge after 34 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,34,step 0
+2.080084,0.243745,True,0.9788133749971166,,Unknown,,step 0
+2.097716,0.2,False,1.1900616249986342,"ConvergenceError: Nonlinear solve failed to converge after 58 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,58,step 0
+2.097716,0.207602,True,1.0273659160011448,,Unknown,,step 0
+2.097716,0.215494,False,1.2261487080031657,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.097716,0.223685,False,1.0219086249999236,"ConvergenceError: Nonlinear solve failed to converge after 38 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,38,step 0
+2.097716,0.232188,True,0.9749334579973947,,Unknown,,step 0
+2.097716,0.241014,True,0.9733649580011843,,Unknown,,step 0
+2.097716,0.250176,True,0.9791523750027409,,Unknown,,step 0
+2.097716,0.259686,True,0.9728354999970179,,Unknown,,step 0
+2.144906,0.2,False,0.8884996670021792,"ConvergenceError: Nonlinear solve failed to converge after 20 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,20,step 0
+2.144906,0.236674,True,0.9972193330031587,,Unknown,,step 0
+2.144906,0.280072,True,1.028165292002086,,Unknown,,step 0
+2.144906,0.331428,True,0.9650846250005998,,Unknown,,step 0
+2.144906,0.392202,True,0.9397669169993605,,Unknown,,step 0
+2.144906,0.464119,True,0.9223223329972825,,Unknown,,step 0
+2.144906,0.549224,True,0.9095743330035475,,Unknown,,step 0
+2.144906,0.649934,True,0.8910349580037291,,Unknown,,step 0
+2.144906,0.769111,True,0.8783544580001035,,Unknown,,step 0
+2.144906,0.910142,True,0.9005239170001005,,Unknown,,step 0
+2.144906,1.077033,True,0.8544061669963412,,Unknown,,step 0
+2.144906,1.274526,True,0.8468382499995641,,Unknown,,step 0
+2.144906,1.508234,True,0.8484287089959253,,Unknown,,step 0
+2.144906,1.784796,True,0.8362416250020033,,Unknown,,step 0
+2.144906,2.11207,True,0.8248375000039232,,Unknown,,step 0
+2.144906,2.499357,True,0.8351494999951683,,Unknown,,step 0
+2.144906,2.957659,True,0.8520361249975394,,Unknown,,step 0
+2.144906,3.5,True,0.8522297500021523,,Unknown,,step 0
+2.148349,0.2,False,1.0362029160023667,"ConvergenceError: Nonlinear solve failed to converge after 42 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,42,step 0
+2.148349,0.207602,False,0.9361129579992848,"ConvergenceError: Nonlinear solve failed to converge after 26 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,26,step 0
+2.148349,0.215494,True,1.0569637500011595,,Unknown,,step 0
+2.148349,0.223685,False,1.2267577919992618,"ConvergenceError: Nonlinear solve failed to converge after 72 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,72,step 0
+2.148349,0.232188,True,1.0843584160029422,,Unknown,,step 0
+2.148349,0.241014,True,0.9860512090017437,,Unknown,,step 0
+2.148349,0.250176,True,0.9768819169985363,,Unknown,,step 0
+2.148349,0.259686,True,0.9634547499954351,,Unknown,,step 0
+2.1918,0.2,True,1.048288958001649,,Unknown,,step 0
+2.1918,0.213631,True,1.0252369579975493,,Unknown,,step 0
+2.1918,0.228192,False,1.1094937090019812,"ConvergenceError: Nonlinear solve failed to converge after 47 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,47,step 0
+2.1918,0.243745,True,0.9952631249980186,,Unknown,,step 0
+2.1918,0.260358,True,0.9710130419989582,,Unknown,,step 0
+2.200205,0.2,False,1.271896749996813,"ConvergenceError: Nonlinear solve failed to converge after 70 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,70,step 0
+2.200205,0.207602,True,1.032670541004336,,Unknown,,step 0
+2.200205,0.215494,False,1.0147248749999562,"ConvergenceError: Nonlinear solve failed to converge after 41 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,41,step 0
+2.200205,0.223685,True,1.0361132079997333,,Unknown,,step 0
+2.200205,0.232188,True,1.015354249997472,,Unknown,,step 0
+2.200205,0.241014,True,1.0267695000002277,,Unknown,,step 0
+2.200205,0.250176,True,1.0272453330035205,,Unknown,,step 0
+2.200205,0.259686,True,0.9756839170004241,,Unknown,,step 0
+2.200205,0.269557,True,0.9853502079931786,,Unknown,,step 0
+2.253313,0.2,True,1.0295074579989887,,Unknown,,step 0
+2.253313,0.207602,True,1.0419760829972802,,Unknown,,step 0
+2.253313,0.215494,False,1.1286430420004763,"ConvergenceError: Nonlinear solve failed to converge after 57 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,57,step 0
+2.253313,0.223685,False,1.206697791996703,"ConvergenceError: Nonlinear solve failed to converge after 61 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,61,step 0
+2.253313,0.232188,True,1.0097811250016093,,Unknown,,step 0
+2.253313,0.241014,True,1.0297962499971618,,Unknown,,step 0
+2.253313,0.250176,True,1.0346619580013794,,Unknown,,step 0
+2.253313,0.259686,True,0.9781748339955811,,Unknown,,step 0
+2.253313,0.269557,True,0.989360209001461,,Unknown,,step 0
+2.253313,0.279803,True,0.9963971249962924,,Unknown,,step 0
+2.307703,0.2,False,1.1069559999959893,"ConvergenceError: Nonlinear solve failed to converge after 49 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,49,step 0
+2.307703,0.207602,False,1.2398251249978784,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.307703,0.215494,True,1.039770707997377,,Unknown,,step 0
+2.307703,0.223685,False,1.172887583001284,"ConvergenceError: Nonlinear solve failed to converge after 52 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,52,step 0
+2.307703,0.232188,True,1.0433148750016699,,Unknown,,step 0
+2.307703,0.241014,False,1.2381893749989104,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.307703,0.250176,True,1.0019069580012,,Unknown,,step 0
+2.307703,0.259686,False,1.2447474579967093,"ConvergenceError: Nonlinear solve failed to converge after 66 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,66,step 0
+2.307703,0.269557,True,1.0059111660011695,,Unknown,,step 0
+2.307703,0.279803,True,1.0057194580003852,,Unknown,,step 0
+2.309516,0.2,False,1.133495458001562,"ConvergenceError: Nonlinear solve failed to converge after 54 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,54,step 0
+2.309516,0.213631,False,0.8749692080018576,"ConvergenceError: Nonlinear solve failed to converge after 17 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,17,step 0
+2.309516,0.228192,False,0.9468268330019782,"ConvergenceError: Nonlinear solve failed to converge after 11 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,11,step 0
+2.309516,0.243745,False,0.9423761669968371,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+2.309516,0.260358,True,1.0414069170001312,,Unknown,,step 0
+2.309516,0.278103,True,1.0132898749943706,,Unknown,,step 0
+2.363405,0.2,False,1.1989427499938756,"ConvergenceError: Nonlinear solve failed to converge after 61 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,61,step 0
+2.363405,0.207602,True,1.108537542000704,,Unknown,,step 0
+2.363405,0.215494,True,1.0405161669987137,,Unknown,,step 0
+2.363405,0.223685,False,1.179667790995154,"ConvergenceError: Nonlinear solve failed to converge after 64 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,64,step 0
+2.363405,0.232188,False,1.0564094580040546,"ConvergenceError: Nonlinear solve failed to converge after 43 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,43,step 0
+2.363405,0.241014,False,1.047883749997709,"ConvergenceError: Nonlinear solve failed to converge after 38 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,38,step 0
+2.363405,0.250176,True,1.0238844589985092,,Unknown,,step 0
+2.363405,0.259686,False,1.2160831250002957,"ConvergenceError: Nonlinear solve failed to converge after 20 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,20,step 0
+2.363405,0.269557,True,0.9959705829969607,,Unknown,,step 0
+2.363405,0.279803,True,1.0073695839964785,,Unknown,,step 0
+2.363405,0.290439,True,1.0047053750022314,,Unknown,,step 0
+2.420452,0.2,False,0.9497303329990245,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+2.420452,0.207602,False,1.1892185839969898,"ConvergenceError: Nonlinear solve failed to converge after 61 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,61,step 0
+2.420452,0.215494,False,1.018973541999003,"ConvergenceError: Nonlinear solve failed to converge after 42 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,42,step 0
+2.420452,0.223685,False,0.9418652500025928,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+2.420452,0.232188,True,1.0500783329989645,,Unknown,,step 0
+2.420452,0.241014,True,1.0402442090053228,,Unknown,,step 0
+2.420452,0.250176,False,0.9828454590024194,"ConvergenceError: Nonlinear solve failed to converge after 33 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,33,step 0
+2.420452,0.259686,True,1.0303767919976963,,Unknown,,step 0
+2.420452,0.269557,True,1.0040161249999073,,Unknown,,step 0
+2.420452,0.279803,True,1.0153731669997796,,Unknown,,step 0
+2.420452,0.290439,True,1.0216780420014402,,Unknown,,step 0
+2.420452,0.30148,True,1.0051506670060917,,Unknown,,step 0
+2.433554,0.2,False,1.204620332995546,"ConvergenceError: Nonlinear solve failed to converge after 66 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,66,step 0
+2.433554,0.213631,True,1.0521015409976826,,Unknown,,step 0
+2.433554,0.228192,False,0.9977390420026495,"ConvergenceError: Nonlinear solve failed to converge after 38 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,38,step 0
+2.433554,0.243745,True,1.0801787079981295,,Unknown,,step 0
+2.433554,0.260358,True,1.0193718340015039,,Unknown,,step 0
+2.433554,0.278103,True,1.018629874997714,,Unknown,,step 0
+2.433554,0.297058,True,1.0073869170009857,,Unknown,,step 0
+2.478876,0.2,True,1.0498860410007183,,Unknown,,step 0
+2.478876,0.207602,False,1.0485176669972134,"ConvergenceError: Nonlinear solve failed to converge after 47 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,47,step 0
+2.478876,0.215494,False,1.1191768339995178,"ConvergenceError: Nonlinear solve failed to converge after 52 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,52,step 0
+2.478876,0.223685,False,0.8969720409950241,"ConvergenceError: Nonlinear solve failed to converge after 22 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,22,step 0
+2.478876,0.232188,False,0.9471597499941709,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+2.478876,0.241014,True,1.06716262500413,,Unknown,,step 0
+2.478876,0.250176,False,1.1624732079944806,"ConvergenceError: Nonlinear solve failed to converge after 30 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,30,step 0
+2.478876,0.259686,True,1.0239117909950437,,Unknown,,step 0
+2.478876,0.269557,True,1.0147784580040025,,Unknown,,step 0
+2.478876,0.279803,True,1.0557152499968652,,Unknown,,step 0
+2.478876,0.290439,True,1.0257443750015227,,Unknown,,step 0
+2.478876,0.30148,True,1.0277392499992857,,Unknown,,step 0
+2.53871,0.2,False,0.9512492089997977,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+2.53871,0.207602,False,1.0483734169974923,"ConvergenceError: Nonlinear solve failed to converge after 49 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,49,step 0
+2.53871,0.215494,False,1.1574088749985094,"ConvergenceError: Nonlinear solve failed to converge after 57 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,57,step 0
+2.53871,0.223685,True,1.0777317920001224,,Unknown,,step 0
+2.53871,0.232188,False,0.9770942500035744,"ConvergenceError: Nonlinear solve failed to converge after 29 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,29,step 0
+2.53871,0.241014,False,1.2494331669950043,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.53871,0.250176,False,1.1512996250021388,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+2.53871,0.259686,True,1.048388832998171,,Unknown,,step 0
+2.53871,0.269557,False,1.160758291996899,"ConvergenceError: Nonlinear solve failed to converge after 62 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,62,step 0
+2.53871,0.279803,True,1.0222533330015722,,Unknown,,step 0
+2.53871,0.290439,True,1.0751863340046839,,Unknown,,step 0
+2.53871,0.30148,True,1.0276957500027493,,Unknown,,step 0
+2.53871,0.31294,True,1.0367429170000833,,Unknown,,step 0
+2.564254,0.2,True,1.1351235000038287,,Unknown,,step 0
+2.564254,0.213631,False,1.2930119169977843,"ConvergenceError: Nonlinear solve failed to converge after 79 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,79,step 0
+2.564254,0.228192,True,1.0712797090018285,,Unknown,,step 0
+2.564254,0.243745,True,1.0716499170011957,,Unknown,,step 0
+2.564254,0.260358,True,1.0425282500000321,,Unknown,,step 0
+2.564254,0.278103,True,1.0119949580039247,,Unknown,,step 0
+2.564254,0.297058,True,1.0411539580018143,,Unknown,,step 0
+2.564254,0.317304,True,1.0725705829972867,,Unknown,,step 0
+2.599988,0.2,False,1.2107652499980759,"ConvergenceError: Nonlinear solve failed to converge after 64 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,64,step 0
+2.599988,0.207602,False,0.997163708001608,"ConvergenceError: Nonlinear solve failed to converge after 38 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,38,step 0
+2.599988,0.215494,False,1.1041349160004756,"ConvergenceError: Nonlinear solve failed to converge after 48 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,48,step 0
+2.599988,0.223685,True,1.098135332998936,,Unknown,,step 0
+2.599988,0.232188,True,1.0703740419994574,,Unknown,,step 0
+2.599988,0.241014,True,1.1031254999979865,,Unknown,,step 0
+2.599988,0.250176,True,1.0530190419958672,,Unknown,,step 0
+2.599988,0.259686,False,1.2508147499975166,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.599988,0.269557,False,1.0068661249970319,"ConvergenceError: Nonlinear solve failed to converge after 41 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,41,step 0
+2.599988,0.279803,True,1.0217433750003693,,Unknown,,step 0
+2.599988,0.290439,True,1.0351815419999184,,Unknown,,step 0
+2.599988,0.30148,True,1.0350321249934495,,Unknown,,step 0
+2.599988,0.31294,True,1.0224323330039624,,Unknown,,step 0
+2.599988,0.324835,True,1.0442219590040622,,Unknown,,step 0
+2.662746,0.2,False,1.1342038750008214,"ConvergenceError: Nonlinear solve failed to converge after 52 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,52,step 0
+2.662746,0.207602,False,0.9872370419980143,"ConvergenceError: Nonlinear solve failed to converge after 38 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,38,step 0
+2.662746,0.215494,False,1.226605916999688,"ConvergenceError: Nonlinear solve failed to converge after 67 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,67,step 0
+2.662746,0.223685,True,1.134420707996469,,Unknown,,step 0
+2.662746,0.232188,True,1.081580917001702,,Unknown,,step 0
+2.662746,0.241014,True,1.101607917000365,,Unknown,,step 0
+2.662746,0.250176,False,0.9457441249978729,"ConvergenceError: Nonlinear solve failed to converge after 28 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,28,step 0
+2.662746,0.259686,False,0.9675191670030472,"ConvergenceError: Nonlinear solve failed to converge after 32 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,32,step 0
+2.662746,0.269557,True,1.0486649999947986,,Unknown,,step 0
+2.662746,0.279803,True,1.070094374998007,,Unknown,,step 0
+2.662746,0.290439,True,1.0408885420038132,,Unknown,,step 0
+2.662746,0.30148,True,1.0476907080010278,,Unknown,,step 0
+2.662746,0.31294,True,1.0438378749968251,,Unknown,,step 0
+2.662746,0.324835,True,1.0515081249977811,,Unknown,,step 0
+2.701974,0.2,False,1.2438705829990795,"ConvergenceError: Nonlinear solve failed to converge after 60 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,60,step 0
+2.701974,0.213631,False,1.1161489580044872,"ConvergenceError: Nonlinear solve failed to converge after 52 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,52,step 0
+2.701974,0.228192,False,1.126682415997493,"ConvergenceError: Nonlinear solve failed to converge after 53 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,53,step 0
+2.701974,0.243745,True,1.088415708996763,,Unknown,,step 0
+2.701974,0.260358,False,1.0691543329958222,"ConvergenceError: Nonlinear solve failed to converge after 40 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,40,step 0
+2.701974,0.278103,False,0.951430832996266,"ConvergenceError: Nonlinear solve failed to converge after 22 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,22,step 0
+2.701974,0.297058,True,1.0385995840042597,,Unknown,,step 0
+2.701974,0.317304,True,1.0459929999997257,,Unknown,,step 0
+2.727018,0.2,False,1.2551487919990905,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.727018,0.207602,False,0.9505294589980622,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+2.727018,0.215494,False,0.9915378750010859,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+2.727018,0.223685,False,1.0179651660000673,"ConvergenceError: Nonlinear solve failed to converge after 37 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,37,step 0
+2.727018,0.232188,False,1.153951500004041,"ConvergenceError: Nonlinear solve failed to converge after 54 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,54,step 0
+2.727018,0.241014,False,1.2724098749968107,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.727018,0.250176,False,0.9527310419944115,"ConvergenceError: Nonlinear solve failed to converge after 31 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,31,step 0
+2.727018,0.259686,False,1.1424316250049742,"ConvergenceError: Nonlinear solve failed to converge after 57 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,57,step 0
+2.727018,0.269557,True,1.0978873339990969,,Unknown,,step 0
+2.727018,0.279803,False,0.8578424169973005,"ConvergenceError: Nonlinear solve failed to converge after 14 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,14,step 0
+2.727018,0.290439,True,1.0516075420018751,,Unknown,,step 0
+2.727018,0.30148,True,1.047165459000098,,Unknown,,step 0
+2.727018,0.31294,True,1.050264707999304,,Unknown,,step 0
+2.727018,0.324835,True,1.053855582998949,,Unknown,,step 0
+2.727018,0.337183,True,1.0689360420001321,,Unknown,,step 0
+2.792842,0.2,False,1.197893083000963,"ConvergenceError: Nonlinear solve failed to converge after 62 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,62,step 0
+2.792842,0.207602,False,1.257943417003844,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.792842,0.215494,False,0.9833690410014242,"ConvergenceError: Nonlinear solve failed to converge after 34 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,34,step 0
+2.792842,0.223685,False,1.2534605830005603,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.792842,0.232188,False,1.2803368750028312,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.792842,0.241014,True,1.1056703750000452,,Unknown,,step 0
+2.792842,0.250176,True,1.1556505829939852,,Unknown,,step 0
+2.792842,0.259686,False,1.2432895000019926,"ConvergenceError: Nonlinear solve failed to converge after 76 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,76,step 0
+2.792842,0.269557,False,1.2363198329985607,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.792842,0.279803,False,0.9381848330012872,"ConvergenceError: Nonlinear solve failed to converge after 26 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,26,step 0
+2.792842,0.290439,True,1.0577163339985418,,Unknown,,step 0
+2.792842,0.30148,True,1.057285833005153,,Unknown,,step 0
+2.792842,0.31294,True,1.049246458998823,,Unknown,,step 0
+2.792842,0.324835,True,1.0843280420012888,,Unknown,,step 0
+2.792842,0.337183,True,1.0869235410063993,,Unknown,,step 0
+2.84709,0.2,False,1.1071798329940066,"ConvergenceError: Nonlinear solve failed to converge after 55 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,55,step 0
+2.84709,0.213631,False,1.2890835419966606,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.84709,0.228192,False,1.0664162499961094,"ConvergenceError: Nonlinear solve failed to converge after 46 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,46,step 0
+2.84709,0.243745,True,1.100380708994635,,Unknown,,step 0
+2.84709,0.260358,False,1.31160491600167,"ConvergenceError: Nonlinear solve failed to converge after 75 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,75,step 0
+2.84709,0.278103,True,1.0929070409983979,,Unknown,,step 0
+2.84709,0.297058,True,1.0683051250016433,,Unknown,,step 0
+2.84709,0.317304,True,1.0500604170010774,,Unknown,,step 0
+2.84709,0.338931,True,1.054191750001337,,Unknown,,step 0
+2.860254,0.2,True,1.1104092499954277,,Unknown,,step 0
+2.860254,0.207602,False,1.0448882919954485,"ConvergenceError: Nonlinear solve failed to converge after 44 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,44,step 0
+2.860254,0.215494,False,1.224773792004271,"ConvergenceError: Nonlinear solve failed to converge after 71 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,71,step 0
+2.860254,0.223685,False,1.051089000000502,"ConvergenceError: Nonlinear solve failed to converge after 45 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,45,step 0
+2.860254,0.232188,True,1.2349987500056159,,Unknown,,step 0
+2.860254,0.241014,False,1.2393797089971486,"ConvergenceError: Nonlinear solve failed to converge after 67 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,67,step 0
+2.860254,0.250176,False,0.9675725829947623,"ConvergenceError: Nonlinear solve failed to converge after 27 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,27,step 0
+2.860254,0.259686,False,1.0607346249962575,"ConvergenceError: Nonlinear solve failed to converge after 49 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,49,step 0
+2.860254,0.269557,False,1.2411112080008024,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.860254,0.279803,True,1.0543684999938705,,Unknown,,step 0
+2.860254,0.290439,True,1.0550599169946508,,Unknown,,step 0
+2.860254,0.30148,True,1.0629925829998683,,Unknown,,step 0
+2.860254,0.31294,True,1.0678439580005943,,Unknown,,step 0
+2.860254,0.324835,True,1.0712188750039786,,Unknown,,step 0
+2.860254,0.337183,True,1.064547958005278,,Unknown,,step 0
+2.860254,0.35,True,1.0387053750018822,,Unknown,,step 0
+2.929294,0.2,False,0.9811865000010584,"ConvergenceError: Nonlinear solve failed to converge after 33 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,33,step 0
+2.929294,0.207602,False,1.2579294169991044,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.929294,0.215494,True,1.1185411249971366,,Unknown,,step 0
+2.929294,0.223685,False,0.9821522920028656,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+2.929294,0.232188,True,1.1273417499978677,,Unknown,,step 0
+2.929294,0.241014,False,1.101362915993377,"ConvergenceError: Nonlinear solve failed to converge after 52 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,52,step 0
+2.929294,0.250176,True,1.1077799999984563,,Unknown,,step 0
+2.929294,0.259686,True,1.0947263749985723,,Unknown,,step 0
+2.929294,0.269557,False,1.35431070800405,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+2.929294,0.279803,True,1.0626172500051325,,Unknown,,step 0
+2.929294,0.290439,True,1.051636292002513,,Unknown,,step 0
+2.929294,0.30148,True,1.060226125002373,,Unknown,,step 0
+2.929294,0.31294,True,1.0607986670001992,,Unknown,,step 0
+2.929294,0.324835,True,1.0956363750010496,,Unknown,,step 0
+2.929294,0.337183,True,1.0562830830021994,,Unknown,,step 0
+2.929294,0.35,True,1.0633350420030183,,Unknown,,step 0
+3.0,0.2,False,1.0715310410014354,"ConvergenceError: Nonlinear solve failed to converge after 49 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,49,step 0
+3.0,0.207602,False,0.9937818749967846,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+3.0,0.213631,False,1.2503208750058548,"ConvergenceError: Nonlinear solve failed to converge after 39 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,39,step 0
+3.0,0.215494,True,1.09725916699972,,Unknown,,step 0
+3.0,0.223685,False,1.2971167919968138,"ConvergenceError: Nonlinear solve failed to converge after 79 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,79,step 0
+3.0,0.228192,False,0.9973765830000048,"ConvergenceError: Nonlinear solve failed to converge after 36 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,36,step 0
+3.0,0.232188,False,1.079377875001228,"ConvergenceError: Nonlinear solve failed to converge after 52 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,52,step 0
+3.0,0.236674,False,1.249336332999519,"ConvergenceError: Nonlinear solve failed to converge after 74 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,74,step 0
+3.0,0.241014,True,1.2181608749961015,,Unknown,,step 0
+3.0,0.243745,False,1.1157707090023905,"ConvergenceError: Nonlinear solve failed to converge after 48 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,48,step 0
+3.0,0.250176,False,0.9110450830048649,"ConvergenceError: Nonlinear solve failed to converge after 24 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,24,step 0
+3.0,0.259686,False,0.9825292910027201,"ConvergenceError: Nonlinear solve failed to converge after 34 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,34,step 0
+3.0,0.260358,False,1.2317204579958343,"ConvergenceError: Nonlinear solve failed to converge after 80 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT",DIVERGED_MAX_IT,80,step 0
+3.0,0.269557,False,0.926113458997861,"ConvergenceError: Nonlinear solve failed to converge after 25 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,25,step 0
+3.0,0.278103,False,1.0525411250055186,"ConvergenceError: Nonlinear solve failed to converge after 19 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,19,step 0
+3.0,0.279803,False,0.9165269170043757,"ConvergenceError: Nonlinear solve failed to converge after 24 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,24,step 0
+3.0,0.280072,False,1.041007832995092,"ConvergenceError: Nonlinear solve failed to converge after 37 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH",DIVERGED_LINE_SEARCH,37,step 0
+3.0,0.290439,True,1.085891458002152,,Unknown,,step 0
+3.0,0.297058,True,1.0866188750005676,,Unknown,,step 0
+3.0,0.30148,True,1.0843942080027773,,Unknown,,step 0
+3.0,0.31294,True,1.0768900830007624,,Unknown,,step 0
+3.0,0.317304,True,1.0738478749990463,,Unknown,,step 0
+3.0,0.324835,True,1.0669190000044182,,Unknown,,step 0
+3.0,0.331428,True,1.0918776670005172,,Unknown,,step 0
+3.0,0.337183,True,1.0653621250021388,,Unknown,,step 0
+3.0,0.338931,True,1.0949115000039455,,Unknown,,step 0
+3.0,0.35,True,1.0594551670001238,,Unknown,,step 0
+3.0,0.362032,True,1.0512080830012565,,Unknown,,step 0
+3.0,0.392202,True,1.0491604579947307,,Unknown,,step 0
+3.0,0.464119,True,1.0127083330007736,,Unknown,,step 0
+3.0,0.549224,True,0.9901989579957444,,Unknown,,step 0
+3.0,0.649934,True,1.0012847920006607,,Unknown,,step 0
+3.0,0.769111,True,0.9357745829984196,,Unknown,,step 0
+3.0,0.910142,True,0.906851416999416,,Unknown,,step 0
+3.0,1.077033,True,0.8818221250039642,,Unknown,,step 0
+3.0,1.274526,True,0.8756881250010338,,Unknown,,step 0
+3.0,1.508234,True,0.8592723330002627,,Unknown,,step 0
+3.0,1.784796,True,0.8960021250022692,,Unknown,,step 0
+3.0,2.11207,True,0.8544045410017134,,Unknown,,step 0
+3.0,2.499357,True,0.8481825420021778,,Unknown,,step 0
+3.0,2.957659,True,0.8364367079993826,,Unknown,,step 0
+3.0,3.5,True,0.8444369999997434,,Unknown,,step 0
