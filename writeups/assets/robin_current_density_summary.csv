@@ -1,0 +1,4 @@
+case_tag,noise_percent,seed,best_kappa0,best_kappa1,best_loss,gen_plot,fit_plot
+0pct,0.0,20260220,0.9988962041014258,1.998188041368848,1.1346796509863998e-08,writeups/assets/robin_current_density_generation_0pct.png,writeups/assets/robin_kappa_current_density_inference_0pct.png
+2p5pct,2.5,20260222,1.006404322277102,2.001376118098532,9.080107810325536e-05,writeups/assets/robin_current_density_generation_2p5pct.png,writeups/assets/robin_kappa_current_density_inference_2p5pct.png
+5pct,5.0,20260221,1.9494059912317305,2.6694314580062954,0.0005178677082109781,writeups/assets/robin_current_density_generation_5pct.png,writeups/assets/robin_kappa_current_density_inference_5pct.png

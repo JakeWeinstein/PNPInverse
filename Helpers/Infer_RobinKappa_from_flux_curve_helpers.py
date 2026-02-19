@@ -22,6 +22,7 @@ except Exception:
     plt = None
 
 from Utils.robin_flux_experiment import (
+    FARADAY_CONSTANT,
     SteadyStateConfig,
     add_percent_noise,
     all_results_converged,
@@ -48,6 +49,11 @@ class RobinFluxCurveInferenceRequest:
     regenerate_target: bool = False
     target_noise_percent: float = 2.0
     target_seed: int = 20260220
+    observable_mode: str = "total_species"
+    observable_species_index: Optional[int] = None
+    observable_scale: float = 1.0
+    observable_label: str = "steady-state flux (observable)"
+    observable_title: str = "Robin kappa fit"
     kappa_lower: float = 1e-6
     kappa_upper: float = 20.0
     optimizer_method: str = "L-BFGS-B"
@@ -155,6 +161,8 @@ class _LiveFitPlot:
         *,
         phi_applied_values: np.ndarray,
         target_flux: np.ndarray,
+        y_label: str,
+        title: str,
         enabled: bool,
         pause_seconds: float,
         show_eval_lines: bool,
@@ -216,8 +224,8 @@ class _LiveFitPlot:
                 fontsize=9,
             )
             self.ax.set_xlabel("applied voltage phi_applied")
-            self.ax.set_ylabel("steady-state flux (observable)")
-            self.ax.set_title("Robin kappa fit (live)")
+            self.ax.set_ylabel(str(y_label))
+            self.ax.set_title(f"{title} (live)")
             self.ax.grid(True, alpha=0.25)
             self.ax.legend()
             self.fig.tight_layout()
@@ -534,8 +542,8 @@ def ensure_target_curve(
     return {"phi_applied": phi_applied_values.copy(), "flux": target_flux_noisy}
 
 
-def _build_total_species_flux_form(ctx: Dict[str, object]):
-    """Build Robin-boundary total-species flux form from current solver state."""
+def _build_species_boundary_flux_forms(ctx: Dict[str, object]) -> List[object]:
+    """Build integrated Robin-boundary flux forms (one scalar form per species)."""
     import firedrake as fd
 
     n_species = int(ctx["n_species"])
@@ -546,12 +554,75 @@ def _build_total_species_flux_form(ctx: Dict[str, object]):
     ci = fd.split(ctx["U"])[:-1]
     ds = fd.Measure("ds", domain=ctx["mesh"])
 
-    flux_form = 0
+    forms: List[object] = []
     for i in range(n_species):
-        flux_form += kappa_funcs[i] * (ci[i] - fd.Constant(c_inf_vals[i])) * ds(
-            electrode_marker
+        forms.append(kappa_funcs[i] * (ci[i] - fd.Constant(c_inf_vals[i])) * ds(electrode_marker))
+    return forms
+
+
+def _build_observable_form(
+    ctx: Dict[str, object],
+    *,
+    mode: str,
+    species_index: Optional[int],
+    scale: float,
+) -> object:
+    """Build scalar observable form from species boundary flux forms.
+
+    Supported modes:
+    - ``total_species``: sum_i flux_i
+    - ``total_charge``: F * sum_i z_i * flux_i
+    - ``charge_proxy_no_f``: sum_i z_i * flux_i (Faraday scaling omitted)
+    - ``species``: flux_species_index
+    """
+    import firedrake as fd
+
+    mode_norm = str(mode).strip().lower()
+    forms = _build_species_boundary_flux_forms(ctx)
+    n_species = len(forms)
+
+    if mode_norm == "total_species":
+        out = 0
+        for form_i in forms:
+            out += form_i
+    elif mode_norm == "total_charge":
+        z_consts = list(ctx.get("z_consts", []))
+        if len(z_consts) != n_species:
+            raise ValueError(
+                f"z_consts length {len(z_consts)} does not match species count {n_species}."
+            )
+        out = 0
+        for i in range(n_species):
+            out += z_consts[i] * forms[i]
+        out = fd.Constant(float(FARADAY_CONSTANT)) * out
+    elif mode_norm == "charge_proxy_no_f":
+        z_consts = list(ctx.get("z_consts", []))
+        if len(z_consts) != n_species:
+            raise ValueError(
+                f"z_consts length {len(z_consts)} does not match species count {n_species}."
+            )
+        # Provisional observable for parameter studies: charge-weighted species
+        # flux without Faraday scaling. Units are intentionally treated as a.u.
+        # until physical current-density calibration is finalized.
+        out = 0
+        for i in range(n_species):
+            out += z_consts[i] * forms[i]
+    elif mode_norm == "species":
+        if species_index is None:
+            raise ValueError("species_index must be set when observable_mode='species'.")
+        idx = int(species_index)
+        if idx < 0 or idx >= n_species:
+            raise ValueError(
+                f"species_index {idx} out of bounds for n_species={n_species}."
+            )
+        out = forms[idx]
+    else:
+        raise ValueError(
+            f"Unknown observable_mode '{mode}'. "
+            "Use 'total_species', 'total_charge', 'charge_proxy_no_f', or 'species'."
         )
-    return flux_form
+
+    return fd.Constant(float(scale)) * out
 
 
 def _build_scalar_target_in_control_space(
@@ -596,6 +667,9 @@ def solve_point_objective_and_gradient(
     blob_initial_condition: bool,
     fail_penalty: float,
     forward_recovery: ForwardRecoveryConfig,
+    observable_mode: str,
+    observable_species_index: Optional[int],
+    observable_scale: float,
 ) -> PointAdjointResult:
     """Solve one phi_applied point and extract dJ_i/dkappa with firedrake-adjoint."""
     import firedrake as fd
@@ -655,7 +729,12 @@ def solve_point_objective_and_gradient(
         problem = fd.NonlinearVariationalProblem(F_res, U, bcs=bcs, J=jac)
         solver = fd.NonlinearVariationalSolver(problem, solver_parameters=params[10])
 
-        total_flux_form = _build_total_species_flux_form(ctx)
+        observable_form = _build_observable_form(
+            ctx,
+            mode=observable_mode,
+            species_index=observable_species_index,
+            scale=float(observable_scale),
+        )
         prev_flux: Optional[float] = None
         steady_count = 0
         simulated_flux = float("nan")
@@ -673,9 +752,9 @@ def solve_point_objective_and_gradient(
 
             U_prev.assign(U)
 
-            # Non-annotated flux assembly for convergence check itself.
+            # Non-annotated assembly for convergence check itself.
             with adj.stop_annotating():
-                simulated_flux = float(fd.assemble(total_flux_form))
+                simulated_flux = float(fd.assemble(observable_form))
 
             if prev_flux is not None:
                 delta = abs(simulated_flux - prev_flux)
@@ -696,7 +775,7 @@ def solve_point_objective_and_gradient(
                 target_flux_scalar = fd.assemble(
                     target_flux_control * fd.dx(domain=ctx["mesh"])
                 )
-                simulated_flux_scalar = fd.assemble(total_flux_form)
+                simulated_flux_scalar = fd.assemble(observable_form)
                 point_objective = 0.5 * (simulated_flux_scalar - target_flux_scalar) ** 2
 
                 controls = [adj.Control(ctrl) for ctrl in list(ctx["kappa_funcs"])]
@@ -762,6 +841,9 @@ def evaluate_curve_objective_and_gradient(
                 blob_initial_condition=bool(request.blob_initial_condition),
                 fail_penalty=float(request.fail_penalty),
                 forward_recovery=request.forward_recovery,
+                observable_mode=str(request.observable_mode),
+                observable_species_index=request.observable_species_index,
+                observable_scale=float(request.observable_scale),
             )
             points.append(point)
             simulated_flux[i] = point.simulated_flux
@@ -828,6 +910,7 @@ def evaluate_curve_loss_forward(
     kappa_values: np.ndarray,
     blob_initial_condition: bool,
     fail_penalty: float,
+    observable_scale: float,
 ) -> Tuple[float, np.ndarray, int]:
     """Evaluate scalar curve loss (no derivatives), used by line search."""
     results = sweep_phi_applied_steady_flux(
@@ -837,7 +920,7 @@ def evaluate_curve_loss_forward(
         kappa_values=kappa_values.tolist(),
         blob_initial_condition=blob_initial_condition,
     )
-    simulated_flux = results_to_flux_array(results)
+    simulated_flux = float(observable_scale) * results_to_flux_array(results)
     n_failed = sum(0 if r.converged else 1 for r in results)
 
     if n_failed > 0 or np.any(~np.isfinite(simulated_flux)):
@@ -905,6 +988,8 @@ def run_scipy_adjoint_optimization(
     live_plot = _LiveFitPlot(
         phi_applied_values=phi_applied_values,
         target_flux=target_flux,
+        y_label=str(request.observable_label),
+        title=str(request.observable_title),
         enabled=bool(request.live_plot),
         pause_seconds=float(request.live_plot_pause_seconds),
         show_eval_lines=bool(request.live_plot_eval_lines),
@@ -1116,6 +1201,7 @@ def run_scipy_adjoint_optimization(
             kappa_values=best_kappa,
             blob_initial_condition=bool(request.blob_initial_condition),
             fail_penalty=float(request.fail_penalty),
+            observable_scale=float(request.observable_scale),
         )
 
     # Ensure the final state is drawn even if callback was not called on last point.
@@ -1211,6 +1297,8 @@ def export_live_fit_gif(
     seconds: float,
     n_frames: int,
     dpi: int,
+    y_label: str = "steady-state flux (observable)",
+    title: str = "Robin kappa fit progress",
 ) -> Optional[str]:
     """Render a standalone convergence GIF from per-evaluation diagnostics.
 
@@ -1329,8 +1417,8 @@ def export_live_fit_gif(
         ax.set_ylim(y_lim[0], y_lim[1])
         ax.grid(True, alpha=0.25)
         ax.set_xlabel("applied voltage phi_applied")
-        ax.set_ylabel("steady-state flux (observable)")
-        ax.set_title("Robin kappa fit progress")
+        ax.set_ylabel(str(y_label))
+        ax.set_title(str(title))
 
         loss = _as_float(meta.get("objective"), float("nan"))
         kappa0 = _as_float(meta.get("kappa0"), float("nan"))
@@ -1385,43 +1473,51 @@ def run_robin_kappa_flux_curve_inference(
     request: RobinFluxCurveInferenceRequest,
 ) -> RobinFluxCurveInferenceResult:
     """Run end-to-end Robin-kappa curve inference with adjoint gradients."""
-    phi_applied_values = np.asarray(request.phi_applied_values, dtype=float)
+    request_runtime = copy.deepcopy(request)
+    request_runtime.steady.flux_observable = str(request_runtime.observable_mode)
+    request_runtime.steady.species_index = request_runtime.observable_species_index
+
+    phi_applied_values = np.asarray(request_runtime.phi_applied_values, dtype=float)
     target_data = ensure_target_curve(
-        target_csv_path=request.target_csv_path,
-        base_solver_params=request.base_solver_params,
-        steady=request.steady,
+        target_csv_path=request_runtime.target_csv_path,
+        base_solver_params=request_runtime.base_solver_params,
+        steady=request_runtime.steady,
         phi_applied_values=phi_applied_values,
-        true_kappa=request.true_value,
-        noise_percent=float(request.target_noise_percent),
-        seed=int(request.target_seed),
-        force_regenerate=bool(request.regenerate_target),
+        true_kappa=request_runtime.true_value,
+        noise_percent=float(request_runtime.target_noise_percent),
+        seed=int(request_runtime.target_seed),
+        force_regenerate=bool(request_runtime.regenerate_target),
     )
     target_phi_applied = np.asarray(target_data["phi_applied"], dtype=float)
-    target_flux = np.asarray(target_data["flux"], dtype=float)
+    target_flux = float(request_runtime.observable_scale) * np.asarray(
+        target_data["flux"], dtype=float
+    )
     if target_phi_applied.size != target_flux.size:
         raise ValueError("Target phi_applied and flux lengths do not match.")
     phi_applied_values = target_phi_applied.copy()
 
-    initial_kappa_list = _normalize_kappa(request.initial_guess, name="initial_guess")
+    initial_kappa_list = _normalize_kappa(request_runtime.initial_guess, name="initial_guess")
     if initial_kappa_list is None:
         raise ValueError("initial_guess must be set.")
     initial_kappa = np.asarray(initial_kappa_list, dtype=float)
 
-    n_species = int(request.base_solver_params[0])
-    lower = np.full(n_species, float(request.kappa_lower), dtype=float)
-    upper = np.full(n_species, float(request.kappa_upper), dtype=float)
+    n_species = int(request_runtime.base_solver_params[0])
+    lower = np.full(n_species, float(request_runtime.kappa_lower), dtype=float)
+    upper = np.full(n_species, float(request_runtime.kappa_upper), dtype=float)
 
     print("=== Adjoint-Gradient Robin Kappa Inference ===")
     print(f"Target points: {len(phi_applied_values)}")
     print(f"Initial kappa: {initial_kappa.tolist()}")
     print(f"Bounds: lower={lower.tolist()} upper={upper.tolist()}")
     print(
-        "Objective: 0.5 * sum_i (steady_flux(phi_i, kappa) - target_flux_i)^2, "
+        "Objective: 0.5 * sum_i (observable(phi_i, kappa) - target_i)^2, "
+        f"mode={request_runtime.observable_mode}, "
+        f"scale={float(request_runtime.observable_scale):.16g}, "
         "with dJ/dkappa from firedrake-adjoint per point."
     )
 
     best_kappa, best_loss, best_sim_flux, history_rows, point_rows, opt_result, live_plot = run_scipy_adjoint_optimization(
-        request=request,
+        request=request_runtime,
         phi_applied_values=phi_applied_values,
         target_flux=target_flux,
         initial_kappa=initial_kappa,
@@ -1436,20 +1532,21 @@ def run_robin_kappa_flux_curve_inference(
     )
 
     final_loss, final_sim_flux, forward_failures_at_best = evaluate_curve_loss_forward(
-        base_solver_params=request.base_solver_params,
-        steady=request.steady,
+        base_solver_params=request_runtime.base_solver_params,
+        steady=request_runtime.steady,
         phi_applied_values=phi_applied_values,
         target_flux=target_flux,
         kappa_values=best_kappa,
-        blob_initial_condition=bool(request.blob_initial_condition),
-        fail_penalty=float(request.fail_penalty),
+        blob_initial_condition=bool(request_runtime.blob_initial_condition),
+        fail_penalty=float(request_runtime.fail_penalty),
+        observable_scale=float(request_runtime.observable_scale),
     )
     if np.isfinite(final_loss) and forward_failures_at_best == 0:
         best_loss = float(final_loss)
         best_sim_flux = final_sim_flux
 
-    os.makedirs(request.output_dir, exist_ok=True)
-    fit_csv_path = os.path.join(request.output_dir, "phi_applied_vs_steady_flux_fit.csv")
+    os.makedirs(request_runtime.output_dir, exist_ok=True)
+    fit_csv_path = os.path.join(request_runtime.output_dir, "phi_applied_vs_steady_flux_fit.csv")
     with open(fit_csv_path, "w", encoding="utf-8") as f:
         f.write("phi_applied,target_flux,simulated_flux\n")
         for p, t, s in zip(
@@ -1459,20 +1556,20 @@ def run_robin_kappa_flux_curve_inference(
     print(f"Saved fitted curve CSV: {fit_csv_path}")
 
     history_csv_path = os.path.join(
-        request.output_dir, "robin_kappa_gradient_optimization_history.csv"
+        request_runtime.output_dir, "robin_kappa_gradient_optimization_history.csv"
     )
     write_history_csv(history_csv_path, history_rows)
     print(f"Saved optimization history CSV: {history_csv_path}")
 
-    point_csv_path = os.path.join(request.output_dir, "robin_kappa_point_gradients.csv")
+    point_csv_path = os.path.join(request_runtime.output_dir, "robin_kappa_point_gradients.csv")
     write_point_gradient_csv(point_csv_path, point_rows)
     print(f"Saved point-gradient CSV: {point_csv_path}")
 
     fit_plot_path: Optional[str] = None
     if plt is None:
         print("matplotlib not available; skipping fit plot generation.")
-    elif bool(request.live_plot) and getattr(live_plot, "enabled", False):
-        fit_plot_path = os.path.join(request.output_dir, "phi_applied_vs_steady_flux_fit.png")
+    elif bool(request_runtime.live_plot) and getattr(live_plot, "enabled", False):
+        fit_plot_path = os.path.join(request_runtime.output_dir, "phi_applied_vs_steady_flux_fit.png")
         live_plot.update(
             current_flux=best_sim_flux.copy(),
             best_flux=best_sim_flux.copy(),
@@ -1484,7 +1581,7 @@ def run_robin_kappa_flux_curve_inference(
         live_plot.save(fit_plot_path)
         print(f"Saved fit plot: {fit_plot_path}")
     else:
-        fit_plot_path = os.path.join(request.output_dir, "phi_applied_vs_steady_flux_fit.png")
+        fit_plot_path = os.path.join(request_runtime.output_dir, "phi_applied_vs_steady_flux_fit.png")
         plt.figure(figsize=(7, 4))
         plt.plot(
             phi_applied_values,
@@ -1501,8 +1598,8 @@ def run_robin_kappa_flux_curve_inference(
             linewidth=2,
         )
         plt.xlabel("applied voltage phi_applied")
-        plt.ylabel("steady-state flux (observable)")
-        plt.title("Robin kappa inference (adjoint-gradient curve fitting)")
+        plt.ylabel(str(request_runtime.observable_label))
+        plt.title(f"{request_runtime.observable_title} (adjoint-gradient curve fitting)")
         plt.grid(True, alpha=0.25)
         plt.legend()
         plt.tight_layout()
@@ -1511,16 +1608,18 @@ def run_robin_kappa_flux_curve_inference(
         print(f"Saved fit plot: {fit_plot_path}")
 
     live_gif_path: Optional[str] = None
-    if request.live_plot_export_gif_path:
+    if request_runtime.live_plot_export_gif_path:
         live_gif_path = export_live_fit_gif(
-            path=str(request.live_plot_export_gif_path),
+            path=str(request_runtime.live_plot_export_gif_path),
             phi_applied_values=phi_applied_values,
             target_flux=target_flux,
             history_rows=history_rows,
             point_rows=point_rows,
-            seconds=float(request.live_plot_export_gif_seconds),
-            n_frames=int(request.live_plot_export_gif_frames),
-            dpi=int(request.live_plot_export_gif_dpi),
+            seconds=float(request_runtime.live_plot_export_gif_seconds),
+            n_frames=int(request_runtime.live_plot_export_gif_frames),
+            dpi=int(request_runtime.live_plot_export_gif_dpi),
+            y_label=str(request_runtime.observable_label),
+            title=f"{str(request_runtime.observable_title)} progress",
         )
         if live_gif_path:
             print(f"Saved convergence GIF: {live_gif_path}")

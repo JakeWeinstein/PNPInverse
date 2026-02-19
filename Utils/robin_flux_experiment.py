@@ -65,6 +65,8 @@ class SteadyStateConfig:
         Which scalar observable to report:
         - ``"total_species"``: sum of species fluxes
         - ``"total_charge"``: Faradaic charge flux ``F * sum(z_i * J_i)``
+        - ``"charge_proxy_no_f"``: signed charge proxy ``sum(z_i * J_i)``
+          (Faraday scaling intentionally omitted; units are not physical current)
         - ``"species"``: one selected species flux
     species_index:
         Required when ``flux_observable="species"``.
@@ -177,6 +179,15 @@ def observed_flux_from_species_flux(
             raise ValueError(f"z_vals size {z.size} does not match species flux size {f.size}.")
         return float(FARADAY_CONSTANT * np.dot(z, f))
 
+    if mode == "charge_proxy_no_f":
+        z = np.asarray([float(v) for v in z_vals], dtype=float)
+        if z.size != f.size:
+            raise ValueError(f"z_vals size {z.size} does not match species flux size {f.size}.")
+        # Provisional observable for fitting only: signed charge-weighted flux
+        # without Faraday scaling. This keeps magnitudes comparable to
+        # flux-space studies while unit conventions are being finalized.
+        return float(np.dot(z, f))
+
     if mode == "species":
         if species_index is None:
             raise ValueError("species_index must be set when flux_observable='species'.")
@@ -187,7 +198,7 @@ def observed_flux_from_species_flux(
 
     raise ValueError(
         f"Unknown flux_observable '{flux_observable}'. "
-        "Use 'total_species', 'total_charge', or 'species'."
+        "Use 'total_species', 'total_charge', 'charge_proxy_no_f', or 'species'."
     )
 
 

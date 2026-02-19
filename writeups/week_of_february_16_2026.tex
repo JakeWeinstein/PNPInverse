@@ -29,7 +29,8 @@ The center of gravity was the new Robin curve inference path: data generation, s
 \item Always-resilient optimization logic that can recover from nonlinear forward-solve failures.
 \item Robin experimental pipeline where the observable is steady-state flux on the Robin boundary.
 \item New gradient-based Robin \(\kappa\) inference from flux-curve mismatch using Firedrake adjoints + SciPy.
-\item Real-time fit diagnostics: live curve plot with target/current/best and per-evaluation trajectories.
+\item Current-density-proxy inference branch using charge-weighted flux \(\sum_i z_i F_i\), with Faraday scaling intentionally omitted pending unit calibration.
+\item Regenerated report set for 0\%, 2.5\%, and 5\% noise in both data-generation and inference-fit formats, plus a 2.5\% convergence GIF artifact.
 \end{enumerate}
 
 \section*{1. Unified Inverse Interface}
@@ -99,33 +100,24 @@ F_{\mathrm{obs}} = \sum_i F_i.
 
 \subsection*{From Modeled Flux to Experimental Current Density}
 Experimentally, the directly measured quantity is typically current density
-\((\mathrm{mA}/\mathrm{cm}^2)\), not molar flux. The two are linked by Faraday's law.
-
-If \(F_i\) is the \emph{integrated} species flux through the electrode boundary
-\((\mathrm{mol}/\mathrm{s})\), then the corresponding flux density is
+\((\mathrm{mA}/\mathrm{cm}^2)\), not molar flux. In this workflow, the key relation is:
 \[
-N_i = \frac{F_i}{A_{\mathrm{electrode}}}
-\qquad [\mathrm{mol}\,\mathrm{m}^{-2}\,\mathrm{s}^{-1}],
+\text{charge-weighted flux} \;\propto\; \sum_i z_i F_i,
 \]
-where \(A_{\mathrm{electrode}}\) is the electrode boundary measure.
+so to move from total species flux to a current-like observable, we weight each
+species contribution by its charge and sum.
 
-For a species involving \(n_i\) electrons per molecule, the partial current density is
-\[
-j_i = \pm n_i F N_i
-\qquad [\mathrm{A}\,\mathrm{m}^{-2}],
-\]
-with \(F=96485.3329\,\mathrm{C/mol}\) and sign chosen by electrochemical
-convention (e.g., cathodic reduction often plotted negative).
+If physical current density units are needed, this weighted sum is then scaled
+by constants (Faraday factor and boundary-area conversion). For fitting, the
+important structural step is the charge weighting itself.
 
-Unit conversion to the experimental plotting convention is
-\[
-j_i(\mathrm{mA}/\mathrm{cm}^2) = 0.1\, j_i(\mathrm{A}/\mathrm{m}^2).
-\]
-
-For peroxide production, \(n_i=2\), so once species flux is computed at each
-\(\phi_{\mathrm{applied}}\), a peroxide current-density polarization curve is obtained by direct scaling.
-This means fitting flux-vs-voltage curves is equivalent (up to fixed constants and area)
-to fitting current-density-vs-voltage curves.
+\textbf{Current implementation note (temporary):}
+the new current-density inference branch currently omits the Faraday factor on
+purpose and fits a charge-weighted flux proxy \(\sum_i z_i F_i\) in arbitrary
+units. This keeps curve magnitudes in the same \(\mathcal{O}(1)\) range as the
+flux-based studies while unit conventions are being finalized. Therefore, the
+present proxy scaling is not yet a physically calibrated
+\(\mathrm{mA}/\mathrm{cm}^2\) mapping.
 
 \subsection*{Steady-state criterion}
 At each time step \(n\), with per-species boundary flux \(F_i^{(n)}\):
@@ -288,14 +280,63 @@ Case & Objective Evals & SciPy Success & Termination \\
 \caption{Robin \(\kappa\) curve fit at 5\% noise.}
 \end{figure}
 
+\subsection*{Current-Density Counterparts (Proxy Scaling)}
+An analogous set of plots was generated for the current-density inference path.
+In this revision, the observable is the charge-weighted flux proxy
+\(\sum_i z_i F_i\) (Faraday scaling intentionally omitted), so the y-axis is in
+arbitrary units. The objective and optimizer are unchanged.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Case & Seed & Best $\kappa_0$ & Best $\kappa_1$ & Final Loss \\
+\midrule
+0\% noise & 20260220 & 0.9989 & 1.9982 & $1.1347\times10^{-8}$ \\
+2.5\% noise & 20260222 & 1.0064 & 2.0014 & $9.0801\times10^{-5}$ \\
+5\% noise & 20260221 & 1.9494 & 2.6694 & $5.1787\times10^{-4}$ \\
+\bottomrule
+\end{tabular}
+\caption{Current-density-proxy inference summary (arbitrary units, no Faraday scaling).}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.31\textwidth]{assets/robin_current_density_generation_0pct.png}
+\hfill
+\includegraphics[width=0.31\textwidth]{assets/robin_current_density_generation_2p5pct.png}
+\hfill
+\includegraphics[width=0.31\textwidth]{assets/robin_current_density_generation_5pct.png}
+\caption{Synthetic current-density-proxy data generation (0\%, 2.5\%, 5\% noise; arbitrary units).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{assets/robin_kappa_current_density_inference_0pct.png}
+\caption{Robin \(\kappa\) current-density-proxy fit at 0\% noise (arbitrary units).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{assets/robin_kappa_current_density_inference_2p5pct.png}
+\caption{Robin \(\kappa\) current-density-proxy fit at 2.5\% noise (arbitrary units).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{assets/robin_kappa_current_density_inference_5pct.png}
+\caption{Robin \(\kappa\) current-density-proxy fit at 5\% noise (arbitrary units).}
+\end{figure}
+
 \section*{7. Practical Takeaways from This Week}
 \begin{itemize}
 \item The Robin flux-based inverse workflow is now fully implemented end-to-end and experimentally interpretable.
-\item Boundary flux outputs can be converted directly to partial current density, enabling direct comparison to experimentally measured polarization curves.
+\item A parallel current-density-proxy path is now in place: charge weighting is enforced, while absolute current scaling is explicitly deferred until unit calibration is finalized.
 \item The unified interface significantly reduced duplication and made target/solver swapping straightforward.
 \item Resilient retry mechanics now handle many nonlinear solve failures that previously aborted optimization.
-\item In noiseless synthetic tests, recovered \(\kappa\) is close to truth; with 5\% RMS noise, solutions remain feasible but can shift to different local minima.
-\item Live plotting materially improved debugging visibility during fitting.
+\item Regenerated proxy runs show strong recovery at 0\% and 2.5\% noise, with expected degradation and basin sensitivity at 5\% noise.
+\item Reporting artifacts are now synchronized with the new branch: side-by-side data-generation plots, per-noise fit plots, summary table, and a 2.5\% convergence GIF.
 \end{itemize}
 
 \end{document}
