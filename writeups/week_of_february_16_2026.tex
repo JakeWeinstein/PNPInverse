@@ -535,4 +535,11 @@ reaching essentially identical \(\kappa\) and loss.
 \item Reporting artifacts are now synchronized with the new branch: side-by-side data-generation plots, per-noise fit plots, summary table, and a 2.5\% convergence GIF.
 \end{itemize}
 
+\textbf{Future note:}
+the next expansion target is a wider \(\phi_{\mathrm{applied}}\) sweep, including
+negative \(\phi_{\mathrm{applied}}\) values. Before expanding this range, runtime
+and solver-stability optimization is needed because a smaller time step
+\(\Delta t\) may be required to keep the forward solves stable in the more
+challenging regions.
+
 \end{document}
