@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import copy
 import os
+import shutil
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -62,6 +63,13 @@ class RobinFluxCurveInferenceRequest:
     live_plot_eval_lines: bool = True
     live_plot_eval_line_alpha: float = 0.30
     live_plot_eval_max_lines: int = 120
+    live_plot_capture_frames_dir: Optional[str] = None
+    live_plot_capture_every_n_updates: int = 1
+    live_plot_capture_max_frames: int = 1000
+    live_plot_export_gif_path: Optional[str] = None
+    live_plot_export_gif_seconds: float = 5.0
+    live_plot_export_gif_frames: int = 50
+    live_plot_export_gif_dpi: int = 140
     anisotropy_trigger_failed_points: int = 4
     anisotropy_trigger_failed_fraction: float = 0.25
     forward_recovery: "ForwardRecoveryConfig" = field(
@@ -107,6 +115,7 @@ class RobinFluxCurveInferenceResult:
     fit_plot_path: Optional[str]
     history_csv_path: str
     point_gradient_csv_path: str
+    live_gif_path: Optional[str]
     optimization_success: bool
     optimization_message: str
 
@@ -151,12 +160,20 @@ class _LiveFitPlot:
         show_eval_lines: bool,
         eval_line_alpha: float,
         eval_max_lines: int,
+        capture_frames_dir: Optional[str],
+        capture_every_n_updates: int,
+        capture_max_frames: int,
     ) -> None:
         self.enabled = bool(enabled and plt is not None)
         self.pause_seconds = float(max(0.0, pause_seconds))
         self.show_eval_lines = bool(show_eval_lines)
         self.eval_line_alpha = float(min(max(eval_line_alpha, 0.0), 1.0))
         self.eval_max_lines = int(max(1, eval_max_lines))
+        self.capture_frames_dir = capture_frames_dir
+        self.capture_every_n_updates = int(max(1, capture_every_n_updates))
+        self.capture_max_frames = int(max(1, capture_max_frames))
+        self._update_counter = 0
+        self._captured_frames = 0
         self.fig = None
         self.ax = None
         self.target_line = None
@@ -170,6 +187,10 @@ class _LiveFitPlot:
             return
 
         try:
+            if self.capture_frames_dir:
+                if os.path.isdir(self.capture_frames_dir):
+                    shutil.rmtree(self.capture_frames_dir)
+                os.makedirs(self.capture_frames_dir, exist_ok=True)
             plt.ion()
             self.fig, self.ax = plt.subplots(figsize=(7, 4))
             x = np.asarray(phi_applied_values, dtype=float)
@@ -206,6 +227,7 @@ class _LiveFitPlot:
             self.fig.canvas.draw_idle()
             self.fig.canvas.flush_events()
             plt.pause(self.pause_seconds)
+            self._capture_frame(force=True)
         except Exception:
             # Fail open: disable live plotting but continue optimization.
             self.enabled = False
@@ -296,6 +318,7 @@ class _LiveFitPlot:
             self.fig.canvas.draw_idle()
             self.fig.canvas.flush_events()
             plt.pause(self.pause_seconds)
+            self._capture_frame(force=False)
         except Exception:
             pass
 
@@ -304,6 +327,27 @@ class _LiveFitPlot:
         if not self.enabled or self.fig is None:
             return
         self.fig.savefig(path, dpi=160)
+
+    def _capture_frame(self, *, force: bool) -> None:
+        """Optionally save the current live figure as an animation frame."""
+        if (
+            not self.enabled
+            or self.fig is None
+            or not self.capture_frames_dir
+            or self._captured_frames >= self.capture_max_frames
+        ):
+            return
+        self._update_counter += 1
+        if (not force) and (self._update_counter % self.capture_every_n_updates != 0):
+            return
+        frame_path = os.path.join(
+            self.capture_frames_dir, f"frame_{self._captured_frames:04d}.png"
+        )
+        try:
+            self.fig.savefig(frame_path, dpi=160)
+            self._captured_frames += 1
+        except Exception:
+            pass
 
 
 def _normalize_kappa(value: Optional[Sequence[float]], *, name: str) -> Optional[List[float]]:
@@ -866,6 +910,9 @@ def run_scipy_adjoint_optimization(
         show_eval_lines=bool(request.live_plot_eval_lines),
         eval_line_alpha=float(request.live_plot_eval_line_alpha),
         eval_max_lines=int(request.live_plot_eval_max_lines),
+        capture_frames_dir=request.live_plot_capture_frames_dir,
+        capture_every_n_updates=int(request.live_plot_capture_every_n_updates),
+        capture_max_frames=int(request.live_plot_capture_max_frames),
     )
 
     def _key_from_x(x: np.ndarray) -> Tuple[float, ...]:
@@ -1138,6 +1185,202 @@ def write_point_gradient_csv(path: str, rows: Sequence[Dict[str, object]]) -> No
             writer.writerow(row)
 
 
+def _as_int(value: object, default: int = 0) -> int:
+    """Best-effort conversion to integer with fallback."""
+    try:
+        return int(value)
+    except Exception:
+        return int(default)
+
+
+def _as_float(value: object, default: float = float("nan")) -> float:
+    """Best-effort conversion to float with fallback."""
+    try:
+        return float(value)
+    except Exception:
+        return float(default)
+
+
+def export_live_fit_gif(
+    *,
+    path: str,
+    phi_applied_values: np.ndarray,
+    target_flux: np.ndarray,
+    history_rows: Sequence[Dict[str, object]],
+    point_rows: Sequence[Dict[str, object]],
+    seconds: float,
+    n_frames: int,
+    dpi: int,
+) -> Optional[str]:
+    """Render a standalone convergence GIF from per-evaluation diagnostics.
+
+    This path is robust in headless/GUI-restricted environments because it
+    re-renders the curves from recorded optimization rows rather than relying on
+    interactive window screenshots.
+    """
+    if plt is None:
+        return None
+
+    try:
+        from PIL import Image
+    except Exception:
+        return None
+
+    phi = np.asarray(phi_applied_values, dtype=float).copy()
+    target = np.asarray(target_flux, dtype=float).copy()
+    n_points = int(phi.size)
+    if n_points == 0:
+        return None
+
+    curves_by_eval: Dict[int, np.ndarray] = {}
+    for row in point_rows:
+        eval_id = _as_int(row.get("evaluation"), -1)
+        point_idx = _as_int(row.get("point_index"), -1)
+        if eval_id < 0 or point_idx < 0 or point_idx >= n_points:
+            continue
+        if eval_id not in curves_by_eval:
+            curves_by_eval[eval_id] = np.full(n_points, np.nan, dtype=float)
+        curves_by_eval[eval_id][point_idx] = _as_float(row.get("simulated_flux"))
+
+    eval_ids = sorted(curves_by_eval.keys())
+    if not eval_ids:
+        return None
+
+    history_by_eval: Dict[int, Dict[str, object]] = {}
+    for row in history_rows:
+        eval_id = _as_int(row.get("evaluation"), -1)
+        if eval_id >= 0:
+            history_by_eval[eval_id] = dict(row)
+
+    y_arrays = [target]
+    for eval_id in eval_ids:
+        vals = curves_by_eval[eval_id]
+        finite = vals[np.isfinite(vals)]
+        if finite.size:
+            y_arrays.append(finite)
+    y_concat = np.concatenate([np.asarray(a, dtype=float).ravel() for a in y_arrays])
+    y_min = float(np.min(y_concat))
+    y_max = float(np.max(y_concat))
+    y_span = max(1e-8, y_max - y_min)
+    y_pad = 0.08 * y_span
+    y_lim = (y_min - y_pad, y_max + y_pad)
+
+    n_out = int(max(2, n_frames))
+    pick = np.round(np.linspace(0, len(eval_ids) - 1, n_out)).astype(int)
+    selected_eval_ids = [eval_ids[i] for i in pick]
+    eval_pos = {eval_id: i for i, eval_id in enumerate(eval_ids)}
+
+    best_eval_by_pos: List[int] = []
+    best_eval = eval_ids[0]
+    best_obj = float("inf")
+    for eval_id in eval_ids:
+        meta = history_by_eval.get(eval_id, {})
+        obj = _as_float(meta.get("objective"), float("inf"))
+        n_failed = _as_int(meta.get("n_failed_points"), 9999)
+        if np.isfinite(obj) and n_failed == 0 and obj < best_obj:
+            best_obj = obj
+            best_eval = eval_id
+        best_eval_by_pos.append(best_eval)
+
+    frames: List[Image.Image] = []
+    for eval_id in selected_eval_ids:
+        pos = eval_pos[eval_id]
+        best_eval_here = best_eval_by_pos[pos]
+        current = curves_by_eval[eval_id]
+        best_curve = curves_by_eval[best_eval_here]
+        meta = history_by_eval.get(eval_id, {})
+
+        fig, ax = plt.subplots(figsize=(7, 4), dpi=max(72, int(dpi)))
+
+        for prev_eval in eval_ids[:pos]:
+            prev = curves_by_eval[prev_eval]
+            if np.any(np.isfinite(prev)):
+                ax.plot(phi, prev, color="#BBBBBB", linewidth=1.0, alpha=0.22)
+
+        ax.plot(
+            phi,
+            target,
+            "o-",
+            color="#1f77b4",
+            linewidth=2.2,
+            markersize=4.5,
+            label="target data",
+        )
+        ax.plot(
+            phi,
+            best_curve,
+            "s-",
+            color="#2ca02c",
+            linewidth=2.0,
+            markersize=4.0,
+            label="best fit so far",
+        )
+        ax.plot(
+            phi,
+            current,
+            "D--",
+            color="#ff7f0e",
+            linewidth=1.8,
+            markersize=3.8,
+            label="current evaluation",
+        )
+
+        ax.set_xlim(float(np.min(phi)), float(np.max(phi)))
+        ax.set_ylim(y_lim[0], y_lim[1])
+        ax.grid(True, alpha=0.25)
+        ax.set_xlabel("applied voltage phi_applied")
+        ax.set_ylabel("steady-state flux (observable)")
+        ax.set_title("Robin kappa fit progress")
+
+        loss = _as_float(meta.get("objective"), float("nan"))
+        kappa0 = _as_float(meta.get("kappa0"), float("nan"))
+        kappa1 = _as_float(meta.get("kappa1"), float("nan"))
+        n_failed = _as_int(meta.get("n_failed_points"), -1)
+        status = (
+            f"eval={eval_id:03d}  "
+            f"loss={loss:.6e}  "
+            f"kappa=[{kappa0:.6f}, {kappa1:.6f}]  "
+            f"fails={n_failed:02d}"
+        )
+        ax.text(
+            0.01,
+            0.99,
+            status,
+            transform=ax.transAxes,
+            va="top",
+            ha="left",
+            fontsize=8.5,
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.75, pad=2.5),
+        )
+
+        ax.legend(loc="lower right", fontsize=8)
+        fig.tight_layout()
+        fig.canvas.draw()
+        w, h = fig.canvas.get_width_height()
+        rgba = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8).reshape(h, w, 4)
+        frame = Image.fromarray(rgba, mode="RGBA").convert("P", palette=Image.Palette.ADAPTIVE)
+        frames.append(frame)
+        plt.close(fig)
+
+    if not frames:
+        return None
+
+    out_dir = os.path.dirname(path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
+    duration_ms = int(max(1, round((float(max(0.1, seconds)) * 1000.0) / len(frames))))
+    frames[0].save(
+        path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=duration_ms,
+        loop=0,
+        optimize=False,
+    )
+    return path
+
+
 def run_robin_kappa_flux_curve_inference(
     request: RobinFluxCurveInferenceRequest,
 ) -> RobinFluxCurveInferenceResult:
@@ -1243,10 +1486,17 @@ def run_robin_kappa_flux_curve_inference(
     else:
         fit_plot_path = os.path.join(request.output_dir, "phi_applied_vs_steady_flux_fit.png")
         plt.figure(figsize=(7, 4))
-        plt.scatter(phi_applied_values, target_flux, label="target flux", s=36)
+        plt.plot(
+            phi_applied_values,
+            target_flux,
+            marker="o",
+            linewidth=2,
+            label="target flux",
+        )
         plt.plot(
             phi_applied_values,
             best_sim_flux,
+            marker="s",
             label="best-fit simulated flux",
             linewidth=2,
         )
@@ -1260,6 +1510,23 @@ def run_robin_kappa_flux_curve_inference(
         plt.close()
         print(f"Saved fit plot: {fit_plot_path}")
 
+    live_gif_path: Optional[str] = None
+    if request.live_plot_export_gif_path:
+        live_gif_path = export_live_fit_gif(
+            path=str(request.live_plot_export_gif_path),
+            phi_applied_values=phi_applied_values,
+            target_flux=target_flux,
+            history_rows=history_rows,
+            point_rows=point_rows,
+            seconds=float(request.live_plot_export_gif_seconds),
+            n_frames=int(request.live_plot_export_gif_frames),
+            dpi=int(request.live_plot_export_gif_dpi),
+        )
+        if live_gif_path:
+            print(f"Saved convergence GIF: {live_gif_path}")
+        else:
+            print("GIF export requested but could not be generated.")
+
     return RobinFluxCurveInferenceResult(
         best_kappa=best_kappa.copy(),
         best_loss=float(best_loss),
@@ -1271,6 +1538,7 @@ def run_robin_kappa_flux_curve_inference(
         fit_plot_path=fit_plot_path,
         history_csv_path=history_csv_path,
         point_gradient_csv_path=point_csv_path,
+        live_gif_path=live_gif_path,
         optimization_success=bool(getattr(opt_result, "success", False)),
         optimization_message=str(getattr(opt_result, "message", "")),
     )

@@ -1,0 +1,6 @@
+noise_percent=2.5
+seed=20260222
+best_kappa=[1.0165390077929404, 1.9926954508810757]
+best_loss=0.00016312026429312221
+optimization_success=True
+optimization_message=CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL

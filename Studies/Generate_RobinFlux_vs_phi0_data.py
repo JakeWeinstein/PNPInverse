@@ -141,10 +141,11 @@ def main() -> None:
             linewidth=2,
             label=f"clean (kappa={true_kappa})",
         )
-        plt.scatter(
+        plt.plot(
             phi_applied_values,
             noisy_flux,
-            s=36,
+            marker="s",
+            linewidth=2,
             label=f"noisy (kappa={true_kappa})",
             alpha=0.9,
         )

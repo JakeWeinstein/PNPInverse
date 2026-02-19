@@ -115,6 +115,31 @@ A step is steady if
 \]
 and steady state is declared after the required number of consecutive steady steps.
 
+\subsection*{How \(\kappa\) Shapes the \(\phi_{\mathrm{applied}}\)-Flux Curve}
+To isolate \(\kappa\)-dependence, a no-noise overlay was generated for:
+\[
+\kappa \in \{[2,2], [1,1], [2,1], [1,2], [1,5], [5,1]\}.
+\]
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{assets/robin_kappa_no_noise_overlay.png}
+\caption{No-noise \(\phi_{\mathrm{applied}}\)-vs-steady-flux curves for multiple Robin \(\kappa\) pairs.}
+\end{figure}
+
+Interpretation from these curves:
+\begin{itemize}
+\item Increasing both \(\kappa\) values raises the overall flux level (e.g. \([1,1]\rightarrow[2,2]\)).
+\item The two species do not affect voltage sensitivity equally: \([1,5]\) is much steeper than \([5,1]\), even though both have similar zero-voltage flux intercept.
+\item This asymmetry is consistent with charge-coupled transport in PNP: each species-specific Robin transfer coefficient multiplies a concentration field that responds differently to applied voltage.
+\end{itemize}
+
+Using endpoint slope \(\big(F(0.04)-F(0)\big)/0.04\), representative values are:
+\[
+[1,1]\!:\!1.984,\quad [2,2]\!:\!1.782,\quad [2,1]\!:\!1.290,\quad
+[1,2]\!:\!2.400,\quad [1,5]\!:\!2.942,\quad [5,1]\!:\!0.144.
+\]
+
 \section*{4. Robin \(\kappa\) Inference from Flux Curves}
 \subsection*{What was built}
 A dedicated script and helper pipeline were implemented for inferring \(\kappa\) from a full \(\phi_{\mathrm{applied}}\)-vs-steady-flux curve.
@@ -160,16 +185,45 @@ where \(p\) is \texttt{noise\_percent}.
 So \(5\%\) means \(\sigma=0.05\cdot\mathrm{RMS}\), not a hard \(\pm 5\%\) pointwise cap. Individual points can exceed \(5\%\) in magnitude.
 
 \section*{6. Representative Results and Plots}
-\subsection*{Summary Table}
+\subsection*{Summary Tables}
 \begin{table}[H]
 \centering
 \small
-\begin{tabular}{lrrrrr}
+\begin{tabular}{lrrrrrr}
 \toprule
-Case & Best $\kappa_0$ & Best $\kappa_1$ & Final Objective & Mean $|\Delta F/F|$ (\%) & Max $|\Delta F/F|$ (\%) \\
+Case & Seed & Mean $|\Delta F/F|$ (\%) & Max $|\Delta F/F|$ (\%) & Best $\kappa_0$ & Best $\kappa_1$ & Final Loss \\
 \midrule
-0\% noise & 1.0015 & 1.9980 & $1.49\times 10^{-8}$ & 0.000 & 0.000 \\
-5\% noise & 3.3216 & 1.5005 & $3.67\times 10^{-3}$ & 3.357 & 10.520 \\
+0\% noise & 20260220 & 0.000 & 0.000 & 1.0015 & 1.9980 & $1.4901\times10^{-8}$ \\
+2.5\% noise & 20260222 & 1.790 & 8.263 & 1.0165 & 1.9927 & $1.6312\times10^{-4}$ \\
+5\% noise & 20260221 & 3.908 & 7.918 & 1.4533 & 1.7969 & $4.0573\times10^{-4}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lrrrrrr}
+\toprule
+Case & Target $\kappa_0$ & Target $\kappa_1$ & Fit $\kappa_0$ & Fit $\kappa_1$ & RMSE (Flux) & MAE (Flux) \\
+\midrule
+0\% noise & 1.0000 & 2.0000 & 1.0015 & 1.9980 & $4.4573\times10^{-5}$ & $3.8524\times10^{-5}$ \\
+2.5\% noise & 1.0000 & 2.0000 & 1.0165 & 1.9927 & $4.6636\times10^{-3}$ & $3.0610\times10^{-3}$ \\
+5\% noise & 1.0000 & 2.0000 & 1.4533 & 1.7969 & $7.3551\times10^{-3}$ & $5.3404\times10^{-3}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lrrr}
+\toprule
+Case & Objective Evals & SciPy Success & Termination \\
+\midrule
+0\% noise & 20 & True & Proj. grad $\leq$ PGTOL \\
+2.5\% noise & 20 & True & Proj. grad $\leq$ PGTOL \\
+5\% noise & 16 & True & Proj. grad $\leq$ PGTOL \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -177,14 +231,12 @@ Case & Best $\kappa_0$ & Best $\kappa_1$ & Final Objective & Mean $|\Delta F/F|$
 \subsection*{Data Generation Curves}
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.82\textwidth]{assets/robin_data_generation_0pct.png}
-\caption{Synthetic Robin flux-curve data generation with 0\% noise.}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.82\textwidth]{assets/robin_data_generation_5pct.png}
-\caption{Synthetic Robin flux-curve data generation with 5\% RMS Gaussian noise.}
+\includegraphics[width=0.31\textwidth]{assets/robin_data_generation_0pct.png}
+\hfill
+\includegraphics[width=0.31\textwidth]{assets/robin_data_generation_2p5pct.png}
+\hfill
+\includegraphics[width=0.31\textwidth]{assets/robin_data_generation_5pct.png}
+\caption{Synthetic Robin flux-curve data generation ordered from least to most noise: 0\%, 2.5\%, 5\%.}
 \end{figure}
 
 \subsection*{Inference Fits}
@@ -192,6 +244,12 @@ Case & Best $\kappa_0$ & Best $\kappa_1$ & Final Objective & Mean $|\Delta F/F|$
 \centering
 \includegraphics[width=0.82\textwidth]{assets/robin_kappa_inference_0pct.png}
 \caption{Robin \(\kappa\) curve fit at 0\% noise.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{assets/robin_kappa_inference_2p5pct.png}
+\caption{Robin \(\kappa\) curve fit at 2.5\% noise.}
 \end{figure}
 
 \begin{figure}[H]

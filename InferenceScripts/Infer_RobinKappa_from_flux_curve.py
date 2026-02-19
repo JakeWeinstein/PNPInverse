@@ -96,7 +96,7 @@ def main() -> None:
         output_dir=os.path.join("StudyResults", "robin_flux_experiment"),
         regenerate_target=True,
         target_noise_percent=5.0,
-        target_seed=20260220,
+        target_seed=20260222,
         kappa_lower=1e-6,
         kappa_upper=20.0,
         optimizer_method="L-BFGS-B",
@@ -119,6 +119,13 @@ def main() -> None:
         live_plot_eval_lines=True,
         live_plot_eval_line_alpha=0.30,
         live_plot_eval_max_lines=120,
+        # Export a standalone convergence GIF that does not depend on PDF animation support.
+        live_plot_export_gif_path=os.path.join(
+            "StudyResults", "robin_flux_experiment", "robin_kappa_fit_convergence.gif"
+        ),
+        live_plot_export_gif_seconds=5.0,
+        live_plot_export_gif_frames=50,
+        live_plot_export_gif_dpi=140,
         # If enough sweep points fail at a candidate kappa, try an anisotropy-reduced
         # kappa surrogate for that evaluation.
         anisotropy_trigger_failed_points=4,
