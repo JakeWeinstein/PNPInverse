@@ -97,6 +97,36 @@ The default scalar observable used this week is total species flux:
 F_{\mathrm{obs}} = \sum_i F_i.
 \]
 
+\subsection*{From Modeled Flux to Experimental Current Density}
+Experimentally, the directly measured quantity is typically current density
+\((\mathrm{mA}/\mathrm{cm}^2)\), not molar flux. The two are linked by Faraday's law.
+
+If \(F_i\) is the \emph{integrated} species flux through the electrode boundary
+\((\mathrm{mol}/\mathrm{s})\), then the corresponding flux density is
+\[
+N_i = \frac{F_i}{A_{\mathrm{electrode}}}
+\qquad [\mathrm{mol}\,\mathrm{m}^{-2}\,\mathrm{s}^{-1}],
+\]
+where \(A_{\mathrm{electrode}}\) is the electrode boundary measure.
+
+For a species involving \(n_i\) electrons per molecule, the partial current density is
+\[
+j_i = \pm n_i F N_i
+\qquad [\mathrm{A}\,\mathrm{m}^{-2}],
+\]
+with \(F=96485.3329\,\mathrm{C/mol}\) and sign chosen by electrochemical
+convention (e.g., cathodic reduction often plotted negative).
+
+Unit conversion to the experimental plotting convention is
+\[
+j_i(\mathrm{mA}/\mathrm{cm}^2) = 0.1\, j_i(\mathrm{A}/\mathrm{m}^2).
+\]
+
+For peroxide production, \(n_i=2\), so once species flux is computed at each
+\(\phi_{\mathrm{applied}}\), a peroxide current-density polarization curve is obtained by direct scaling.
+This means fitting flux-vs-voltage curves is equivalent (up to fixed constants and area)
+to fitting current-density-vs-voltage curves.
+
 \subsection*{Steady-state criterion}
 At each time step \(n\), with per-species boundary flux \(F_i^{(n)}\):
 \[
@@ -261,6 +291,7 @@ Case & Objective Evals & SciPy Success & Termination \\
 \section*{7. Practical Takeaways from This Week}
 \begin{itemize}
 \item The Robin flux-based inverse workflow is now fully implemented end-to-end and experimentally interpretable.
+\item Boundary flux outputs can be converted directly to partial current density, enabling direct comparison to experimentally measured polarization curves.
 \item The unified interface significantly reduced duplication and made target/solver swapping straightforward.
 \item Resilient retry mechanics now handle many nonlinear solve failures that previously aborted optimization.
 \item In noiseless synthetic tests, recovered \(\kappa\) is close to truth; with 5\% RMS noise, solutions remain feasible but can shift to different local minima.
