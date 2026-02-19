@@ -4,7 +4,7 @@ Inverse and forward experiments for a Poisson-Nernst-Planck (PNP) model using Fi
 
 This directory now has two complementary workflows:
 - A **unified inverse interface** (`UnifiedInverse/`) for standard parameter inference from state data.
-- An **experimental-style Robin workflow** where the measured signal is a `phi_applied` vs steady-state flux curve, used to infer Robin transfer coefficients `kappa`.
+- An **experimental-style Robin workflow** where the measured signal is a `phi_applied` vs steady-state curve (flux or charge-weighted current-density proxy), used to infer Robin transfer coefficients `kappa`.
 
 ## Current Folder Layout
 
@@ -25,18 +25,17 @@ This directory now has two complementary workflows:
 
 ## Environment Setup
 
-Use the same environment combo used by the current studies:
+Use any environment where Firedrake + adjoint dependencies are installed.
+For example:
 
 ```bash
-source /opt/miniconda3/etc/profile.d/conda.sh
-conda activate firedrake_clean
-source /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/venv-firedrake/bin/activate
+conda activate <your_firedrake_env>
 ```
 
 Then run from:
 
 ```bash
-cd /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+cd PNPInverse
 ```
 
 Core dependencies:
@@ -45,6 +44,7 @@ Core dependencies:
 - `numpy`
 - `matplotlib`
 - `scipy`
+- `imageio`
 - `Pillow` (for GIF export)
 
 Optional for writeup builds:
@@ -167,6 +167,23 @@ Implementation reference:
 - `InferenceScripts/Infer_RobinKappa_from_flux_curve.py`
 - `Helpers/Infer_RobinKappa_from_flux_curve_helpers.py`
 
+### Current-density proxy mode
+
+The current-density branch fits a charge-weighted proxy observable:
+
+$$
+\sum_i z_i F_i
+$$
+
+using `observable_mode="charge_proxy_no_f"`.
+
+Notes:
+- Faraday scaling is intentionally omitted for now (proxy units are arbitrary).
+- This keeps magnitudes comparable to flux-space studies while unit calibration is being finalized.
+
+Entry script:
+- `InferenceScripts/Infer_RobinKappa_from_current_density_curve.py`
+
 ### Forward-solve resilience
 
 When a point solve diverges, recovery stages are applied:
@@ -175,6 +192,37 @@ When a point solve diverges, recovery stages are applied:
 3. Relax `snes_atol`, `snes_rtol`, and `ksp_rtol` and vary line search.
 
 This prevents immediate failure on difficult iterates and improves robustness.
+
+### Parallel point solves (adjoint-safe)
+
+To speed up each objective/gradient evaluation across the 15 sweep points,
+point solves can run in parallel worker processes.
+
+Important: this uses **processes**, not threads, so each worker has isolated
+firedrake-adjoint tape state.
+
+User-configurable options in `RobinFluxCurveInferenceRequest`:
+- `parallel_point_solves_enabled`
+- `parallel_point_workers`
+- `parallel_point_min_points`
+- `parallel_start_method` (`spawn` recommended)
+
+Example (inside an inference script request block):
+
+```python
+parallel_point_solves_enabled=True,
+parallel_point_workers=4,
+parallel_point_min_points=4,
+parallel_start_method="spawn",
+```
+
+Current status:
+- Replay mode is temporarily disabled in the helper due validity issues.
+- Process-parallel point solves are active and supported with serial fallback if
+  worker initialization/execution fails.
+- Latest no-noise current-density benchmark on this machine:
+  serial `279.642 s` vs process-parallel (`4` workers) `111.948 s`
+  (~`2.50x` speedup) with matching fitted `kappa`/loss.
 
 ## Active Scripts
 
@@ -192,6 +240,8 @@ This prevents immediate failure on difficult iterates and improves robustness.
   - Robin `kappa` inference on state data.
 - `InferenceScripts/Infer_RobinKappa_from_flux_curve.py`
   - Robin `kappa` inference from `phi_applied` vs steady-state flux curve.
+- `InferenceScripts/Infer_RobinKappa_from_current_density_curve.py`
+  - Robin `kappa` inference from `phi_applied` vs charge-weighted steady-state proxy.
 
 ### Studies/probes
 
@@ -204,6 +254,8 @@ This prevents immediate failure on difficult iterates and improves robustness.
 - `Studies/optimization_method_study.py`
 - `Studies/bfgs_lbfgsb_diffusion_failure_study.py`
 - `Studies/forward_solver_D_stability_study.py`
+- `Studies/benchmark_current_density_replay_runtime.py`
+  - Runtime benchmark driver (supports serial and process-parallel point solves).
 
 ## Quick Start Commands
 
@@ -242,6 +294,12 @@ Infer `kappa` from curve:
 python InferenceScripts/Infer_RobinKappa_from_flux_curve.py
 ```
 
+Infer `kappa` from current-density proxy curve:
+
+```bash
+python InferenceScripts/Infer_RobinKappa_from_current_density_curve.py
+```
+
 Main outputs are written to:
 
 ```text
@@ -255,6 +313,19 @@ Typical files:
 - `robin_kappa_point_gradients.csv`
 - `phi_applied_vs_steady_observable_fit.png`
 - `robin_kappa_fit_convergence.gif`
+
+Current-density workflow outputs are written under:
+
+```text
+StudyResults/robin_current_density_experiment/
+```
+
+Typical files:
+- `phi_applied_vs_steady_current_density_synthetic.csv`
+- `phi_applied_vs_steady_observable_fit.csv`
+- `robin_kappa_gradient_optimization_history.csv`
+- `robin_kappa_point_gradients.csv`
+- `phi_applied_vs_steady_observable_fit.png`
 
 ### 3) Overlay arbitrary no-noise `kappa` curves
 
