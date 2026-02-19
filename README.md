@@ -75,48 +75,51 @@ Backward-compatible wrappers are kept in:
 
 ### Physical observable and boundary flux
 
-For species \(i\), the Robin boundary condition used in this project is:
+For species $i$, the Robin boundary condition used in this project is:
 
-\[
-J_i \cdot n = \kappa_i \left(c_i - c_{\infty,i}\right).
-\]
+$$
+J_i \cdot n = \kappa_i \left(c_i - c_{\infty,i}\right)
+$$
 
 Species flux through the Robin electrode boundary:
 
-\[
-F_i = \int_{\Gamma_{\mathrm{electrode}}} \kappa_i \left(c_i - c_{\infty,i}\right)\,ds.
-\]
+$$
+F_i = \int_{\Gamma_{\mathrm{electrode}}} \kappa_i \left(c_i - c_{\infty,i}\right)\, ds
+$$
 
 Default scalar measured signal in the experiment:
 
-\[
-F_{\mathrm{obs}} = \sum_i F_i.
-\]
+$$
+F_{\mathrm{obs}} = \sum_i F_i
+$$
 
 Implementation reference:
 - `Utils/robin_flux_experiment.py` (`compute_species_flux_on_robin_boundary`, `observed_flux_from_species_flux`)
 
 ### Steady-state definition
 
-At time step \(n\), with boundary flux \(F_i^{(n)}\):
+At time step $n$, with boundary flux $F_i^{(n)}$:
 
-\[
-\Delta_i^{(n)} = \left|F_i^{(n)} - F_i^{(n-1)}\right|.
-\]
+$$
+\Delta_i^{(n)} = \left|F_i^{(n)} - F_i^{(n-1)}\right|
+$$
 
-\[
-\mathrm{rel}^{(n)} = \max_i \frac{\Delta_i^{(n)}}{\max\left(|F_i^{(n)}|,|F_i^{(n-1)}|,\varepsilon_{\mathrm{abs}}\right)},
-\quad
-\mathrm{abs}^{(n)} = \max_i \Delta_i^{(n)}.
-\]
+$$
+\mathrm{rel}^{(n)} =
+\max_i \frac{\Delta_i^{(n)}}{\max\left(\left|F_i^{(n)}\right|,\left|F_i^{(n-1)}\right|,\varepsilon_{\mathrm{abs}}\right)}
+$$
+
+$$
+\mathrm{abs}^{(n)} = \max_i \Delta_i^{(n)}
+$$
 
 A step is marked steady if:
 
-\[
+$$
 \mathrm{rel}^{(n)} \le \varepsilon_{\mathrm{rel}}
 \quad \text{or} \quad
-\mathrm{abs}^{(n)} \le \varepsilon_{\mathrm{abs}}.
-\]
+\mathrm{abs}^{(n)} \le \varepsilon_{\mathrm{abs}}
+$$
 
 Steady state is declared after `consecutive_steps` steady steps in a row.
 
@@ -127,34 +130,36 @@ Implementation reference:
 
 Noise is additive Gaussian with:
 
-\[
-\sigma = \left(\frac{p}{100}\right)\mathrm{RMS}(F_{\mathrm{clean}}),
-\]
+$$
+\sigma = \left(\frac{p}{100}\right)\mathrm{RMS}\!\left(F_{\mathrm{clean}}\right)
+$$
 
-where \(p\) is `noise_percent`.
+where $p$ is `noise_percent`.
 
-This is RMS-scaled noise, not a strict pointwise \(\pm p\%\) cap.
+This is RMS-scaled noise, not a strict pointwise $\pm p\%$ cap.
 
 Implementation reference:
 - `Utils/robin_flux_experiment.py` (`add_percent_noise`)
 
 ### Inverse objective and adjoint gradient
 
-For sweep points \(\phi_j\) with target flux \(F_j^\star\):
+For sweep points $\phi_j$ with target flux $F_j^\star$:
 
-\[
-L_j(\kappa) = \frac{1}{2}\left(F_j(\kappa)-F_j^\star\right)^2,
-\quad
-J(\kappa) = \sum_{j=1}^{m} L_j(\kappa).
-\]
+$$
+L_j(\kappa) = \frac{1}{2}\left(F_j(\kappa) - F_j^\star\right)^2
+$$
+
+$$
+J(\kappa) = \sum_{j=1}^{m} L_j(\kappa)
+$$
 
 Per-point adjoint gradients are computed with Firedrake-adjoint and summed:
 
-\[
-\nabla J(\kappa) = \sum_{j \in \mathcal{C}} \nabla_{\kappa} L_j(\kappa),
-\]
+$$
+\nabla J(\kappa) = \sum_{j \in \mathcal{C}} \nabla_{\kappa} L_j(\kappa)
+$$
 
-where \(\mathcal{C}\) is the set of converged sweep points.
+where $\mathcal{C}$ is the set of converged sweep points.
 
 Optimization uses SciPy `minimize` (default `L-BFGS-B`) with analytic Jacobian.
 
