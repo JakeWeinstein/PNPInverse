@@ -1,92 +1,55 @@
-import numpy as np
-import firedrake as fd
-import firedrake.adjoint as adj
-from Utils.forsolve import *
+"""Compatibility helper for diffusion inference using the unified engine.
 
-def m_to_string(m):
-    outstr = ""
-    for mval in m:
-        outstr += str(mval.dat.data)+ ", "
-    outstr = outstr[:-2]
-    return outstr
+This module keeps the historical import path used by study scripts while routing
+all logic through ``UnifiedInverse``.
+"""
 
-def m_to_d_to_string(m):
-    outstr = ""
-    for mval in m:
-        outstr += str(np.exp(mval.dat.data))+ ", "
-    outstr = outstr[:-2]
-    return outstr
+from __future__ import annotations
 
-def vec_to_function(ctx, vec, *, space_key="V_scalar"):
-    """
-    Build a Firedrake Function on ctx[space_key] with DOF coefficients from vec.
-    vec must have length == ctx[space_key].dim().
+from typing import Any, Sequence
 
-    Needed to allow arbitrary data in objective function
-    """
-    V = ctx[space_key]
-    f = fd.Function(V)
-    v = np.asarray(vec, dtype=float).ravel()
+from UnifiedInverse import (
+    ForwardSolverAdapter,
+    build_default_target_registry,
+    build_reduced_functional,
+)
 
-    if v.size != f.dat.data.size:
-        raise ValueError(
-            f"Target vector length {v.size} != DOFs {f.dat.data.size} for {space_key}"
-        )
 
-    f.dat.data[:] = v
-    return f
-
-def make_objective_and_grad(solver_params, c_targets, blob_ic=True):
-    """
-    Build the reduced functional for an arbitrary number of species.
+def make_objective_and_grad(
+    solver_params: Sequence[Any],
+    c_targets: Sequence[Sequence[float]],
+    blob_ic: bool = True,
+):
+    """Build a reduced functional for inferring diffusion coefficients ``D``.
 
     Parameters
     ----------
-    solver_params : list
-        Forward solver parameters (see generate_noisy_data).
-    c_targets : sequence
-        Sequence of target concentration vectors, one per species.
-    blob_ic : bool, optional
-        Whether to use blob initial condition.
+    solver_params:
+        Standard 11-entry solver parameter list.
+    c_targets:
+        Final concentration vectors to match, one per species.
+    blob_ic:
+        Whether to initialize with the Gaussian blob concentration profile.
+
+    Returns
+    -------
+    firedrake.adjoint.ReducedFunctional
+        Objective functional parameterized by log-diffusion controls.
     """
+    adapter = ForwardSolverAdapter.from_module_path("Utils.forsolve")
+    target = build_default_target_registry()["diffusion"]
 
-    ctx = build_context(solver_params)
-    ctx = build_forms(ctx, solver_params)
+    # The diffusion objective uses only concentrations. A placeholder phi target
+    # is supplied for interface consistency and is ignored by the target config.
+    if not c_targets:
+        raise ValueError("c_targets must include at least one concentration vector.")
+    phi_placeholder = c_targets[0]
 
-    n_species = solver_params[0]
-    if len(c_targets) != n_species:
-        raise ValueError(f"Expected {n_species} target vectors, got {len(c_targets)}")
-
-    logD_funcs = ctx["logD_funcs"]
-    c_target_fs = [vec_to_function(ctx, c_target) for c_target in c_targets]
-
-    # Start from a clean tape
-    tape = adj.get_working_tape()
-    tape.clear_tape()
-    adj.continue_annotation()
-
-    set_initial_conditions(ctx, solver_params, blob=blob_ic)
-
-    U_final = forsolve(ctx, solver_params)
-
-    # L2 mismatch summed over species
-    Jobj = 0.5 * fd.assemble(
-        sum(
-            fd.inner(U_final.sub(i) - c_target_fs[i], U_final.sub(i) - c_target_fs[i])
-            for i in range(n_species)
-        )
-        * fd.dx
+    return build_reduced_functional(
+        adapter=adapter,
+        target=target,
+        solver_params=solver_params,
+        concentration_targets=c_targets,
+        phi_target=phi_placeholder,
+        blob_initial_condition=blob_ic,
     )
-
-    # Called whenever adjoint is evaluated
-    def eval_cb(j, m):
-        print (f"j = {j}, m = {m_to_string(m)}, D = {m_to_d_to_string(m)}" )
-
-    rf = adj.ReducedFunctional(
-        Jobj, 
-        [adj.Control(logd_func) for logd_func in logD_funcs],
-        eval_cb_post = eval_cb
-    )
-    
-    return rf
-

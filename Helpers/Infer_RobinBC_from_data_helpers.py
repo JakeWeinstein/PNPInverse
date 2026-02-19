@@ -1,7 +1,7 @@
-"""Compatibility helper for Dirichlet-phi0 inference using the unified engine.
+"""Compatibility helper for Robin-kappa inference using the unified engine.
 
-This module preserves the previous helper import path while delegating to the
-new modular interface in ``UnifiedInverse``.
+This wrapper keeps legacy imports functional while routing through the new
+unified inverse interface.
 """
 
 from __future__ import annotations
@@ -21,27 +21,28 @@ def make_objective_and_grad(
     phi_vec: Sequence[float],
     blob_ic: bool = True,
 ):
-    """Build a reduced functional for inferring Dirichlet boundary value ``phi0``.
+    """Build a reduced functional for inferring Robin transfer coefficient(s).
 
     Parameters
     ----------
     solver_params:
-        Standard 11-entry solver parameter list.
+        Standard 11-entry solver parameter list configured for a Robin solver.
     c_targets:
-        Concentration targets. Kept for compatibility with old signatures.
-        The Dirichlet ``phi0`` target uses only ``phi_vec`` in the objective.
+        Final concentration vectors, one per species.
     phi_vec:
-        Electric-potential target vector.
+        Final electric-potential vector.
     blob_ic:
         Whether to initialize with the Gaussian blob concentration profile.
 
     Returns
     -------
     firedrake.adjoint.ReducedFunctional
-        Objective functional parameterized by the scalar ``phi0`` control.
+        Objective functional parameterized by per-species ``kappa`` controls.
     """
-    adapter = ForwardSolverAdapter.from_module_path("Utils.forsolve")
-    target = build_default_target_registry()["dirichlet_phi0"]
+    adapter = ForwardSolverAdapter.from_module_path(
+        "Utils.robin_forsolve", solve_function_name="forsolve_robin"
+    )
+    target = build_default_target_registry()["robin_kappa"]
 
     return build_reduced_functional(
         adapter=adapter,

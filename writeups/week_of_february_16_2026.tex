@@ -1,0 +1,212 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{siunitx}
+\usepackage{setspace}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\setlength{\parindent}{0pt}
+\sisetup{round-mode=places,round-precision=4}
+
+\title{PNPInverse Weekly Development Writeup\\Week of February 16, 2026}
+\author{Jake Weinstein (Project Notes Consolidated)}
+\date{\today}
+
+\begin{document}
+\onehalfspacing
+\maketitle
+
+\section*{Weekly Focus}
+This week focused on converting the inverse workflow from isolated scripts into a modular framework, then building a new experiment-style inference path for Robin boundary transfer coefficients from \(\phi_{\mathrm{applied}}\)-vs-steady-flux data.
+
+The center of gravity was the new Robin curve inference path: data generation, steady-state detection, adjoint gradient extraction point-by-point, SciPy-based optimization, and recovery logic for forward-solve failures.
+
+\section*{Outline of What Was Implemented}
+\begin{enumerate}
+\item Unified inverse interface that can plug into compatible forward solvers and infer multiple parameter targets.
+\item Always-resilient optimization logic that can recover from nonlinear forward-solve failures.
+\item Robin experimental pipeline where the observable is steady-state flux on the Robin boundary.
+\item New gradient-based Robin \(\kappa\) inference from flux-curve mismatch using Firedrake adjoints + SciPy.
+\item Real-time fit diagnostics: live curve plot with target/current/best and per-evaluation trajectories.
+\end{enumerate}
+
+\section*{1. Unified Inverse Interface}
+\subsection*{What was built}
+A shared inference core was established so new inverse problems can be configured through:
+\begin{itemize}
+\item a forward-solver adapter,
+\item a parameter target definition,
+\item a request object containing true value, initial guess, noise, and optimizer settings.
+\end{itemize}
+
+This unifies diffusion, Dirichlet BC, and Robin BC inference under one architecture while preserving compatibility wrappers for existing helper imports.
+
+\subsection*{Mathematical template}
+For state \(u(m)\) produced by the forward solve under control/parameter \(m\), the generic objective template is:
+\[
+J(m)=\frac12\int_\Omega \|\mathcal{O}(u(m)) - d\|^2\,dx,
+\]
+where \(\mathcal{O}\) selects the measured field(s) (concentration, potential, or derived observable), and \(d\) is synthetic/experimental target data.
+
+\section*{2. Resilient Optimization for Forward-Solve Failures}
+\subsection*{What was built}
+The optimization loop was made always-resilient by adding staged recovery rather than hard-failing on the first diverged PDE solve. Recovery phases were implemented in this order:
+\begin{enumerate}
+\item Increase \texttt{snes\_max\_it}.
+\item Apply anisotropy reduction to the trial parameter vector (with reset of relaxed tolerances).
+\item Relax nonlinear/linear tolerances (\texttt{snes\_atol}, \texttt{snes\_rtol}, \texttt{ksp\_rtol}) and line-search strategy.
+\end{enumerate}
+
+The restart logic uses the last known feasible parameter state, so retries do not repeatedly jump back to the original initial guess.
+
+\subsection*{Anisotropy reduction concept}
+For a multi-component parameter vector \(m\), anisotropy is treated as a max/min magnitude ratio. If too large, the vector is blended toward an isotropic surrogate based on geometric-mean magnitude:
+\[
+m_{\mathrm{new}}=(1-\beta)m + \beta m_{\mathrm{iso}},
+\]
+where \(\beta\in[0,1]\) controls flattening strength.
+
+\section*{3. Robin Experimental Flux Pipeline}
+\subsection*{What was built}
+A new workflow mirrors an experiment where:
+\begin{itemize}
+\item control input is applied voltage \(\phi_{\mathrm{applied}}\),
+\item measured output is steady-state flux through the Robin boundary.
+\end{itemize}
+
+Utilities were added for:
+\begin{itemize}
+\item steady-state probe sweeps,
+\item synthetic \(\phi_{\mathrm{applied}}\)-flux data generation,
+\item CSV serialization and reuse across fitting runs.
+\end{itemize}
+
+\subsection*{Steady-state flux definition}
+The Robin boundary law in this implementation is:
+\[
+J_i\cdot n = \kappa_i(c_i-c_{\infty,i}).
+\]
+Species flux across the Robin electrode boundary is assembled as
+\[
+F_i = \int_{\Gamma_{\mathrm{electrode}}} \kappa_i(c_i-c_{\infty,i})\,ds.
+\]
+The default scalar observable used this week is total species flux:
+\[
+F_{\mathrm{obs}} = \sum_i F_i.
+\]
+
+\subsection*{Steady-state criterion}
+At each time step \(n\), with per-species boundary flux \(F_i^{(n)}\):
+\[
+\Delta_i^{(n)} = |F_i^{(n)}-F_i^{(n-1)}|,
+\]
+\[
+\text{rel}^{(n)} = \max_i\frac{\Delta_i^{(n)}}{\max(|F_i^{(n)}|,|F_i^{(n-1)}|,\varepsilon_{\mathrm{abs}})},
+\quad
+\text{abs}^{(n)} = \max_i\Delta_i^{(n)}.
+\]
+A step is steady if
+\[
+\text{rel}^{(n)}\le\varepsilon_{\mathrm{rel}}
+\quad\text{or}\quad
+\text{abs}^{(n)}\le\varepsilon_{\mathrm{abs}},
+\]
+and steady state is declared after the required number of consecutive steady steps.
+
+\section*{4. Robin \(\kappa\) Inference from Flux Curves}
+\subsection*{What was built}
+A dedicated script and helper pipeline were implemented for inferring \(\kappa\) from a full \(\phi_{\mathrm{applied}}\)-vs-steady-flux curve.
+
+Per voltage point \(\phi_j\), a steady-state forward solve is run and compared to target flux \(F_j^\star\).
+
+\subsection*{Objective and gradient}
+Per-point loss:
+\[
+L_j(\kappa)=\frac12\left(F_j(\kappa)-F_j^\star\right)^2.
+\]
+Global loss over \(m\) sweep points:
+\[
+J(\kappa)=\sum_{j=1}^m L_j(\kappa).
+\]
+
+Firedrake adjoint is used at each point to compute
+\[
+\nabla_\kappa L_j(\kappa),
+\]
+and gradients are accumulated over converged points:
+\[
+\nabla J(\kappa)=\sum_{j\in\mathcal{C}} \nabla_\kappa L_j(\kappa).
+\]
+
+\subsection*{SciPy minimize pipeline}
+SciPy receives:
+\begin{itemize}
+\item \texttt{fun}: curve loss \(J(\kappa)\),
+\item \texttt{jac}: analytic adjoint gradient \(\nabla J(\kappa)\),
+\item bounds on \(\kappa\),
+\item method/tolerance/options (e.g. \texttt{L-BFGS-B}, \texttt{ftol}, \texttt{gtol}, \texttt{maxiter}),
+\item callback for iteration diagnostics and plot updates.
+\end{itemize}
+
+\section*{5. Noise Model Clarification}
+Noise is Gaussian with standard deviation tied to RMS signal magnitude:
+\[
+\sigma = \left(\frac{p}{100}\right)\mathrm{RMS}(F_{\mathrm{clean}}),
+\]
+where \(p\) is \texttt{noise\_percent}.
+
+So \(5\%\) means \(\sigma=0.05\cdot\mathrm{RMS}\), not a hard \(\pm 5\%\) pointwise cap. Individual points can exceed \(5\%\) in magnitude.
+
+\section*{6. Representative Results and Plots}
+\subsection*{Summary Table}
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Case & Best $\kappa_0$ & Best $\kappa_1$ & Final Objective & Mean $|\Delta F/F|$ (\%) & Max $|\Delta F/F|$ (\%) \\
+\midrule
+0\% noise & 1.0015 & 1.9980 & $1.49\times 10^{-8}$ & 0.000 & 0.000 \\
+5\% noise & 3.3216 & 1.5005 & $3.67\times 10^{-3}$ & 3.357 & 10.520 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Data Generation Curves}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{assets/robin_data_generation_0pct.png}
+\caption{Synthetic Robin flux-curve data generation with 0\% noise.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{assets/robin_data_generation_5pct.png}
+\caption{Synthetic Robin flux-curve data generation with 5\% RMS Gaussian noise.}
+\end{figure}
+
+\subsection*{Inference Fits}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{assets/robin_kappa_inference_0pct.png}
+\caption{Robin \(\kappa\) curve fit at 0\% noise.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{assets/robin_kappa_inference_5pct.png}
+\caption{Robin \(\kappa\) curve fit at 5\% noise.}
+\end{figure}
+
+\section*{7. Practical Takeaways from This Week}
+\begin{itemize}
+\item The Robin flux-based inverse workflow is now fully implemented end-to-end and experimentally interpretable.
+\item The unified interface significantly reduced duplication and made target/solver swapping straightforward.
+\item Resilient retry mechanics now handle many nonlinear solve failures that previously aborted optimization.
+\item In noiseless synthetic tests, recovered \(\kappa\) is close to truth; with 5\% RMS noise, solutions remain feasible but can shift to different local minima.
+\item Live plotting materially improved debugging visibility during fitting.
+\end{itemize}
+
+\end{document}

@@ -15,6 +15,11 @@ from pathlib import Path
 
 import numpy as np
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+PNPINVERSE_ROOT = SCRIPT_DIR.parent
+if str(PNPINVERSE_ROOT) not in sys.path:
+    sys.path.insert(0, str(PNPINVERSE_ROOT))
+
 # Keep Firedrake caches writable in sandboxed environments.
 os.environ.setdefault("FIREDRAKE_TSFC_KERNEL_CACHE_DIR", "/tmp/firedrake-tsfc")
 os.environ.setdefault("PYOP2_CACHE_DIR", "/tmp/pyop2")
@@ -24,7 +29,8 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 METHODS = ["BFGS", "L-BFGS-B", "CG", "SLSQP", "TNC", "Newton-CG"]
 BOUNDED_METHODS = {"L-BFGS-B", "SLSQP", "TNC"}
-NOISE_STDS = [0.0, 0.005, 0.02]
+# Percent noise levels (sigma = pct/100 * RMS(field)).
+NOISE_STDS = [0.0, 5.0, 20.0]
 BASE_SEED = 20260211
 NOISE_ZERO_SEEDS = [BASE_SEED]
 NOISY_SEEDS = [BASE_SEED, BASE_SEED + 1, BASE_SEED + 2]
@@ -136,7 +142,7 @@ def run_single(config):
                     params,
                 ]
                 with adj.stop_annotating():
-                    data = generate_noisy_data(solver_params_gen, noise_std=noise_std, seed=seed)
+                    data = generate_noisy_data(solver_params_gen, noise_percent=noise_std, seed=seed)
 
                 noisy_c = list(data[n_species + 1 : 2 * n_species + 1])
 
@@ -188,7 +194,7 @@ def run_single(config):
                     params,
                 ]
                 with adj.stop_annotating():
-                    data = generate_noisy_data(solver_params_gen, noise_std=noise_std, seed=seed)
+                    data = generate_noisy_data(solver_params_gen, noise_percent=noise_std, seed=seed)
 
                 noisy_c = list(data[n_species + 1 : 2 * n_species + 1])
                 noisy_phi = data[-1]

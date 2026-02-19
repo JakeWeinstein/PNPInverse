@@ -1,0 +1,5 @@
+noise_percent=5.0
+best_kappa=[3.3216050775134294, 1.5004611603744755]
+best_loss=0.0036742104138537835
+optimization_success=True
+optimization_message=CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH

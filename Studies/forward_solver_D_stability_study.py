@@ -15,6 +15,12 @@ import time
 from collections import Counter
 from pathlib import Path
 
+# Ensure parent package path is available when running from Studies/.
+SCRIPT_DIR = Path(__file__).resolve().parent
+PNPINVERSE_ROOT = SCRIPT_DIR.parent
+if str(PNPINVERSE_ROOT) not in sys.path:
+    sys.path.insert(0, str(PNPINVERSE_ROOT))
+
 # Keep Firedrake caches writable in sandboxed environments.
 os.environ.setdefault("FIREDRAKE_TSFC_KERNEL_CACHE_DIR", "/tmp/firedrake-tsfc")
 os.environ.setdefault("PYOP2_CACHE_DIR", "/tmp/pyop2")

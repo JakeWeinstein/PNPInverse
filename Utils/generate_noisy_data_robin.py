@@ -1,5 +1,6 @@
 import numpy as np
-from Utils.forsolve import *
+
+from Utils.robin_forsolve import build_context, build_forms, forsolve_robin, set_initial_conditions
 
 
 def _add_percent_noise(vec, noise_percent, rng):
@@ -16,7 +17,7 @@ def _add_percent_noise(vec, noise_percent, rng):
     return v + rng.normal(0.0, sigma, size=v.shape)
 
 
-def generate_noisy_data(
+def generate_noisy_data_robin(
     solver_params,
     noise_percent=10.0,
     seed=None,
@@ -24,8 +25,7 @@ def generate_noisy_data(
     noise_std=None,
 ):
     """
-    Run the PNP forward solver and return final-step clean and noisy
-    vectors for each species and phi.
+    Run the Robin-BC PNP forward solver and return final-step clean/noisy vectors.
 
     Parameters
     ----------
@@ -53,20 +53,31 @@ def generate_noisy_data(
 
     rng = np.random.default_rng(seed)
     try:
-        (n_species, order, dt, t_end, z_vals, D_vals,
-         a_vals, phi_applied, c0, phi0, params) = solver_params
+        (
+            n_species,
+            order,
+            dt,
+            t_end,
+            z_vals,
+            D_vals,
+            a_vals,
+            phi_applied,
+            c0,
+            phi0,
+            params,
+        ) = solver_params
     except Exception as exc:
         raise ValueError("forward_solver expects a list of 11 solver parameters") from exc
-    
+
     ctx = build_context(solver_params)
     ctx = build_forms(ctx, solver_params)
     set_initial_conditions(ctx, solver_params, blob=True)
 
-    U_prev = forsolve(ctx, solver_params)
+    U_final = forsolve_robin(ctx, solver_params, print_interval=print_interval)
 
     phi_idx = n_species
-    c_vecs = [np.array(U_prev.sub(i).dat.data_ro) for i in range(n_species)]
-    phi_vec = np.array(U_prev.sub(phi_idx).dat.data_ro)
+    c_vecs = [np.array(U_final.sub(i).dat.data_ro) for i in range(n_species)]
+    phi_vec = np.array(U_final.sub(phi_idx).dat.data_ro)
 
     c_noisy = [_add_percent_noise(c_vec, noise_percent, rng) for c_vec in c_vecs]
     phi_noisy = _add_percent_noise(phi_vec, noise_percent, rng)
