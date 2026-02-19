@@ -137,7 +137,7 @@ A step is steady if
 \]
 and steady state is declared after the required number of consecutive steady steps.
 
-\subsection*{How \(\kappa\) Shapes the \(\phi_{\mathrm{applied}}\)-Flux Curve}
+\subsection*{How \(\kappa\) Shapes the \(\phi_{\mathrm{applied}}\) Curves}
 To isolate \(\kappa\)-dependence, a no-noise overlay was generated for:
 \[
 \kappa \in \{[2,2], [1,1], [2,1], [1,2], [1,5], [5,1]\}.
@@ -146,20 +146,26 @@ To isolate \(\kappa\)-dependence, a no-noise overlay was generated for:
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.88\textwidth]{assets/robin_kappa_no_noise_overlay.png}
-\caption{No-noise \(\phi_{\mathrm{applied}}\)-vs-steady-flux curves for multiple Robin \(\kappa\) pairs.}
+\caption{No-noise \(\phi_{\mathrm{applied}}\)-vs-steady-flux curves for multiple Robin \(\kappa\) pairs (original Figure 1).}
 \end{figure}
 
-Interpretation from these curves:
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{assets/robin_kappa_no_noise_overlay_current_density_proxy.png}
+\caption{No-noise \(\phi_{\mathrm{applied}}\)-vs-current-density-proxy curves for the same Robin \(\kappa\) pairs (added below Figure 1).}
+\end{figure}
+
+Interpretation from the current-density-proxy overlay (second figure):
 \begin{itemize}
-\item Increasing both \(\kappa\) values raises the overall flux level (e.g. \([1,1]\rightarrow[2,2]\)).
-\item The two species do not affect voltage sensitivity equally: \([1,5]\) is much steeper than \([5,1]\), even though both have similar zero-voltage flux intercept.
-\item This asymmetry is consistent with charge-coupled transport in PNP: each species-specific Robin transfer coefficient multiplies a concentration field that responds differently to applied voltage.
+\item In this voltage window, all curves have negative slope: increasing \(\phi_{\mathrm{applied}}\) drives the charge-weighted proxy to more negative values.
+\item Zero-voltage intercepts depend strongly on anisotropy: \([1,5]\) and \([1,2]\) start negative, \([5,1]\) and \([2,1]\) start positive, while \([1,1]\) and \([2,2]\) start near zero.
+\item Changing which species gets the larger \(\kappa\) (\([1,5]\) vs \([5,1]\)) changes both intercept and slope, consistent with asymmetric species contributions to the charge-weighted observable.
 \end{itemize}
 
-Using endpoint slope \(\big(F(0.04)-F(0)\big)/0.04\), representative values are:
+Using endpoint slope \(\big(P(0.04)-P(0)\big)/0.04\) for proxy \(P=\sum_i z_i F_i\), representative values are:
 \[
-[1,1]\!:\!1.984,\quad [2,2]\!:\!1.782,\quad [2,1]\!:\!1.290,\quad
-[1,2]\!:\!2.400,\quad [1,5]\!:\!2.942,\quad [5,1]\!:\!0.144.
+[1,1]\!:\!-4.661,\quad [2,2]\!:\!-5.594,\quad [2,1]\!:\!-5.402,\quad
+[1,2]\!:\!-4.911,\quad [1,5]\!:\!-5.301,\quad [5,1]\!:\!-6.619.
 \]
 
 \section*{4. Robin \(\kappa\) Inference from Flux Curves}

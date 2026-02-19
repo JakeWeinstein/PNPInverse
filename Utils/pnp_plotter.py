@@ -4,7 +4,10 @@ from firedrake.pyplot import tripcolor, tricontour
 import matplotlib.animation as animation
 import numpy as np
 import matplotlib.tri as tri
-import imageio
+try:
+    import imageio
+except Exception:
+    imageio = None
 import io
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pathlib import Path
@@ -154,36 +157,65 @@ def create_animations(snapshots, mode, mesh, W, z_vals, num_steps, dt,
         buf = io.BytesIO()
         fig.savefig(buf, format="png", dpi=150)  # fixed size; avoid bbox_inches to keep frames same shape
         buf.seek(0)
-        images.append(imageio.v2.imread(buf))
+        if imageio is not None:
+            images.append(imageio.v2.imread(buf))
+        else:
+            from PIL import Image
+            images.append(np.asarray(Image.open(buf).convert("RGBA")))
         plt.close(fig)
 
     fname = RENDERS_DIR / f"pnp_animation{mode}.{fmt}"
-    try:
-        # imageio mp4 requires imageio-ffmpeg; if missing, this will raise
-        imageio.mimsave(fname, images, fps=fps)
-        print(f"  Saved animation to {fname}")
-        return
-    except Exception as e:
-        print(f"  Warning: failed to save {fmt} via imageio ({e}); trying matplotlib FFMpegWriter...")
+
+    # Preferred path: imageio if available.
+    if imageio is not None:
         try:
-            Writer = animation.FFMpegWriter
-            writer = Writer(fps=fps)
+            # imageio mp4 requires imageio-ffmpeg; if missing, this will raise.
+            imageio.mimsave(fname, images, fps=fps)
+            print(f"  Saved animation to {fname}")
+            return
+        except Exception as e:
+            print(f"  Warning: failed to save {fmt} via imageio ({e}); trying matplotlib writers...")
+    else:
+        print("  Warning: imageio not available; trying matplotlib writers...")
+
+    # Fallback 1: matplotlib writer by requested format.
+    try:
+        if str(fmt).lower() == "gif":
+            writer = animation.PillowWriter(fps=fps)
+        else:
+            writer = animation.FFMpegWriter(fps=fps)
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.axis("off")
+        im = ax.imshow(images[0])
+        with writer.saving(fig, fname, dpi=150):
+            for frame in images:
+                im.set_data(frame)
+                writer.grab_frame()
+        plt.close(fig)
+        print(f"  Saved animation to {fname} via matplotlib writer")
+        return
+    except Exception as e2:
+        print(f"  Warning: matplotlib writer save failed ({e2}); falling back to GIF.")
+
+    # Fallback 2: always try GIF as last resort.
+    alt = RENDERS_DIR / f"pnp_animation{mode}.gif"
+    try:
+        if imageio is not None:
+            imageio.mimsave(alt, images, fps=fps)
+        else:
+            writer = animation.PillowWriter(fps=fps)
             fig = plt.figure()
-            im = plt.imshow(images[0])
-            with writer.saving(fig, fname, dpi=150):
+            ax = fig.add_subplot(111)
+            ax.axis("off")
+            im = ax.imshow(images[0])
+            with writer.saving(fig, alt, dpi=150):
                 for frame in images:
                     im.set_data(frame)
                     writer.grab_frame()
             plt.close(fig)
-            print(f"  Saved animation to {fname} via matplotlib/ffmpeg")
-            return
-        except Exception as e2:
-            print(f"  Warning: matplotlib ffmpeg save failed ({e2}); falling back to GIF.")
-            alt = RENDERS_DIR / f"pnp_animation{mode}.gif"
-            try:
-                imageio.mimsave(alt, images, fps=fps)
-                print(f"  Saved animation to {alt}")
-            except Exception as ee:
-                print(f"  Failed to save animation as gif as well: {ee}")
+        print(f"  Saved animation to {alt}")
+    except Exception as ee:
+        print(f"  Failed to save animation as gif as well: {ee}")
 
     print("Animation generation complete!")

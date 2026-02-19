@@ -1,7 +1,7 @@
-"""Test script: overlay steady-state Robin flux curves for multiple kappa values.
+"""Test script: overlay steady-state Robin observable curves for multiple kappa values.
 
 This script runs repeated phi_applied sweeps, one per kappa pair, and plots all
-phi_applied-vs-flux curves on the same graph for visual comparison.
+phi_applied-vs-observable curves on the same graph for visual comparison.
 
 Run examples:
     python Studies/Test_RobinFlux_kappa_overlay.py
@@ -101,7 +101,7 @@ def kappa_file_suffix(kappa: Sequence[float]) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Overlay phi_applied-vs-steady-state-flux curves for multiple Robin kappa pairs."
+            "Overlay phi_applied-vs-steady-state observable curves for multiple Robin kappa pairs."
         )
     )
     parser.add_argument(
@@ -114,6 +114,40 @@ def main() -> None:
     parser.add_argument("--phi-max", type=float, default=0.04)
     parser.add_argument("--n-points", type=int, default=15)
     parser.add_argument("--dt", type=float, default=1e-1)
+    parser.add_argument(
+        "--observable-mode",
+        type=str,
+        default="total_species",
+        choices=["total_species", "total_charge", "charge_proxy_no_f", "species"],
+        help=(
+            "Scalar observable assembled from species boundary fluxes. "
+            "'charge_proxy_no_f' is charge-weighted flux without Faraday scaling."
+        ),
+    )
+    parser.add_argument(
+        "--species-index",
+        type=int,
+        default=None,
+        help="Required when --observable-mode=species.",
+    )
+    parser.add_argument(
+        "--observable-scale",
+        type=float,
+        default=1.0,
+        help="Post-assembly multiplicative scale applied to plotted values.",
+    )
+    parser.add_argument(
+        "--y-label",
+        type=str,
+        default="steady-state flux (observable)",
+        help="Y-axis label for plot.",
+    )
+    parser.add_argument(
+        "--plot-title",
+        type=str,
+        default="Robin Boundary: phi_applied vs Flux for Multiple Kappa Pairs",
+        help="Plot title.",
+    )
     parser.add_argument("--steady-max-steps", type=int, default=120)
     parser.add_argument("--steady-rel-tol", type=float, default=5e-4)
     parser.add_argument("--steady-abs-tol", type=float, default=1e-7)
@@ -152,7 +186,8 @@ def main() -> None:
         absolute_tolerance=float(args.steady_abs_tol),
         consecutive_steps=int(args.steady_consecutive),
         max_steps=int(args.steady_max_steps),
-        flux_observable="total_species",
+        flux_observable=str(args.observable_mode),
+        species_index=args.species_index,
         verbose=False,
         print_every=10,
     )
@@ -162,6 +197,10 @@ def main() -> None:
     print(
         f"phi_applied range: [{phi_applied_values.min():.4f}, {phi_applied_values.max():.4f}] "
         f"with {len(phi_applied_values)} points"
+    )
+    print(
+        f"observable mode: {args.observable_mode}, "
+        f"species_index={args.species_index}, scale={float(args.observable_scale):.8g}"
     )
     print(f"kappa pairs: {kappa_pairs}")
 
@@ -175,8 +214,8 @@ def main() -> None:
             blob_initial_condition=True,
         )
         converged = np.asarray([bool(r.converged) for r in results], dtype=bool)
-        flux = np.asarray(
-            [float(r.observed_flux) if r.converged else np.nan for r in results],
+        observable_vals = np.asarray(
+            [float(args.observable_scale) * float(r.observed_flux) if r.converged else np.nan for r in results],
             dtype=float,
         )
 
@@ -195,7 +234,7 @@ def main() -> None:
             {
                 "kappa": list(kappa),
                 "converged": converged,
-                "flux": flux,
+                "observable": observable_vals,
             }
         )
 
@@ -208,12 +247,12 @@ def main() -> None:
     for item in overlay_data:
         kappa = item["kappa"]
         converged = item["converged"]
-        flux = item["flux"]
+        observable_vals = item["observable"]
         label = format_kappa_label(kappa)
 
         plt.plot(
             phi_applied_values,
-            flux,
+            observable_vals,
             marker="o",
             linewidth=2,
             label=label,
@@ -231,8 +270,8 @@ def main() -> None:
             )
 
     plt.xlabel("applied voltage phi_applied")
-    plt.ylabel("steady-state flux (observable)")
-    plt.title("Robin Boundary: phi_applied vs Flux for Multiple Kappa Pairs")
+    plt.ylabel(str(args.y_label))
+    plt.title(str(args.plot_title))
     plt.grid(True, alpha=0.25)
     plt.legend(fontsize=9)
     plt.tight_layout()
