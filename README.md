@@ -2,104 +2,213 @@
 
 Inverse and forward experiments for a Poisson-Nernst-Planck (PNP) model using Firedrake and `firedrake.adjoint` (Pyadjoint).
 
-## Unified Inverse Interface
+This directory now has two complementary workflows:
+- A **unified inverse interface** (`UnifiedInverse/`) for standard parameter inference from state data.
+- An **experimental-style Robin workflow** where the measured signal is a `phi_applied` vs steady-state flux curve, used to infer Robin transfer coefficients `kappa`.
 
-The inverse workflow is now centralized in `UnifiedInverse/`.
-
-You can:
-- Plug in any forward solver module that exposes the expected contract (`build_context`, `build_forms`, `set_initial_conditions`, and `forsolve`/equivalent solve function).
-- Choose a parameter target from a registry (`diffusion`, `dirichlet_phi0`, `robin_kappa`).
-- Set true value, noise amount, and initial guess.
-- Automatically generate synthetic data and run optimization end-to-end.
-
-### Core modules
-
-- `UnifiedInverse/solver_interface.py`
-  - Forward-solver adapter loading and contract handling.
-- `UnifiedInverse/parameter_targets.py`
-  - Parameter target definitions and registry.
-- `UnifiedInverse/inference_runner.py`
-  - Synthetic data generation, objective construction, and inference runner.
-- `InferenceScripts/Infer_parameter_from_data.py`
-  - Unified CLI-style entrypoint.
-
-## Folder Layout
+## Current Folder Layout
 
 - `InferenceScripts/`
-  - Active inference entry scripts.
+  - Active entry scripts.
 - `Studies/`
-  - Tests, probes, and diagnostic/benchmark studies.
+  - Probes, tests, overlays, and method studies.
 - `Helpers/`
-  - Backward-compatible helper wrappers for legacy helper import paths.
+  - Helper modules used by inference scripts.
 - `Utils/`
-  - Forward-solver and data/plot utility modules.
+  - Forward solver and Robin experiment utilities.
 - `UnifiedInverse/`
-  - Modular inverse framework used by active scripts.
+  - Modular inverse framework.
 - `Old/`
   - Archived legacy scripts kept for reference.
+- `writeups/`
+  - Weekly reports and report assets.
 
-## Primary Scripts
+## Environment Setup
 
-### Inference scripts
+Use the same environment combo used by the current studies:
 
+```bash
+source /opt/miniconda3/etc/profile.d/conda.sh
+conda activate firedrake_clean
+source /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/venv-firedrake/bin/activate
+```
+
+Then run from:
+
+```bash
+cd /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+```
+
+Core dependencies:
+- Firedrake
+- `firedrake.adjoint`
+- `numpy`
+- `matplotlib`
+- `scipy`
+- `Pillow` (for GIF export)
+
+Optional for writeup builds:
+- `latexmk`, `pdflatex`
+
+## Unified Inverse Interface
+
+The generic inverse engine is in `UnifiedInverse/`:
+- `UnifiedInverse/solver_interface.py`
+- `UnifiedInverse/parameter_targets.py`
+- `UnifiedInverse/inference_runner.py`
+
+Entry script:
 - `InferenceScripts/Infer_parameter_from_data.py`
-  - Fully configurable unified inference interface.
-- `InferenceScripts/Infer_DirichletBC_from_data.py`
-  - Example problem using unified interface for `dirichlet_phi0` inference.
-- `InferenceScripts/Infer_D_from_data.py`
-  - Example problem using unified interface for diffusion inference.
-- `InferenceScripts/Infer_RobinBC_from_data.py`
-  - Example problem using unified interface for Robin `kappa` inference.
-- `InferenceScripts/Infer_D_from_data_robin.py`
-  - Example problem using unified interface for diffusion inference with Robin forward solver.
-- `InferenceScripts/Infer_RobinKappa_from_flux_curve.py`
-  - Infers Robin `kappa` by minimizing least-squares mismatch between target and
-    simulated `phi_applied`-flux curves.
 
-### Study/probe scripts
+You can configure:
+- forward solver module contract,
+- parameter target,
+- true value, noise level, and initial guess,
+- optimizer options.
 
-- `Studies/Probe_RobinFlux_steady_state.py`
-  - Measures steps/time required to reach steady-state Robin flux for a `phi_applied` sweep.
-- `Studies/Generate_RobinFlux_vs_phi0_data.py`
-  - Generates synthetic experimental-style `phi_applied` vs steady-state flux data.
-- `Studies/Test_RobinFlux_kappa_overlay.py`
-  - Overlays steady-state flux curves for multiple Robin `kappa` pairs.
-- `Studies/optimization_method_study.py`
-  - Compares optimization methods across inverse tasks.
-- `Studies/bfgs_lbfgsb_diffusion_failure_study.py`
-  - Focused BFGS vs L-BFGS-B failure analysis.
-- `Studies/forward_solver_D_stability_study.py`
-  - Maps forward-solver convergence across diffusion pairs.
-
-## Backward Compatibility
-
-Legacy helper import paths are preserved as wrappers that call the unified engine:
+Backward-compatible wrappers are kept in:
 - `Helpers/Infer_D_from_data_helpers.py`
 - `Helpers/Infer_DirichletBC_from_data_helpers.py`
 - `Helpers/Infer_RobinBC_from_data_helpers.py`
 
-Original implementations are kept and marked with `(old)` in their filenames.
+## Robin Flux-Curve Inference Experiment
 
-## Legacy Files (Not Used by Default)
+### Physical observable and boundary flux
 
-Legacy standalone inverse scripts and helpers have been retained and renamed:
-- `Old/Infer_D_from_data (old).py`
-- `Old/Infer_DirichletBC_from_data (old).py`
-- `Old/Infer_D_from_data_robin (old).py`
-- `Old/Infer_RobinBC_from_data (old).py`
-- `Old/Infer_D_from_data_helpers (old).py`
-- `Old/Infer_DirichletBC_from_data_helpers (old).py`
-- `Old/Infer_RobinBC_from_data_helpers (old).py`
+For species \(i\), the Robin boundary condition used in this project is:
 
-## Quick Start
+\[
+J_i \cdot n = \kappa_i \left(c_i - c_{\infty,i}\right).
+\]
 
-From `FireDrakeEnvCG/PNPInverse`:
+Species flux through the Robin electrode boundary:
+
+\[
+F_i = \int_{\Gamma_{\mathrm{electrode}}} \kappa_i \left(c_i - c_{\infty,i}\right)\,ds.
+\]
+
+Default scalar measured signal in the experiment:
+
+\[
+F_{\mathrm{obs}} = \sum_i F_i.
+\]
+
+Implementation reference:
+- `Utils/robin_flux_experiment.py` (`compute_species_flux_on_robin_boundary`, `observed_flux_from_species_flux`)
+
+### Steady-state definition
+
+At time step \(n\), with boundary flux \(F_i^{(n)}\):
+
+\[
+\Delta_i^{(n)} = \left|F_i^{(n)} - F_i^{(n-1)}\right|.
+\]
+
+\[
+\mathrm{rel}^{(n)} = \max_i \frac{\Delta_i^{(n)}}{\max\left(|F_i^{(n)}|,|F_i^{(n-1)}|,\varepsilon_{\mathrm{abs}}\right)},
+\quad
+\mathrm{abs}^{(n)} = \max_i \Delta_i^{(n)}.
+\]
+
+A step is marked steady if:
+
+\[
+\mathrm{rel}^{(n)} \le \varepsilon_{\mathrm{rel}}
+\quad \text{or} \quad
+\mathrm{abs}^{(n)} \le \varepsilon_{\mathrm{abs}}.
+\]
+
+Steady state is declared after `consecutive_steps` steady steps in a row.
+
+Implementation reference:
+- `Utils/robin_flux_experiment.py` (`solve_to_steady_state_for_phi_applied`)
+
+### Synthetic noise model
+
+Noise is additive Gaussian with:
+
+\[
+\sigma = \left(\frac{p}{100}\right)\mathrm{RMS}(F_{\mathrm{clean}}),
+\]
+
+where \(p\) is `noise_percent`.
+
+This is RMS-scaled noise, not a strict pointwise \(\pm p\%\) cap.
+
+Implementation reference:
+- `Utils/robin_flux_experiment.py` (`add_percent_noise`)
+
+### Inverse objective and adjoint gradient
+
+For sweep points \(\phi_j\) with target flux \(F_j^\star\):
+
+\[
+L_j(\kappa) = \frac{1}{2}\left(F_j(\kappa)-F_j^\star\right)^2,
+\quad
+J(\kappa) = \sum_{j=1}^{m} L_j(\kappa).
+\]
+
+Per-point adjoint gradients are computed with Firedrake-adjoint and summed:
+
+\[
+\nabla J(\kappa) = \sum_{j \in \mathcal{C}} \nabla_{\kappa} L_j(\kappa),
+\]
+
+where \(\mathcal{C}\) is the set of converged sweep points.
+
+Optimization uses SciPy `minimize` (default `L-BFGS-B`) with analytic Jacobian.
+
+Implementation reference:
+- `InferenceScripts/Infer_RobinKappa_from_flux_curve.py`
+- `Helpers/Infer_RobinKappa_from_flux_curve_helpers.py`
+
+### Forward-solve resilience
+
+When a point solve diverges, recovery stages are applied:
+1. Increase `snes_max_it`.
+2. Try anisotropy-reduced `kappa`.
+3. Relax `snes_atol`, `snes_rtol`, and `ksp_rtol` and vary line search.
+
+This prevents immediate failure on difficult iterates and improves robustness.
+
+## Active Scripts
+
+### Inference entry scripts
+
+- `InferenceScripts/Infer_parameter_from_data.py`
+  - Unified interface entrypoint.
+- `InferenceScripts/Infer_DirichletBC_from_data.py`
+  - Dirichlet example.
+- `InferenceScripts/Infer_D_from_data.py`
+  - Diffusion example.
+- `InferenceScripts/Infer_D_from_data_robin.py`
+  - Diffusion inference with Robin forward solver.
+- `InferenceScripts/Infer_RobinBC_from_data.py`
+  - Robin `kappa` inference on state data.
+- `InferenceScripts/Infer_RobinKappa_from_flux_curve.py`
+  - Robin `kappa` inference from `phi_applied` vs steady-state flux curve.
+
+### Studies/probes
+
+- `Studies/Probe_RobinFlux_steady_state.py`
+  - Steady-state horizon probe over `phi_applied`.
+- `Studies/Generate_RobinFlux_vs_phi0_data.py`
+  - Generates synthetic flux-curve data (script name has legacy `phi0`; workflow uses `phi_applied`).
+- `Studies/Test_RobinFlux_kappa_overlay.py`
+  - Overlays no-noise curves for arbitrary `kappa` combinations.
+- `Studies/optimization_method_study.py`
+- `Studies/bfgs_lbfgsb_diffusion_failure_study.py`
+- `Studies/forward_solver_D_stability_study.py`
+
+## Quick Start Commands
+
+### 1) Unified interface example
 
 ```bash
 python InferenceScripts/Infer_DirichletBC_from_data.py
 ```
 
-Run the generic interface directly:
+Or generic entrypoint:
 
 ```bash
 python InferenceScripts/Infer_parameter_from_data.py \
@@ -108,124 +217,63 @@ python InferenceScripts/Infer_parameter_from_data.py \
   --initial-guess 10.0
 ```
 
-## Requirements
+### 2) Robin flux experiment workflow
 
-This project depends on a working Firedrake install with adjoint support.
-
-Core runtime dependencies:
-- Firedrake
-- `firedrake.adjoint` (Pyadjoint)
-- `numpy`
-- `matplotlib`
-- `imageio` (for animation export in plotting utility)
-
-Optional for report workflows:
-- A LaTeX toolchain (`latexmk`, `pdflatex`) to build PDFs from generated `.tex`.
-
-Recommended setup:
-- Use official Firedrake installation instructions: https://www.firedrakeproject.org/install.html
-- Or run inside the Firedrake Docker image.
-
-## Study Workflows
-
-### Experimental-style Robin flux workflow
-
-1) Probe steady-state horizon with coarse `dt`:
+Probe steady-state behavior:
 
 ```bash
 python Studies/Probe_RobinFlux_steady_state.py
 ```
 
-2) Generate synthetic `phi_applied` vs steady-state flux data:
+Generate synthetic curve:
 
 ```bash
 python Studies/Generate_RobinFlux_vs_phi0_data.py
 ```
 
-3) Infer `kappa` from that curve using least squares:
+Infer `kappa` from curve:
 
 ```bash
 python InferenceScripts/Infer_RobinKappa_from_flux_curve.py
 ```
 
-Outputs are written under:
+Main outputs are written to:
 
 ```text
 StudyResults/robin_flux_experiment/
 ```
 
-### 1) Optimizer comparison across inverse tasks
+Typical files:
+- `phi_applied_vs_steady_flux_synthetic.csv`
+- `phi_applied_vs_steady_flux_fit.csv`
+- `robin_kappa_gradient_optimization_history.csv`
+- `robin_kappa_point_gradients.csv`
+- `phi_applied_vs_steady_flux_fit.png`
+- `robin_kappa_fit_convergence.gif`
+
+### 3) Overlay arbitrary no-noise `kappa` curves
 
 ```bash
-python Studies/optimization_method_study.py
+python Studies/Test_RobinFlux_kappa_overlay.py \
+  --kappa-list "2,2;1,1;2,1;1,2;1,5;5,1" \
+  --phi-min 0.0 --phi-max 0.04 --n-points 15 \
+  --output-dir writeups/assets \
+  --output-prefix robin_kappa_no_noise_overlay
 ```
-
-Default outputs (under `StudyResults/optimization_methods/`):
-- `opt_method_study_results.csv`
-- `opt_method_study_summary.csv`
-- `opt_method_study_summary.md`
-
-Generate figures + LaTeX report source:
-
-```bash
-python StudyResults/optimization_methods/generate_latex_report.py
-```
-
-Build PDF:
-
-```bash
-cd StudyResults/optimization_methods
-latexmk -pdf opt_method_study_report.tex
-```
-
-### 2) BFGS vs L-BFGS-B diffusion failure study
-
-```bash
-python Studies/bfgs_lbfgsb_diffusion_failure_study.py
-```
-
-Default outputs (under `StudyResults/bfgs_lbfgsb_diffusion_failure_study/`):
-- `bfgs_lbfgsb_diffusion_results.csv`
-- `bfgs_lbfgsb_diffusion_summary.csv`
-- `bfgs_lbfgsb_diffusion_failure_cases.csv`
-- `bfgs_lbfgsb_diffusion_failure_analysis.md`
-
-Generate figures + LaTeX report source:
-
-```bash
-python StudyResults/bfgs_lbfgsb_diffusion_failure_study/generate_latex_report.py
-```
-
-Build PDF:
-
-```bash
-cd StudyResults/bfgs_lbfgsb_diffusion_failure_study
-latexmk -pdf bfgs_lbfgsb_diffusion_failure_report.tex
-```
-
-### 3) Forward solver D-stability map
-
-```bash
-python Studies/forward_solver_D_stability_study.py
-```
-
-Anisotropy-focused dense grid:
-
-```bash
-python Studies/forward_solver_D_stability_study.py --study-mode anisotropy_dense --anis-ratio-threshold 8.0
-```
-
-Default outputs:
-- `StudyResults/forward_solver_D_stability*/forward_solver_d_stability_results.csv`
-- `StudyResults/forward_solver_D_stability*/forward_solver_d_stability_map.png`
-- `StudyResults/forward_solver_D_stability*/forward_solver_d_stability_report.tex`
 
 ## Solver Parameter Convention
 
-Forward solver parameter list format remains:
+Forward solver parameter list:
 
 ```text
 [n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0_vals, phi0, params]
 ```
 
-`UnifiedInverse/build_default_solver_params(...)` is the recommended way to construct this list.
+Use:
+- `UnifiedInverse/build_default_solver_params(...)`
+
+to construct this consistently.
+
+## Legacy and Archived Files
+
+Old script implementations are retained under `Old/` and marked with `(old)` in filename where applicable. They are reference-only and not used by default workflows.
