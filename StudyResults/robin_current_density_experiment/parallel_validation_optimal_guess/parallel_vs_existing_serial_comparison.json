@@ -1,0 +1,15 @@
+{
+  "serial_runtime_seconds": 279.64177258400014,
+  "parallel_runtime_seconds": 111.94845329099917,
+  "runtime_speedup_serial_over_parallel": 2.497951194172361,
+  "serial_peak_rss_mb": 423.9375,
+  "parallel_peak_rss_mb": 331.71875,
+  "parallel_over_serial_memory_ratio": 0.7824708830900782,
+  "workers_guess": 4,
+  "serial_best_kappa0": 0.9987167036528151,
+  "serial_best_kappa1": 1.99813214605816,
+  "parallel_best_kappa0": 0.9987167036528174,
+  "parallel_best_kappa1": 1.9981321460581625,
+  "serial_best_loss": 1.074350680065366e-08,
+  "parallel_best_loss": 1.0743506800636987e-08
+}

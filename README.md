@@ -250,10 +250,10 @@ StudyResults/robin_flux_experiment/
 
 Typical files:
 - `phi_applied_vs_steady_flux_synthetic.csv`
-- `phi_applied_vs_steady_flux_fit.csv`
+- `phi_applied_vs_steady_observable_fit.csv`
 - `robin_kappa_gradient_optimization_history.csv`
 - `robin_kappa_point_gradients.csv`
-- `phi_applied_vs_steady_flux_fit.png`
+- `phi_applied_vs_steady_observable_fit.png`
 - `robin_kappa_fit_convergence.gif`
 
 ### 3) Overlay arbitrary no-noise `kappa` curves

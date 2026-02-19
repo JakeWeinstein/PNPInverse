@@ -143,7 +143,7 @@ def main() -> None:
             trial = solve_to_steady_state_for_phi_applied(
                 trial_params,
                 steady=steady,
-                blob_initial_condition=True,
+                blob_initial_condition=False,
             )
             best_result = trial
             chosen_max_it = int(max_it)

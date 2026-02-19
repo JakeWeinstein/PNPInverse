@@ -109,7 +109,7 @@ def main() -> None:
         phi_applied_values=phi_applied_values.tolist(),
         steady=steady,
         kappa_values=true_kappa,
-        blob_initial_condition=True,
+        blob_initial_condition=False,
     )
     if not all_results_converged(results):
         failed = [f"{r.phi_applied:.6f}" for r in results if not r.converged]

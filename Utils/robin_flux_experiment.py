@@ -206,7 +206,7 @@ def solve_to_steady_state_for_phi_applied(
     solver_params: Sequence[Any],
     *,
     steady: SteadyStateConfig,
-    blob_initial_condition: bool = True,
+    blob_initial_condition: bool = False,
 ) -> SteadyStateResult:
     """Run one Robin forward solve until flux-defined steady state is reached.
 
@@ -342,7 +342,7 @@ def sweep_phi_applied_steady_flux(
     phi_applied_values: Sequence[float],
     steady: SteadyStateConfig,
     kappa_values: Optional[Sequence[float]] = None,
-    blob_initial_condition: bool = True,
+    blob_initial_condition: bool = False,
 ) -> List[SteadyStateResult]:
     """Generate a phi_applied-vs-steady-state-flux curve for one kappa setting."""
     out: List[SteadyStateResult] = []

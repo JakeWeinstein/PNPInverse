@@ -1,0 +1,15 @@
+{
+  "baseline_serial_source": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/robin_current_density_experiment/replay_benchmark_no_noise/replay_runtime_memory_summary.csv",
+  "serial_runtime_seconds": 279.64177258400014,
+  "parallel_runtime_seconds": 117.43926416700015,
+  "runtime_speedup_serial_over_parallel": 2.3811608031394504,
+  "serial_peak_rss_mb": 423.9375,
+  "parallel_peak_rss_mb": 345.015625,
+  "parallel_over_serial_memory_ratio": 0.8138360607400855,
+  "serial_best_kappa0": 0.9987167036528151,
+  "serial_best_kappa1": 1.99813214605816,
+  "parallel_best_kappa0": 0.9987167036528174,
+  "parallel_best_kappa1": 1.9981321460581625,
+  "serial_best_loss": 1.074350680065366e-08,
+  "parallel_best_loss": 1.0743506800636987e-08
+}

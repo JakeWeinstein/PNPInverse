@@ -111,7 +111,8 @@ def main() -> None:
         gtol=1e-4,
         fail_penalty=1e9,
         print_point_gradients=True,
-        blob_initial_condition=True,
+        # Use simple IC (uniform concentrations + linear potential), not blob.
+        blob_initial_condition=False,
         # Live plot: true curve + best/current simulated curves, updated each SciPy iteration.
         live_plot=True,
         live_plot_pause_seconds=0.001,
@@ -126,6 +127,12 @@ def main() -> None:
         live_plot_export_gif_seconds=5.0,
         live_plot_export_gif_frames=50,
         live_plot_export_gif_dpi=140,
+        # Optional process-parallel execution across phi_applied points.
+        # Safe for adjoints because each worker has its own process + tape.
+        parallel_point_solves_enabled=False,
+        parallel_point_workers=4,
+        parallel_point_min_points=4,
+        parallel_start_method="spawn",
         # If enough sweep points fail at a candidate kappa, try an anisotropy-reduced
         # kappa surrogate for that evaluation.
         anisotropy_trigger_failed_points=4,

@@ -1,0 +1,4 @@
+metric,value
+replay_rebuild_count,1
+replay_diag_rebuild_count,0
+replay_exception_rebuild_count,0

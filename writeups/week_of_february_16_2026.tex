@@ -31,6 +31,9 @@ The center of gravity was the new Robin curve inference path: data generation, s
 \item New gradient-based Robin \(\kappa\) inference from flux-curve mismatch using Firedrake adjoints + SciPy.
 \item Current-density-proxy inference branch using charge-weighted flux \(\sum_i z_i F_i\), with Faraday scaling intentionally omitted pending unit calibration.
 \item Regenerated report set for 0\%, 2.5\%, and 5\% noise in both data-generation and inference-fit formats, plus a 2.5\% convergence GIF artifact.
+\item Initial-condition optimization study showing a measurable runtime reduction by replacing blob IC with a simple near-steady initial condition.
+\item Replay diagnostics and fallback/rebuild instrumentation for current-density-proxy inference, followed by temporary replay deactivation due validity concerns.
+\item Process-parallel point-solve execution for the 15-point \(\phi_{\mathrm{applied}}\) sweep, with per-worker tape isolation and runtime benchmarking.
 \end{enumerate}
 
 \section*{1. Unified Inverse Interface}
@@ -335,13 +338,200 @@ Case & Seed & Best $\kappa_0$ & Best $\kappa_1$ & Final Loss \\
 \caption{Robin \(\kappa\) current-density-proxy fit at 5\% noise (arbitrary units).}
 \end{figure}
 
-\section*{7. Practical Takeaways from This Week}
+\section*{7. Initial-Condition Runtime Optimization (Blob IC \(\rightarrow\) Flat IC)}
+To reduce time-to-steady-state in each forward solve, a simple initial condition
+(uniform concentrations + linear potential) was benchmarked against the blob
+initial condition on the same no-noise Robin \(\kappa\) inference problem.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Case & Runtime (s) & Best \(\kappa_0\) & Best \(\kappa_1\) & Final Loss & SciPy Success \\
+\midrule
+Blob IC & 335.843 & 1.0015 & 1.9980 & \(1.49\times 10^{-8}\) & True \\
+Flat IC & 310.872 & 1.0017 & 1.9980 & \(1.39\times 10^{-8}\) & True \\
+\bottomrule
+\end{tabular}
+\caption{No-noise runtime benchmark for Robin \(\kappa\) curve inference with identical optimizer settings.}
+\end{table}
+
+Measured runtime improvement from this IC change:
+\[
+335.843\ \mathrm{s}\ \rightarrow\ 310.872\ \mathrm{s},
+\]
+which is a
+\[
+1.0803\times\ \text{speedup} \quad (7.44\%\ \text{faster}).
+\]
+Convergence quality remained effectively unchanged, so this is a low-risk
+performance optimization for data-generation and inference runs.
+
+\section*{8. Replay Runtime/Memory Benchmark (Current-Density Proxy, No Noise)}
+\subsection*{What replay is doing (exactly)}
+The replay path exists to avoid rebuilding and re-solving all pointwise forward
+problems from scratch at every optimizer evaluation. Instead, for each
+\(\phi_{\mathrm{applied},j}\), we build a persistent taped model once and then
+re-evaluate that model under new \(\kappa\) values through
+\texttt{ReducedFunctional} replay.
+
+\subsection*{Replay build phase (dynamic steady-state, not fixed-step)}
+For each sweep point \(j\), replay bundle construction now does:
+\begin{enumerate}
+\item Start from an anchor \(\kappa\) (initially the optimizer initial guess, then rebuilt at reconverged \(\kappa\) when needed).
+\item Run the full nonlinear forward solve with the same steady-state criterion used in non-replay solves.
+\item Require the usual steady-state consecutive count plus an added buffer:
+\[
+N_{\mathrm{steady,target}} =
+N_{\mathrm{steady,required}} + N_{\mathrm{extra}},
+\]
+where \(N_{\mathrm{extra}}=\texttt{replay\_extra\_steady\_steps}\) (default 3).
+\item At the terminal replay-build state, tape four functionals per point:
+\[
+\hat O_j(\kappa),\quad
+\hat O_{j,\mathrm{prev}}(\kappa),\quad
+\hat D_j(\kappa)=\|U_j^{(N)}-U_j^{(N-1)}\|_{L^2}^2,\quad
+\hat N_j(\kappa)=\|U_j^{(N)}\|_{L^2}^2.
+\]
+\end{enumerate}
+
+So replay is anchored at a state that already satisfied steady-state conditions,
+with extra post-steady timesteps to provide local robustness under nearby
+\(\kappa\) updates.
+
+\subsection*{Per-evaluation replay diagnostics}
+At optimizer evaluation \(k\), for each point \(j\), replay computes:
+\[
+O_j=\hat O_j(\kappa^{(k)}),\quad
+O_{j,\mathrm{prev}}=\hat O_{j,\mathrm{prev}}(\kappa^{(k)}),\quad
+\nabla_\kappa O_j,
+\]
+and diagnostics
+\[
+\Delta O_{j,\mathrm{abs}} = |O_j - O_{j,\mathrm{prev}}|,
+\]
+\[
+\Delta O_{j,\mathrm{rel}} =
+\frac{\Delta O_{j,\mathrm{abs}}}
+{\max(|O_j|,|O_{j,\mathrm{prev}}|,\varepsilon_{\mathrm{abs}})},
+\]
+\[
+\Delta U_{j,\mathrm{rel}} =
+\frac{\sqrt{\hat D_j(\kappa^{(k)})}}
+{\max(\sqrt{\hat N_j(\kappa^{(k)})},10^{-16})}.
+\]
+
+A replay point is accepted as ``steady-valid'' only if:
+\begin{itemize}
+\item all replay outputs are finite/non-pathological, and
+\item \(\Delta O_{j,\mathrm{rel}}\le\varepsilon_{\mathrm{rel}}\) or
+\(\Delta O_{j,\mathrm{abs}}\le\varepsilon_{\mathrm{abs}}\).
+\end{itemize}
+
+If a point fails this check, it is marked non-converged for that evaluation.
+This is what prevents replay from silently drifting into non-steady behavior.
+
+\subsection*{Failure handling and automatic rebuild}
+Replay handling is dynamic:
+\begin{enumerate}
+\item If replay throws an exception \emph{or} any point fails replay diagnostics, replay is disabled for that candidate.
+\item The same candidate \(\kappa\) is then evaluated via full resilient forward solves-to-steady-state (non-replay path).
+\item After fallback reconverges (zero failed points), replay is rebuilt at the current effective \(\kappa\) and re-enabled (default: after 1 successful fallback evaluation).
+\end{enumerate}
+
+This gives a fast path when replay is trustworthy, while preserving correctness
+by returning to full solves whenever replay looks invalid.
+
+\subsection*{Auditability (new counters and artifact)}
+The run now records:
+\begin{itemize}
+\item \texttt{replay\_rebuild\_count}: total replay bundle builds/enables,
+\item \texttt{replay\_diag\_rebuild\_count}: rebuilds triggered by failed replay diagnostics,
+\item \texttt{replay\_exception\_rebuild\_count}: rebuilds triggered by replay exceptions.
+\end{itemize}
+
+These counts are printed in console summaries and written to:
+\[
+\texttt{replay\_diagnostics\_summary.csv}.
+\]
+
+\subsection*{Current status: replay comparison withdrawn}
+After adding dynamic replay diagnostics, replay-enabled runs still showed
+diagnostic failures at some optimizer evaluations (e.g., pointwise
+``replay not steady'' failures) that triggered fallback-to-full-solve and
+automatic replay rebuild.
+
+That behavior means a nominal ``replay ON'' run can become a hybrid trajectory
+mixing replay and non-replay evaluations. Because of that hybridity, the old
+ON/OFF runtime table is no longer a valid apples-to-apples comparison, and it
+has been removed from this report.
+
+Therefore replay is now temporarily disabled in the active inference path until
+the replay validity issue is resolved. The replay diagnostics that motivated
+this decision remain implemented and logged (\texttt{replay\_diagnostics\_summary.csv})
+for future debugging/re-enablement work.
+
+\section*{9. Process-Parallel Point Solves}
+\subsection*{Implementation summary}
+To accelerate each objective/gradient evaluation across the 15
+\(\phi_{\mathrm{applied}}\) points, point solves were parallelized with
+\texttt{ProcessPoolExecutor} (not threads). The key design choices were:
+\begin{itemize}
+\item \textbf{Process isolation for adjoint safety:} each worker is a separate process, so firedrake-adjoint tape state is not shared across concurrent point solves.
+\item \textbf{Spawn start method:} workers are launched with \texttt{spawn} to avoid inheriting unstable solver/tape state.
+\item \textbf{Static worker config:} baseline solver/steady settings are initialized once per worker, then each task supplies only \((\phi_{\mathrm{applied}},\; \text{target},\; \kappa)\).
+\item \textbf{Serial fallback:} if worker-pool initialization or execution fails, the code falls back to serial point solves automatically.
+\item \textbf{User configurability:} request-level controls were added: \texttt{parallel\_point\_solves\_enabled}, \texttt{parallel\_point\_workers}, \texttt{parallel\_point\_min\_points}, and \texttt{parallel\_start\_method}.
+\end{itemize}
+
+\subsection*{Worker-count guess and benchmark}
+Hardware query on this machine reports \(10\) total cores split as \(4\)
+performance + \(6\) efficiency. For this adjoint/PDE-heavy workload, the
+working guess for optimal workers was \(4\) (match performance cores).
+
+Benchmark protocol:
+\begin{itemize}
+\item Keep the same no-noise current-density-proxy inference setup (\(15\) points, replay disabled, same target data and optimizer settings).
+\item Reuse the existing serial baseline from the prior benchmark data.
+\item Run one fresh parallel case with \(\texttt{parallel\_point\_workers}=4\).
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lrrrrrr}
+\toprule
+Case & Runtime (s) & Peak RSS (MB) & Best \(\kappa_0\) & Best \(\kappa_1\) & Final Loss & Success \\
+\midrule
+Serial baseline (existing) & 279.642 & 423.9 & 0.9987 & 1.9981 & \(1.0744\times10^{-8}\) & True \\
+Parallel (guess: 4 workers) & 111.948 & 331.7 & 0.9987 & 1.9981 & \(1.0744\times10^{-8}\) & True \\
+\bottomrule
+\end{tabular}
+\caption{No-noise current-density-proxy inference: existing serial baseline vs new process-parallel run (\(4\) workers).}
+\end{table}
+
+Observed impact:
+\[
+\text{speedup (serial/parallel)} = 2.498\times
+\]
+\[
+\text{memory ratio (parallel/serial)} = 0.782\times.
+\]
+
+In this run, parallelization improved wall-clock time substantially while
+reaching essentially identical \(\kappa\) and loss.
+
+\section*{10. Practical Takeaways from This Week}
 \begin{itemize}
 \item The Robin flux-based inverse workflow is now fully implemented end-to-end and experimentally interpretable.
 \item A parallel current-density-proxy path is now in place: charge weighting is enforced, while absolute current scaling is explicitly deferred until unit calibration is finalized.
 \item The unified interface significantly reduced duplication and made target/solver swapping straightforward.
 \item Resilient retry mechanics now handle many nonlinear solve failures that previously aborted optimization.
 \item Regenerated proxy runs show strong recovery at 0\% and 2.5\% noise, with expected degradation and basin sensitivity at 5\% noise.
+\item Replacing blob IC with a simple near-steady initial condition produced a measured 7.44\% runtime reduction in no-noise Robin \(\kappa\) inference, with no meaningful loss of fit quality.
+\item Replay now has explicit steady-state diagnostics, fallback-to-full-solve, and rebuild counters, but is temporarily disabled in production inference runs because replay-enabled trajectories can still become invalid/hybrid and are not yet benchmark-comparable.
+\item Process-parallel point solves (with per-process tape isolation) produced a \(2.498\times\) runtime speedup against the existing serial baseline in the no-noise current-density-proxy benchmark, with matching fit quality.
 \item Reporting artifacts are now synchronized with the new branch: side-by-side data-generation plots, per-noise fit plots, summary table, and a 2.5\% convergence GIF.
 \end{itemize}
 

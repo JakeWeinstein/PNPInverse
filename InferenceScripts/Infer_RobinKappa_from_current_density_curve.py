@@ -119,7 +119,8 @@ def main() -> None:
         gtol=1e-4,
         fail_penalty=1e9,
         print_point_gradients=True,
-        blob_initial_condition=True,
+        # Use simple IC (uniform concentrations + linear potential), not blob.
+        blob_initial_condition=False,
         live_plot=True,
         live_plot_pause_seconds=0.001,
         live_plot_eval_lines=True,
@@ -133,6 +134,16 @@ def main() -> None:
         live_plot_export_gif_seconds=5.0,
         live_plot_export_gif_frames=50,
         live_plot_export_gif_dpi=140,
+        # Replay temporarily disabled pending validity fixes.
+        replay_mode_enabled=False,
+        # Retained for future replay re-enable; currently inert while replay is off.
+        replay_reenable_after_successes=1,
+        # Optional process-parallel execution across phi_applied points.
+        # Safe for adjoints because each worker has its own process + tape.
+        parallel_point_solves_enabled=False,
+        parallel_point_workers=4,
+        parallel_point_min_points=4,
+        parallel_start_method="spawn",
         anisotropy_trigger_failed_points=4,
         anisotropy_trigger_failed_fraction=0.25,
         forward_recovery=ForwardRecoveryConfig(

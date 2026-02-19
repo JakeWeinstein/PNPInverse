@@ -160,9 +160,12 @@ def main() -> None:
             gtol=1e-4,
             fail_penalty=1e9,
             print_point_gradients=False,
-            blob_initial_condition=True,
+            blob_initial_condition=False,
             live_plot=False,
             live_plot_eval_lines=False,
+            # Replay temporarily disabled pending validity fixes.
+            replay_mode_enabled=False,
+            replay_reenable_after_successes=1,
             anisotropy_trigger_failed_points=4,
             anisotropy_trigger_failed_fraction=0.25,
             forward_recovery=ForwardRecoveryConfig(

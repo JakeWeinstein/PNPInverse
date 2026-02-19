@@ -211,7 +211,7 @@ def main() -> None:
             phi_applied_values=phi_applied_values.tolist(),
             steady=steady,
             kappa_values=kappa,
-            blob_initial_condition=True,
+            blob_initial_condition=False,
         )
         converged = np.asarray([bool(r.converged) for r in results], dtype=bool)
         observable_vals = np.asarray(
