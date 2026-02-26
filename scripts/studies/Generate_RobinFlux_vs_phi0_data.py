@@ -6,7 +6,7 @@ This script mirrors an experimental voltage sweep:
 3) record steady-state boundary flux.
 
 Run:
-    python Studies/Generate_RobinFlux_vs_phi0_data.py
+    python scripts/studies/Generate_RobinFlux_vs_phi0_data.py
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import os
 import sys
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PNPINVERSE_ROOT = os.path.dirname(_THIS_DIR)
+_PNPINVERSE_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _PNPINVERSE_ROOT not in sys.path:
     sys.path.insert(0, _PNPINVERSE_ROOT)
 
@@ -32,8 +32,8 @@ try:
 except Exception:
     plt = None
 
-from UnifiedInverse import build_default_solver_params
-from Utils.robin_flux_experiment import (
+from Inverse import build_default_solver_params
+from Forward.steady_state import (
     SteadyStateConfig,
     add_percent_noise,
     all_results_converged,

@@ -47,6 +47,12 @@ from Inverse.inference_runner import (
     run_inverse_inference,
 )
 
+from Inverse.objectives import (
+    make_diffusion_objective_and_grad,
+    make_dirichlet_phi0_objective_and_grad,
+    make_robin_kappa_objective_and_grad,
+)
+
 __all__ = [
     # solver_interface
     "ForwardSolverAdapter",
@@ -68,4 +74,8 @@ __all__ = [
     "build_reduced_functional",
     "resilient_minimize",
     "run_inverse_inference",
+    # objectives
+    "make_diffusion_objective_and_grad",
+    "make_dirichlet_phi0_objective_and_grad",
+    "make_robin_kappa_objective_and_grad",
 ]

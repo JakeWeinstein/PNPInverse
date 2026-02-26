@@ -27,6 +27,7 @@ from Nondim.constants import (
 )
 from Nondim.scales import NondimScales, build_physical_scales
 from Nondim.transform import build_model_scaling, verify_model_params
+from Nondim.compat import build_physical_scales_dict, build_solver_options
 
 __all__ = [
     # constants
@@ -42,4 +43,7 @@ __all__ = [
     # transform
     "build_model_scaling",
     "verify_model_params",
+    # compat
+    "build_physical_scales_dict",
+    "build_solver_options",
 ]

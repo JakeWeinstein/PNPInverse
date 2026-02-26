@@ -1,13 +1,4 @@
-"""Unified-interface example: infer Dirichlet ``phi0`` from synthetic data.
-
-This script demonstrates the new modular inverse workflow by configuring:
-1. a forward solver adapter (``Utils.forsolve``)
-2. a parameter target (``dirichlet_phi0``)
-3. true value, noise level, and initial guess
-
-Run:
-    python InferenceScripts/Infer_DirichletBC_from_data.py
-"""
+"""Unified-interface example: infer Robin boundary transfer coefficient ``kappa``."""
 
 from __future__ import annotations
 
@@ -15,11 +6,11 @@ import os
 import sys
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PNPINVERSE_ROOT = os.path.dirname(_THIS_DIR)
+_PNPINVERSE_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _PNPINVERSE_ROOT not in sys.path:
     sys.path.insert(0, _PNPINVERSE_ROOT)
 
-from UnifiedInverse import (
+from Inverse import (
     ForwardSolverAdapter,
     InferenceRequest,
     build_default_solver_params,
@@ -36,7 +27,6 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 
 def build_solver_options():
-    """Solver options shared across data generation and inverse solve."""
     return {
         "snes_type": "newtonls",
         "snes_max_it": 100,
@@ -46,53 +36,61 @@ def build_solver_options():
         "ksp_type": "preonly",
         "pc_type": "lu",
         "pc_factor_mat_solver_type": "mumps",
+        "robin_bc": {
+            "kappa": [0.8, 0.8],
+            "c_inf": [0.01, 0.01],
+            "electrode_marker": 1,
+            "concentration_marker": 3,
+            "ground_marker": 3,
+        },
     }
 
 
 def main() -> None:
-    # Base solver setup. The target mechanism will overwrite phi0 with
-    # (a) true value for data generation and (b) initial guess for inversion.
     base_solver_params = build_default_solver_params(
         n_species=2,
         order=1,
-        dt=1e-2,
-        t_end=0.1,
+        dt=1e-1,
+        t_end=1,
         z_vals=[1, -1],
         d_vals=[1.0, 1.0],
         a_vals=[0.0, 0.0],
         phi_applied=0.05,
         c0_vals=[0.1, 0.1],
-        phi0=1.0,
+        phi0=5.0,
         solver_options=build_solver_options(),
     )
 
-    adapter = ForwardSolverAdapter.from_module_path("Utils.forsolve")
-    target = build_default_target_registry()["dirichlet_phi0"]
-
     request = InferenceRequest(
-        adapter=adapter,
-        target=target,
+        adapter=ForwardSolverAdapter.from_module_path(
+            "Forward.robin_solver", solve_function_name="forsolve_robin"
+        ),
+        target=build_default_target_registry()["robin_kappa"],
         base_solver_params=base_solver_params,
-        true_value=1.0,
-        initial_guess=10.0,
+        true_value=[1, 5],
+        initial_guess=[10.0, 10.0],
         noise_percent=10.0,
-        seed=20260218,
+        seed=20260219,
         optimizer_method="L-BFGS-B",
-        optimizer_options={"disp": True, "maxiter": 80},
-        tolerance=1e-8,
-        # For realistic inversion, fit against noisy synthetic data.
+        optimizer_options={
+            "disp": True,
+            "maxiter": 300,
+            # Tighten L-BFGS-B stopping so it does not exit early in flat regions.
+            "ftol": 1e-15,
+            "gtol": 1e-10,
+            "maxls": 50,
+        },
+        tolerance=1e-12,
         fit_to_noisy_data=True,
-        blob_initial_condition=True,
-        print_interval_data=100,
-        print_interval_inverse=100,
+        recovery_attempts=100,
     )
 
     result = run_inverse_inference(request)
 
-    print("=== Dirichlet phi0 Inference (Unified Interface) ===")
-    print(f"True phi0: {request.true_value}")
+    print("=== Robin kappa Inference (Unified Interface) ===")
+    print(f"True kappa: {request.true_value}")
     print(f"Initial guess: {request.initial_guess}")
-    print(f"Estimated phi0: {result.estimate}")
+    print(f"Estimated kappa: {result.estimate}")
     print(f"Final objective value: {result.objective_value:.12e}")
 
 

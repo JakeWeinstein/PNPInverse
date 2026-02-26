@@ -6,11 +6,11 @@ import os
 import sys
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PNPINVERSE_ROOT = os.path.dirname(_THIS_DIR)
+_PNPINVERSE_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _PNPINVERSE_ROOT not in sys.path:
     sys.path.insert(0, _PNPINVERSE_ROOT)
 
-from UnifiedInverse import (
+from Inverse import (
     ForwardSolverAdapter,
     InferenceRequest,
     build_default_solver_params,
@@ -63,7 +63,7 @@ def main() -> None:
 
     request = InferenceRequest(
         adapter=ForwardSolverAdapter.from_module_path(
-            "Utils.robin_forsolve", solve_function_name="forsolve_robin"
+            "Forward.robin_solver", solve_function_name="forsolve_robin"
         ),
         target=build_default_target_registry()["diffusion"],
         base_solver_params=base_solver_params,

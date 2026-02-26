@@ -2,7 +2,7 @@
 
 Run from the PNPInverse/ directory::
 
-    python InferenceScripts/test_bv_forward.py [--strategy STRATEGY] [--eta ETA]
+    python scripts/verification/test_bv_forward.py [--strategy STRATEGY] [--eta ETA]
 
 Strategies
 ----------
@@ -27,7 +27,7 @@ import traceback
 import numpy as np
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_THIS_DIR)
+_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 

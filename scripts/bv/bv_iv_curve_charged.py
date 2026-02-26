@@ -25,9 +25,9 @@ Mesh grading beta=3 with Ny=300 gives ~20 points in the Debye layer.
 
 Usage (from PNPInverse/ directory)::
 
-    python InferenceScripts/bv_iv_curve_charged.py
-    python InferenceScripts/bv_iv_curve_charged.py --Ny-mesh 500 --beta 3.5
-    python InferenceScripts/bv_iv_curve_charged.py --l-ref 3e-4 --steps 200
+    python scripts/bv/bv_iv_curve_charged.py
+    python scripts/bv/bv_iv_curve_charged.py --Ny-mesh 500 --beta 3.5
+    python scripts/bv/bv_iv_curve_charged.py --l-ref 3e-4 --steps 200
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ import traceback
 import numpy as np
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_THIS_DIR)
+_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 

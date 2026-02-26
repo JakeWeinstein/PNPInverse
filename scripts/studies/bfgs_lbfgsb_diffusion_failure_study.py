@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PNPINVERSE_ROOT = SCRIPT_DIR.parent
+PNPINVERSE_ROOT = SCRIPT_DIR.parent.parent
 if str(PNPINVERSE_ROOT) not in sys.path:
     sys.path.insert(0, str(PNPINVERSE_ROOT))
 
@@ -118,8 +118,8 @@ def seeds_for_noise(noise_std: float):
 def run_single(config):
     import firedrake.adjoint as adj
 
-    from Helpers.Infer_D_from_data_helpers import make_objective_and_grad as make_d_objective
-    from Utils.generate_noisy_data import generate_noisy_data
+    from Inverse.objectives import make_diffusion_objective_and_grad as make_d_objective
+    from Forward.noise import generate_noisy_data
 
     method = config["method"]
     noise_std = float(config["noise_std"])

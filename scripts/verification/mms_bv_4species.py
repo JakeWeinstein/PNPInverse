@@ -24,8 +24,8 @@ Expected: L2 rate ~ 2.0, H1 rate ~ 1.0 (CG1).
 
 Usage (from PNPInverse/ directory)::
 
-    python InferenceScripts/mms_bv_4species.py
-    python InferenceScripts/mms_bv_4species.py --Nvals 8 16 32 64 128
+    python scripts/verification/mms_bv_4species.py
+    python scripts/verification/mms_bv_4species.py --Nvals 8 16 32 64 128
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ import time
 import numpy as np
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_THIS_DIR)
+_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 

@@ -5,15 +5,15 @@ Examples
 --------
 Infer Dirichlet ``phi0`` with default Dirichlet forward solver:
 
-    python InferenceScripts/Infer_parameter_from_data.py \
+    python scripts/inference/Infer_parameter_from_data.py \
         --target dirichlet_phi0 \
         --true-value 1.0 \
         --initial-guess 10.0
 
 Infer diffusion coefficients using a Robin forward solver module:
 
-    python InferenceScripts/Infer_parameter_from_data.py \
-        --solver-module Utils.robin_forsolve \
+    python scripts/inference/Infer_parameter_from_data.py \
+        --solver-module Forward.robin_solver \
         --solve-function forsolve_robin \
         --target diffusion \
         --true-value 1.0,3.0 \
@@ -21,8 +21,8 @@ Infer diffusion coefficients using a Robin forward solver module:
 
 Infer Robin ``kappa`` values:
 
-    python InferenceScripts/Infer_parameter_from_data.py \
-        --solver-module Utils.robin_forsolve \
+    python scripts/inference/Infer_parameter_from_data.py \
+        --solver-module Forward.robin_solver \
         --solve-function forsolve_robin \
         --target robin_kappa \
         --params-json '{"robin_bc": {"c_inf": [0.01, 0.01], "electrode_marker": 1, "concentration_marker": 3, "ground_marker": 3}}' \
@@ -39,11 +39,11 @@ import sys
 from typing import Any, Dict, List, Optional
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PNPINVERSE_ROOT = os.path.dirname(_THIS_DIR)
+_PNPINVERSE_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _PNPINVERSE_ROOT not in sys.path:
     sys.path.insert(0, _PNPINVERSE_ROOT)
 
-from UnifiedInverse import (
+from Inverse import (
     ForwardSolverAdapter,
     InferenceRequest,
     build_default_solver_params,
@@ -111,13 +111,13 @@ def _parse_vector(text: str, n_species: int, *, name: str) -> List[float]:
 def _default_solver_module_for_target(target_key: str) -> str:
     """Pick default forward solver module by target type."""
     if target_key == "robin_kappa":
-        return "Utils.robin_forsolve"
-    return "Utils.forsolve"
+        return "Forward.robin_solver"
+    return "Forward.dirichlet_solver"
 
 
 def _default_solve_function_for_module(module_path: str) -> Optional[str]:
     """Return an explicit solve function for known non-default modules."""
-    if module_path == "Utils.robin_forsolve":
+    if module_path == "Forward.robin_solver":
         return "forsolve_robin"
     return None
 

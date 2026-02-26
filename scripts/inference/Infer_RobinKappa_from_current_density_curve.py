@@ -6,7 +6,7 @@ import os
 import sys
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PNPINVERSE_ROOT = os.path.dirname(_THIS_DIR)
+_PNPINVERSE_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _PNPINVERSE_ROOT not in sys.path:
     sys.path.insert(0, _PNPINVERSE_ROOT)
 
@@ -26,7 +26,7 @@ from FluxCurve import (
     run_robin_kappa_flux_curve_inference,
 )
 from Inverse import build_default_solver_params
-from Utils.current_density_scaling import build_physical_scales, build_solver_options
+from Nondim.compat import build_physical_scales_dict as build_physical_scales, build_solver_options
 from Forward.steady_state import SteadyStateConfig
 
 

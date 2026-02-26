@@ -27,15 +27,15 @@ Physical parameters from Mangan2025 (pH 4 case):
 Usage (from PNPInverse/ directory)::
 
     # Default 2-species run
-    python InferenceScripts/bv_iv_curve.py
+    python scripts/bv/bv_iv_curve.py
 
     # Legacy 1-species
-    python InferenceScripts/bv_iv_curve.py --n-species 1
+    python scripts/bv/bv_iv_curve.py --n-species 1
 
     # Parameter studies
-    python InferenceScripts/bv_iv_curve.py --k0-2 1e-8
-    python InferenceScripts/bv_iv_curve.py --alpha-2 0.8
-    python InferenceScripts/bv_iv_curve.py --l-ref 3e-4
+    python scripts/bv/bv_iv_curve.py --k0-2 1e-8
+    python scripts/bv/bv_iv_curve.py --alpha-2 0.8
+    python scripts/bv/bv_iv_curve.py --l-ref 3e-4
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ import traceback
 import numpy as np
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_THIS_DIR)
+_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 

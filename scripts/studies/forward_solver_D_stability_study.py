@@ -15,9 +15,9 @@ import time
 from collections import Counter
 from pathlib import Path
 
-# Ensure parent package path is available when running from Studies/.
+# Ensure parent package path is available when running from scripts/studies/.
 SCRIPT_DIR = Path(__file__).resolve().parent
-PNPINVERSE_ROOT = SCRIPT_DIR.parent
+PNPINVERSE_ROOT = SCRIPT_DIR.parent.parent
 if str(PNPINVERSE_ROOT) not in sys.path:
     sys.path.insert(0, str(PNPINVERSE_ROOT))
 
@@ -178,7 +178,7 @@ def is_converged_run(row):
 
 
 def run_single(config):
-    from Utils.forsolve import build_context, build_forms, forsolve, set_initial_conditions
+    from Forward.dirichlet_solver import build_context, build_forms, forsolve, set_initial_conditions
 
     d0 = float(config["d0"])
     d1 = float(config["d1"])

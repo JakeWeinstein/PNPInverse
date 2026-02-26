@@ -6,7 +6,7 @@ This script is the first step in the experimental-style pipeline:
 3) measure required step/time horizon across a phi_applied range.
 
 Run:
-    python Studies/Probe_RobinFlux_steady_state.py
+    python scripts/studies/Probe_RobinFlux_steady_state.py
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import sys
 from typing import List
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PNPINVERSE_ROOT = os.path.dirname(_THIS_DIR)
+_PNPINVERSE_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _PNPINVERSE_ROOT not in sys.path:
     sys.path.insert(0, _PNPINVERSE_ROOT)
 
@@ -30,8 +30,8 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 import numpy as np
 
-from UnifiedInverse import build_default_solver_params
-from Utils.robin_flux_experiment import (
+from Inverse import build_default_solver_params
+from Forward.steady_state import (
     SteadyStateConfig,
     configure_robin_solver_params,
     solve_to_steady_state_for_phi_applied,

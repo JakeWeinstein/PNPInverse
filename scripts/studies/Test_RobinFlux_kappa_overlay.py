@@ -4,8 +4,8 @@ This script runs repeated phi_applied sweeps, one per kappa pair, and plots all
 phi_applied-vs-observable curves on the same graph for visual comparison.
 
 Run examples:
-    python Studies/Test_RobinFlux_kappa_overlay.py
-    python Studies/Test_RobinFlux_kappa_overlay.py --kappa-list "0.8,0.8;2,2;0.8,2"
+    python scripts/studies/Test_RobinFlux_kappa_overlay.py
+    python scripts/studies/Test_RobinFlux_kappa_overlay.py --kappa-list "0.8,0.8;2,2;0.8,2"
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import sys
 from typing import List, Sequence
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PNPINVERSE_ROOT = os.path.dirname(_THIS_DIR)
+_PNPINVERSE_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _PNPINVERSE_ROOT not in sys.path:
     sys.path.insert(0, _PNPINVERSE_ROOT)
 
@@ -33,8 +33,8 @@ try:
 except Exception:
     plt = None
 
-from UnifiedInverse import build_default_solver_params
-from Utils.robin_flux_experiment import (
+from Inverse import build_default_solver_params
+from Forward.steady_state import (
     SteadyStateConfig,
     sweep_phi_applied_steady_flux,
     write_phi_applied_flux_csv,

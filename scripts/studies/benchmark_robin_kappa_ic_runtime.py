@@ -21,18 +21,18 @@ from typing import Any, Dict, List
 import numpy as np
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PNPINVERSE_ROOT = os.path.dirname(_THIS_DIR)
+_PNPINVERSE_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _PNPINVERSE_ROOT not in sys.path:
     sys.path.insert(0, _PNPINVERSE_ROOT)
 
-from Helpers.Infer_RobinKappa_from_flux_curve_helpers import (
+from FluxCurve import (
     ForwardRecoveryConfig,
     RobinFluxCurveInferenceRequest,
     RobinFluxCurveInferenceResult,
     run_robin_kappa_flux_curve_inference,
 )
-from UnifiedInverse import build_default_solver_params
-from Utils.robin_flux_experiment import SteadyStateConfig
+from Inverse import build_default_solver_params
+from Forward.steady_state import SteadyStateConfig
 
 
 @dataclass(frozen=True)
