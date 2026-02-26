@@ -23,11 +23,15 @@
 \maketitle
 
 \section*{Weekly Focus}
-Three threads: (1)~a full codebase restructure,
+Four threads: (1)~a full codebase restructure,
 (2)~building and validating a general-purpose Poisson--Nernst--Planck (PNP) forward
-solver with multi-reaction Butler--Volmer (BV) boundary conditions, and
+solver with multi-reaction Butler--Volmer (BV) boundary conditions,
 (3)~an extensive convergence study demonstrating mesh independence, parameter
-sensitivity, and solver robustness across 29 separate runs.
+sensitivity, and solver robustness across 29 separate runs, and
+(4)~a rigorous Method of Manufactured Solutions (MMS) verification across
+four test cases --- including one that runs through the production solver
+pipeline --- proving $O(h^2)$ convergence for all PDE operators, the
+nonlinear BV flux BC, and the \texttt{cathodic\_conc\_factors} mechanism.
 The solver handles 4~charged species with $(\lambda_D/L)^2\approx10^{-8}$,
 converging at all 100~voltage steps on meshes up to $N_y=1000$ ($h_\mathrm{min}\approx0.3$~nm).
 
@@ -630,10 +634,263 @@ Extreme grading & 500 & 4.0 & 0.0002 & $-0.1758$ & 10/10 \\
 
 
 %% ============================================================
-\section*{5. Results: I--V Curve and Species Profiles}
+\section*{5. Code Verification: Method of Manufactured Solutions}
 %% ============================================================
 
-\subsection*{5.1 I--V curve}
+The convergence study in \S4 demonstrates mesh independence for the physical problem,
+but does not prove that the solver converges to the \emph{correct} solution.
+To provide that guarantee, we performed a Method of Manufactured Solutions (MMS)
+study that simultaneously exercises the volume PDE discretisation
+\emph{and} the nonlinear Butler--Volmer flux boundary condition.
+
+\subsection*{5.1 Why standard MMS is insufficient}
+
+A standard MMS study imposes Dirichlet conditions on the entire boundary,
+testing the volumetric PDE operators but completely bypassing the BV flux BC
+--- the most physically important and numerically challenging part of the
+solver.
+The existing PNP formulations document uses exactly this approach:
+$c_i = c_i^\mathrm{exact}$, $\phi = \phi^\mathrm{exact}$ on $\partial\Omega$,
+with source terms that make the manufactured solution satisfy the PDE.
+This leaves the BV implementation entirely untested.
+
+\subsection*{5.2 MMS with Butler--Volmer boundary conditions}
+
+The key idea: choose a manufactured solution whose normal flux at the
+electrode does \emph{not} equal the BV rate evaluated at the manufactured
+concentrations.
+The mismatch is compensated by a \emph{boundary correction source term}
+$\hat g_i$ added to the weak form, while the BV terms themselves operate
+on the \emph{numerical unknowns} (not the manufactured values).
+This forces Newton's method to converge through the actual BV code path.
+
+\medskip
+\noindent\textbf{Manufactured solutions} (steady state, on $[0,1]^2$):
+\begin{align}
+  \hat c_i^\mathrm{ex}(x,y) &= c_{0,i} + A_i\cos(\pi x)\bigl(1-e^{-\beta_i y}\bigr),
+  \label{eq:mms_c} \\
+  \hat\phi^\mathrm{ex}(x,y) &= \eta_0(1-y) + B\cos(\pi x)\,y(1-y).
+  \label{eq:mms_phi}
+\end{align}
+These are smooth, non-polynomial (transcendental), positive for suitable
+$c_{0,i} > A_i$, and have zero $x$-flux at the side walls
+($\partial_x c \propto \sin(\pi x) = 0$ at $x=0,1$) --- avoiding the
+need for side-wall correction terms.
+
+\medskip
+\noindent\textbf{Volume source terms} are computed by substituting
+\eqref{eq:mms_c}--\eqref{eq:mms_phi} into the PDE and taking the residual:
+\begin{align}
+  \hat S_i &= -\nabla\cdot\bigl[\hat D_i(\nabla\hat c_i^\mathrm{ex}
+    + z_i\hat c_i^\mathrm{ex}\nabla\hat\phi^\mathrm{ex})\bigr], \\
+  \hat S_\phi &= -\hat\varepsilon\nabla^2\hat\phi^\mathrm{ex}
+    - \textstyle\sum_k z_k\hat c_k^\mathrm{ex}.
+\end{align}
+In practice these are evaluated symbolically via UFL automatic
+differentiation (\texttt{fd.div}, \texttt{fd.grad}).
+
+\medskip
+\noindent\textbf{Boundary correction} at the electrode ($y=0$):
+\begin{equation}
+  \hat g_i = \hat D_i\bigl(\nabla\hat c_i^\mathrm{ex}
+    + z_i\hat c_i^\mathrm{ex}\nabla\hat\phi^\mathrm{ex}\bigr)\cdot\hat{\mathbf{n}}
+    - \sum_j s_{ij}\,R_j\bigl(\hat c^\mathrm{ex}\big|_{y=0},\,\hat\eta\bigr),
+  \label{eq:mms_g}
+\end{equation}
+where $\hat{\mathbf{n}}$ is the outward-pointing facet normal and $R_j$
+is the BV rate evaluated at the manufactured surface concentrations.
+
+\medskip
+\noindent\textbf{Modified weak form:}
+\[
+  F_\mathrm{res}^\mathrm{MMS}
+  = F_\mathrm{res}^\mathrm{original}
+  - \sum_i\!\int_\Omega \hat S_i\,v_i\,dx
+  - \int_\Omega \hat S_\phi\,w\,dx
+  - \sum_i\!\int_{\Gamma_\mathrm{el}} \hat g_i\,v_i\,ds.
+\]
+The BV flux terms inside $F_\mathrm{res}^\mathrm{original}$ act on the
+numerical unknowns $(\hat c_h, \hat\phi_h)$, ensuring that Newton's method
+exercises the full nonlinear BV code path.
+The exact solution satisfies $F_\mathrm{res}^\mathrm{MMS}=0$ by construction.
+
+A full derivation is in the companion document
+\texttt{mms\_butler\_volmer.tex}.
+
+
+\subsection*{5.3 Convergence results}
+
+Three test cases of increasing complexity were run on uniform meshes
+with $N=8,16,32,64,128$:
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{lccccc}
+\toprule
+$N$ & $h$ & $\|e_c\|_{L^2}$ & Rate & $\|e_c\|_{H^1}$ & Rate \\
+\midrule
+  8 & 0.1250 & $8.24\times10^{-4}$ & ---  & $6.21\times10^{-3}$ & --- \\
+ 16 & 0.0625 & $2.04\times10^{-4}$ & 2.01 & $1.65\times10^{-3}$ & 1.91 \\
+ 32 & 0.0313 & $5.07\times10^{-5}$ & 2.01 & $4.34\times10^{-4}$ & 1.93 \\
+ 64 & 0.0156 & $1.27\times10^{-5}$ & 2.00 & $1.14\times10^{-4}$ & 1.93 \\
+128 & 0.0078 & $3.16\times10^{-6}$ & 2.00 & $2.97\times10^{-5}$ & 1.94 \\
+\bottomrule
+\end{tabular}
+\caption{Case~1: single neutral species + 1~irreversible BV reaction.
+  CG1 elements; expected rates: $L^2\to2$, $H^1\to1$.}
+\label{tab:mms_case1}
+\end{table}
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{lccccccc}
+\toprule
+$N$ & $h$ & $\|e_{c_0}\|_{L^2}$ & Rate
+  & $\|e_{c_1}\|_{L^2}$ & Rate
+  & $\|e_\phi\|_{L^2}$ & Rate \\
+\midrule
+  8 & 0.1250 & $8.24\times10^{-4}$ & ---  & $1.13\times10^{-3}$ & ---  & $1.62\times10^{-4}$ & --- \\
+ 16 & 0.0625 & $2.04\times10^{-4}$ & 2.01 & $2.87\times10^{-4}$ & 1.98 & $4.18\times10^{-5}$ & 1.95 \\
+ 32 & 0.0313 & $5.07\times10^{-5}$ & 2.01 & $7.20\times10^{-5}$ & 2.00 & $1.05\times10^{-5}$ & 1.99 \\
+ 64 & 0.0156 & $1.27\times10^{-5}$ & 2.00 & $1.80\times10^{-5}$ & 2.00 & $2.64\times10^{-6}$ & 2.00 \\
+128 & 0.0078 & $3.16\times10^{-6}$ & 2.00 & $4.50\times10^{-6}$ & 2.00 & $6.60\times10^{-7}$ & 2.00 \\
+\bottomrule
+\end{tabular}
+\caption{Case~2: two neutral species (O$_2$ + H$_2$O$_2$) + 2~BV reactions
+  (reversible R$_1$ + irreversible R$_2$) with stoichiometric coupling.
+  $L^2$ rates for all fields.}
+\label{tab:mms_case2}
+\end{table}
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{lccccccc}
+\toprule
+$N$ & $h$ & $\|e_{c_0}\|_{L^2}$ & Rate
+  & $\|e_{c_1}\|_{L^2}$ & Rate
+  & $\|e_\phi\|_{L^2}$ & Rate \\
+\midrule
+  8 & 0.1250 & $8.52\times10^{-4}$ & ---  & $5.64\times10^{-4}$ & ---  & $3.08\times10^{-4}$ & --- \\
+ 16 & 0.0625 & $2.12\times10^{-4}$ & 2.01 & $1.43\times10^{-4}$ & 1.99 & $7.96\times10^{-5}$ & 1.95 \\
+ 32 & 0.0313 & $5.28\times10^{-5}$ & 2.01 & $3.57\times10^{-5}$ & 2.00 & $2.01\times10^{-5}$ & 1.99 \\
+ 64 & 0.0156 & $1.32\times10^{-5}$ & 2.00 & $8.93\times10^{-6}$ & 2.00 & $5.03\times10^{-6}$ & 2.00 \\
+128 & 0.0078 & $3.30\times10^{-6}$ & 2.00 & $2.23\times10^{-6}$ & 2.00 & $1.26\times10^{-6}$ & 2.00 \\
+\bottomrule
+\end{tabular}
+\caption{Case~3: two charged species ($z=\pm1$) + Poisson coupling + 1~BV reaction.
+  Tests electromigration, Poisson source term, and BV simultaneously.
+  $L^2$ rates for all fields.}
+\label{tab:mms_case3}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{assets/mms_bv_convergence.png}
+\caption{MMS convergence (Cases~1--3, log-log).
+  All three cases show $O(h^2)$ in $L^2$ and superconvergent
+  $O(h^{1.9\text{--}2.0})$ in $H^1$.}
+\label{fig:mms_convergence}
+\end{figure}
+
+
+\subsection*{5.4 Case~4: full 4-species system through the production solver pipeline}
+
+Cases~1--3 build their weak forms from scratch, verifying the mathematical
+formulation.
+To close the remaining gap --- proving that the \emph{actual solver code}
+(\texttt{build\_context}, \texttt{build\_forms}, the nondimensionalisation
+pipeline, config parsing, R-space controls, and log-diffusivity
+parameterisation) is also correct --- we added a fourth test case that calls
+the production solver directly and injects MMS source terms into its
+assembled \texttt{F\_res}.
+
+This case uses the exact production configuration:
+4~species ($z=[0,0,{+}1,{-}1]$), 2~BV reactions
+(reversible R$_1$ + irreversible R$_2$),
+stoichiometry with $|s_{ij}|$ up to~2,
+and \texttt{cathodic\_conc\_factors} with
+$(\hat c_{\mathrm{H}^+}/\hat c_\mathrm{ref})^2$.
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{lccccccc}
+\toprule
+$N$ & $h$
+  & $\|e_{\mathrm{O}_2}\|_{L^2}$ & Rate
+  & $\|e_{\mathrm{H}^+}\|_{L^2}$ & Rate
+  & $\|e_\phi\|_{L^2}$ & Rate \\
+\midrule
+  8 & 0.1250 & $7.96\times10^{-4}$ & ---  & $5.88\times10^{-5}$ & ---  & $5.50\times10^{-4}$ & --- \\
+ 16 & 0.0625 & $1.98\times10^{-4}$ & 2.01 & $1.45\times10^{-5}$ & 2.02 & $1.43\times10^{-4}$ & 1.95 \\
+ 32 & 0.0313 & $4.93\times10^{-5}$ & 2.01 & $3.61\times10^{-6}$ & 2.01 & $3.60\times10^{-5}$ & 1.99 \\
+ 64 & 0.0156 & $1.23\times10^{-5}$ & 2.00 & $9.00\times10^{-7}$ & 2.00 & $9.02\times10^{-6}$ & 2.00 \\
+128 & 0.0078 & $3.07\times10^{-6}$ & 2.00 & $2.25\times10^{-7}$ & 2.00 & $2.26\times10^{-6}$ & 2.00 \\
+\bottomrule
+\end{tabular}
+\caption{Case~4: full 4-species charged system through the production solver
+  pipeline (\texttt{build\_context} + \texttt{build\_forms}).
+  O$_2$, H$^+$, and $\phi$ shown; H$_2$O$_2$ and ClO$_4^-$ also achieve
+  $L^2$ rate $=2.00$ (see summary file).
+  All 10 convergence checks pass.}
+\label{tab:mms_case4}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{assets/mms_bv_4species.png}
+\caption{Case~4 convergence (log-log).  All 5~fields (4~species + potential)
+  converge at the optimal $O(h^2)$ rate in $L^2$.}
+\label{fig:mms_4species}
+\end{figure}
+
+\noindent This test closes five specific verification gaps that Cases~1--3
+left open:
+\begin{enumerate}
+  \item \textbf{\texttt{cathodic\_conc\_factors}}: the
+    $(\hat c_{\mathrm{H}^+}/\hat c_\mathrm{ref})^2$ prefactor in both BV
+    rates is exercised and verified.
+  \item \textbf{Mixed neutral + charged species}:
+    $z=[0,0,{+}1,{-}1]$ in a single 5-component mixed space,
+    with diffusion-only and diffusion\,+\,electromigration species
+    solved simultaneously.
+  \item \textbf{Production solver code path}: the actual
+    \texttt{build\_forms} assembles $F_\mathrm{res}$; MMS sources are
+    injected afterwards.
+    The nondimensionalisation pipeline, R-space $\hat\eta$ control,
+    log-diffusivity parameterisation, and multi-reaction BV config parsing
+    are all exercised.
+  \item \textbf{Stoichiometry $|s_{ij}|=2$}: H$^+$ has coefficient $-2$ in
+    both reactions.
+  \item \textbf{4-species, 5-DOF-per-node function space}: the largest
+    coupled system in the codebase.
+\end{enumerate}
+
+\noindent\textbf{Key findings (all four cases combined):}
+\begin{itemize}
+  \item All $L^2$ rates converge to exactly 2.00 at the finest meshes,
+        confirming $O(h^{p+1})$ for CG1 ($p=1$).
+  \item $H^1$ rates show superconvergence (1.9--2.0 vs.\ the guaranteed
+        minimum of 1.0), typical for smooth solutions on structured meshes.
+  \item Cases~1--3 verify the mathematical formulation (signs, IBP, BV flux);
+        Case~4 additionally verifies the production solver code.
+\end{itemize}
+
+\noindent The full MMS study simultaneously verifies:
+(1)~diffusion discretisation,
+(2)~electromigration coupling,
+(3)~Poisson with charge density,
+(4)~BV nonlinear flux (sign, scaling, exponent),
+(5)~stoichiometric coupling,
+(6)~\texttt{cathodic\_conc\_factors},
+(7)~Dirichlet and zero-flux BCs, and
+(8)~the production nondimensionalisation pipeline.
+
+
+%% ============================================================
+\section*{6. Results: I--V Curve and Species Profiles}
+%% ============================================================
+
+\subsection*{6.1 I--V curve}
 
 \begin{figure}[!htbp]
 \centering
@@ -653,11 +910,11 @@ The I--V curve shows three regimes:
 (2)~smooth transition to a diffusion-limited plateau, and
 (3)~flat plateau at large $|\eta|$ where both O$_2$ and H$^+$ are depleted
 at the electrode.
-Unlike the uncharged 2-species model (\S6), the peroxide current does
+Unlike the uncharged 2-species model (\S8), the peroxide current does
 \emph{not} spike and collapse --- H$^+$ depletion caps both reactions simultaneously.
 
 
-\subsection*{5.2 Species and potential profiles}
+\subsection*{6.2 Species and potential profiles}
 
 \begin{figure}[!htbp]
 \centering
@@ -672,7 +929,7 @@ Unlike the uncharged 2-species model (\S6), the peroxide current does
 \end{figure}
 
 
-\subsection*{5.3 Comparison with neutral 2-species model}
+\subsection*{6.3 Comparison with neutral 2-species model}
 
 \begin{figure}[!htbp]
 \centering
@@ -685,7 +942,7 @@ Unlike the uncharged 2-species model (\S6), the peroxide current does
 
 
 %% ============================================================
-\section*{6. Bugs Found and Fixed}
+\section*{7. Bugs Found and Fixed}
 %% ============================================================
 
 Three interconnected BV bugs were discovered and fixed:
@@ -715,14 +972,14 @@ Bug & Root cause & Fix \\
 
 
 %% ============================================================
-\section*{7. Uncharged Validation Models (Summary)}
+\section*{8. Uncharged Validation Models (Summary)}
 %% ============================================================
 
 Before building the full PNP solver, two simplified models were developed
 and validated on a \texttt{UnitSquareMesh(32,32)} with neutral species ($z=0$).
 These served as stepping stones and are summarised briefly.
 
-\subsection*{6.1 Single-species (O$_2$ only)}
+\subsection*{8.1 Single-species (O$_2$ only)}
 A single neutral species with one BV reaction.
 Produces a monotonic sigmoidal I--V curve.
 Key findings:
@@ -732,7 +989,7 @@ $\alpha>0.43$ required to reach the transport limit;
 the Bikerman steric term selectively compresses the plateau.
 Cannot capture the turn-up (requires a second reaction).
 
-\subsection*{6.2 Two-species (O$_2$ + H$_2$O$_2$, neutral)}
+\subsection*{8.2 Two-species (O$_2$ + H$_2$O$_2$, neutral)}
 Two neutral species with multi-reaction BV (R$_1$ + R$_2$).
 This model does produce a turn-up at large $|\eta|$, but as a \emph{sharp spike}
 rather than the broad experimental plateau.
@@ -741,20 +998,27 @@ $R_2\to R_1$ as $|\eta|\to\infty$ (the exponential in $R_2$ always dominates
 the diffusive escape of H$_2$O$_2$), driving $I_\mathrm{peroxide}\to 0$.
 All parameter combinations produce this spike shape --- the broad plateau
 requires either convective transport (RRDE) or H$^+$ depletion physics
-(the 4-species model of \S2--\S4).
+(the 4-species model of \S3--\S6).
 
 
 %% ============================================================
-\section*{7. Discussion and Next Steps}
+\section*{9. Discussion and Next Steps}
 %% ============================================================
 
 \textbf{Solver quality.}
-The 29-run convergence study demonstrates:
+The 29-run convergence study (\S4) and the MMS verification (\S5) together
+provide strong evidence of solver correctness:
 \begin{itemize}
   \item Mesh-independent results ($<0.01$\% change from $N_y=50$ to 500)
   \item Correct $1/L$ scaling of limiting current
   \item Robustness at extreme mesh refinement ($N_y=1000$, $\beta=4$)
   \item 100\% convergence across all tested parameter combinations
+  \item Optimal $O(h^2)$ MMS convergence in $L^2$ for all fields
+        across four test cases (neutral, multi-reaction,
+        charged\,+\,Poisson, and the full 4-species production
+        pipeline), verifying diffusion, electromigration, Poisson,
+        BV flux, \texttt{cathodic\_conc\_factors}, and the
+        nondimensionalisation pipeline
 \end{itemize}
 
 \textbf{Physical accuracy.}
