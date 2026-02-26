@@ -1,0 +1,32 @@
+applied_voltage_v_vs_rhe,phi_model,converged,steps_taken,final_relative_change,final_absolute_change,observed_flux_proxy,peroxide_current_density_mA_per_cm2,failure_reason
+-0.3,0.9949999999999999,0,1,nan,nan,nan,nan,"ConvergenceError: Nonlinear solve failed to converge after 81 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH"
+-0.19999999999999998,0.8949999999999999,0,1,nan,nan,nan,nan,"ConvergenceError: Nonlinear solve failed to converge after 47 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH"
+-0.09999999999999998,0.7949999999999999,0,1,nan,nan,nan,nan,"ConvergenceError: Nonlinear solve failed to converge after 15 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH"
+5.551115123125783e-17,0.6949999999999998,0,1,nan,nan,nan,nan,"ConvergenceError: Nonlinear solve failed to converge after 41 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH"
+0.10000000000000003,0.595,0,1,nan,nan,nan,nan,"ConvergenceError: Nonlinear solve failed to converge after 74 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH"
+0.2,0.49499999999999994,0,1,nan,nan,nan,nan,"ConvergenceError: Nonlinear solve failed to converge after 82 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH"
+0.3000000000000001,0.39499999999999985,0,1,nan,nan,nan,nan,"ConvergenceError: Nonlinear solve failed to converge after 83 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH"
+0.4000000000000001,0.2949999999999999,0,1,nan,nan,nan,nan,"ConvergenceError: Nonlinear solve failed to converge after 100 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT"
+0.5,0.19499999999999995,0,1,nan,nan,nan,nan,"ConvergenceError: Nonlinear solve failed to converge after 90 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH"
+0.6000000000000001,0.09499999999999986,0,1,nan,nan,nan,nan,"ConvergenceError: Nonlinear solve failed to converge after 100 nonlinear iterations.
+Reason:
+   DIVERGED_MAX_IT"
+0.7,-0.0050000000000000044,1,27,0.00024270825817696384,0.0001692330615779003,0.031143694954186785,2.1055157067128016,

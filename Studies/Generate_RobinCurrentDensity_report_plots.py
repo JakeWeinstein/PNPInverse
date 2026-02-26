@@ -1,4 +1,4 @@
-"""Generate report-ready current-density-proxy plots for Robin kappa studies.
+"""Generate report-ready current-density plots for Robin kappa studies.
 
 This script runs three noise cases (0%, 2.5%, 5%) for the current-density
 observable and writes:
@@ -36,6 +36,7 @@ from Helpers.Infer_RobinKappa_from_flux_curve_helpers import (
     run_robin_kappa_flux_curve_inference,
 )
 from UnifiedInverse import build_default_solver_params
+from Utils.current_density_scaling import build_physical_scales, build_solver_options
 from Utils.robin_flux_experiment import SteadyStateConfig
 
 
@@ -44,26 +45,6 @@ class CaseConfig:
     noise_percent: float
     seed: int
     tag: str
-
-
-def build_solver_options() -> dict:
-    return {
-        "snes_type": "newtonls",
-        "snes_max_it": 100,
-        "snes_atol": 1e-8,
-        "snes_rtol": 1e-8,
-        "snes_linesearch_type": "bt",
-        "ksp_type": "preonly",
-        "pc_type": "lu",
-        "pc_factor_mat_solver_type": "mumps",
-        "robin_bc": {
-            "kappa": [0.8, 0.8],
-            "c_inf": [0.01, 0.01],
-            "electrode_marker": 1,
-            "concentration_marker": 3,
-            "ground_marker": 3,
-        },
-    }
 
 
 def read_clean_noisy_current_density_csv(path: str, scale: float):
@@ -84,30 +65,40 @@ def read_clean_noisy_current_density_csv(path: str, scale: float):
 
 
 def main() -> None:
+    scales = build_physical_scales()
+    kappa_scale_m_s = float(scales["kappa_scale_m_s"])
+
     base_solver_params = build_default_solver_params(
         n_species=2,
         order=1,
         dt=1e-1,
         t_end=20.0,
         z_vals=[1, -1],
-        d_vals=[1.0, 1.0],
+        d_vals=[float(scales["d_species_m2_s"][0]), float(scales["d_species_m2_s"][1])],
         a_vals=[0.0, 0.0],
         phi_applied=0.05,
-        c0_vals=[0.1, 0.1],
+        c0_vals=[
+            float(scales["bulk_concentration_mol_m3"]),
+            float(scales["bulk_concentration_mol_m3"]),
+        ],
         phi0=0.05,
-        solver_options=build_solver_options(),
+        solver_options=build_solver_options(scales),
     )
-    # Provisional unit convention for report plots:
-    # use charge-weighted flux proxy without Faraday scaling and keep
-    # scale=1 so values stay near the flux-space magnitude range.
-    current_density_scale = 1.0
+    # Convert model-space total-charge observable to physical current density.
+    current_density_scale = float(scales["molar_flux_scale_mol_m2_s"])
+    current_density_scale_a_m2 = float(scales["current_density_scale_a_m2"])
+    print(
+        "Current-density scale: "
+        f"{current_density_scale_a_m2:.6e} A/m^2 per model unit; "
+        f"kappa scale: {kappa_scale_m_s:.6e} m/s per model unit"
+    )
 
     steady = SteadyStateConfig(
         relative_tolerance=5e-4,
         absolute_tolerance=1e-7,
         consecutive_steps=4,
         max_steps=120,
-        flux_observable="charge_proxy_no_f",
+        flux_observable="total_charge",
         verbose=False,
         print_every=10,
     )
@@ -141,11 +132,11 @@ def main() -> None:
             regenerate_target=True,
             target_noise_percent=float(case.noise_percent),
             target_seed=int(case.seed),
-            observable_mode="charge_proxy_no_f",
+            observable_mode="total_charge",
             observable_species_index=None,
             observable_scale=current_density_scale,
-            observable_label="charge-weighted boundary flux proxy (a.u.)",
-            observable_title="Robin kappa inference from charge-weighted flux proxy",
+            observable_label="steady current density (A/m^2)",
+            observable_title="Robin kappa inference from steady-state current density",
             kappa_lower=1e-6,
             kappa_upper=20.0,
             optimizer_method="L-BFGS-B",
@@ -194,11 +185,11 @@ def main() -> None:
             assets_dir, f"robin_current_density_generation_{case.tag}.png"
         )
         plt.figure(figsize=(7, 4))
-        plt.plot(phi_vals, clean_vals, "o-", linewidth=2, label="clean synthetic proxy")
+        plt.plot(phi_vals, clean_vals, "o-", linewidth=2, label="clean synthetic current density")
         plt.plot(phi_vals, noisy_vals, "s--", linewidth=1.8, label=f"noisy ({case.noise_percent:.1f}%)")
         plt.xlabel("applied voltage phi_applied")
-        plt.ylabel("charge-weighted boundary flux proxy (a.u.)")
-        plt.title(f"Current-Density Proxy Data Generation ({case.noise_percent:.1f}% noise)")
+        plt.ylabel("steady current density (A/m^2)")
+        plt.title(f"Current-Density Data Generation ({case.noise_percent:.1f}% noise)")
         plt.grid(True, alpha=0.25)
         plt.legend()
         plt.tight_layout()
@@ -214,18 +205,18 @@ def main() -> None:
             result.target_flux,
             marker="o",
             linewidth=2,
-            label="target proxy",
+            label="target current density",
         )
         plt.plot(
             result.phi_applied_values,
             result.best_simulated_flux,
             marker="s",
             linewidth=2,
-            label="best-fit simulated proxy",
+            label="best-fit simulated current density",
         )
         plt.xlabel("applied voltage phi_applied")
-        plt.ylabel("charge-weighted boundary flux proxy (a.u.)")
-        plt.title(f"Robin Kappa Inference from Current-Density Proxy ({case.noise_percent:.1f}% noise)")
+        plt.ylabel("steady current density (A/m^2)")
+        plt.title(f"Robin Kappa Inference from Current Density ({case.noise_percent:.1f}% noise)")
         plt.grid(True, alpha=0.25)
         plt.legend()
         plt.tight_layout()
@@ -239,6 +230,8 @@ def main() -> None:
                 "seed": case.seed,
                 "best_kappa0": float(result.best_kappa[0]),
                 "best_kappa1": float(result.best_kappa[1]),
+                "best_kappa0_m_s": kappa_scale_m_s * float(result.best_kappa[0]),
+                "best_kappa1_m_s": kappa_scale_m_s * float(result.best_kappa[1]),
                 "best_loss": float(result.best_loss),
                 "gen_plot": gen_plot_path,
                 "fit_plot": fit_plot_path,
@@ -262,6 +255,8 @@ def main() -> None:
                 "seed",
                 "best_kappa0",
                 "best_kappa1",
+                "best_kappa0_m_s",
+                "best_kappa1_m_s",
                 "best_loss",
                 "gen_plot",
                 "fit_plot",

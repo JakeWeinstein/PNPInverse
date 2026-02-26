@@ -1,4 +1,4 @@
-"""Quick benchmark: replay on vs off for no-noise current-density-proxy inference.
+"""Quick benchmark: replay on vs off for no-noise current-density inference.
 
 This script compares two otherwise-identical runs:
 1) replay enabled
@@ -33,6 +33,7 @@ from Helpers.Infer_RobinKappa_from_flux_curve_helpers import (
     run_robin_kappa_flux_curve_inference,
 )
 from UnifiedInverse import build_default_solver_params
+from Utils.current_density_scaling import build_physical_scales, build_solver_options
 from Utils.robin_flux_experiment import (
     SteadyStateConfig,
     add_percent_noise,
@@ -54,41 +55,23 @@ class BenchmarkConfig:
     target_noise_percent: float
 
 
-def build_solver_options() -> Dict[str, Any]:
-    """Return PETSc/SNES options used for the current-density benchmark."""
-    return {
-        "snes_type": "newtonls",
-        "snes_max_it": 100,
-        "snes_atol": 1e-8,
-        "snes_rtol": 1e-8,
-        "snes_linesearch_type": "bt",
-        "ksp_type": "preonly",
-        "pc_type": "lu",
-        "pc_factor_mat_solver_type": "mumps",
-        "robin_bc": {
-            "kappa": [0.8, 0.8],
-            "c_inf": [0.01, 0.01],
-            "electrode_marker": 1,
-            "concentration_marker": 3,
-            "ground_marker": 3,
-        },
-    }
-
-
-def build_base_solver_params() -> Sequence[object]:
-    """Create baseline solver params for current-density-proxy runs."""
+def build_base_solver_params(scales: Dict[str, Any]) -> Sequence[object]:
+    """Create baseline solver params for current-density runs."""
     return build_default_solver_params(
         n_species=2,
         order=1,
         dt=1e-1,
         t_end=20.0,
         z_vals=[1, -1],
-        d_vals=[1.0, 1.0],
+        d_vals=[float(scales["d_species_m2_s"][0]), float(scales["d_species_m2_s"][1])],
         a_vals=[0.0, 0.0],
         phi_applied=0.05,
-        c0_vals=[0.1, 0.1],
+        c0_vals=[
+            float(scales["bulk_concentration_mol_m3"]),
+            float(scales["bulk_concentration_mol_m3"]),
+        ],
         phi0=0.05,
-        solver_options=build_solver_options(),
+        solver_options=build_solver_options(scales),
     )
 
 
@@ -99,7 +82,7 @@ def build_steady_config() -> SteadyStateConfig:
         absolute_tolerance=1e-7,
         consecutive_steps=4,
         max_steps=120,
-        flux_observable="charge_proxy_no_f",
+        flux_observable="total_charge",
         verbose=False,
         print_every=10,
     )
@@ -156,7 +139,8 @@ def run_single_case(
     parallel_start_method: str = "spawn",
 ) -> Dict[str, Any]:
     """Run one no-noise current-density inference case and collect metrics."""
-    base_solver_params = build_base_solver_params()
+    scales = build_physical_scales()
+    base_solver_params = build_base_solver_params(scales)
     steady = build_steady_config()
 
     request = RobinFluxCurveInferenceRequest(
@@ -170,11 +154,11 @@ def run_single_case(
         regenerate_target=False,
         target_noise_percent=float(config.target_noise_percent),
         target_seed=int(config.target_seed),
-        observable_mode="charge_proxy_no_f",
+        observable_mode="total_charge",
         observable_species_index=None,
-        observable_scale=1.0,
-        observable_label="charge-weighted boundary flux proxy (a.u.)",
-        observable_title="Replay benchmark (current-density proxy)",
+        observable_scale=float(scales["molar_flux_scale_mol_m2_s"]),
+        observable_label="steady current density (A/m^2)",
+        observable_title="Replay benchmark (current density)",
         kappa_lower=1e-6,
         kappa_upper=20.0,
         optimizer_method="L-BFGS-B",
@@ -221,6 +205,8 @@ def run_single_case(
     result = run_robin_kappa_flux_curve_inference(request)
     elapsed = time.perf_counter() - t0
 
+    kappa_scale_m_s = float(scales["kappa_scale_m_s"])
+
     out = {
         "replay_enabled": int(bool(replay_enabled)),
         "parallel_point_solves_enabled": int(bool(parallel_points_enabled)),
@@ -229,6 +215,8 @@ def run_single_case(
         "peak_rss_mb": float(peak_rss_mb()),
         "best_kappa0": float(result.best_kappa[0]),
         "best_kappa1": float(result.best_kappa[1]),
+        "best_kappa0_m_s": kappa_scale_m_s * float(result.best_kappa[0]),
+        "best_kappa1_m_s": kappa_scale_m_s * float(result.best_kappa[1]),
         "best_loss": float(result.best_loss),
         "optimization_success": int(bool(result.optimization_success)),
         "optimization_message": str(result.optimization_message),
@@ -273,6 +261,8 @@ def write_summary_csv(path: str, rows: List[Dict[str, Any]]) -> None:
         "peak_rss_mb",
         "best_kappa0",
         "best_kappa1",
+        "best_kappa0_m_s",
+        "best_kappa1_m_s",
         "best_loss",
         "optimization_success",
         "optimization_message",
@@ -352,10 +342,11 @@ def main() -> None:
         return
 
     os.makedirs(os.path.dirname(str(args.target_csv)), exist_ok=True)
-    base_solver_params = build_base_solver_params()
+    scales = build_physical_scales()
+    base_solver_params = build_base_solver_params(scales)
     steady = build_steady_config()
 
-    print("Preparing shared no-noise current-density target curve...")
+    print("Preparing shared no-noise current-density target curve (A/m^2 scaling)...")
     prepare_target_csv(
         target_csv_path=str(args.target_csv),
         base_solver_params=base_solver_params,

@@ -1,0 +1,539 @@
+zoo\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{fullpage}
+\usepackage{hyperref}
+\usepackage{color}
+
+\title{Monolithic scheme for Poisson--Nernst--Planck Equations with Butler--Volmer Boundary Conditions and Steric Effects}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+  Developing numerical scheme for fully coupled monolithic Poisson--Nernst--Planck (PNP) equations. We start with weak formulations for both classical and modified cases. Specifically, we focus on  PNP equations with Butler--Volmer boundary conditions as well as a general modified PNP system that incorporates steric effects through additional contributions in the chemical potential.
+\end{abstract}
+
+\section{Introduction}
+The Poisson--Nernst--Planck (PNP) system describes the transport of charged species in an electrostatic field. In many electrochemical applications, such as electrode reactions, the classical PNP equations are coupled with Butler--Volmer kinetics to describe reactive fluxes at interfaces. Moreover, in concentrated electrolytes or systems where finite ion size effects are significant, the standard PNP equations are modified to include steric effects via additional contributions to the chemical potential.
+
+\section{Mathematical Formulation}
+
+\subsection{PNP Strong Formulation}
+For an ionic species \( c_i(x,t) \) with diffusion coefficient \( D_i \), valence \( z_i \), and electrostatic potential \(\phi(x,t)\), the \emph{Nernst--Planck equation} is given by
+\begin{equation}
+  \frac{\partial c_i}{\partial t} = \nabla \cdot \left( D_i \left[ \nabla c_i + \frac{z_i F}{RT}\, c_i\, \nabla \phi \right] \right),
+\end{equation}
+where \( F \) is Faraday's constant, \( R \) is the gas constant, and \( T \) is the absolute temperature.
+
+The \emph{Poisson equation} for the electrostatic potential is
+\begin{equation}
+  -\nabla \cdot (\epsilon\, \nabla \phi) = \sum_i z_i F\, c_i,
+\end{equation}
+with \(\epsilon\) being the dielectric permittivity of the medium.
+
+At an electrode interface, denoted by \(\Gamma_{\mathrm{elec}}\), the reactive flux of species \( i \) is modeled via a Butler--Volmer condition. For a redox reaction
+\[
+\mathrm{O} + n e^- \rightleftharpoons \mathrm{R},
+\]
+the current density is expressed as
+\begin{equation}
+  j = j_0 \left[ \exp\left(-\frac{\alpha n F}{RT}\,\eta\right) - \exp\left(\frac{(1-\alpha)nF}{RT}\,\eta\right) \right],
+\end{equation}
+where \( j_0 \) is the exchange current density, \(\alpha\) is the charge transfer coefficient, \( n \) is the number of electrons transferred, and \(\eta = \phi_{\text{electrode}} - \phi_{\text{eq}}\) is the overpotential.
+
+This yields a flux boundary condition:
+\begin{equation}
+  -D_i\left( \nabla c_i + \frac{z_i F}{RT}\, c_i\, \nabla \phi \right) \cdot \mathbf{n} = \pm \frac{j}{nF},
+\end{equation}
+with the sign chosen according to whether species \( i \) is consumed or produced.
+
+\subsubsection{Weak Formulation for the Nernst--Planck Equation}
+Let \( \Omega \) be the spatial domain with boundary \(\partial \Omega\), and let \( V \) be an appropriate test space (typically \( H^1(\Omega) \)). For each ionic species \( c_i \), we multiply the strong form by a test function \( v \in V \) and integrate over \(\Omega\):
+\begin{equation} \label{eq:NP_weak}
+  \int_\Omega \frac{\partial c_i}{\partial t}\, v\, dx = \int_\Omega \nabla \cdot \left( D_i \left[\nabla c_i + \frac{z_i F}{RT}\, c_i\, \nabla \phi \right] \right) v \, dx.
+\end{equation}
+Integration by parts yields:
+\begin{equation}
+  \int_\Omega \frac{\partial c_i}{\partial t}\, v\, dx = - \int_\Omega D_i \left[\nabla c_i + \frac{z_i F}{RT}\, c_i\, \nabla \phi \right] \cdot \nabla v\, dx + \int_{\partial\Omega} D_i \left[\nabla c_i + \frac{z_i F}{RT}\, c_i\, \nabla \phi \right]\cdot \mathbf{n}\, v\, ds.
+\end{equation}
+On the electrode surface \(\Gamma_{\mathrm{elec}} \subset \partial \Omega\), the flux is prescribed via the Butler--Volmer condition. Thus, the weak formulation for \( c_i \) becomes:
+\[
+\boxed{
+\int_\Omega \frac{\partial c_i}{\partial t}\, v\, dx + \int_\Omega D_i \left[\nabla c_i + \frac{z_i F}{RT}\, c_i\, \nabla \phi \right]\cdot \nabla v\, dx = \int_{\Gamma_{\mathrm{elec}}} \left(\mp \frac{j}{nF}\right) v\, ds +\int_{\partial\Omega \setminus \Gamma_{elec}} D_i \left[\nabla c_i + \frac{z_i F}{RT}\, c_i\, \nabla \phi \right]\cdot \mathbf{n}\, v\, ds, \quad \forall\, v \in V.
+}
+\]
+
+\textbf{Butler--Volmer boundary condition as a system of coupled equation}
+
+For a one-electron redox couple $\mathrm{O} + e^- \leftrightarrow \mathrm{R}$, 
+the net reaction rate per unit area is
+\begin{equation}
+R_{\text{BV}}
+=
+k_0
+\left[
+c_O \exp\!\left(-\alpha\frac{F\eta}{RT}\right)
+-
+c_R \exp\!\left((1-\alpha)\frac{F\eta}{RT}\right)
+\right].
+\end{equation}
+Here:
+\begin{itemize}
+    \item $k_0$ is the (surface) reaction rate constant,
+    \item $c_O$ and $c_R$ are the \emph{surface} concentrations of the oxidized 
+          and reduced species, obtained from the PNP solution,
+    \item $\alpha$ is the charge-transfer (symmetry) coefficient, typically between 
+          $0.3$ and $0.7$,
+    \item $F$ is Faraday's constant,
+    \item $\eta$ is the \emph{overpotential}, defined by
+    \begin{equation}
+        \eta = \phi_m - \phi_s - E_{\mathrm{eq}},
+    \end{equation}
+    where $\phi_m$ is the electrode (metal) potential, $\phi_s$ is the solution potential
+    at the reaction plane, and $E_{\mathrm{eq}}$ is the Nernst equilibrium potential.
+\end{itemize}
+
+Inside the electrolyte, the flux of ionic species $i$ is given by the Nernst--Planck 
+expression:
+\begin{equation}
+\textbf{J}_i
+= -D_i\left(
+\nabla c_i + \frac{z_i e}{k_B T} c_i \nabla\phi
+\right).
+\end{equation}
+
+At the electrode surface, the normal flux must match the consumption or production 
+rate due to the electrochemical reaction. Thus, the BV equation becomes a 
+flux boundary condition. For the oxidized species $\mathrm{O}$:
+\begin{equation}
+-\textbf{n} \cdot \textbf{J}_O = R_{\text{BV}},
+\end{equation}
+while for the reduced species $\mathrm{R}$:
+\begin{equation}
+\textbf{n} \cdot \textbf{J}_R = -R_{\text{BV}}.
+\end{equation}
+
+These relationships ensure that:
+\begin{itemize}
+    \item a positive bulk velocity (BV) rate consumes $\mathrm{O}$ (flux into the surface and 
+          produces $\mathrm{R}$ (flux away from the surface,
+    \item charge is conserved between the ionic flux and the electronic current 
+          in the electrode.
+\end{itemize}
+
+The total Faradaic current density at the electrode is
+\begin{equation}
+j_F = F R_{\text{BV}}.
+\end{equation}
+
+\subsubsection{Weak Formulation for the Poisson Equation}
+Let \( w \in W \) (typically \( W = H^1(\Omega) \)) be a test function. Multiply the Poisson equation by \( w \) and integrate over \(\Omega\):
+\begin{equation}
+  -\int_\Omega \nabla \cdot (\epsilon\, \nabla \phi) \,w\, dx = \int_\Omega \left( \sum_i z_i F\, c_i \right)w\, dx.
+\end{equation}
+Integrating by parts gives:
+\begin{equation}
+  \int_\Omega \epsilon\, \nabla \phi \cdot \nabla w\, dx - \int_{\partial\Omega} \epsilon\, (\nabla \phi \cdot \mathbf{n})\, w\, ds = \int_\Omega \left( \sum_i z_i F\, c_i \right)w\, dx.
+\end{equation}
+Depending on the boundary conditions imposed on \(\phi\), the boundary integral may be handled accordingly (for example, \( w = 0 \) on parts of \(\partial\Omega \) with Dirichlet conditions). Thus, the weak formulation for the potential \(\phi\) is:
+\[
+\boxed{
+\int_\Omega \epsilon\, \nabla \phi \cdot \nabla w\, dx = \int_\Omega \left( \sum_i z_i F\, c_i \right)w\, dx + \int_{\Gamma_N} \epsilon\, (\nabla \phi \cdot \mathbf{n})\, w\, ds, \quad \forall\, w \in W,
+}
+\]
+where \(\Gamma_N\) is the part of the boundary with Neumann conditions.
+
+\subsection{Modified PNP Equations with Steric Effects}
+
+In many realistic applications, steric effects due to finite ion size become important. These effects are incorporated by adding an extra term \(\mu_i^{\mathrm{steric}}(c)\) in the chemical potential. One typical model is derived from a lattice-gas approach, such as Bikerman's model, leading to
+\[
+\mu^{\mathrm{steric}}(c) = k_B T \ln\left(1 - \sum_j a_j\, c_j\right),
+\]
+where \( a_j \) represents the effective size of ion \( j \).
+
+\subsubsection{Strong Formulation with Steric Effects}
+The modified Nernst--Planck equation including steric effects is written as
+\begin{equation} \label{eq:modified_NP}
+  \frac{\partial c_i}{\partial t} = \nabla \cdot \left\{ D_i \left[ \nabla c_i + c_i\, \nabla \left( \frac{z_i F}{RT}\,\phi + \mu^{\mathrm{steric}}(c) \right) \right] \right\}.
+\end{equation}
+The Poisson equation remains
+\begin{equation} \label{eq:poisson}
+  -\nabla \cdot \left( \epsilon(x)\, \nabla \phi \right) = \sum_i z_i F\, c_i.
+\end{equation}
+
+\subsubsection{Weak Formulation for the Modified Nernst--Planck Equation}
+Let \( v \in V \) be a test function. Multiplying \eqref{eq:modified_NP} by \( v \) and integrating over \(\Omega\) gives:
+\begin{equation}
+  \int_\Omega \frac{\partial c_i}{\partial t}\, v\, dx = \int_\Omega \nabla \cdot \left\{ D_i \left[ \nabla c_i + c_i\, \nabla \left( \frac{z_i F}{RT}\,\phi + \mu^{\mathrm{steric}}(c) \right) \right] \right\} v\, dx.
+\end{equation}
+Integration by parts yields:
+\begin{multline}
+  \int_\Omega \frac{\partial c_i}{\partial t}\, v\, dx = - \int_\Omega D_i \left[ \nabla c_i + c_i\, \nabla \left( \frac{z_i F}{RT}\,\phi + \mu^{\mathrm{steric}}(c) \right) \right] \cdot \nabla v\, dx \\[1mm]
+  + \int_{\partial\Omega} D_i \left[ \nabla c_i + c_i\, \nabla \left( \frac{z_i F}{RT}\,\phi + \mu^{\mathrm{steric}}(c) \right) \right]\cdot \mathbf{n}\, v\, ds.
+\end{multline}
+At the reactive boundary \(\Gamma_{\mathrm{elec}}\) (if a Butler--Volmer kinetics is applied), the flux condition is
+\[
+-D_i \left[ \nabla c_i + c_i\, \nabla \left( \frac{z_i F}{RT}\,\phi + \mu_i^{\mathrm{steric}}(c) \right) \right] \cdot \mathbf{n} = \pm \frac{j}{n_i F}.
+\]
+Thus, the weak formulation for \( c_i \) is:
+\[
+\boxed{
+\int_\Omega \frac{\partial c_i}{\partial t}\, v\, dx + \int_\Omega D_i \left[ \nabla c_i + c_i\, \nabla \left( \frac{z_i F}{RT}\,\phi + \mu_i^{\mathrm{steric}}(c) \right) \right]\cdot \nabla v\, dx = \int_{\Gamma_{\mathrm{elec}}} \left(\mp \frac{j_i}{n_i F}\right) v\, ds, \quad \forall\, v \in V.
+}
+\]
+
+\subsubsection{Weak Formulation for the Poisson Equation with Steric Effects}
+Let \( w \in W \) be a test function. Multiplying \eqref{eq:poisson} by \( w \) and integrating over \(\Omega\):
+\begin{equation}
+  -\int_\Omega \nabla \cdot \left( \epsilon(x)\, \nabla \phi \right) w\, dx = \int_\Omega \left( \sum_i z_i F\, c_i \right) w\, dx.
+\end{equation}
+Integrating by parts yields:
+\begin{equation}
+  \int_\Omega \epsilon(x)\, \nabla \phi \cdot \nabla w\, dx - \int_{\partial\Omega} \epsilon(x)\, (\nabla \phi \cdot \mathbf{n})\, w\, ds = \int_\Omega \left( \sum_i z_i F\, c_i \right) w\, dx.
+\end{equation}
+Thus, the weak formulation for \(\phi\) is:
+\[
+\boxed{
+\int_\Omega \epsilon(x)\, \nabla \phi \cdot \nabla w\, dx = \int_\Omega \left( \sum_i z_i F\, c_i \right) w\, dx + \int_{\Gamma_N} \epsilon(x)\, (\nabla \phi \cdot \mathbf{n})\, w\, ds, \quad \forall\, w \in W.
+}
+\]
+
+\subsection{Summary of the Weak Formulations}
+
+\subsection*{Classical PNP with Butler--Volmer Boundary Conditions}
+\begin{itemize}
+  \item \textbf{For each ionic species \( c_i \):}
+  \[
+  \int_\Omega \frac{\partial c_i}{\partial t}\, v\, dx + \int_\Omega D_i \left[\nabla c_i + \frac{z_i F}{RT}\, c_i\, \nabla \phi \right]\cdot \nabla v\, dx = \int_{\Gamma_{\mathrm{elec}}} \left(\mp \frac{j}{nF}\right) v\, ds, \quad \forall\, v \in V.
+  \]
+  \item \textbf{For the potential \(\phi\):}
+  \[
+  \int_\Omega \epsilon\, \nabla \phi \cdot \nabla w\, dx = \int_\Omega \left( \sum_i z_i F\, c_i \right)w\, dx + \int_{\Gamma_N} \epsilon\, (\nabla \phi \cdot \mathbf{n})\, w\, ds, \quad \forall\, w \in W.
+  \]
+\end{itemize}
+
+\subsection*{Modified PNP with Steric Effects}
+\begin{itemize}
+  \item \textbf{For each ionic species \( c_i \):}
+  \[
+  \int_\Omega \frac{\partial c_i}{\partial t}\, v\, dx + \int_\Omega D_i \left[ \nabla c_i + c_i\, \nabla \left( \frac{z_i F}{RT}\,\phi + \mu^{\mathrm{steric}}(c) \right) \right]\cdot \nabla v\, dx = \int_{\Gamma_{\mathrm{elec}}} \left(\mp \frac{j}{n_i F}\right) v\, ds, \quad \forall\, v \in V.
+  \]
+  \item \textbf{For the potential \(\phi\):}
+  \[
+  \int_\Omega \epsilon(x)\, \nabla \phi \cdot \nabla w\, dx = \int_\Omega \left( \sum_i z_i F\, c_i \right)w\, dx + \int_{\Gamma_N} \epsilon(x)\, (\nabla \phi \cdot \mathbf{n})\, w\, ds, \quad \forall\, w \in W.
+  \]
+\end{itemize}
+
+
+\subsection{Steady-State Weak Formulation}
+\textcolor{red}{((((Reformulate the following sections for n number of ionic species instead of single species.))))}
+We consider a single ionic species with concentration $c(x)$ (with diffusivity $D$ and valence $z$) and an electrostatic potential $\phi(x)$ defined on a bounded domain $\Omega\subset\mathbb{R}^d$ with boundary $\partial\Omega$. For the sake of clarity, we assume that appropriate Dirichlet or Neumann conditions have been imposed. (The extension to multiple species is straightforward.)
+
+\subsection*{Ionic Transport Equation}
+At steady state, the time derivative vanishes so that the Nernst--Planck equation becomes
+\begin{equation}\label{NP_strong}
+\nabla\cdot\left( D \left[ \nabla c + \frac{zF}{RT}\,c\,\nabla\phi \right] \right) = 0 \quad \text{in } \Omega.
+\end{equation}
+Multiplying by a test function $v\in H^1(\Omega)$ and integrating by parts we obtain
+\begin{equation}\label{NP_weak}
+\int_\Omega D\left[\nabla c + \frac{zF}{RT}\,c\,\nabla\phi \right]\cdot \nabla v\, dx 
+= \int_{\Gamma_{\mathrm{elec}}} \left(\mp \frac{j}{nF}\right) v\, ds,
+\end{equation}
+where the right-hand side is given by the reactive flux (e.g., via a Butler--Volmer condition) on the electrode boundary $\Gamma_{\mathrm{elec}}\subset\partial\Omega$. On non-reactive portions the flux is assumed to vanish.
+
+\subsection*{Poisson Equation}
+The electrostatic potential satisfies
+\begin{equation}\label{Poisson_strong}
+-\nabla\cdot\bigl(\epsilon\,\nabla\phi\bigr) = zF\, c \quad \text{in } \Omega.
+\end{equation}
+Multiplying by a test function $w\in H^1(\Omega)$ and integrating by parts yields
+\begin{equation}\label{Poisson_weak}
+\int_\Omega \epsilon\,\nabla\phi\cdot \nabla w\, dx 
+= \int_\Omega zF\, c\, w\, dx 
++ \int_{\Gamma_N} \epsilon\, (\nabla\phi\cdot \mathbf{n})\, w\, ds,
+\end{equation}
+where $\Gamma_N$ denotes the portion of the boundary with Neumann data. (If Dirichlet conditions are prescribed on a portion of $\partial\Omega$, the corresponding test functions vanish there.)
+
+\section{Finite Element Discretization}
+
+Let $\{\varphi_i\}_{i=1}^N$ be a basis for the finite element space
+\[
+V_h \subset H^1(\Omega),
+\]
+typically consisting of continuous, piecewise-polynomial functions (for example, piecewise linear functions).
+
+We approximate
+\[
+c^h(x) = \sum_{j=1}^N C_j\,\varphi_j(x) \quad \text{and} \quad \phi^h(x) = \sum_{j=1}^N \Phi_j\,\varphi_j(x),
+\]
+where $C_j$ and $\Phi_j$ are the nodal unknowns for the concentration and potential, respectively.
+
+\subsection*{Discretized Ionic Transport Equation}
+
+Choosing $v=\varphi_i$ in \eqref{NP_weak} for $i=1,\dots,N$, we have
+\begin{equation}\label{discrete_NP}
+\int_\Omega D\left[\nabla c^h + \frac{zF}{RT}\,c^h\,\nabla\phi^h \right]\cdot \nabla \varphi_i\, dx 
+=\int_{\Gamma_{\mathrm{elec}}} \left(\mp \frac{j}{nF}\right) \varphi_i\, ds, \quad i=1,\dots,N.
+\end{equation}
+Substitute
+\[
+c^h = \sum_{j=1}^N C_j\,\varphi_j \quad \text{and} \quad \phi^h = \sum_{j=1}^N \Phi_j\,\varphi_j.
+\]
+Then,
+\[
+\nabla c^h = \sum_{j=1}^N C_j\,\nabla\varphi_j, \quad \nabla\phi^h = \sum_{j=1}^N \Phi_j\,\nabla\varphi_j.
+\]
+Inserting these into \eqref{discrete_NP} leads to
+\begin{equation}\label{matrix_NP}
+\sum_{j=1}^N \left[ D \int_\Omega \nabla \varphi_j \cdot \nabla \varphi_i\, dx \right] C_j
++ \sum_{j=1}^N \left[ D\,\frac{zF}{RT} \int_\Omega \varphi_j\,\left(\sum_{k=1}^N C_k\,\varphi_k\right) \left(\nabla\varphi_j\cdot \nabla\varphi_i\right) dx \right] \Phi_j 
+= F_i,
+\end{equation}
+where
+\[
+F_i = \int_{\Gamma_{\mathrm{elec}}} \left(\mp \frac{j}{nF}\right) \varphi_i\, ds.
+\]
+Note that the second term is \emph{nonlinear} in the unknowns since $c^h$ depends on $\{C_k\}$.
+
+\subsection*{Discretized Poisson Equation}
+
+Choosing $w=\varphi_i$ in \eqref{Poisson_weak}, we obtain for $i=1,\dots,N$:
+\begin{equation}\label{matrix_Poisson}
+\int_\Omega \epsilon\, \nabla\phi^h\cdot \nabla \varphi_i\, dx 
+= \int_\Omega zF\, c^h\, \varphi_i\, dx + G_i,
+\end{equation}
+with
+\[
+G_i = \int_{\Gamma_N} \epsilon\, (\nabla\phi^h\cdot \mathbf{n})\, \varphi_i\, ds.
+\]
+Substituting $\phi^h = \sum_{j=1}^N \Phi_j\,\varphi_j$ and $c^h = \sum_{k=1}^N C_k\,\varphi_k$ yields
+\begin{equation}\label{matrix_Poisson_final}
+\sum_{j=1}^N \left[ \int_\Omega \epsilon\, \nabla \varphi_j \cdot \nabla \varphi_i\, dx \right] \Phi_j 
+= \sum_{k=1}^N \left[ zF \int_\Omega \varphi_k\, \varphi_i\, dx \right] C_k + G_i.
+\end{equation}
+
+\section{Matrix Formulation Summary}
+\textcolor{red}{((((This section needs careful review and edits))))}
+
+Define the following matrices and vectors:
+\begin{itemize}
+  \item The \emph{stiffness matrix} for the concentration:
+    \[
+    A_{ij} = \int_\Omega \nabla \varphi_j \cdot \nabla \varphi_i\, dx.
+    \]
+  \item The \emph{coupling matrix} due to the electrostatic drift term:
+    \[
+    B_{ij}(\mathbf{C}) = \frac{zF}{RT}\, \int_\Omega \varphi_j\left(\sum_{k=1}^N C_k\, \varphi_k\right) \, \nabla\varphi_j \cdot \nabla \varphi_i\, dx.
+    \]
+    (This matrix depends nonlinearly on the vector $\mathbf{C} = [C_1,\dots,C_N]^T$.)
+  \item The \emph{stiffness matrix} for the potential:
+    \[
+    K_{ij} = \int_\Omega \epsilon\, \nabla \varphi_j \cdot \nabla \varphi_i\, dx.
+    \]
+  \item The \emph{mass matrix} for the coupling in the Poisson equation:
+    \[
+    M_{ij} = \int_\Omega \varphi_j\, \varphi_i\, dx.
+    \]
+\end{itemize}
+Also, let $\mathbf{C}=[C_1,\dots,C_N]^T$, $\mathbf{\Phi}=[\Phi_1,\dots,\Phi_N]^T$, and define the load vectors
+\[
+\mathbf{F}_c = [F_1,\dots,F_N]^T \quad \text{and} \quad \mathbf{G}_\phi = [G_1,\dots,G_N]^T.
+\]
+
+Then the finite element formulation can be written in the coupled (nonlinear) matrix system:
+\[
+\underbrace{D\,A\,\mathbf{C}}_{\text{diffusion term}} 
++ \underbrace{D\,B(\mathbf{C})\,\mathbf{\Phi}}_{\text{drift (coupling) term}}
+= \mathbf{F}_c,
+\]
+\[
+K\,\mathbf{\Phi} = zF\,M\,\mathbf{C} + \mathbf{G}_\phi.
+\]
+
+
+\section{Finite Element Spaces}
+Here we discuss various finite element spaces compatible for this problem. 
+
+\section{Determination of Source Terms for Method of Manufactured Solutions}
+
+The Method of Manufactured Solutions (MMS) is a code verification technique used to confirm that a numerical implementation correctly solves the intended partial differential equations. Rather than solving a problem with an unknown solution, we construct an artificial problem where the exact solution is known \emph{a priori}. This is achieved by:
+\begin{enumerate}
+\item Choosing smooth ``manufactured'' solutions for all unknowns,
+\item Substituting these solutions into the governing PDEs,
+\item Computing the resulting residual, which becomes a \emph{source term} or \emph{forcing function},
+\item Solving the modified PDEs (with source terms added) numerically,
+\item Comparing the numerical solution to the exact manufactured solution to measure the discretization error.
+\end{enumerate}
+
+\subsection{Application to PNP Equations}
+
+For the PNP system, we have $n$ ionic species with concentrations $c_i(x,t)$ and an electrostatic potential $\phi(x,t)$. The strong form (without source terms) is:
+\begin{align}
+\frac{\partial c_i}{\partial t} - \nabla \cdot \left[ D_i \left( \nabla c_i + \frac{z_i F}{RT}\, c_i\, \nabla \phi \right) \right] &= 0, \quad i=1,\dots,n, \label{eq:pnp_species_strong}\\
+-\nabla \cdot (\epsilon\, \nabla \phi) - \sum_{i=1}^n z_i F\, c_i &= 0. \label{eq:pnp_poisson_strong}
+\end{align}
+
+\subsection{Choice of Manufactured Solutions}
+
+We select smooth manufactured solutions. For a spatial convergence study with piecewise polynomial finite elements of order $p$, the manufactured solutions should \emph{not} be exactly representable by the finite element basis. Typical choices involve trigonometric or exponential functions.
+
+For our study, we choose:
+\begin{align}
+c_i^{\mathrm{exact}}(x,y,t) &= c_0 + A\, \sin(\pi x)\, \sin(\pi y)\, e^{-t}, \label{eq:c_exact}\\
+\phi^{\mathrm{exact}}(x,y,t) &= B\, \sin(\pi x)\, \sin(\pi y)\, e^{-t}, \label{eq:phi_exact}
+\end{align}
+where $c_0$, $A$, and $B$ are constants chosen to ensure $c_i^{\mathrm{exact}} > 0$ throughout the domain (e.g., $c_0=1.0$, $A=0.1$, $B=0.1$).
+
+These functions are smooth (infinitely differentiable), satisfy homogeneous Dirichlet boundary conditions on the unit square $\Omega = [0,1] \times [0,1]$, and decay exponentially in time.
+
+\subsection{Source Term for Species Equations}
+
+Substituting the manufactured solution \eqref{eq:c_exact} into the left-hand side of \eqref{eq:pnp_species_strong}, we compute the source term:
+\begin{equation}
+S_i(x,y,t) = \frac{\partial c_i^{\mathrm{exact}}}{\partial t} - \nabla \cdot \mathbf{J}_i^{\mathrm{exact}},
+\end{equation}
+where the flux is
+\begin{equation}
+\mathbf{J}_i^{\mathrm{exact}} = D_i \left( \nabla c_i^{\mathrm{exact}} + \frac{z_i F}{RT}\, c_i^{\mathrm{exact}}\, \nabla \phi^{\mathrm{exact}} \right).
+\end{equation}
+
+\subsubsection{Time Derivative}
+\begin{equation}
+\frac{\partial c_i^{\mathrm{exact}}}{\partial t} = -A\, \sin(\pi x)\, \sin(\pi y)\, e^{-t}.
+\end{equation}
+
+\subsubsection{Spatial Derivatives}
+
+First-order derivatives of $c_i^{\mathrm{exact}}$:
+\begin{align}
+\frac{\partial c_i^{\mathrm{exact}}}{\partial x} &= A\pi\, \cos(\pi x)\, \sin(\pi y)\, e^{-t},\\
+\frac{\partial c_i^{\mathrm{exact}}}{\partial y} &= A\pi\, \sin(\pi x)\, \cos(\pi y)\, e^{-t}.
+\end{align}
+
+Second-order derivatives:
+\begin{align}
+\frac{\partial^2 c_i^{\mathrm{exact}}}{\partial x^2} &= -A\pi^2\, \sin(\pi x)\, \sin(\pi y)\, e^{-t},\\
+\frac{\partial^2 c_i^{\mathrm{exact}}}{\partial y^2} &= -A\pi^2\, \sin(\pi x)\, \sin(\pi y)\, e^{-t}.
+\end{align}
+
+Thus, the Laplacian is:
+\begin{equation}
+\nabla^2 c_i^{\mathrm{exact}} = -2A\pi^2\, \sin(\pi x)\, \sin(\pi y)\, e^{-t}.
+\end{equation}
+
+Similarly, for $\phi^{\mathrm{exact}}$:
+\begin{align}
+\frac{\partial \phi^{\mathrm{exact}}}{\partial x} &= B\pi\, \cos(\pi x)\, \sin(\pi y)\, e^{-t},\\
+\frac{\partial \phi^{\mathrm{exact}}}{\partial y} &= B\pi\, \sin(\pi x)\, \cos(\pi y)\, e^{-t},\\
+\nabla^2 \phi^{\mathrm{exact}} &= -2B\pi^2\, \sin(\pi x)\, \sin(\pi y)\, e^{-t}.
+\end{align}
+
+\subsubsection{Divergence of Flux}
+
+The flux for species $i$ is:
+\begin{equation}
+\mathbf{J}_i^{\mathrm{exact}} = D_i \left( \nabla c_i^{\mathrm{exact}} + \frac{z_i F}{RT}\, c_i^{\mathrm{exact}}\, \nabla \phi^{\mathrm{exact}} \right).
+\end{equation}
+
+The divergence is:
+\begin{equation}
+\nabla \cdot \mathbf{J}_i^{\mathrm{exact}} = D_i \left( \nabla^2 c_i^{\mathrm{exact}} + \frac{z_i F}{RT} \left[ \nabla c_i^{\mathrm{exact}} \cdot \nabla \phi^{\mathrm{exact}} + c_i^{\mathrm{exact}}\, \nabla^2 \phi^{\mathrm{exact}} \right] \right).
+\end{equation}
+
+\subsubsection{Final Source Term for Species}
+
+Combining all terms, the source term for species $i$ is:
+\begin{equation}
+\boxed{
+S_i(x,y,t) = \frac{\partial c_i^{\mathrm{exact}}}{\partial t} - D_i \left( \nabla^2 c_i^{\mathrm{exact}} + \frac{z_i F}{RT} \left[ \nabla c_i^{\mathrm{exact}} \cdot \nabla \phi^{\mathrm{exact}} + c_i^{\mathrm{exact}}\, \nabla^2 \phi^{\mathrm{exact}} \right] \right).
+}
+\end{equation}
+
+We can then substitute the laplacian and time derivative results for our species and electrostatic potential equations in order to numerically determine the source term for each species. The above differentiation is done symbolically using sympy, from which the resulting weak form with source term included is numerically integrated using Firedrake.
+
+\subsection{Source Term for Poisson Equation}
+((REVIEW THIS))
+
+Substituting $\phi^{\mathrm{exact}}$ and $c_i^{\mathrm{exact}}$ into the Poisson equation \eqref{eq:pnp_poisson_strong}, the source term is:
+\begin{equation}
+S_\phi(x,y,t) = -\epsilon\, \nabla^2 \phi^{\mathrm{exact}} - \sum_{i=1}^n z_i F\, c_i^{\mathrm{exact}}.
+\end{equation}
+
+Using the Laplacian computed earlier:
+\begin{equation}
+\nabla^2 \phi^{\mathrm{exact}} = -2B\pi^2\, \sin(\pi x)\, \sin(\pi y)\, e^{-t},
+\end{equation}
+we have:
+\begin{equation}
+-\epsilon\, \nabla^2 \phi^{\mathrm{exact}} = 2\epsilon B\pi^2\, \sin(\pi x)\, \sin(\pi y)\, e^{-t}.
+\end{equation}
+
+The charge density term is:
+\begin{equation}
+\sum_{i=1}^n z_i F\, c_i^{\mathrm{exact}} = F \sum_{i=1}^n z_i \left[ c_0 + A\, \sin(\pi x)\, \sin(\pi y)\, e^{-t} \right].
+\end{equation}
+
+For a system with charge neutrality at $t=0$ (i.e., $\sum_{i=1}^n z_i c_0 = 0$), this simplifies to:
+\begin{equation}
+\sum_{i=1}^n z_i F\, c_i^{\mathrm{exact}} = FA\, \sin(\pi x)\, \sin(\pi y)\, e^{-t} \sum_{i=1}^n z_i.
+\end{equation}
+
+For a binary electrolyte with $z_1 = +1$ and $z_2 = -1$, we have $\sum_{i=1}^2 z_i = 0$, so:
+\begin{equation}
+\sum_{i=1}^2 z_i F\, c_i^{\mathrm{exact}} = 0.
+\end{equation}
+
+Thus, for this specific case, the source term for Poisson simplifies to:
+\begin{equation}
+\boxed{
+S_\phi(x,y,t) = 2\epsilon B\pi^2\, \sin(\pi x)\, \sin(\pi y)\, e^{-t}.
+}
+\end{equation}
+
+\subsection{Modified Weak Formulation with Source Terms}
+
+The weak formulation with MMS source terms becomes:
+
+\textbf{For each ionic species $c_i$:}
+\begin{equation}
+\int_\Omega \frac{\partial c_i}{\partial t}\, v\, dx + \int_\Omega D_i \left[\nabla c_i + \frac{z_i F}{RT}\, c_i\, \nabla \phi \right]\cdot \nabla v\, dx = \int_\Omega S_i\, v\, dx, \quad \forall\, v \in V.
+\end{equation}
+
+\textbf{For the potential $\phi$:}
+\begin{equation}
+\int_\Omega \epsilon\, \nabla \phi \cdot \nabla w\, dx = \int_\Omega \left( \sum_i z_i F\, c_i \right)w\, dx + \int_\Omega S_\phi\, w\, dx, \quad \forall\, w \in W.
+\end{equation}
+
+Boundary conditions are prescribed using the exact manufactured solutions:
+\begin{align}
+c_i(x,y,t) &= c_i^{\mathrm{exact}}(x,y,t) \quad \text{on } \partial\Omega,\\
+\phi(x,y,t) &= \phi^{\mathrm{exact}}(x,y,t) \quad \text{on } \partial\Omega.
+\end{align}
+
+Initial conditions are similarly set to the exact solutions at $t=0$.
+
+\subsection{Convergence Study}
+
+With the added source terms, the numerical solution $c_i^h$ and $\phi^h$ should converge to the exact manufactured solutions as the mesh is refined. The error is measured using standard norms:
+
+\textbf{$L^2$ norm (solution error):}
+\begin{equation}
+\| c_i^{\mathrm{exact}} - c_i^h \|_{L^2(\Omega)} = \left( \int_\Omega | c_i^{\mathrm{exact}} - c_i^h |^2\, dx \right)^{1/2}.
+\end{equation}
+
+\textbf{$H^1$ norm (solution + gradient error):}
+\begin{equation}
+\| c_i^{\mathrm{exact}} - c_i^h \|_{H^1(\Omega)} = \left( \int_\Omega \left[ | c_i^{\mathrm{exact}} - c_i^h |^2 + |\nabla c_i^{\mathrm{exact}} - \nabla c_i^h |^2 \right] dx \right)^{1/2}.
+\end{equation}
+
+For finite elements of polynomial order $p$, the expected convergence rates are:
+\begin{align}
+\| u^{\mathrm{exact}} - u^h \|_{L^2(\Omega)} &= \mathcal{O}(h^{p+1}),\\
+\| u^{\mathrm{exact}} - u^h \|_{H^1(\Omega)} &= \mathcal{O}(h^{p}),
+\end{align}
+where $h$ is the mesh element size. Achieving these rates confirms that the numerical implementation is correct.
+
+
+\end{document}

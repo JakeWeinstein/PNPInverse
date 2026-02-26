@@ -26,13 +26,13 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 import numpy as np
 
-from Helpers.Infer_RobinKappa_from_flux_curve_helpers import (
+from FluxCurve import (
     ForwardRecoveryConfig,
     RobinFluxCurveInferenceRequest,
     run_robin_kappa_flux_curve_inference,
 )
-from UnifiedInverse import build_default_solver_params
-from Utils.robin_flux_experiment import SteadyStateConfig
+from Inverse import build_default_solver_params
+from Forward.steady_state import SteadyStateConfig
 
 
 def build_solver_options() -> dict:
