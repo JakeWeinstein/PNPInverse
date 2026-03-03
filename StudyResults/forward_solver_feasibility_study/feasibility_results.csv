@@ -1,0 +1,11 @@
+label,z_vals,max_eta_hat,max_v_rhe,n_converged,n_attempted,elapsed_s,failure_mode,electrode_concentrations
+"z=[0,0,+1,-1] (full charged)","[0, 0, 1, -1]",-46.5115,-0.5000,300,300,184.5,none (reached target),"{'c_0': 0.0032963241158114253, 'c_1': 1.1213011249776603, 'c_2': 4.531281285466433e-05, 'c_3': 4.964680268636672e-12}"
+"z=[0,+1] (2-sp, H2O2 charged)","[0, 1]",0.0000,0.6950,0,300,11.7,"ConvergenceError at eta=-0.16: Nonlinear solve failed to converge after 17 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL",{}
+"z=[0,0,+1,0] (H+ only charged)","[0, 0, 1, 0]",0.0000,0.6950,0,300,0.6,"ConvergenceError at eta=-0.16: Nonlinear solve failed to converge after 12 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL",{}
+"z=[0,0,0,-1] (ClO4- only charged)","[0, 0, 0, -1]",0.0000,0.6950,0,300,0.4,"ConvergenceError at eta=-0.16: Nonlinear solve failed to converge after 5 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL",{}

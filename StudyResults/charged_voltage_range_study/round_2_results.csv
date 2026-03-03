@@ -1,0 +1,17 @@
+label,steric_a,Ny_mesh,beta_mesh,lambda_max,exponent_clip,conc_floor,dt,max_ss_steps,eta_steps,linesearch_type,l_ref,max_eta_hat,max_v_rhe,n_converged,n_attempted,elapsed_s,c_O2_final,c_HP_final,failure_mode
+r2_best_combo_a=0.1,0.1,500,3.5,0.3,30.0,1e-12,0.2,200,500,l2,0.0001,-6.8837,0.5181,74,500,302.1,0.195842,1.325707,Timeout (300s) at eta=-6.88
+r2_steric_a=0.30,0.3,500,3.5,0.3,30.0,1e-12,0.2,200,500,l2,0.0001,-0.3721,0.6854,4,500,9.1,1.067712,0.308840,"ConvergenceError at eta=-0.47: Nonlinear solve failed to converge after 14 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL"
+r2_steric_a=0.40,0.4,500,3.5,0.3,30.0,1e-12,0.2,200,500,l2,0.0001,0.0000,0.6950,0,500,5.0,1.000000,0.200000,"ConvergenceError at eta=-0.09: Nonlinear solve failed to converge after 5 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL"
+r2_lam=0.1_a=0.1,0.1,500,3.5,0.1,30.0,1e-12,0.2,200,500,l2,0.0001,-16.2790,0.2767,175,500,300.4,0.070301,0.122931,Timeout (300s) at eta=-16.28
+r2_bt_a=0.1,0.1,500,3.5,0.5,50.0,1e-12,0.2,200,500,bt,0.0001,-0.1860,0.6902,2,500,8.1,1.000061,0.240688,"ConvergenceError at eta=-0.28: Nonlinear solve failed to converge after 62 nonlinear iterations.
+Reason:
+   DIVERGED_LINE_SEARCH"
+r2_floor=1e-6_a=0.1,0.1,500,3.5,0.3,50.0,1e-06,0.2,200,500,l2,0.0001,-6.8837,0.5181,74,500,301.8,0.195842,1.325707,Timeout (300s) at eta=-6.88
+r2_floor=1e-4_a=0.1,0.1,500,3.5,0.3,50.0,0.0001,0.2,200,500,l2,0.0001,-6.8837,0.5181,74,500,302.3,0.195842,1.325707,Timeout (300s) at eta=-6.88
+r2_steps=1000_a=0.1,0.1,500,3.5,0.3,50.0,1e-12,0.2,200,1000,l2,0.0001,-4.1860,0.5874,90,1000,303.5,0.461827,1.759026,Timeout (300s) at eta=-4.19
+r2_clip=15_a=0.1,0.1,500,3.5,0.3,15.0,1e-12,0.2,200,500,l2,0.0001,-6.7907,0.5205,73,500,300.3,0.200197,1.347553,Timeout (300s) at eta=-6.79
+r2_L=300um_a=0.1,0.1,500,3.5,0.3,30.0,1e-12,0.2,200,500,l2,0.0003,-6.1395,0.5373,66,500,300.3,0.203445,0.938715,Timeout (300s) at eta=-6.14

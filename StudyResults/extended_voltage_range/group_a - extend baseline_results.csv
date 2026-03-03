@@ -1,0 +1,4 @@
+label,group,steric_a,steric_a_vals,Ny_mesh,beta_mesh,lambda_max,exponent_clip,conc_floor,dt,max_ss_steps,eta_steps,linesearch_type,l_ref,eta_target,max_eta_hat,max_v_rhe,n_converged,n_attempted,elapsed_s,c_O2_final,c_HP_final,failure_mode
+baseline_extended,A,0.0,,300,3.0,0.5,50.0,1e-12,0.5,80,300,l2,0.0001,-65.9724,-65.9724,-1.0000,300,300,104.4,0.001514,0.000023,none (reached target)
+baseline_extended_lam02,A,0.0,,300,3.0,0.2,50.0,1e-12,0.5,80,300,l2,0.0001,-65.9724,-65.9724,-1.0000,300,300,68.1,0.001514,0.000023,none (reached target)
+baseline_extended_400steps,A,0.0,,300,3.0,0.5,50.0,1e-12,0.5,80,400,l2,0.0001,-65.9724,-65.9724,-1.0000,400,400,125.1,0.001514,0.000023,none (reached target)

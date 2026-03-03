@@ -1,0 +1,111 @@
+{
+  "baseline": {
+    "config": "baseline",
+    "wall_time_s": 134.1,
+    "success": false,
+    "k0_rel_error": [
+      1.1372110310477768,
+      9.401655134226134
+    ],
+    "alpha_rel_error": [
+      0.5241884272541744,
+      0.04244120195530421
+    ],
+    "best_k0": [
+      0.0026996349865866655,
+      0.0005474555333803228
+    ],
+    "best_alpha": [
+      0.2983338561116327,
+      0.4787793990223479
+    ],
+    "best_loss": 2.2315645918204525e-05,
+    "multifidelity_enabled": false,
+    "use_checkpoint_warmstart": false,
+    "optimizer_method": "L-BFGS-B"
+  },
+  "multifidelity_only": {
+    "config": "multifidelity_only",
+    "wall_time_s": 143.2,
+    "success": false,
+    "k0_rel_error": [
+      1.5595204064326675,
+      8.288772922921227
+    ],
+    "alpha_rel_error": [
+      0.6559570866010526,
+      0.36394907108247754
+    ],
+    "best_k0": [
+      0.003233078408125475,
+      0.0004888827854169067
+    ],
+    "best_alpha": [
+      0.21571490670114007,
+      0.6819745355412388
+    ],
+    "best_loss": 2.0370684941904057e-05,
+    "multifidelity_enabled": true,
+    "coarse_mesh_Nx": 4,
+    "coarse_mesh_Ny": 100,
+    "coarse_max_iters": 3,
+    "use_checkpoint_warmstart": false,
+    "optimizer_method": "L-BFGS-B"
+  },
+  "multifidelity_cached": {
+    "config": "multifidelity_cached",
+    "wall_time_s": 143.2,
+    "success": false,
+    "k0_rel_error": [
+      1.5595204064326675,
+      8.288772922921227
+    ],
+    "alpha_rel_error": [
+      0.6559570866010526,
+      0.36394907108247754
+    ],
+    "best_k0": [
+      0.003233078408125475,
+      0.0004888827854169067
+    ],
+    "best_alpha": [
+      0.21571490670114007,
+      0.6819745355412388
+    ],
+    "best_loss": 2.0370684941904057e-05,
+    "multifidelity_enabled": true,
+    "coarse_mesh_Nx": 4,
+    "coarse_mesh_Ny": 100,
+    "coarse_max_iters": 3,
+    "use_checkpoint_warmstart": true,
+    "optimizer_method": "L-BFGS-B"
+  },
+  "multifidelity_cached_gn": {
+    "config": "multifidelity_cached_gn",
+    "wall_time_s": 205.4,
+    "success": false,
+    "k0_rel_error": [
+      1.870425237331981,
+      1.3950380456708131
+    ],
+    "alpha_rel_error": [
+      0.6844889779869171,
+      0.8999966323400936
+    ],
+    "best_k0": [
+      0.003625800299787765,
+      0.0001260546339826744
+    ],
+    "best_alpha": [
+      0.197825410802203,
+      0.9499983161700468
+    ],
+    "best_loss": 1.6963269885346818e-05,
+    "multifidelity_enabled": true,
+    "coarse_mesh_Nx": 4,
+    "coarse_mesh_Ny": 100,
+    "coarse_max_iters": 3,
+    "use_checkpoint_warmstart": true,
+    "optimizer_method": "gauss_newton"
+  }
+}

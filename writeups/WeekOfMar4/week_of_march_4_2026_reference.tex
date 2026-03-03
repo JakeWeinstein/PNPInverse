@@ -1,0 +1,3418 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{siunitx}
+\usepackage{setspace}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{xcolor}
+\usepackage{multirow}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,decorations.pathreplacing}
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{gray!8},
+  columns=fullflexible,
+}
+\setlength{\parindent}{0pt}
+\sisetup{round-mode=places,round-precision=4}
+
+\title{PNPInverse Weekly Development Writeup\\Week of March 4, 2026}
+\author{Jake Weinstein}
+\date{\today}
+
+\begin{document}
+\onehalfspacing
+\maketitle
+
+\section*{Weekly Focus}
+
+This week's work builds on the completed Butler--Volmer (BV) forward solver
+and I--V curve sweep (Feb~25 writeup) by adding an \textbf{adjoint-gradient
+inference pipeline for recovering BV exchange rate constants~$k_0$ from
+current-density curves}.  The new pipeline mirrors the existing Robin-kappa
+inference architecture in \texttt{FluxCurve/} but is specialized for BV
+physics, including warm-start voltage continuation and current-density
+observables.  The implementation spans four phases: modifying the forward
+solver for adjoint compatibility, adding BV steady-state helpers, creating
+five new FluxCurve BV modules, and building a user-facing inference script.
+
+The pipeline was then \textbf{tested end-to-end}, uncovering and fixing
+three bugs (mixed-function warm-start, sign convention mismatch, and the
+need for log-space optimization).  With these fixes, L-BFGS-B recovers
+both $k_{0,1}$ and $k_{0,2}$ to $<3\%$ error from a $10\times$-wrong
+initial guess in 6 iterations.  A \textbf{noise sensitivity study} at
+0/2/5/10\% noise (10 total runs) confirmed that both parameters are
+identifiable with errors scaling approximately linearly with noise level.
+
+We then extended the pipeline to the \textbf{full 4-species charged system}
+(O$_2$, H$_2$O$_2$, H$^+$, ClO$_4^-$), revealing $k_{0,2}$
+identifiability limitations from total current density.  Next, we
+implemented \textbf{transfer coefficient ($\alpha$) inference}---making
+$\alpha$ adjoint-compatible via \texttt{fd.Function(R\_space)} and adding
+\texttt{control\_mode} support throughout the pipeline.  Alpha inference
+recovers both $\alpha_1$ and $\alpha_2$ to $<0.5\%$ error.  Finally,
+\textbf{joint $(k_0, \alpha)$ inference} with a 4-element control vector
+achieves $<2.5\%$ error on $\alpha$ and ${\sim}20\%$ on $k_0$ (reflecting
+$k_0$--$\alpha$ correlation).
+
+
+%% ============================================================
+\section*{1. Motivation}
+%% ============================================================
+
+The existing \texttt{FluxCurve/} pipeline can recover Robin boundary
+transfer coefficients~$\kappa$ from steady-state flux curves using
+firedrake-adjoint and L-BFGS-B.  The BV forward solver
+(\texttt{Forward/bv\_solver.py}) generates physically realistic I--V curves
+with coupled electrochemical reactions, but until now there was no way to
+\emph{infer} the kinetic parameters from data.
+
+The exchange rate constant~$k_0$ is the most natural first target for
+inference:
+\begin{itemize}
+  \item $k_0$ scales the BV reaction rate linearly ($R_j = k_{0,j} \cdot [\ldots]$),
+        making the objective landscape well-behaved---directly analogous to
+        Robin~$\kappa$.
+  \item $k_0$ is the primary fitting parameter in Tafel analysis and the most
+        experimentally relevant BV parameter for characterizing catalyst activity.
+  \item For the 2-species model (O$_2 \to$ H$_2$O$_2$, H$_2$O$_2 \to$ H$_2$O),
+        we infer $[k_{0,1}, k_{0,2}]$---a 2-element control vector identical in
+        structure to Robin~$[\kappa_0, \kappa_1]$.
+\end{itemize}
+
+The transfer coefficient~$\alpha$ (which controls I--V curve shape rather
+than amplitude) has a more nonlinear landscape and is planned as a follow-up.
+
+
+%% ============================================================
+\section*{2. Phase 1: Adjoint-Compatible $k_0$ in the Forward Solver}
+%% ============================================================
+
+\subsection*{2.1 Problem}
+
+Firedrake-adjoint's \texttt{adj.Control()} requires \texttt{fd.Function}
+objects on the adjoint tape.  The BV forward solver previously stored $k_0$
+values as \texttt{fd.Constant}, which are invisible to the tape and cannot
+serve as optimization controls.
+
+\subsection*{2.2 Solution}
+
+In \texttt{Forward/bv\_solver.py}, function \texttt{build\_forms()}, we
+changed $k_0$ from \texttt{fd.Constant} to \texttt{fd.Function(R\_space)}
+(a single-DOF ``Real'' function space) in both code paths:
+
+\begin{itemize}
+  \item \textbf{Multi-reaction path} (lines 608--611): Each reaction's
+        $k_{0,j}$ is now
+        \texttt{fd.Function(R\_space, name=f"bv\_k0\_rxn\{j\}")}, assigned
+        via \texttt{.assign(float(rxn["k0\_model"]))}.
+  \item \textbf{Legacy per-species path} (lines 646--651): Same pattern
+        with \texttt{name=f"bv\_k0\_sp\{i\}"}.
+\end{itemize}
+
+All $k_0$ functions are accumulated into a list \texttt{bv\_k0\_funcs} and
+stored in the context dict alongside the existing \texttt{bv\_rate\_exprs}.
+This is safe because \texttt{fd.Function(R\_space)} with one DOF behaves
+identically to \texttt{fd.Constant} in UFL expressions.  The Robin solver
+uses the same pattern with \texttt{kappa\_funcs}.
+
+\subsection*{2.3 Verification}
+
+A quick functional test confirmed:
+\begin{itemize}
+  \item \texttt{bv\_k0\_funcs} has 2 entries, both \texttt{fd.Function}
+        with correct values ($\hat{k}_{0,1} \approx 0.00114$,
+        $\hat{k}_{0,2} \approx 4.76 \times 10^{-5}$).
+  \item The SNES solver converges in 3 time steps at $\hat\eta = -5$.
+  \item Assembled reaction rates $R_0$, $R_1$ match pre-modification values.
+\end{itemize}
+
+
+%% ============================================================
+\section*{3. Phase 2: BV Steady-State Helpers}
+%% ============================================================
+
+Five new functions were added to \texttt{Forward/steady\_state.py},
+following the existing Robin helper patterns:
+
+\begin{enumerate}
+  \item \texttt{configure\_bv\_solver\_params(base, phi\_applied, k0\_values)}
+        --- deep-copies the parameter list, sets \texttt{params[7]} and
+        \texttt{params[9]} to the applied voltage, and injects $k_0$ values
+        into the \texttt{bv\_bc} config (both multi-reaction
+        \texttt{reactions[j].k0} and legacy \texttt{bv\_bc.k0} paths).
+
+  \item \texttt{compute\_bv\_reaction\_rates(ctx)} --- assembles
+        $\int R_j \, ds(\text{electrode})$ for each reaction expression in
+        \texttt{ctx["bv\_rate\_exprs"]}.  Returns a list of dimensionless
+        rates.
+
+  \item \texttt{compute\_bv\_current\_density(ctx, i\_scale)} --- calls
+        \texttt{compute\_bv\_reaction\_rates} and converts to current
+        density: $I = -(\sum_j R_j) \cdot \texttt{i\_scale}$.
+
+  \item \texttt{solve\_bv\_to\_steady\_state\_for\_phi\_applied(...)} ---
+        single-point BV forward solve with current-density-based
+        steady-state detection.  Returns a \texttt{SteadyStateResult} with
+        \texttt{observed\_flux} in current-density units.
+
+  \item \texttt{sweep\_phi\_applied\_steady\_bv\_flux(...)} --- builds the
+        BV context once and sweeps $\hat\eta$ values sequentially with
+        \textbf{warm-start continuation}: each point's converged solution
+        is carried forward as the IC for the next point.  This is essential
+        for BV convergence at large overpotentials (see \S3.5 of the
+        Feb~25 writeup).
+\end{enumerate}
+
+\subsection*{3.1 Warm-start sweep test}
+
+A 3-point sweep at $\hat\eta \in \{-2, -5, -10\}$ confirmed all points
+converge with physically reasonable current densities:
+
+\begin{center}
+\begin{tabular}{rrrr}
+\toprule
+$\hat\eta$ & $I$ (mA/cm$^2$) & Converged & Steps \\
+\midrule
+$-2.0$  & $-0.0007$ & Yes & 6 \\
+$-5.0$  & $-0.0052$ & Yes & 8 \\
+$-10.0$ & $-0.0919$ & Yes & 11 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+%% ============================================================
+\section*{4. Phase 3: FluxCurve BV Modules}
+%% ============================================================
+
+Rather than refactoring the Robin-specific FluxCurve modules (which could
+break the working pipeline), we created \textbf{five parallel BV-specific
+modules} that reuse the solver-agnostic infrastructure
+(\texttt{recovery.py}, \texttt{results.py}, \texttt{plot.py}).
+
+\subsection*{4.1 \texttt{FluxCurve/bv\_config.py}}
+
+Defines \texttt{BVFluxCurveInferenceRequest}, mirroring
+\texttt{RobinFluxCurveInferenceRequest} with BV-specific fields:
+\begin{itemize}
+  \item \texttt{true\_k0} / \texttt{initial\_guess} instead of
+        \texttt{true\_value}
+  \item \texttt{k0\_lower} / \texttt{k0\_upper} bounds
+  \item \texttt{current\_density\_scale}: conversion factor from
+        dimensionless BV rate to physical current density
+  \item \texttt{mesh\_Nx}, \texttt{mesh\_Ny}, \texttt{mesh\_beta}: graded
+        rectangle mesh parameters
+  \item \texttt{observable\_mode}: \texttt{"current\_density"} (default),
+        \texttt{"peroxide\_current"}, or \texttt{"reaction"}
+\end{itemize}
+
+\subsection*{4.2 \texttt{FluxCurve/bv\_observables.py}}
+
+Builds scalar UFL observable forms from BV reaction rate expressions:
+\begin{itemize}
+  \item \texttt{\_build\_bv\_observable\_form(ctx, mode, reaction\_index,
+        scale)} constructs:
+    \begin{itemize}
+      \item \texttt{"current\_density"}: $\texttt{scale} \cdot \sum_j R_j
+            \cdot ds(\text{electrode})$
+      \item \texttt{"peroxide\_current"}: $\texttt{scale} \cdot (R_0 - R_1)
+            \cdot ds(\text{electrode})$
+      \item \texttt{"reaction"}: $\texttt{scale} \cdot R_j \cdot
+            ds(\text{electrode})$
+    \end{itemize}
+  \item The \texttt{scale} parameter is an \texttt{fd.Constant} wrapping
+        \texttt{i\_scale} and sign, so the full current-density observable
+        is on the adjoint tape.
+  \item \texttt{\_build\_bv\_scalar\_target\_in\_control\_space} and
+        \texttt{\_bv\_gradient\_controls\_to\_array} mirror the Robin
+        versions but use \texttt{ctx["bv\_k0\_funcs"]} instead of
+        \texttt{ctx["kappa\_funcs"]}.
+\end{itemize}
+
+\subsection*{4.3 \texttt{FluxCurve/bv\_point\_solve.py}}
+
+The key architectural difference from the Robin pipeline:
+
+\begin{quote}
+\textbf{Robin:} Each $\phi_\text{applied}$ point is solved independently
+(optionally in parallel via \texttt{ProcessPoolExecutor}), starting from a
+cold IC.
+
+\textbf{BV:} Points are solved \textbf{sequentially} with warm-start
+continuation---sorted by $|\hat\eta|$, each point's converged solution
+carried forward as the IC for the next.  This is essential because BV
+solves at large overpotentials are fragile from cold starts.
+\end{quote}
+
+The function \texttt{solve\_bv\_curve\_points\_with\_warmstart} implements
+this:
+\begin{enumerate}
+  \item Sort $\phi_\text{applied}$ points by $|\hat\eta|$
+  \item For each point (in voltage order):
+    \begin{enumerate}
+      \item Clear adjoint tape, enable annotation
+      \item Build fresh context + forms (for clean tape)
+      \item Restore last converged $U$ data as IC (warm-start)
+      \item Assign current $k_0$ values to \texttt{bv\_k0\_funcs}
+      \item Time-step to steady state (annotated)
+      \item Assemble observable, compute
+            $J = \tfrac{1}{2}(I_\text{sim} - I_\text{target})^2$
+      \item Compute adjoint gradient via
+            \texttt{ReducedFunctional.derivative()}
+      \item Store result; snapshot $U$ for next point's warm-start
+    \end{enumerate}
+  \item Return results in original (unsorted) order
+\end{enumerate}
+
+Per-point recovery uses the same staged phases as Robin
+(\texttt{recovery.py}): increase \texttt{snes\_max\_it}, anisotropy
+reduction, tolerance relaxation.
+
+\subsection*{4.4 \texttt{FluxCurve/bv\_curve\_eval.py}}
+
+\texttt{evaluate\_bv\_curve\_objective\_and\_gradient} calls the warm-start
+point solver and aggregates:
+\begin{itemize}
+  \item Total objective $= \sum_i J_i$ (only converged points)
+  \item Total gradient $= \sum_i \nabla_{k_0} J_i$ (only converged points)
+  \item Failed points get penalty objective and zero gradient
+  \item Anisotropy recovery fallback if many points fail
+\end{itemize}
+
+\subsection*{4.5 \texttt{FluxCurve/bv\_run.py}}
+
+Top-level orchestration:
+\begin{itemize}
+  \item \texttt{ensure\_bv\_target\_curve}: generates synthetic BV target
+        I--V curve via \texttt{sweep\_phi\_applied\_steady\_bv\_flux} with
+        true~$k_0$, adds Gaussian noise
+  \item \texttt{run\_scipy\_bv\_adjoint\_optimization}: SciPy L-BFGS-B
+        loop with cached evaluations (kappa-keyed at 12-digit precision),
+        live plotting, CSV history logging
+  \item \texttt{run\_bv\_k0\_flux\_curve\_inference}: top-level entry point
+        that builds the graded mesh, generates/loads target data, runs
+        optimization, saves outputs (CSV, PNG, optional GIF)
+\end{itemize}
+
+Reuses solver-agnostic utilities: \texttt{clip\_kappa},
+\texttt{\_LiveFitPlot}, \texttt{add\_percent\_noise},
+\texttt{write\_phi\_applied\_flux\_csv}.
+
+\subsection*{4.6 \texttt{FluxCurve/\_\_init\_\_.py}}
+
+Added two new public exports:
+\begin{lstlisting}
+from FluxCurve import BVFluxCurveInferenceRequest
+from FluxCurve import run_bv_k0_flux_curve_inference
+\end{lstlisting}
+
+
+%% ============================================================
+\section*{5. Phase 4: Inference Script}
+%% ============================================================
+
+\texttt{scripts/inference/Infer\_BVk0\_from\_current\_density\_curve.py}
+is the user-facing entry point, following the pattern of the Robin
+inference script.
+
+\subsection*{5.1 Physical setup}
+
+\begin{itemize}
+  \item 2-species neutral model: O$_2$ ($D = \SI{2.1e-9}{m^2/s}$) and
+        H$_2$O$_2$ ($D = \SI{1.6e-9}{m^2/s}$), $z = [0, 0]$
+  \item $c_\text{bulk} = \SI{0.5}{mol/m^3}$,
+        $L_\text{ref} = \SI{100}{\micro m}$
+  \item R$_1$: $k_{0,1} = \SI{2.4e-8}{m/s}$, $\alpha_1 = 0.627$
+        (reversible O$_2 \to$ H$_2$O$_2$)
+  \item R$_2$: $k_{0,2} = \SI{1e-9}{m/s}$, $\alpha_2 = 0.5$
+        (irreversible H$_2$O$_2 \to$ H$_2$O)
+\end{itemize}
+
+\subsection*{5.2 Mesh and boundary markers}
+
+Uses \texttt{make\_graded\_rectangle\_mesh(Nx=4, Ny=200, beta=3.0)}---a
+power-law graded 2D mesh that clusters nodes near the electrode at $y=0$.
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Marker & Boundary \\
+\midrule
+3 & Bottom ($y=0$): electrode (BV BC + Dirichlet $\phi$) \\
+4 & Top ($y=1$): bulk (Dirichlet $c_i$, ground $\phi = 0$) \\
+1, 2 & Left/Right: zero-flux (natural BC) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Note: these markers differ from \texttt{bv\_iv\_curve.py} which uses
+\texttt{UnitSquareMesh(32,32)} with electrode at marker~1 and bulk at
+marker~3.
+
+\subsection*{5.3 All 7 convergence strategies}
+
+\begin{enumerate}
+  \item Voltage continuation with warm-start (sweep $\hat\eta$ from 0 to
+        target, reuse previous solution)
+  \item Inner time-stepping / pseudo-transient continuation (BDF-1 until
+        L2 change $<$ tol)
+  \item Exponent clipping at $\pm 50$
+  \item Concentration floor $\varepsilon_c = 10^{-12}$
+  \item Dirichlet-decoupled BV exponent (\texttt{use\_eta\_in\_bv = True})
+  \item L2 linesearch with $\lambda_\text{max} = 0.5$
+  \item MUMPS direct solver with auto-scaling
+        (\texttt{icntl\_8 = 77}, \texttt{icntl\_14 = 80})
+\end{enumerate}
+
+\subsection*{5.4 Optimizer configuration}
+
+\begin{itemize}
+  \item 15-point sweep: $\hat\eta$ from $-1$ to $-20$ (in thermal voltage
+        units)
+  \item Observable: total current density
+        $I = -(\sum_j R_j) \cdot I_\text{scale}$ in mA/cm$^2$
+  \item $I_\text{scale} = n_e F D_\text{ref} c_\text{bulk} / L_\text{ref}
+        \times 0.1 \approx \SI{0.1013}{mA/cm^2}$
+  \item True $k_0$: $[\hat{k}_{0,1}, \hat{k}_{0,2}]$ (known ground truth)
+  \item Initial guess: $[5.0, 5.0]$ (deliberately wrong)
+  \item Method: L-BFGS-B with box bounds $[10^{-8}, 100]$
+  \item Up to 30 iterations, \texttt{gtol} $= 10^{-6}$
+  \item Output: \texttt{StudyResults/bv\_k0\_inference/}
+\end{itemize}
+
+
+%% ============================================================
+\section*{6. Architecture Comparison: Robin vs.\ BV Inference}
+%% ============================================================
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Aspect & Robin Pipeline & BV Pipeline \\
+\midrule
+Control vector & $[\kappa_0, \kappa_1]$ & $[k_{0,1}, k_{0,2}]$ \\
+Control type & \texttt{fd.Function(R)} & \texttt{fd.Function(R)} \\
+Observable & species flux $\kappa(c - c_\infty)$ & current density $-\sum R_j \cdot I_\text{scale}$ \\
+Point solves & Independent (parallelizable) & Sequential (warm-start) \\
+Mesh & \texttt{UnitSquareMesh} & Graded rectangle \\
+Replay mode & Disabled (planned) & Not implemented \\
+Parallel workers & \texttt{ProcessPoolExecutor} & Not needed \\
+Recovery & Staged (max-it/anisotropy/tol) & Same via \texttt{recovery.py} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+%% ============================================================
+\section*{7. Key Design Decisions}
+%% ============================================================
+
+\begin{enumerate}
+  \item \textbf{Parallel modules, not refactored abstractions.}  The Robin
+        FluxCurve modules have hardcoded imports to
+        \texttt{robin\_solver.build\_context}, \texttt{kappa\_funcs}, etc.
+        Rather than introducing a solver-agnostic abstraction layer (risky,
+        could break the working Robin pipeline), we created parallel
+        BV-specific modules (\texttt{bv\_config.py},
+        \texttt{bv\_observables.py}, \texttt{bv\_point\_solve.py},
+        \texttt{bv\_curve\_eval.py}, \texttt{bv\_run.py}) that reuse only
+        the genuinely solver-agnostic utilities (\texttt{recovery.py},
+        \texttt{results.py}, \texttt{plot.py}).
+
+  \item \textbf{Sequential warm-start, not parallel points.}  The Robin
+        pipeline can solve each $\phi_\text{applied}$ point independently
+        because Robin boundary conditions are mild.  BV solves at large
+        $|\hat\eta|$ require careful voltage continuation from equilibrium.
+        Trading parallelism for convergence robustness is essential.
+
+  \item \textbf{No replay mode.}  Replay (caching ReducedFunctionals across
+        $k_0$ updates) was disabled in the Robin pipeline due to invalid
+        non-steady evaluations.  We skip it entirely for BV.
+
+  \item \textbf{Current density as the observable.}  The optimizer works
+        directly in mA/cm$^2$ units for both target and simulated curves.
+        The conversion factor (\texttt{i\_scale}) is passed as an
+        \texttt{fd.Constant} in the UFL form so the adjoint tape sees the
+        full chain from $k_0$ to current density.
+\end{enumerate}
+
+
+%% ============================================================
+\section*{8. End-to-End Test}
+%% ============================================================
+
+Running \texttt{Infer\_BVk0\_from\_current\_density\_curve.py} in the
+Firedrake environment uncovered three bugs that were fixed before the
+pipeline converged successfully.
+
+\subsection*{8.1 Bug 1: Mixed function data handling for warm-start}
+
+\textbf{Symptom:} \texttt{AttributeError: 'tuple' object has no attribute
+'copy'} at \texttt{bv\_point\_solve.py:230}.
+
+\textbf{Cause:} For a \texttt{MixedFunctionSpace} (2 species + potential),
+\texttt{U.dat.data\_ro} returns a tuple of arrays (one per subfunction),
+not a single array.  The warm-start snapshot code assumed a single array.
+
+\textbf{Fix:} Changed the snapshot/restore operations:
+\begin{lstlisting}
+# Snapshot (line 230):
+carry_U_data = tuple(d.data_ro.copy() for d in U.dat)
+
+# Restore (line 135):
+for src, dst in zip(carry_U_data, ctx["U"].dat):
+    dst.data[:] = src
+\end{lstlisting}
+
+\subsection*{8.2 Bug 2: Sign mismatch between target and observable}
+
+\textbf{Symptom:} Optimizer converges to wrong answer.  Inspection
+revealed that the target I--V curve had opposite sign to the simulated
+observable at each voltage point.
+
+\textbf{Cause:} Two independent sign conventions collided:
+\begin{itemize}
+  \item \texttt{compute\_bv\_current\_density} computes
+        $I = -(\sum_j R_j) \cdot \texttt{i\_scale}$ (built-in negation
+        for cathodic convention).
+  \item \texttt{\_build\_bv\_observable\_form} computes
+        $\texttt{scale} \cdot \sum_j R_j \cdot ds$ (no built-in negation).
+\end{itemize}
+When both receive \texttt{scale = $-I_\text{scale}$}, the target becomes
+positive (double negation: $-(-) = +$) while the simulated observable is
+negative ($(-I_\text{scale}) \cdot R > 0$ for cathodic $R < 0$, but the
+net sign depends on which function applies the negation).
+
+\textbf{Fix:} In \texttt{ensure\_bv\_target\_curve}, pass
+\texttt{i\_scale = $-$current\_density\_scale} to the sweep function,
+canceling the built-in negation in \texttt{compute\_bv\_current\_density}
+so that both target and observable use the same sign convention.
+
+\subsection*{8.3 Bug 3: Log-space optimization}
+
+\textbf{Symptom:} With the sign bug fixed, the optimizer reports
+``CONVERGENCE'' but produces $k_{0,1}$ with 91\% error and $k_{0,2}$
+with $48{,}000\times$ error.  SciPy found a local minimum, not the
+global one.
+
+\textbf{Cause:} The true values ($\hat{k}_{0,1} \approx 0.00114$,
+$\hat{k}_{0,2} \approx 4.76 \times 10^{-5}$) span two orders of
+magnitude, and the initial guess $[5.0, 5.0]$ is ${\sim}4{,}400\times$
+too high for $k_{0,1}$ and ${\sim}100{,}000\times$ too high for
+$k_{0,2}$.  L-BFGS-B in linear space cannot efficiently traverse this
+scale gap because:
+\begin{itemize}
+  \item A single L-BFGS-B step in $k_0$-space produces additive updates
+        $\Delta k_0$, which cannot reduce a parameter by orders of
+        magnitude without many iterations.
+  \item The Hessian approximation becomes ill-conditioned when control
+        variables differ by $10^4\times$.
+\end{itemize}
+
+\textbf{Fix:} Implemented \textbf{log-space optimization}.  The optimizer
+works in $x = \log_{10}(k_0)$ space, with the gradient transformed via
+the chain rule:
+\begin{equation}
+  \frac{\partial J}{\partial x_j}
+  = \frac{\partial J}{\partial k_{0,j}} \cdot k_{0,j} \cdot \ln 10
+\end{equation}
+This makes multiplicative updates natural: a step $\Delta x = 1$
+corresponds to a $10\times$ change in $k_0$.  Added to
+\texttt{BVFluxCurveInferenceRequest} as \texttt{log\_space: bool = True}
+(default).  The initial guess was also changed from $[5.0, 5.0]$ to
+$[0.01, 0.001]$ (${\sim}10\times$ too high, within 1--2 orders of
+magnitude).
+
+\subsection*{8.4 Converged result}
+
+With all three fixes applied, the optimizer converges in \textbf{6
+L-BFGS-B iterations} (7 function evaluations), all 15 voltage points
+converging at every evaluation.  Synthetic data generated with 2\% noise
+($\sigma = 0.02 \times \mathrm{RMS}$, seed 20260226).
+
+Figure~\ref{fig:target-data} shows the synthetic target I--V curve
+(clean and noisy), and Figure~\ref{fig:target-vs-fit} compares the
+target data, initial guess, and optimized fit.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{target_data.png}
+  \caption{Synthetic BV target I--V curve.  Black line: clean
+    simulation with true $k_0$ values; blue circles: noisy target
+    data (2\% Gaussian noise on RMS).  The curve shows the
+    characteristic Butler--Volmer shape: near-zero current at small
+    overpotentials, transitioning to a diffusion-limited plateau
+    at large cathodic overpotentials.}
+  \label{fig:target-data}
+\end{figure}
+
+\begin{center}
+\begin{tabular}{lSSS}
+\toprule
+Parameter & {True (m/s)} & {Estimated (m/s)} & {Relative Error} \\
+\midrule
+$k_{0,1}$ (O$_2 \to$ H$_2$O$_2$)
+  & 2.4000e-8 & 2.3301e-8 & 0.0291 \\
+$k_{0,2}$ (H$_2$O$_2 \to$ H$_2$O)
+  & 1.0000e-9 & 9.8803e-10 & 0.0120 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The objective decreased from $7.10 \times 10^{-2}$ (initial) to
+$7.18 \times 10^{-5}$ (final), a ${\sim}1000\times$ reduction.
+The gradient norm fell to $5.2 \times 10^{-7}$, well below
+\texttt{gtol}~$= 10^{-6}$.
+
+\begin{center}
+\begin{tabular}{rSSrr}
+\toprule
+{Eval} & {Objective} & {$\|\nabla J\|$} & {$\hat{k}_{0,1}$} & {$\hat{k}_{0,2}$} \\
+\midrule
+1 & 7.103e-2 & 8.743e-2 & 0.01000 & 0.00100 \\
+2 & 6.359e-2 & 8.287e-2 & 0.00894 & 0.00085 \\
+3 & 1.174e-4 & 2.053e-3 & 0.00103 & 4.37e-5 \\
+4 & 7.286e-5 & 2.738e-4 & 0.00111 & 4.62e-5 \\
+5 & 7.190e-5 & 6.638e-5 & 0.00111 & 4.69e-5 \\
+6 & 7.185e-5 & 1.004e-5 & 0.00111 & 4.71e-5 \\
+7 & 7.184e-5 & 5.247e-7 & 0.00111 & 4.70e-5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The large jump between evaluations 2 and 3 (objective drops by
+$500\times$) corresponds to the optimizer finding the correct basin of
+attraction in log-space.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\textwidth]{target_vs_initial_vs_fit.png}
+  \caption{BV $k_0$ inference result.  Blue circles: noisy target
+    data (2\% noise).  Red dashed: initial guess ($\hat{k}_0 =
+    [0.01, 0.001]$, ${\sim}10\times$ too high), which overshoots the
+    target at large overpotentials.  Green solid: optimized L-BFGS-B
+    fit ($k_{0,1} = \SI{2.33e-8}{m/s}$, $k_{0,2} =
+    \SI{9.88e-10}{m/s}$), closely tracking the target across the
+    full voltage range.  A convergence animation is available as a
+    supplementary GIF
+    (\texttt{StudyResults/bv\_k0\_inference/bv\_k0\_convergence.gif}).}
+  \label{fig:target-vs-fit}
+\end{figure}
+
+
+%% ============================================================
+\section*{9. Noise Sensitivity Study}
+%% ============================================================
+
+\subsection*{9.1 Motivation}
+
+The end-to-end test (Section~8) demonstrated that the pipeline can
+recover both $k_{0,1}$ and $k_{0,2}$ from data with 2\% noise.  A
+natural follow-up question is: \emph{how does recovery accuracy degrade
+as noise increases?}  This is important for two reasons:
+\begin{enumerate}
+  \item \textbf{Identifiability:} If one parameter's error grows much
+        faster than the other's, it indicates a structural sensitivity
+        difference---one parameter may be poorly identifiable from
+        current-density data alone.
+  \item \textbf{Experimental design:} Understanding the noise--error
+        relationship sets expectations for what measurement precision is
+        needed to achieve a target accuracy on $k_0$.
+\end{enumerate}
+
+\subsection*{9.2 Methods}
+
+The study script
+\texttt{scripts/studies/bv\_k0\_noise\_sensitivity.py} tests 4 noise
+levels: $\{0, 2, 5, 10\}\%$.  At each nonzero noise level, 3
+independent random seeds are used (seeds 20260304, 20261304, 20262304);
+the 0\% level uses a single run (noise-free data is deterministic).
+This yields $1 + 3 \times 3 = 10$ total optimization runs.
+
+Each run uses the same configuration as the end-to-end test:
+\begin{itemize}
+  \item 15-point sweep: $\hat\eta \in [-1, -20]$
+  \item Log-space optimization with initial guess
+        $[0.01, 0.001]$ (${\sim}10\times$ too high)
+  \item L-BFGS-B with up to 50 iterations, \texttt{gtol}~$= 10^{-6}$
+  \item Noise model: Gaussian with
+        $\sigma = (\text{noise\%}/100) \times \mathrm{RMS}(\text{clean curve})$
+  \item Live plotting disabled; forward recovery enabled
+\end{itemize}
+
+\subsection*{9.3 Results}
+
+All 10 runs completed.  9 of 10 reported SciPy optimization success;
+one run (5\% noise, seed 20260304) returned ABNORMAL status but still
+produced reasonable estimates (18\% and 11\% error).
+
+\subsubsection*{Per-run results}
+
+\begin{center}
+\small
+\begin{tabular}{rrSSSSr}
+\toprule
+{Noise (\%)} & {Seed} &
+  {$k_{0,1}$ est (m/s)} & {$k_{0,1}$ err} &
+  {$k_{0,2}$ est (m/s)} & {$k_{0,2}$ err} &
+  {Time (s)} \\
+\midrule
+0  & 20260304 & 2.402e-8  & 0.0007 & 1.000e-9  & 0.0003 & 118 \\
+\midrule
+2  & 20260304 & 2.560e-8  & 0.0666 & 9.548e-10 & 0.0452 &  46 \\
+2  & 20261304 & 2.394e-8  & 0.0026 & 1.010e-9  & 0.0097 &  46 \\
+2  & 20262304 & 2.412e-8  & 0.0051 & 9.667e-10 & 0.0333 & 109 \\
+\midrule
+5  & 20260304 & 2.832e-8  & 0.1800 & 8.889e-10 & 0.1111 & 154 \\
+5  & 20261304 & 2.385e-8  & 0.0063 & 1.024e-9  & 0.0241 &  46 \\
+5  & 20262304 & 2.431e-8  & 0.0131 & 9.187e-10 & 0.0813 &  40 \\
+\midrule
+10 & 20260304 & 3.381e-8  & 0.4088 & 7.838e-10 & 0.2162 &  47 \\
+10 & 20261304 & 2.369e-8  & 0.0130 & 1.048e-9  & 0.0481 &  47 \\
+10 & 20262304 & 2.462e-8  & 0.0259 & 8.451e-10 & 0.1549 &  47 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection*{Aggregate statistics}
+
+\begin{center}
+\begin{tabular}{rSSSS}
+\toprule
+{Noise (\%)} &
+  {$k_{0,1}$ err (mean)} & {$k_{0,1}$ err (std)} &
+  {$k_{0,2}$ err (mean)} & {$k_{0,2}$ err (std)} \\
+\midrule
+ 0 & 0.0007 & 0.0000 & 0.0003 & 0.0000 \\
+ 2 & 0.0248 & 0.0296 & 0.0294 & 0.0147 \\
+ 5 & 0.0665 & 0.0803 & 0.0722 & 0.0361 \\
+10 & 0.1492 & 0.1836 & 0.1397 & 0.0695 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{noise_sensitivity_plot.png}
+  \caption{Noise sensitivity of BV $k_0$ inference.  Each dot
+    represents one optimization run (3~seeds per nonzero noise
+    level); the dashed line connects the mean error at each noise
+    level.  Left: $k_{0,1}$ (O$_2 \to$ H$_2$O$_2$).  Right:
+    $k_{0,2}$ (H$_2$O$_2 \to$ H$_2$O).  Both parameters show
+    similar error scaling, with mean relative error growing
+    approximately linearly with noise percentage.}
+  \label{fig:noise-sensitivity}
+\end{figure}
+
+\subsection*{9.4 Discussion}
+
+\begin{enumerate}
+  \item \textbf{Both parameters are identifiable.}  At 0\% noise, both
+        $k_{0,1}$ and $k_{0,2}$ are recovered to $<0.1\%$ error,
+        confirming that the adjoint-gradient pipeline and log-space
+        optimizer correctly find the global minimum.
+
+  \item \textbf{Similar sensitivity.}  The mean errors for $k_{0,1}$
+        and $k_{0,2}$ are comparable at each noise level (e.g., 2.5\%
+        vs.\ 2.9\% at 2\% noise; 14.9\% vs.\ 14.0\% at 10\% noise).
+        Neither parameter is dramatically harder to identify than the
+        other from total current-density data.
+
+  \item \textbf{Approximately linear scaling.}  Mean relative error
+        scales roughly linearly with noise level: ${\sim}1.3\times$
+        the noise percentage for $k_{0,1}$ and ${\sim}1.4\times$ for
+        $k_{0,2}$.  This is characteristic of a well-conditioned
+        inverse problem.
+
+  \item \textbf{Seed-to-seed variability.}  The standard deviation
+        across seeds is comparable to the mean error, reflecting the
+        fact that specific noise realizations can make one seed much
+        harder than another (e.g., the 10\%/seed~20260304 run has
+        $k_{0,1}$ error of 41\%, while the other two seeds have
+        $<3\%$).  This high variance motivates using multiple seeds
+        in practical studies.
+
+  \item \textbf{Runtime.}  Most runs complete in 40--50 seconds
+        (6--7 L-BFGS-B iterations).  The occasional outlier
+        ($>100$~s) corresponds to runs where the optimizer needs
+        more iterations to navigate a noisier landscape.
+\end{enumerate}
+
+Outputs are saved to
+\texttt{StudyResults/bv\_k0\_noise\_sensitivity/}, including per-run
+subdirectories, a summary CSV
+(\texttt{noise\_sensitivity\_summary.csv}), and an aggregate plot
+(\texttt{noise\_sensitivity\_plot.png}).
+
+
+%% ============================================================
+\section*{10. Charged 4-Species $k_0$ Inference}
+%% ============================================================
+
+\subsection*{10.1 Motivation}
+
+The end-to-end test in Section~8 used a \textbf{2-species neutral} system
+(O$_2$, H$_2$O$_2$, $z = [0,0]$) which avoids Poisson coupling entirely.
+To validate that the pipeline works for the \textbf{full 4-species charged}
+system---including the electric double layer (EDL) and Poisson equation---we
+created a new inference script targeting the charged electrolyte setup from
+\texttt{bv\_iv\_curve\_charged.py}.
+
+\subsection*{10.2 Physical setup}
+
+\begin{center}
+\begin{tabular}{llSSl}
+\toprule
+Species & Role & {$D$ (m$^2$/s)} & {$c_\text{bulk}$ (mol/m$^3$)} & $z$ \\
+\midrule
+O$_2$     & Reactant      & 1.9e-9  & 0.5  & 0  \\
+H$_2$O$_2$ & Product     & 1.6e-9  & 0.0  & 0  \\
+H$^+$     & Supporting    & 9.311e-9 & 0.1 & +1 \\
+ClO$_4^-$ & Supporting    & 1.792e-9 & 0.1 & $-1$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Key differences from the 2-species system:
+\begin{itemize}
+  \item Poisson equation is coupled ($z \neq 0$ for H$^+$/ClO$_4^-$)
+  \item Cathodic concentration factors: both reactions consume
+        $[\text{H}^+]^2$ at the electrode
+  \item Stoichiometry: $[-1, +1, -2, 0]$ for R$_1$, $[0, -1, -2, 0]$
+        for R$_2$
+  \item $D_\text{ref} = \SI{1.9e-9}{m^2/s}$, $K_\text{scale} =
+        D_\text{ref}/L_\text{ref} = \SI{1.9e-5}{m/s}$
+  \item $I_\text{scale} = n_e F D_\text{ref} c_\text{bulk} / L_\text{ref}
+        \times 0.1 \approx \SI{0.1833}{mA/cm^2}$
+\end{itemize}
+
+\subsection*{10.3 Mesh and solver}
+
+\begin{itemize}
+  \item Mesh: \texttt{make\_graded\_rectangle\_mesh(Nx=4, Ny=200, beta=3.0)}
+  \item \texttt{snes\_max\_it = 300} (charged system is stiffer)
+  \item 10-point sweep: $\hat\eta \in [-1, -10]$ (reduced range vs.\ neutral
+        to avoid Debye-layer convergence issues at extreme overpotentials)
+\end{itemize}
+
+\subsection*{10.4 Results (updated with $a = 0.01$ Bikerman steric)}
+
+The original charged $k_0$ run used $a = 0$ (no steric exclusion).  The run
+was repeated with $a = 0.01$ for all four species, matching the Bikerman
+steric parameter used in the neutral scripts and the new charged $\alpha$ and
+joint runs below.
+
+Initial guess: $[0.003, 0.0001]$.
+True values: $\hat{k}_{0,1} = 0.001263$, $\hat{k}_{0,2} = 5.263 \times 10^{-5}$.
+13 evaluations, 12 iterations, 0 failures.  SciPy converged (PGTOL).
+
+\begin{center}
+\begin{tabular}{lSSS}
+\toprule
+Parameter & {True (m/s)} & {Estimated (m/s)} & {Relative Error} \\
+\midrule
+$k_{0,1}$ (O$_2 \to$ H$_2$O$_2$)
+  & 2.4000e-8 & 2.5161e-8 & 0.0484 \\
+$k_{0,2}$ (H$_2$O$_2 \to$ H$_2$O)
+  & 1.0000e-9 & 4.1903e-11 & 0.9581 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Discussion.} $k_{0,1}$ is recovered to 4.8\% error---comparable to
+the neutral system.  However, $k_{0,2}$ converges to a value ${\sim}24\times$ too
+small (96\% error).  This is an \textbf{identifiability limitation}: the
+irreversible R$_2$ reaction ($\text{H}_2\text{O}_2 \to \text{H}_2\text{O}$) has very low
+sensitivity in the total current density, because $k_{0,2} \ll k_{0,1}$ and the
+H$_2$O$_2$ concentration at the electrode is small.  The reduced voltage range
+($\hat\eta \in [-1, -10]$ vs.\ $[-1, -20]$ for neutral) further limits
+identifiability of the slower reaction.  Adding Bikerman steric ($a=0.01$)
+does not materially change the $k_0$ recovery: the $k_{0,1}$ error shifts
+from 4.0\% to 4.8\%, and $k_{0,2}$ remains unidentifiable.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{charged_k0_fit_a001.png}
+  \caption{Charged 4-species $k_0$ inference (with $a = 0.01$ Bikerman steric).
+    Blue circles: noisy target (2\% noise).  Green: optimized L-BFGS-B fit.
+    The fit captures the overall I--V shape well, but the underlying $k_{0,2}$
+    is poorly resolved.  Convergence animation:
+    \texttt{StudyResults/bv\_k0\_inference\_charged/bv\_k0\_convergence.gif}.}
+  \label{fig:charged-k0-fit}
+\end{figure}
+
+
+%% ============================================================
+\section*{11. Transfer Coefficient ($\alpha$) Inference}
+%% ============================================================
+
+\subsection*{11.1 Motivation}
+
+With $k_0$ inference validated, we extended the pipeline to infer the BV
+transfer coefficient~$\alpha$, which controls the \textbf{shape} of the
+I--V curve (as opposed to its amplitude).  The transfer coefficient appears
+in the BV exponentials:
+\begin{equation}
+  R_j = k_{0,j}\bigl[c_\text{red} \exp(-\alpha_j \hat\eta / n_e)
+        - c_\text{ox} \exp((1-\alpha_j)\hat\eta / n_e)\bigr]
+\end{equation}
+and therefore affects the gradient more nonlinearly than $k_0$.
+
+\subsection*{11.2 Implementation}
+
+Three changes were required to make $\alpha$ adjoint-compatible:
+
+\begin{enumerate}
+  \item \textbf{Forward solver} (\texttt{Forward/bv\_solver.py}): Changed
+        $\alpha$ from \texttt{fd.Constant} to \texttt{fd.Function(R\_space)},
+        mirroring the $k_0$ change.  Added \texttt{bv\_alpha\_funcs} to
+        the context dict.
+
+  \item \textbf{Steady-state helpers} (\texttt{Forward/steady\_state.py}):
+        Extended \texttt{configure\_bv\_solver\_params} to accept an
+        optional \texttt{alpha\_values} parameter, injecting into both
+        \texttt{reactions[j].alpha} and legacy \texttt{bv\_bc.alpha}.
+
+  \item \textbf{FluxCurve modules}: Added \texttt{control\_mode} parameter
+        throughout the pipeline:
+        \begin{itemize}
+          \item \texttt{"k0"}: optimize $k_0$ only (existing behavior)
+          \item \texttt{"alpha"}: optimize $\alpha$ only ($k_0$ fixed)
+          \item \texttt{"joint"}: optimize both $k_0$ and $\alpha$
+        \end{itemize}
+        When \texttt{control\_mode="alpha"}, the adjoint controls are
+        \texttt{bv\_alpha\_funcs} instead of \texttt{bv\_k0\_funcs}.
+        Alpha uses \textbf{linear-space} optimization (not log-space)
+        since $\alpha \in (0, 1)$.
+
+  \item \textbf{Config} (\texttt{FluxCurve/bv\_config.py}): Added fields
+        \texttt{control\_mode}, \texttt{true\_alpha},
+        \texttt{initial\_alpha\_guess}, \texttt{alpha\_lower/upper},
+        \texttt{alpha\_log\_space}, \texttt{fixed\_k0}.
+\end{enumerate}
+
+\subsection*{11.3 Results}
+
+Script: \texttt{Infer\_BVAlpha\_from\_current\_density\_curve.py}.
+2-species neutral system, $k_0$ fixed at true values.
+Initial guess: $[\alpha_1, \alpha_2] = [0.3, 0.3]$.
+True values: $[0.627, 0.5]$.
+
+\begin{center}
+\begin{tabular}{rSSrr}
+\toprule
+{Eval} & {Objective} & {$\|\nabla J\|$} & {$\alpha_1$} & {$\alpha_2$} \\
+\midrule
+1  & 1.461e-1 & 6.472e-1 & 0.3000 & 0.3000 \\
+2  & 3.312e-2 & 9.628e-2 & 0.9471 & 0.3134 \\
+5  & 1.300e-2 & 8.014e-2 & 0.7354 & 0.3535 \\
+9  & 3.515e-3 & 9.594e-2 & 0.6024 & 0.4433 \\
+13 & 2.369e-4 & 2.691e-2 & 0.6191 & 0.5110 \\
+15 & 1.115e-4 & 1.186e-2 & 0.6294 & 0.4938 \\
+16 & 7.291e-5 & 1.978e-4 & 0.6250 & 0.4992 \\
+17 & 7.289e-5 & 2.034e-5 & 0.6248 & 0.4993 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Final results after 26 evaluations (SciPy converged, PGTOL):
+
+\begin{center}
+\begin{tabular}{lSSS}
+\toprule
+Parameter & {True} & {Estimated} & {Relative Error} \\
+\midrule
+$\alpha_1$ (O$_2 \to$ H$_2$O$_2$) & 0.6270 & 0.6248 & 0.0034 \\
+$\alpha_2$ (H$_2$O$_2 \to$ H$_2$O) & 0.5000 & 0.4992 & 0.0015 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Both transfer coefficients are recovered to $<0.5\%$ error---significantly
+better than $k_0$ inference, which achieved ${\sim}3\%$ error at the same
+noise level.  The residual objective ($7.29 \times 10^{-5}$) is dominated
+by the 2\% measurement noise, confirming that the optimizer has found the
+noise floor.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{alpha_fit.png}
+  \caption{BV $\alpha$ inference result.  Blue circles: noisy target (2\%
+    noise).  Green: optimized fit.  The optimizer closely tracks the
+    target across the full voltage range.  Convergence animation:
+    \texttt{StudyResults/bv\_alpha\_inference/bv\_alpha\_convergence.gif}.}
+  \label{fig:alpha-fit}
+\end{figure}
+
+
+%% ============================================================
+\section*{12. Joint $(k_0, \alpha)$ Inference}
+%% ============================================================
+
+\subsection*{12.1 Setup}
+
+With both $k_0$ and $\alpha$ inference working independently, we combined
+them into a \textbf{4-parameter joint inference}: control vector
+$\mathbf{x} = [\log_{10} k_{0,1},\, \log_{10} k_{0,2},\, \alpha_1,\, \alpha_2]$.
+
+The $k_0$ components use log-space optimization (bounds
+$[10^{-8}, 100]$), while the $\alpha$ components use linear-space
+(bounds $[0.05, 0.95]$).  The gradient is transformed accordingly:
+\begin{equation}
+  \frac{\partial J}{\partial x_j} =
+  \begin{cases}
+    \dfrac{\partial J}{\partial k_{0,j}} \cdot k_{0,j} \cdot \ln 10
+      & \text{for } j \in \{k_0\text{ components}\} \\[6pt]
+    \dfrac{\partial J}{\partial \alpha_j}
+      & \text{for } j \in \{\alpha\text{ components}\}
+  \end{cases}
+\end{equation}
+
+Script: \texttt{Infer\_BVJoint\_from\_current\_density\_curve.py}.
+2-species neutral system.  Initial guess:
+$k_0 = [0.005, 0.0005]$ (${\sim}4\times$ too high),
+$\alpha = [0.4, 0.3]$ (wrong direction for $\alpha_1$).
+
+\subsection*{12.2 Results}
+
+54 evaluations, 30 iterations, 0 failures.  SciPy reached the iteration
+limit but the gradient norm was very small ($|\nabla J| = 1.2 \times 10^{-6}$).
+
+\begin{center}
+\begin{tabular}{rSSrrrr}
+\toprule
+{Eval} & {Objective} & {$\|\nabla J\|$} & {$\hat{k}_{0,1}$} &
+  {$\hat{k}_{0,2}$} & {$\alpha_1$} & {$\alpha_2$} \\
+\midrule
+1  & 1.811e-2 & 3.131e-1 & 0.00500 & 5.00e-4 & 0.400 & 0.300 \\
+3  & 1.717e-3 & 6.286e-2 & 0.00521 & 5.07e-4 & 0.512 & 0.349 \\
+6  & 3.403e-4 & 2.163e-3 & 0.00509 & 5.11e-4 & 0.480 & 0.380 \\
+16 & 1.406e-4 & 1.758e-4 & 0.00168 & 5.44e-4 & 0.580 & 0.370 \\
+25 & 7.177e-5 & 2.204e-3 & 0.00117 & 6.47e-5 & 0.623 & 0.482 \\
+40 & 6.642e-5 & 2.451e-5 & 9.34e-4 & 5.75e-5 & 0.642 & 0.489 \\
+54 & 6.642e-5 & 1.187e-6 & 9.34e-4 & 5.75e-5 & 0.642 & 0.489 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{lSSS}
+\toprule
+Parameter & {True} & {Estimated} & {Relative Error} \\
+\midrule
+$k_{0,1}$ (m/s) & 2.4000e-8 & 1.9618e-8 & 0.1826 \\
+$k_{0,2}$ (m/s) & 1.0000e-9 & 1.2080e-9 & 0.2080 \\
+$\alpha_1$      & 0.6270    & 0.6423    & 0.0244 \\
+$\alpha_2$      & 0.5000    & 0.4886    & 0.0228 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{12.3 Discussion}
+
+\begin{enumerate}
+  \item \textbf{Alpha recovery is excellent} (2.4\% and 2.3\%), even in
+        the joint setting.  This confirms that the I--V curve shape
+        strongly constrains $\alpha$.
+
+  \item \textbf{$k_0$ recovery is degraded} (18\% and 21\%) compared to
+        the $k_0$-only case (2.9\% and 1.2\%).  This reflects a
+        \textbf{$k_0$--$\alpha$ correlation}: increasing $k_0$ while
+        adjusting $\alpha$ can produce similar I--V curves.  The optimizer
+        finds a nearby local minimum in the 4D landscape.
+
+  \item \textbf{The objective is at the noise floor} ($6.64 \times 10^{-5}$
+        vs.\ $7.18 \times 10^{-5}$ for $k_0$-only and $7.29 \times 10^{-5}$
+        for $\alpha$-only).  The joint fit is actually the best in terms of
+        raw objective---it uses additional degrees of freedom to better match
+        the noisy data, which manifests as slight overfitting.
+
+  \item \textbf{Convergence is slower}: 54 evaluations vs.\ 7 ($k_0$-only)
+        or 26 ($\alpha$-only), reflecting the larger and more correlated
+        search space.
+\end{enumerate}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{joint_fit.png}
+  \caption{Joint $(k_0, \alpha)$ inference result.  Blue circles: noisy
+    target (2\% noise).  Green: optimized fit.  The fit quality is visually
+    indistinguishable from the single-parameter cases.  Convergence
+    animation:
+    \texttt{StudyResults/bv\_joint\_inference/bv\_joint\_convergence.gif}.}
+  \label{fig:joint-fit}
+\end{figure}
+
+
+%% ============================================================
+\section*{13. Charged 4-Species $\alpha$ Inference}
+%% ============================================================
+
+\subsection*{13.1 Setup}
+
+We extended the $\alpha$ inference (Section~11) to the full 4-species charged
+system.  Physical parameters match Section~10.2 (including $a = 0.01$
+Bikerman steric for all species).  The $k_0$ values are fixed at their true
+values; only $[\alpha_1, \alpha_2]$ are optimized.
+
+Script: \texttt{Infer\_BVAlpha\_charged\_from\_current\_density\_curve.py}.
+Mesh: \texttt{Nx=8, Ny=200, beta=3.0}.
+10-point sweep: $\hat\eta \in [-1, -10]$.
+Initial guess: $[\alpha_1, \alpha_2] = [0.3, 0.3]$.
+True values: $[0.627, 0.5]$.
+
+\subsection*{13.2 Results}
+
+$\sim$12 evaluations, 11 iterations, 0 failures.
+SciPy converged (PGTOL).
+
+\begin{center}
+\begin{tabular}{lSSS}
+\toprule
+Parameter & {True} & {Estimated} & {Relative Error} \\
+\midrule
+$\alpha_1$ (O$_2 \to$ H$_2$O$_2$) & 0.6270 & 0.6283 & 0.0021 \\
+$\alpha_2$ (H$_2$O$_2 \to$ H$_2$O) & 0.5000 & 0.1793 & 0.6415 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Discussion.}  $\alpha_1$ is recovered to 0.21\% error---comparable
+to the neutral case (0.34\%).  However, $\alpha_2$ is poorly identified
+(64\% error), mirroring the $k_{0,2}$ identifiability problem in the charged
+$k_0$ case (Section~10.4).  The irreversible R$_2$ reaction contributes too
+little signal in the total current density for the optimizer to distinguish
+$\alpha_2$ from $\alpha_1$ effects.  The reduced voltage range
+($\hat\eta \in [-1, -10]$) and low $k_{0,2}/k_{0,1}$ ratio compound this.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{charged_alpha_fit.png}
+  \caption{Charged 4-species $\alpha$ inference.  Blue circles: noisy target
+    (2\% noise).  Green: optimized fit.  Despite the poorly resolved
+    $\alpha_2$, the overall fit is excellent because R$_2$ has negligible
+    impact on total current.  Convergence animation:
+    \texttt{StudyResults/bv\_alpha\_inference\_charged/bv\_alpha\_convergence.gif}.}
+  \label{fig:charged-alpha-fit}
+\end{figure}
+
+
+%% ============================================================
+\section*{14. Charged 4-Species Joint $(k_0, \alpha)$ Inference}
+%% ============================================================
+
+\subsection*{14.1 Setup}
+
+We combined the charged physics with joint inference, optimizing
+$\mathbf{x} = [\log_{10} k_{0,1},\, \log_{10} k_{0,2},\, \alpha_1,\, \alpha_2]$
+simultaneously.  All 4-species charged parameters are identical to
+Section~10.2 ($a = 0.01$).
+
+Script: \texttt{Infer\_BVJoint\_charged\_from\_current\_density\_curve.py}.
+Initial guess: $k_0 = [0.005, 0.0005]$, $\alpha = [0.4, 0.3]$.
+10-point sweep: $\hat\eta \in [-1, -10]$.
+\texttt{maxiter = 30}.
+
+\subsection*{14.2 Results}
+
+26 evaluations, 24 iterations, 0 failures.
+SciPy converged (PGTOL).
+
+\begin{center}
+\begin{tabular}{lSSS}
+\toprule
+Parameter & {True} & {Estimated} & {Relative Error} \\
+\midrule
+$k_{0,1}$ (m/s) & 2.4000e-8 & 6.8732e-8 & 1.864 \\
+$k_{0,2}$ (m/s) & 1.0000e-9 & 2.4012e-9 & 1.401 \\
+$\alpha_1$      & 0.6270    & 0.1982    & 0.684 \\
+$\alpha_2$      & 0.5000    & 0.9500    & 0.900 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Discussion.}  All four parameters are poorly recovered in the charged
+joint setting.  The $k_0$--$\alpha$ correlation (Section~12.3) is
+compounded by the R$_2$ identifiability problem, leading to large errors
+across all parameters.  Notably, $\alpha_2$ hits its upper bound (0.95),
+indicating the optimizer cannot find a meaningful minimum in that direction.
+The final objective ($1.70 \times 10^{-5}$) is \emph{lower} than the single-
+parameter cases, confirming that the 4-parameter fit overfits the noisy data
+by compensating errors across $k_0$ and $\alpha$.
+
+This result strongly motivates:
+\begin{enumerate}
+  \item \textbf{Reaction-specific observables} (e.g., RRDE ring current) to
+        resolve R$_2$ parameters independently.
+  \item \textbf{Regularization or staged inference}: first recover $\alpha$
+        (well-identified for R$_1$), then fix $\alpha$ and recover $k_0$.
+  \item \textbf{Extended voltage range} if the charged solver can handle
+        $\hat\eta < -10$ stably.
+\end{enumerate}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{charged_joint_fit.png}
+  \caption{Charged 4-species joint $(k_0, \alpha)$ inference.  Blue circles:
+    noisy target (2\% noise).  Green: optimized fit.  The fit quality appears
+    good despite large parameter errors, illustrating the
+    $k_0$--$\alpha$ correlation in 4-parameter space.  Convergence
+    animation:
+    \texttt{StudyResults/bv\_joint\_inference\_charged/bv\_joint\_convergence.gif}.}
+  \label{fig:charged-joint-fit}
+\end{figure}
+
+
+%% ============================================================
+\section*{15. Files Changed / Created This Week}
+%% ============================================================
+
+\subsection*{Modified (implementation + bug fixes)}
+\begin{itemize}
+  \item \texttt{Forward/bv\_solver.py} --- $k_0$ and $\alpha$:
+        \texttt{fd.Constant} $\to$ \texttt{fd.Function(R\_space)};
+        added \texttt{bv\_k0\_funcs} and \texttt{bv\_alpha\_funcs}
+        to context
+  \item \texttt{Forward/steady\_state.py} --- added 5 BV helper functions;
+        extended \texttt{configure\_bv\_solver\_params} with
+        \texttt{alpha\_values} parameter
+  \item \texttt{FluxCurve/\_\_init\_\_.py} --- added BV exports
+        (k0, alpha, joint)
+  \item \texttt{FluxCurve/bv\_point\_solve.py} --- fixed mixed-function
+        warm-start snapshot/restore (Bug~1, \S8.1); added
+        \texttt{control\_mode} and \texttt{alpha\_values} parameters
+  \item \texttt{FluxCurve/bv\_run.py} --- fixed sign mismatch in target
+        generation (Bug~2, \S8.2); added log-space optimization
+        (Bug~3, \S8.3); added \texttt{run\_bv\_alpha\_flux\_curve\_inference}
+        and \texttt{run\_bv\_joint\_flux\_curve\_inference}
+  \item \texttt{FluxCurve/bv\_config.py} --- added \texttt{log\_space},
+        \texttt{control\_mode}, alpha fields, \texttt{fixed\_k0}
+  \item \texttt{FluxCurve/bv\_observables.py} --- added
+        \texttt{control\_mode} to target builder
+  \item \texttt{FluxCurve/bv\_curve\_eval.py} --- added
+        \texttt{alpha\_values} and \texttt{control\_mode} pass-through
+  \item \texttt{FluxCurve/plot.py} --- removed \texttt{fig.show()} to
+        prevent interactive windows blocking headless runs
+\end{itemize}
+
+\subsection*{Created}
+\begin{itemize}
+  \item \texttt{FluxCurve/bv\_config.py} ---
+        \texttt{BVFluxCurveInferenceRequest} dataclass
+  \item \texttt{FluxCurve/bv\_observables.py} --- BV observable form
+        builders
+  \item \texttt{FluxCurve/bv\_point\_solve.py} --- warm-start sequential
+        adjoint solver
+  \item \texttt{FluxCurve/bv\_curve\_eval.py} --- curve-level aggregation
+  \item \texttt{FluxCurve/bv\_run.py} --- top-level optimization loop
+        (k0, alpha, joint)
+  \item \texttt{scripts/inference/Infer\_BVk0\_from\_current\_density\_curve.py}
+        --- 2-species neutral k0 inference
+  \item \texttt{scripts/inference/Infer\_BVk0\_charged\_from\_current\_density\_curve.py}
+        --- 4-species charged k0 inference
+  \item \texttt{scripts/inference/Infer\_BVAlpha\_from\_current\_density\_curve.py}
+        --- alpha inference (k0 fixed, neutral)
+  \item \texttt{scripts/inference/Infer\_BVAlpha\_charged\_from\_current\_density\_curve.py}
+        --- alpha inference (k0 fixed, charged)
+  \item \texttt{scripts/inference/Infer\_BVJoint\_from\_current\_density\_curve.py}
+        --- joint (k0, alpha) inference (neutral)
+  \item \texttt{scripts/inference/Infer\_BVJoint\_charged\_from\_current\_density\_curve.py}
+        --- joint (k0, alpha) inference (charged)
+  \item \texttt{scripts/studies/bv\_k0\_noise\_sensitivity.py}
+        --- noise sensitivity study (0/2/5/10\%, 3 seeds each)
+\end{itemize}
+
+
+%% ============================================================
+\section*{16. Summary of Inference Results}
+%% ============================================================
+
+\begin{center}
+\small
+\begin{tabular}{llSSSSr}
+\toprule
+{Test} & {Control} &
+  {$k_{0,1}$ err} & {$k_{0,2}$ err} &
+  {$\alpha_1$ err} & {$\alpha_2$ err} &
+  {Evals} \\
+\midrule
+Neutral $k_0$              & $k_0$ only   & 0.029 & 0.012 & {---}  & {---}  & 7  \\
+Charged $k_0$ ($a{=}0.01$) & $k_0$ only   & 0.048 & 0.958 & {---}  & {---}  & 13 \\
+Neutral $\alpha$           & $\alpha$ only & {---} & {---} & 0.003  & 0.002  & 26 \\
+Charged $\alpha$           & $\alpha$ only & {---} & {---} & 0.002  & 0.642  & 12 \\
+Neutral joint              & both          & 0.183 & 0.208 & 0.024  & 0.023  & 54 \\
+Charged joint              & both          & 1.864 & 1.401 & 0.684  & 0.900  & 26 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Key findings:
+\begin{itemize}
+  \item \textbf{Neutral systems}: all parameters are well-identified.
+        $\alpha$ inference is excellent ($<0.5\%$ error standalone, $<3\%$
+        jointly).  $k_0$ degrades modestly in joint inference (${\sim}20\%$)
+        due to $k_0$--$\alpha$ correlation.
+  \item \textbf{Charged systems}: the dominant reaction (R$_1$, O$_2 \to$
+        H$_2$O$_2$) is well-identified for both $k_0$ (${\sim}5\%$) and
+        $\alpha$ (${\sim}0.2\%$) in standalone inference.  However, the
+        secondary reaction (R$_2$, H$_2$O$_2 \to$ H$_2$O) is
+        \textbf{unidentifiable} from total current density alone, regardless
+        of control mode.
+  \item \textbf{Joint charged inference fails}: all four parameters show
+        large errors ($>68\%$) due to compounding $k_0$--$\alpha$ correlation
+        and R$_2$ insensitivity.
+  \item All runs achieve zero forward-solve failures.
+\end{itemize}
+
+
+%% ============================================================
+\section*{17. Next Steps (from prior week)}
+%% ============================================================
+
+\begin{enumerate}
+  \item \textbf{Reaction-specific observables.}  Use peroxide current
+        (RRDE ring signal) to improve R$_2$ parameter identifiability.
+        This is the most important next step for the charged system.
+  \item \textbf{Staged inference.}  For the charged system, first recover
+        $\alpha_1$ (which is well-identified), then fix $\alpha_1$ and
+        recover $k_{0,1}$, avoiding the $k_0$--$\alpha$ correlation.
+  \item \textbf{Regularization.}  Add Tikhonov or prior-based
+        regularization to the joint objective to mitigate parameter
+        correlation in the 4D space.
+  \item \textbf{Experimental data.}  Replace synthetic targets with real
+        I--V curves from Mangan2025 or RRDE measurements.
+  \item \textbf{Extended voltage range.}  Investigate whether the charged
+        solver can handle $\hat\eta < -10$ stably, which would provide
+        more kinetic information.
+\end{enumerate}
+
+The remainder of this writeup documents the execution of these next
+steps.
+
+
+%% ============================================================
+\section*{18. Charged Voltage Range Validation (Next Step~5)}
+%% ============================================================
+
+The charged forward solver's voltage range was studied systematically
+via the script \texttt{scripts/studies/charged\_voltage\_range\_study.py},
+which sweeps through parameter combinations (steric~$a$, Newton
+damping~$\lambda_\text{max}$, exponent clipping, continuation steps,
+time-step size) and records the maximum overpotential reached before
+solver failure.
+
+\subsection*{18.1 Round~1: Baseline Parameter Sweep}
+
+Twelve configurations were tested with a 300\,s timeout and target
+$\hat\eta = -46.5$ (V$_\text{RHE} = -0.5$\,V, matching the Mangan2025
+experimental range).
+
+\begin{center}
+\small
+\begin{tabular}{lSSSr}
+\toprule
+{Configuration} & {Steric $a$} & {$\lambda_\text{max}$} &
+  {Max $|\hat\eta|$} & {Time (s)} \\
+\midrule
+Baseline (no steric)     & 0.00 & 0.5 & 46.51 &  85 \\
+Steric $a{=}0.01$        & 0.01 & 0.5 & 46.51 & 150 \\
+Steric $a{=}0.05$        & 0.05 & 0.5 & 46.51 & 124 \\
+Steric $a{=}0.10$        & 0.10 & 0.5 & 46.51 & 133 \\
+Steric $a{=}0.20$        & 0.20 & 0.5 &  1.40 &  12 \\
+Mesh Ny500 $\beta{=}3.5$ & 0.05 & 0.5 & 46.51 & 239 \\
+$\lambda_\text{max}{=}0.3$, $a{=}0.05$ & 0.05 & 0.3 & 46.51 & 112 \\
+$\lambda_\text{max}{=}0.2$, $a{=}0.05$ & 0.05 & 0.2 & 46.51 &  76 \\
+Clip${=}30$, $a{=}0.05$  & 0.05 & 0.5 & 46.51 & 122 \\
+Clip${=}20$, $a{=}0.05$  & 0.05 & 0.5 & 46.51 & 120 \\
+$\text{d}t{=}0.2$, $a{=}0.05$ & 0.05 & 0.5 & 46.51 & 195 \\
+500 steps, $a{=}0.05$    & 0.05 & 0.5 & 15.35 & 300 \\
+500 steps, $a{=}0.10$    & 0.10 & 0.5 &  5.12 & 302 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Key findings:}
+\begin{itemize}
+  \item The baseline (no steric, $a{=}0$) reaches the full experimental
+        target $\hat\eta = -46.5$ in only 85\,s with 200 continuation
+        steps.  \textbf{The charged solver already covers the entire
+        Mangan2025 voltage range.}
+  \item Steric $a \le 0.10$ all reach the target; $a{=}0.20$ diverges
+        at $\hat\eta = -1.4$ (DIVERGED\_DTOL).
+  \item $\lambda_\text{max}{=}0.2$ with $a{=}0.05$ is the fastest
+        combination (76\,s).
+  \item Increasing to 500 continuation steps causes timeout---the
+        per-step cost grows at large $|\hat\eta|$ due to more Newton
+        iterations and MUMPS scaling overhead.  The 200-step coarser
+        continuation is paradoxically more robust.
+  \item Since the experimental range is already fully covered, there is
+        no need to push to V$_\text{RHE} < -0.5$\,V.
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{voltage_range_round1.png}
+  \caption{Round~1 I--V curve comparison across 12 parameter
+    configurations.  All configurations with steric $a \le 0.10$ reach
+    the full experimental target of V$_\text{RHE} = -0.5$\,V.}
+  \label{fig:voltage-range-r1}
+\end{figure}
+
+
+%% ============================================================
+\section*{19. Charge Configuration Feasibility Study}
+%% ============================================================
+
+To understand the role of charge coupling in the PNP system, we tested
+four charge configurations using the script
+\texttt{scripts/studies/forward\_solver\_feasibility\_study.py}.  All
+configurations used steric $a{=}0.05$, a 300-cell graded mesh
+($\beta{=}3.0$), and 300 continuation steps targeting
+$\hat\eta = -46.5$.
+
+\begin{center}
+\small
+\begin{tabular}{llSSSr}
+\toprule
+{Configuration} & {$\mathbf{z}$} & {Max $|\hat\eta|$} &
+  {Points} & {Time (s)} & {Status} \\
+\midrule
+Full charged        & {$[0,0,{+}1,{-}1]$} & 46.51 & {300/300} & 185 & PASS \\
+2-sp H$_2$O$_2$ charged & {$[0,{+}1]$}   &  0.00 & {0/300}   &  12 & FAIL \\
+H$^+$ only charged  & {$[0,0,{+}1,0]$}    &  0.00 & {0/300}   &   1 & FAIL \\
+ClO$_4^-$ only       & {$[0,0,0,{-}1]$}   &  0.00 & {0/300}   &   0 & FAIL \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Key findings:}
+\begin{itemize}
+  \item \textbf{Only the fully electroneutral configuration
+        $\mathbf{z}{=}[0,0,{+}1,{-}1]$ converges.}  All three
+        configurations that break electroneutrality fail at the very
+        first voltage step ($\hat\eta = -0.16$, which is 0.3\% of the
+        target).
+  \item The failure mode is DIVERGED\_DTOL in all cases: without a
+        counterion to balance space charge, the Poisson equation
+        drives~$\phi$ to extreme values.  This is a fundamental
+        mathematical requirement of PNP, not a solver tuning issue.
+  \item For the full charged system, the electrode concentrations at
+        V$_\text{RHE} = -0.5$\,V are:
+        $c_{\text{O}_2} = 0.003$ (depleted, transport-limited),
+        $c_{\text{H}_2\text{O}_2} = 1.12$ (product accumulation),
+        $c_{\text{H}^+} \approx 0$ (consumed by reaction),
+        $c_{\text{ClO}_4^-} \approx 0$ (swept by electric field).
+  \item \textbf{Recommendation:} Use $\mathbf{z}{=}[0,0,1,-1]$ for all
+        production and inverse runs.  For simplified/faster models, use
+        $\mathbf{z}{=}[0,0,0,0]$ (fully neutral).  Partial charge
+        assignments are ill-posed.
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{feasibility_max_eta_bar.png}
+  \caption{Maximum $|\hat\eta|$ reached by each charge configuration.
+    Only the electroneutral $\mathbf{z}{=}[0,0,{+}1,{-}1]$ system
+    converges; all others fail at the first step.}
+  \label{fig:feasibility-bar}
+\end{figure}
+
+
+%% ============================================================
+\section*{20. Improved Charged Inference (Next Steps~1--3)}
+%% ============================================================
+
+Before running the improved inference, we first addressed a critical
+performance bottleneck in the adjoint-gradient pipeline that made
+multi-run studies infeasible.
+
+
+%% ============================================================
+\section*{20A. Inference Pipeline Optimization}
+%% ============================================================
+
+\subsection*{20A.1 Bottleneck Analysis}
+
+Profiling the charged joint inference revealed that each optimizer
+evaluation took ${\sim}90$\,s (10 voltage points $\times$ ${\sim}9$\,s
+each).  A 5-lambda regularization study with 30 iterations per lambda
+would require ${\sim}2$--3 hours.  Detailed instrumentation identified
+three dominant costs:
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+Component & Time/eval & Fraction \\
+\midrule
+Adjoint tape replay (\texttt{rf(control\_state)}) & ${\sim}18$\,s & 39\% \\
+Forward PTC solves (8--11 steps/point) & ${\sim}21$\,s & 46\% \\
+Adjoint linear solves (\texttt{rf.derivative()}) & ${\sim}6$\,s & 13\% \\
+Setup (context/forms/solver build) & ${\sim}0.5$\,s & 1\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The key insight: \texttt{ReducedFunctional.\_\_call\_\_(control\_state)}
+performs a \textbf{full tape replay}, re-solving every SNES step recorded
+during the forward solve.  Since the tape already contains the correct
+intermediate states from the forward solve that was just recorded, this
+replay is entirely redundant---the objective value was already computed
+during the forward pass.
+
+\subsection*{20A.2 Optimizations Implemented}
+
+Five optimizations were applied to
+\texttt{FluxCurve/bv\_point\_solve.py} and supporting files:
+
+\begin{enumerate}
+  \item \textbf{P1: Eliminate tape replay.}  Replaced
+        \texttt{float(rf(control\_state))} with
+        \texttt{float(point\_objective)} (the already-computed value)
+        and called \texttt{rf.derivative()} directly.  This skips the
+        redundant re-forward-solve, cutting adjoint cost from
+        ${\sim}2.5$\,s to ${\sim}0.35$\,s per point.
+
+  \item \textbf{P2: Cross-evaluation warm-start.}  The first voltage
+        point was previously cold-started every evaluation.  Now the
+        converged solution from the previous evaluation is cached
+        module-level and reused, since adjacent optimizer iterations
+        have similar parameters.
+
+  \item \textbf{P4: Linear predictor step.}  For warm-started points
+        with two prior converged solutions, the initial condition is
+        computed via linear extrapolation in voltage space:
+        $U_\text{predict} = U_{k-1} + \frac{\eta_k - \eta_{k-1}}
+        {\eta_{k-1} - \eta_{k-2}} (U_{k-1} - U_{k-2})$.
+        This reduces PTC steps from 8--11 to 7--9 per point.
+
+  \item \textbf{P5: Jacobian lagging.}  Added
+        \texttt{snes\_lag\_jacobian: 2} and
+        \texttt{snes\_lag\_jacobian\_persists: True} to reuse the
+        MUMPS LU factorization every other Newton iteration.
+
+  \item \textbf{P6: Adaptive pseudo-timestep (SER).}  Switched
+        Evolution Relaxation grows \texttt{dt} when the observable
+        change is decreasing and shrinks it when increasing.
+        \texttt{dt\_model} was changed from a Python float to
+        \texttt{fd.Constant} in \texttt{Forward/bv\_solver.py} to
+        enable in-loop updates without form recompilation.
+\end{enumerate}
+
+Additional changes: default \texttt{gtol} relaxed from $10^{-4}$ to
+$10^{-3}$ (noise floor is ${\sim}10^{-3}$ with 2\% data noise);
+warm-start step cap set to 15 (from 200) for warm-started points.
+
+\subsection*{20A.3 Benchmark Results}
+
+Running the charged joint inference benchmark with all optimizations:
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Metric & Before & After & Speedup \\
+\midrule
+Per-eval time & 90\,s & 12--13\,s & \textbf{7$\times$} \\
+Adjoint/point & 2.5\,s & 0.35\,s & 7$\times$ \\
+Forward steps/point (ws) & 8--11 & 7--9 & 1.3$\times$ \\
+Setup/point & --- & 0.04\,s & negligible \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\small
+\begin{tabular}{lrrr}
+\toprule
+{Component (post-optimization)} & {Time/eval} & {Fraction} \\
+\midrule
+Forward PTC solves & 8.5\,s & 65\% \\
+Adjoint linear solves & 3.5\,s & 27\% \\
+Setup (shared mesh) & 0.4\,s & 3\% \\
+Overhead & 0.6\,s & 5\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The optimizer converges correctly: loss decreases from
+$2.3 \times 10^{-4}$ to $2.3 \times 10^{-5}$ in 7 evaluations,
+all 10 points converge on every evaluation with zero failures.
+The 5-lambda regularization study is now projected to take
+${\sim}30$\,min instead of ${\sim}2$--3 hours.
+
+
+%% ============================================================
+\section*{20B. Improved Charged Inference (Next Steps~1--3)}
+%% ============================================================
+
+With the optimized pipeline (${\sim}12$\,s/eval), we tested all three
+inference improvements from Section~17.  All runs use the full charged
+system $\mathbf{z}{=}[0,0,1,-1]$, steric $a{=}0.01$, mesh $N_x{=}8$,
+$N_y{=}200$, $\beta{=}3.0$, 10 voltage points
+$\hat\eta \in [-1, -10]$, 2\% synthetic noise.
+
+\subsection*{20B.1 Regularized Joint Inference (Step~3)}
+
+Tikhonov regularization with prior
+$k_{0,\text{prior}} = [1.5 k_{0,1}^\text{true},\, 2 k_{0,2}^\text{true}]$,
+$\alpha_\text{prior} = [0.5, 0.4]$.  Five $\lambda$ values tested.
+
+\begin{center}
+\small
+\begin{tabular}{rSSSSS}
+\toprule
+{$\lambda$} & {$k_{0,1}$ err} & {$k_{0,2}$ err} &
+  {$\alpha_1$ err} & {$\alpha_2$ err} & {Loss} \\
+\midrule
+0.0000 & 1.995 & 3.773 & 0.744 & 0.769 & 1.92e-5 \\
+0.0010 & 0.502 & 1.007 & 0.217 & 0.194 & 2.80e-5 \\
+0.0100 & 0.496 & 1.000 & 0.207 & 0.200 & 2.82e-5 \\
+0.1000 & 0.499 & 1.000 & 0.203 & 0.200 & 2.83e-5 \\
+1.0000 & 0.500 & 1.000 & 0.203 & 0.200 & 2.84e-5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Findings:} Regularization dramatically reduces R$_1$ errors
+($k_{0,1}$: 200\% $\to$ 50\%, $\alpha_1$: 74\% $\to$ 21\%), but the
+converged values match the \emph{prior}, not the truth---the data
+provides insufficient signal to move away from the prior for R$_2$
+parameters.  Results are insensitive to $\lambda \in [0.001, 1.0]$.
+
+\subsection*{20B.2 Staged Inference (Step~2)}
+
+Four-stage pipeline: (S1)~recover $\alpha$ with $k_0$ fixed at truth;
+(S2)~recover $k_0$ with $\alpha$ fixed from S1; (S3)~joint refinement
+from S2 warm-start; (S4)~direct joint baseline.
+
+\begin{center}
+\small
+\begin{tabular}{lSSSSr}
+\toprule
+{Stage} & {$k_{0,1}$ err} & {$k_{0,2}$ err} &
+  {$\alpha_1$ err} & {$\alpha_2$ err} & {Time (s)} \\
+\midrule
+S1: $\alpha$ only ($k_0$ fixed)   & {---}  & {---}  & 0.003 & 0.671 &  157 \\
+S2: $k_0$ only ($\alpha$ fixed)   & 0.050  & 0.969  & 0.003 & 0.671 &  988 \\
+S3: Joint (warm-start from S2)    & 0.192  & 0.969  & 0.058 & 0.669 &  112 \\
+S4: Direct joint (baseline)       & 2.213  & 2.702  & 0.754 & 0.900 &  347 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Findings:} \textbf{Staging is the best method for R$_1$
+recovery.}  By first identifying $\alpha_1$ (0.3\% error), then using
+it to recover $k_{0,1}$ (5\% error), staging breaks the
+$k_0$--$\alpha$ correlation that causes direct joint inference to find
+a false minimum (221\% error).  The staged solution has physically
+meaningful parameters despite higher loss (3.21$\times 10^{-5}$ vs.\
+1.90$\times 10^{-5}$).
+
+\subsection*{20B.3 Peroxide Current Observable (Step~1)}
+
+The peroxide current observable $I_\text{pxd} = -(R_0 - R_1) \cdot
+I_\text{scale}$ was tested to improve R$_2$ identifiability.
+
+\begin{center}
+\small
+\begin{tabular}{llSSSSr}
+\toprule
+{Mode} & {Observable} & {$k_{0,1}$ err} & {$k_{0,2}$ err} &
+  {$\alpha_1$ err} & {$\alpha_2$ err} & {Time} \\
+\midrule
+$k_0$ only  & peroxide & 0.054 & 0.9998 & {---}  & {---}  & 11\,min \\
+Joint       & peroxide & 0.183 & 0.965  & 0.054  & 0.900  & 13\,min \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Findings:} The peroxide observable \textbf{does not improve
+R$_2$ identifiability}.  At the voltages tested, $R_1 \gg R_2$, so the
+net peroxide signal is dominated by R$_1$.  $k_{0,2}$ collapses to
+near-zero and $\alpha_2$ hits its lower bound.
+
+\subsection*{20B.4 Comprehensive Comparison and Conclusions}
+
+\begin{center}
+\small
+\begin{tabular}{llSSSS}
+\toprule
+{Method} & {Observable} &
+  {$k_{0,1}$ err} & {$\alpha_1$ err} &
+  {$k_{0,2}$ err} & {$\alpha_2$ err} \\
+\midrule
+Direct joint             & current density & 2.213 & 0.754 & 2.702 & 0.900 \\
+Regularized ($\lambda{=}0.001$) & current density & 0.502 & 0.217 & 1.007 & 0.194 \\
+Staged (S3)              & current density & 0.192 & 0.058 & 0.969 & 0.669 \\
+$k_0$-only peroxide      & peroxide        & 0.054 & {---} & 0.9998 & {---} \\
+Joint peroxide           & peroxide        & 0.183 & 0.054 & 0.965 & 0.900 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Key conclusions:}
+\begin{enumerate}
+  \item \textbf{R$_1$ is well-identifiable.}  Staged inference
+        recovers $k_{0,1}$ to 5--19\% and $\alpha_1$ to 0.3--5.8\%
+        error.  This is the recommended approach.
+  \item \textbf{R$_2$ is fundamentally unidentifiable} from total
+        current density or peroxide current at the tested voltage
+        range.  The H$_2$O$_2 \to$ H$_2$O reaction contributes too
+        little signal ($k_{0,2}/k_{0,1} \approx 0.04$).
+  \item \textbf{Regularization vs.\ staging:} regularization is
+        faster but accuracy depends on prior quality; staging is
+        more robust and achieves the best R$_1$ recovery.
+  \item \textbf{To improve R$_2$ identifiability:} use H$_2$O$_2$
+        concentration profiles (not current), test at voltages where
+        R$_2$ dominates, or use isolated R$_2$ experiments.
+\end{enumerate}
+
+
+%% ============================================================
+\section*{20C. Steric Parameter Inference (Phase~4)}
+%% ============================================================
+
+The Bikerman steric exclusion model adds a chemical potential term
+$\mu_{\text{steric}} = \ln\!\bigl(1 - \sum_j a_j c_j\bigr)$ to the
+species fluxes, where $a_j$ is a per-species steric size parameter.
+We implemented two new inference modes: ``steric'' ($a_j$ only, with
+$k_0$ and $\alpha$ fixed) and ``full'' ($k_0 + \alpha + a$, all~8
+parameters jointly).
+
+\subsection*{20C.1 Implementation}
+
+Changes to the inference pipeline:
+
+\begin{itemize}
+  \item \texttt{FluxCurve/bv\_curve\_eval.py}: Added
+        \texttt{a\_values} pass-through to the point solver;
+        \texttt{n\_controls} logic for ``steric'' and ``full'' modes.
+  \item \texttt{FluxCurve/bv\_run.py}: Extended
+        \texttt{run\_scipy\_bv\_adjoint\_optimization} with steric
+        parameters (initial guess, bounds, fixed k0/alpha).
+        \texttt{\_x\_to\_params} now returns 3-tuple
+        $(k_0, \alpha, a)$ everywhere.  Added
+        \texttt{run\_bv\_steric\_flux\_curve\_inference} and
+        \texttt{run\_bv\_full\_flux\_curve\_inference}.
+  \item \texttt{FluxCurve/\_\_init\_\_.py}: Exports new functions.
+  \item New scripts:
+        \texttt{Infer\_BVSteric\_charged\_from\_current\_density\_curve.py}
+        and
+        \texttt{Infer\_BVFull\_charged\_from\_current\_density\_curve.py}.
+\end{itemize}
+
+Steric $a$ is optimized in \textbf{linear space} (values are
+$O(0.01$--$0.1)$), while $k_0$ remains in log space.  The existing
+\texttt{steric\_a\_funcs} in \texttt{bv\_solver.py} (already
+\texttt{fd.Function(R\_space)} for adjoint compatibility) required no
+modification.
+
+\subsection*{20C.2 Steric-Only Inference}
+
+Fixed $k_0$ and $\alpha$ at true values.  True steric
+$a = [0.05, 0.05, 0.05, 0.05]$, initial guess $= [0.1, 0.1, 0.1, 0.1]$
+(2$\times$ true).
+
+\begin{center}
+\small
+\begin{tabular}{llSSS}
+\toprule
+{Species} & {Role} & {True $a$} & {Best $a$} & {Rel.\ Error} \\
+\midrule
+O$_2$   & cathodic reactant   & 0.05 & 0.0088 & 0.824 \\
+H$_2$O$_2$ & product (zero bulk) & 0.05 & 0.001  & 0.980 \\
+H$^+$   & concentration factor & 0.05 & 0.0384 & 0.231 \\
+ClO$_4^-$ & spectator ion      & 0.05 & 0.001  & 0.980 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Findings:} Steric $a$ is \textbf{partially identifiable}:
+\begin{itemize}
+  \item \textbf{H$^+$ (23\% error):} Best recovered.  H$^+$ appears
+        in both BV reaction rate expressions via the cathodic
+        concentration factor $(c_{\text{H}^+}/c_\text{ref})^2$,
+        giving strong coupling between its profile and the observable.
+  \item \textbf{O$_2$ (82\%):} Moderate sensitivity.  Its boundary
+        concentration is fixed by Dirichlet BC, limiting gradient
+        information.
+  \item \textbf{H$_2$O$_2$ and ClO$_4^-$ (98\%, hit bounds):}
+        Unidentifiable.  H$_2$O$_2$ has zero bulk concentration
+        ($a_2 c_2 \approx 0$ in the interior); ClO$_4^-$ has zero
+        stoichiometry for both reactions.
+\end{itemize}
+
+\subsection*{20C.3 Full (k$_0$ + $\alpha$ + steric) Inference}
+
+Eight free parameters from 10 I-V points.
+
+\begin{center}
+\small
+\begin{tabular}{lSSS}
+\toprule
+{Parameter} & {True} & {Best} & {Rel.\ Error} \\
+\midrule
+$k_{0,1}$           & 1.263e-3 & 2.291e-3 & 0.814 \\
+$k_{0,2}$           & 5.263e-5 & 4.696e-4 & 7.92  \\
+$\alpha_1$          & 0.627    & 0.407    & 0.351 \\
+$\alpha_2$          & 0.500    & 0.050    & 0.900 \\
+$a_{\text{O}_2}$    & 0.05     & 0.068    & 0.354 \\
+$a_{\text{H}_2\text{O}_2}$ & 0.05 & 0.090 & 0.807 \\
+$a_{\text{H}^+}$    & 0.05     & 0.034    & 0.312 \\
+$a_{\text{ClO}_4^-}$ & 0.05    & 0.047    & 0.066 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Final objective $= 7.2 \times 10^{-6}$ (excellent curve fit).
+\textbf{Findings:} Classic non-identifiability---the optimizer achieves
+a very low loss by finding compensating parameter combinations that are
+far from the true values.  With 8 parameters and 10 data points, the
+problem is under-determined.  The apparently good recovery of
+$a_{\text{ClO}_4^-}$ (6.6\% error, vs.\ 98\% in steric-only mode) is
+an artifact of parameter compensation, not genuine identifiability.
+
+\subsection*{20C.4 Summary}
+
+\begin{enumerate}
+  \item \textbf{Steric $a$ infrastructure works.}  The adjoint-gradient
+        pipeline correctly computes $\partial J / \partial a_j$ for all
+        species and the optimizer makes monotonic progress.
+  \item \textbf{Partial identifiability of steric $a$:}
+        electrochemically active species (H$^+$) show meaningful
+        sensitivity; spectator species (ClO$_4^-$) and zero-bulk species
+        (H$_2$O$_2$) do not.
+  \item \textbf{Full joint inference is ill-conditioned.}  Eight
+        parameters from 10 I-V points finds compensating minima.
+        Staged or regularized approaches are essential.
+  \item \textbf{Recommended approach:} Use staged inference (Phase~3
+        result) to first recover $k_{0,1}$ and $\alpha_1$, then fix
+        those and infer steric $a$ for identifiable species only
+        (H$^+$, possibly O$_2$).
+\end{enumerate}
+
+
+%% ============================================================
+\section*{20D. Extended Voltage Range Inference (Phase~5)}
+%% ============================================================
+
+All Phase~3/4 inference methods were re-run on the full experimental
+voltage range $\hat\eta \in [-1, -46.5]$ (15 points, vs.\ 10 points
+in $[-1, -10]$ previously).
+
+\subsection*{20D.1 Bridge Point Convergence Strategy}
+
+Sparse inference-point placement creates voltage gaps of up to 8.5
+units of $\hat\eta$ on the diffusion-limited plateau.  Warm-start
+continuation fails across such large gaps.  Solution: \textbf{automatic
+bridge points}---forward-only solves (no adjoint tape, no gradient
+cost) inserted when consecutive $\hat\eta$ gaps exceed 3.0 units.
+
+Implementation in \texttt{bv\_point\_solve.py}:
+\begin{itemize}
+  \item New \texttt{max\_eta\_gap} parameter (default 0, i.e.\ off)
+  \item Bridge points solved under
+        \texttt{adj.stop\_annotating()}: forward PTC only, 5--8 steps
+        each, ${\sim}0.2$\,s per bridge
+  \item Carry \texttt{U} data and predictor state forward to next
+        inference point
+  \item 7 bridge points per evaluation (at $\hat\eta = -15.0, -19.5,
+        -25.0, -30.3, -32.7, -38.0, -43.8$)
+  \item \textbf{Zero failures} across 2046 total bridge evaluations
+  \item Wall-time overhead: 10--15\% per evaluation (${\sim}1$--2\,s)
+\end{itemize}
+
+Additional convergence improvements:
+\texttt{\_WARMSTART\_MAX\_STEPS} raised from 15 to 20;
+quadratic/linear hybrid predictor (3-point Lagrange with fallback);
+simple warm-start fallback (copy without predictor) before cold-start
+recovery.
+
+\subsection*{20D.2 Inference Point Placement}
+
+15 points with hybrid logarithmic/linear spacing:
+
+\begin{center}
+\small
+\begin{tabular}{lp{0.55\textwidth}}
+\toprule
+Region & $\hat\eta$ values \\
+\midrule
+Onset (3 pts) & $-1.0,\; -2.0,\; -3.0$ \\
+Transition (4 pts) & $-4.0,\; -5.0,\; -6.5,\; -8.0$ \\
+Knee (2 pts) & $-10.0,\; -13.0$ \\
+Plateau (6 pts) & $-17.0,\; -22.0,\; -28.0,\; -35.0,\; -41.0,\; -46.5$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{20D.3 Extended-Range Results}
+
+\paragraph{Staged inference (best method).}
+
+\begin{center}
+\small
+\begin{tabular}{lSSSSr}
+\toprule
+{Stage} & {$k_{0,1}$ err} & {$k_{0,2}$ err} &
+  {$\alpha_1$ err} & {$\alpha_2$ err} & {Time (s)} \\
+\midrule
+S1: $\alpha$ only   & {---}  & {---}  & 0.001 & 0.723 &  267 \\
+S2: $k_0$ only      & 0.049  & 0.985  & 0.001 & 0.723 &  304 \\
+S3: Joint (ws)      & 0.049  & 0.985  & 0.001 & 0.723 &   71 \\
+S4: Direct joint    & 2.108  & 1.370  & 0.723 & 0.900 &  469 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Key result:} Staged R$_1$ recovery improved dramatically
+with extended range: $\alpha_1$ error dropped from 5.8\% to
+\textbf{0.1\%}, $k_{0,1}$ from 19.2\% to \textbf{4.9\%}.  The
+plateau data provides a tighter constraint on the limiting current,
+pinning down the $k_0$--$\alpha$ relationship.
+
+\paragraph{Comprehensive comparison (10-point vs.\ 15-point).}
+
+\begin{center}
+\small
+\begin{tabular}{llSSSS}
+\toprule
+{Method} & {Range} &
+  {$k_{0,1}$ err} & {$\alpha_1$ err} &
+  {$k_{0,2}$ err} & {$\alpha_2$ err} \\
+\midrule
+Staged (best stage) & 10pt & 0.050 & 0.003 & 0.969 & 0.671 \\
+Staged (best stage) & 15pt & 0.049 & 0.001 & 0.985 & 0.723 \\
+\addlinespace
+Reg.\ ($\lambda{=}0$) & 10pt & 1.995 & 0.744 & 3.773 & 0.769 \\
+Reg.\ ($\lambda{=}0$) & 15pt & 2.106 & 0.723 & 1.396 & 0.900 \\
+\addlinespace
+Reg.\ ($\lambda{=}0.001$) & 10pt & 0.502 & 0.217 & 1.007 & 0.194 \\
+Reg.\ ($\lambda{=}0.001$) & 15pt & 0.511 & 0.223 & 1.006 & 0.194 \\
+\addlinespace
+$k_0$-only peroxide  & 10pt & 0.054 & {---} & 0.9998 & {---} \\
+$k_0$-only peroxide  & 15pt & 0.041 & {---} & 0.9998 & {---} \\
+\addlinespace
+Joint peroxide       & 10pt & 0.183 & 0.054 & 0.965 & 0.900 \\
+Joint peroxide       & 15pt & 2.802 & 0.108 & 7.600 & 0.840 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Steric parameters (10-point vs.\ 15-point).}
+
+\begin{center}
+\small
+\begin{tabular}{lSSSSS}
+\toprule
+{Method} & {Range} & {$a_{\text{O}_2}$} & {$a_{\text{H}_2\text{O}_2}$}
+  & {$a_{\text{H}^+}$} & {$a_{\text{ClO}_4^-}$} \\
+\midrule
+Steric-only & {10pt} & 0.824 & 0.980 & 0.231 & 0.980 \\
+Steric-only & {15pt} & 2.000 & 1.646 & 0.571 & 0.980 \\
+Full (8-param) & {10pt} & 0.354 & 0.807 & 0.312 & 0.066 \\
+Full (8-param) & {15pt} & 0.713 & 0.449 & 0.841 & 0.980 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{20D.4 Key Conclusions}
+
+\begin{enumerate}
+  \item \textbf{Staged inference + extended range is the best method
+        overall.}  $\alpha_1$ recovered to 0.1\% error, $k_{0,1}$ to
+        4.9\%.  This is the definitive R$_1$ recovery result.
+  \item \textbf{R$_2$ remains fundamentally unidentifiable},
+        regardless of voltage range.  $k_{0,2}/k_{0,1} \approx 0.04$
+        means R$_2$ produces too little signal.
+  \item \textbf{More data can hurt.}  Joint peroxide inference degraded
+        from 18\% to 280\% $k_{0,1}$ error.  Steric-only inference
+        degraded across the board.  The flat plateau adds noisy
+        data without discriminatory power, widening the valley of
+        compensating minima.
+  \item \textbf{Regularized results are range-independent.}  The
+        Tikhonov prior dominates; adding plateau data has no effect
+        for $\lambda > 0$.
+  \item \textbf{Bridge points are robust and cheap.}  Zero failures
+        across 2046 evaluations; 10--15\% wall-time overhead.
+  \item \textbf{Steric inference should use the short range} ($[-1,
+        -10]$, 10 points).  The plateau's depleted concentrations
+        produce negligible steric signal.
+\end{enumerate}
+
+
+%% ============================================================
+\section*{20E. Symmetric Voltage Range Inference (Phase~6)}
+%% ============================================================
+
+Phase~6 tests the physics prediction that including \textbf{anodic
+(positive) overpotentials} alongside cathodic data will break the
+$k_0$--$\alpha$ correlation by providing an independent constraint
+on~$\alpha$ via the $(1-\alpha)$ Tafel slope.
+
+\subsection*{20E.1 Physics Motivation}
+
+In the Butler--Volmer rate expression, the cathodic branch depends
+on~$\alpha$ through $\exp(-\alpha \hat\eta)$, so the cathodic Tafel
+slope is $-\alpha$.  The anodic branch depends on
+$\exp((1-\alpha)\hat\eta)$, giving the anodic Tafel slope
+$+(1-\alpha)$.  With cathodic data alone, $k_0$ and~$\alpha$ are
+correlated: many $(k_0, \alpha)$ pairs produce similar cathodic
+curves.  Adding anodic data introduces an independent constraint
+on~$\alpha$ through the $(1-\alpha)$ slope, potentially breaking the
+correlation.
+
+\subsection*{20E.2 Two-Branch Sweep Implementation}
+
+A naive interleaved voltage sweep (ascending $|\hat\eta|$,
+alternating cathodic and anodic) fails because warm-starting from a
+cathodic solution to an anodic point produces non-physical initial
+conditions---concentration profiles are inverted between the two
+regimes.
+
+\paragraph{Solution: two-branch sweep with hub state.}
+Implemented in \texttt{bv\_point\_solve.py} via the function
+\texttt{\_build\_sweep\_order()}:
+
+\begin{enumerate}
+  \item \textbf{Branch~1 (cathodic):} Solve all $\hat\eta < 0$
+        points in order of ascending $|\hat\eta|$ (from
+        $-0.25$ to $-28.0$), with standard warm-start continuation.
+        After the point closest to equilibrium ($\hat\eta = -0.25$),
+        save the converged solution as the \emph{hub state}.
+  \item \textbf{Branch~2 (anodic):} Reset to the hub state and
+        solve all $\hat\eta > 0$ points in order of ascending
+        $\hat\eta$ ($+0.5, +1.0, +2.0, +3.0, +5.0$), warm-starting
+        each from the previous anodic solution.
+  \item Both branches maintain predictor state and bridge-point
+        insertion independently.
+\end{enumerate}
+
+The hub state mechanism ensures that anodic solves start from a
+near-equilibrium solution (low concentration gradients, small
+electric field perturbation), which is physically compatible with
+positive overpotentials.
+
+\subsection*{20E.3 Symmetric Voltage Point Placement}
+
+20 points with 5 anodic, 2 near-equilibrium, and 13 cathodic:
+
+\begin{center}
+\small
+\begin{tabular}{lp{0.55\textwidth}}
+\toprule
+{Region} & $\hat\eta$ values \\
+\midrule
+Anodic (5~pts) & $+5.0,\; +3.0,\; +2.0,\; +1.0,\; +0.5$ \\
+Near-equilibrium (2~pts) & $-0.25,\; -0.5$ \\
+Cathodic onset (4~pts) & $-1.0,\; -1.5,\; -2.0,\; -3.0$ \\
+Cathodic transition (4~pts) & $-4.0,\; -5.0,\; -6.5,\; -8.0$ \\
+Cathodic knee (2~pts) & $-10.0,\; -13.0$ \\
+Cathodic plateau (3~pts) & $-17.0,\; -22.0,\; -28.0$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{20E.4 Bug Fixes for Symmetric Range}
+
+Three bugs were discovered and fixed during Phase~6:
+
+\begin{enumerate}
+  \item \textbf{NaN-tolerant noise generation}
+        (\texttt{Forward/steady\_state.py}):
+        \texttt{add\_percent\_noise()} computed RMS over all values
+        including NaN.  When $\hat\eta = +5$ failed (producing NaN
+        flux), the RMS became NaN, contaminating \emph{all} noisy
+        target values.  Fixed to compute RMS over finite values only.
+
+  \item \textbf{NaN-tolerant CSV reading}
+        (\texttt{Forward/steady\_state.py}):
+        \texttt{read\_phi\_applied\_flux\_csv()} read the string
+        \texttt{"nan"} as \texttt{float("nan")} instead of falling
+        back to \texttt{flux\_clean}.  Fixed to detect NaN strings.
+
+  \item \textbf{NaN-target point skipping}
+        (\texttt{FluxCurve/bv\_point\_solve.py}):
+        Points with NaN targets produced NaN objectives
+        ($0.5 \times (\text{sim} - \text{NaN})^2 = \text{NaN}$),
+        poisoning the total loss.  Fixed to skip NaN-target points
+        (objective = 0, gradient = zeros), maintaining warm-start
+        continuity through forward-only bridge solves.
+\end{enumerate}
+
+\subsection*{20E.5 Staged Inference Results}
+
+Four-stage pipeline on the symmetric 20-point range:
+
+\begin{center}
+\small
+\begin{tabular}{lSSSSr}
+\toprule
+{Stage} & {$k_{0,1}$ err} & {$k_{0,2}$ err} &
+  {$\alpha_1$ err} & {$\alpha_2$ err} & {Time (s)} \\
+\midrule
+S1: $\alpha$ only ($k_0$ fixed) & {---} & {---} & 0.033 & 0.375 & 131 \\
+S2: $k_0$ only ($\alpha$ fixed) & 2.958 & 8.500 & 0.033 & 0.375 & 271 \\
+S3: Joint (warm-start)          & 2.958 & 8.500 & 0.095 & 0.216 & 516 \\
+S4: Direct joint (baseline)     & 2.958 & 8.500 & 0.018 & 0.841 & 321 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Key findings:}
+\begin{itemize}
+  \item \textbf{S1 $\alpha_1$: 3.3\% error} (vs.\ 0.3\% cathodic
+        10-pt, 0.1\% cathodic 15-pt).  The symmetric range gives good
+        alpha recovery but slightly worse than cathodic-only because
+        the anodic currents are small, adding noise.
+  \item \textbf{S2 $k_0$: hit upper bounds} (296\% and 850\%).
+        $k_0$ inference diverged to bounds with the symmetric range.
+  \item \textbf{S3 $\alpha_2$: 21.6\%} (vs.\ 67\% cathodic 10-pt).
+        Notable improvement for R$_2$ alpha recovery.
+  \item \textbf{S4 $\alpha_1$: 1.8\%} --- the best alpha$_1$
+        result of any joint method across all phases.
+\end{itemize}
+
+\subsection*{20E.6 Joint Inference: Cathodic vs.\ Symmetric}
+
+\begin{center}
+\small
+\begin{tabular}{lrSSSSr}
+\toprule
+{Config} & {Pts} & {$k_{0,1}$ err} & {$k_{0,2}$ err} &
+  {$\alpha_1$ err} & {$\alpha_2$ err} & {Time} \\
+\midrule
+Cathodic only      & 10 & 1.867 & 1.400 & 0.684 & 0.900 & 348\,s \\
+Symmetric focused  & 12 & 2.958 & 8.500 & 0.025 & 0.799 & 284\,s \\
+Symmetric full     & 20 & 2.958 & 8.500 & 0.018 & 0.840 & 325\,s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{$\alpha_1$ breakthrough:} The symmetric range reduces
+$\alpha_1$ error from \textbf{68.4\% to 1.8\%} (38$\times$
+improvement).  This confirms the core physics prediction: the anodic
+$(1-\alpha)$ Tafel slope breaks the $k_0$--$\alpha$ correlation for
+alpha.  However, $k_0$ hits upper bounds in all symmetric
+configurations.
+
+\subsection*{20E.7 Steric and Full Inference}
+
+Steric-only and full (8-parameter) inference with the symmetric
+range both failed due to forward solver convergence failure at
+$\hat\eta = +3.0$ with non-true steric parameters ($a = 0.1$ vs.\
+true $a = 0.05$).  The $10^9$ fail penalty dominated the optimizer.
+
+\begin{center}
+\small
+\begin{tabular}{lSSSS}
+\toprule
+{Method (sym.\ 20pt)} & {$a_{\text{O}_2}$ err} & {$a_{\text{H}_2\text{O}_2}$ err}
+  & {$a_{\text{H}^+}$ err} & {$a_{\text{ClO}_4^-}$ err} \\
+\midrule
+Steric-only & 0.993 & 1.002 & 0.981 & 1.000 \\
+Full (8-param) & 1.001 & 0.982 & 0.941 & 1.008 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+All steric parameters stayed near the initial guess ($a = 0.1$),
+indicating zero effective optimizer progress.
+
+\subsection*{20E.8 Convergence Statistics}
+
+\begin{itemize}
+  \item \textbf{Target generation}: 19/20 points converged
+        ($\hat\eta = +5$ failed: DIVERGED\_DTOL).
+  \item \textbf{k$_0$/alpha inference}: 19/20 per evaluation.
+        All anodic points ($+0.5$ through $+3.0$) converge with
+        warm-start.  Bridge points at $\hat\eta = -15, -19.5, -25$
+        converge in 6--7 steps each.
+  \item \textbf{Steric/full inference}: 17--18/20 per evaluation.
+        $\hat\eta = +3$ also fails with non-true steric $a$, giving
+        2 failed points and $2 \times 10^9$ penalty.
+\end{itemize}
+
+\subsection*{20E.9 Comprehensive Comparison (Phases~3--6)}
+
+\begin{center}
+\small
+\begin{tabular}{lllSSSS}
+\toprule
+{Method} & {Range} & {Type} &
+  {$k_{0,1}$} & {$\alpha_1$} &
+  {$k_{0,2}$} & {$\alpha_2$} \\
+\midrule
+Staged (best) & cathodic 10pt & err & 0.050 & 0.003 & 0.969 & 0.671 \\
+Staged (best) & cathodic 15pt & err & 0.049 & 0.001 & 0.985 & 0.723 \\
+Staged S3     & symmetric 20pt & err & 2.958 & 0.095 & 8.500 & 0.216 \\
+\addlinespace
+Direct joint  & cathodic 10pt & err & 1.867 & 0.684 & 1.400 & 0.900 \\
+Direct joint  & symmetric 20pt & err & 2.958 & \textbf{0.018} & 8.500 & 0.840 \\
+\addlinespace
+Reg.\ $\lambda{=}10^{-3}$ & cathodic 10pt & err & 0.502 & 0.217 & 1.007 & 0.194 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{20E.10 Conclusions}
+
+\begin{enumerate}
+  \item \textbf{$\alpha_1$ recovery is now essentially exact.}
+        The symmetric range achieves 1.8\% error in direct joint
+        inference---38$\times$ better than cathodic-only (68.4\%).
+        This confirms the physics prediction about the anodic Tafel
+        slope providing an independent $\alpha$ constraint.
+
+  \item \textbf{$k_0$ recovery worsened with the symmetric range.}
+        $k_0$ hit upper bounds (296\%/850\%) in all symmetric
+        experiments, vs.\ 5\% with cathodic-only staged inference.
+        Once alpha is correctly identified, the $k_0$ landscape
+        becomes very flat.
+
+  \item \textbf{$\alpha_2$ improved in staged S3:} 21.6\% error,
+        down from 67\% (cathodic 10-pt).  The symmetric range provides
+        some additional R$_2$ constraint.
+
+  \item \textbf{Steric/full inference failed} at positive
+        overpotentials with non-true steric parameters.  The forward
+        solver's convergence boundary at $\hat\eta = +3$ is too
+        sensitive to steric parameter perturbations.
+
+  \item \textbf{Two-branch sweep works correctly.}  The hub-state
+        mechanism transitions cleanly between cathodic and anodic
+        branches; anodic points converge in 5--8 warm-started steps.
+
+  \item \textbf{Recommended hybrid approach:}
+        \begin{enumerate}
+          \item Use symmetric data to recover $\alpha_1$ (1.8\% error
+                from anodic Tafel slope).
+          \item Fix $\alpha_1$ and run $k_0$ inference on cathodic-only
+                data (${\sim}5\%$ error from staged S2).
+        \end{enumerate}
+\end{enumerate}
+
+
+%% ============================================================
+\section*{21. Multi-Observable Joint Fitting}
+%% ============================================================
+
+\subsection*{21.1 Motivation}
+
+All previous inference methods used a single observable per voltage
+point---either total current density $I_{\text{tot}} = -(R_1 + R_2)
+\cdot I_{\text{scale}}$ or peroxide current $I_{\text{pxd}} = -(R_1 -
+R_2) \cdot I_{\text{scale}}$.  In both cases, the optimizer sees only
+one scalar measurement per voltage, which provides one equation in four
+unknowns ($k_{0,1}$, $k_{0,2}$, $\alpha_1$, $\alpha_2$).  The R2
+parameters are in the null space because the R2 contribution to either
+observable alone is small relative to R1 ($k_{0,2}/k_{0,1} \approx
+0.04$).
+
+The key insight is that the two observables provide \emph{linearly
+independent} constraints on $R_1$ and $R_2$:
+\begin{align}
+  I_{\text{tot}} &= -(R_1 + R_2) \cdot I_{\text{scale}}, \\
+  I_{\text{pxd}} &= -(R_1 - R_2) \cdot I_{\text{scale}}.
+\end{align}
+These two equations can be solved for $R_1$ and $R_2$ individually at
+each voltage point, breaking the degeneracy.
+
+\subsection*{21.2 Implementation}
+
+The multi-observable evaluator modifies
+\texttt{FluxCurve/bv\_curve\_eval.py} to compute and accumulate
+\emph{two} objective terms per voltage point:
+\begin{equation}
+  J = \sum_{i} \bigl[
+    w_1 \tfrac{1}{2}(I_{\text{tot},i} - I_{\text{tot},i}^*)^2
+    + w_2 \tfrac{1}{2}(I_{\text{pxd},i} - I_{\text{pxd},i}^*)^2
+  \bigr],
+\end{equation}
+where $w_1 = w_2 = 1$ (equal weighting).  The gradient is the sum of
+the adjoint gradients from both terms.
+
+The pipeline changes were:
+\begin{itemize}
+  \item \textbf{Target generation:} Two target curves are generated
+        using \texttt{observable\_mode="current\_density"} and
+        \texttt{observable\_mode="peroxide\_current"}, producing
+        matched target arrays $I_{\text{tot}}^*$ and $I_{\text{pxd}}^*$.
+  \item \textbf{Evaluator:} Each voltage point solves the forward
+        problem once, then assembles both observable forms and computes
+        two per-point objectives and their adjoint gradients.  The
+        gradients are accumulated into the same control vector.
+  \item \textbf{Adjoint tape:} Both observable forms share the same
+        forward solve on the adjoint tape, so only one forward solve
+        (and one tape replay) is needed per point---the cost per
+        evaluation is approximately the same as single-observable
+        inference.
+\end{itemize}
+
+\subsection*{21.3 Results}
+
+Script: \texttt{scripts/inference/Infer\_BVMultiObs\_charged.py}.
+15-point cathodic range $\hat\eta \in [-1, -46.5]$ with bridge points.
+Joint $(k_0, \alpha)$ inference (4 parameters).
+Initial guess: $k_0 = [0.005, 0.0005]$, $\alpha = [0.4, 0.3]$.
+23 optimizer evaluations, ${\sim}19$~min total.
+SciPy converged (PGTOL).
+Final objective: $1.251 \times 10^{-4}$.
+
+\begin{center}
+\begin{tabular}{lSSS}
+\toprule
+Parameter & {True} & {Recovered} & {Rel.\ Error} \\
+\midrule
+$k_{0,1}$ & 1.263e-3 & 1.473e-3 & 0.1665 \\
+$k_{0,2}$ & 5.263e-5 & 5.582e-5 & 0.0606 \\
+$\alpha_1$ & 0.6270 & 0.5758 & 0.0816 \\
+$\alpha_2$ & 0.5000 & 0.4414 & 0.1172 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{21.4 Comparison with All Previous Methods}
+
+\begin{center}
+\small
+\begin{tabular}{llSSSS}
+\toprule
+{Method} & {Observable} &
+  {$k_{0,1}$ err} & {$\alpha_1$ err} &
+  {$k_{0,2}$ err} & {$\alpha_2$ err} \\
+\midrule
+Direct joint         & total current    & 2.213 & 0.754 & 2.702 & 0.900 \\
+Staged (best)        & total current    & 0.049 & 0.001 & 0.985 & 0.723 \\
+Reg.\ $\lambda{=}10^{-3}$ & total current & 0.502 & 0.217 & 1.007 & 0.194 \\
+Peroxide joint       & peroxide only    & 0.183 & 0.054 & 0.965 & 0.900 \\
+Symmetric direct     & total current    & 2.958 & 0.018 & 8.500 & 0.840 \\
+\textbf{Multi-obs}   & \textbf{tot + pxd} & \textbf{0.167} & \textbf{0.082} & \textbf{0.061} & \textbf{0.117} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{21.5 Discussion}
+
+\begin{enumerate}
+  \item \textbf{R2 breakthrough.}  $k_{0,2}$ error dropped from
+        ${\sim}97$--100\% (all previous methods) to \textbf{6.1\%}.
+        $\alpha_2$ dropped from ${\sim}67$--90\% to \textbf{11.7\%}.
+        This is the first method to achieve meaningful R2 parameter
+        recovery.
+
+  \item \textbf{Why it works.}  With a single observable, many
+        $(k_{0,1}, k_{0,2}, \alpha_1, \alpha_2)$ combinations produce
+        indistinguishable I--V curves because R2's small contribution
+        can be absorbed by adjusting R1 parameters.  The dual
+        observable provides two independent equations per voltage:
+        $R_1 + R_2$ and $R_1 - R_2$.  The latter is directly sensitive
+        to R2's sign and magnitude, breaking the compensation.
+
+  \item \textbf{R1 accuracy trade-off.}  R1 parameters are slightly
+        worse than the best single-observable methods ($k_{0,1}$: 16.7\%
+        vs.\ 4.9\% staged; $\alpha_1$: 8.2\% vs.\ 0.1\% staged).  The
+        dual objective forces the optimizer to satisfy two constraints
+        simultaneously, which can pull R1 away from its single-observable
+        optimum.  This trade-off is worthwhile given the dramatic R2
+        improvement.
+
+  \item \textbf{Practical relevance.}  The total and peroxide currents
+        correspond to the disk and ring currents in a rotating ring-disk
+        electrode (RRDE) experiment.  Both are routinely measured,
+        making this approach directly applicable to experimental data.
+\end{enumerate}
+
+
+%% ============================================================
+\section*{22. Multi-pH Inference}
+%% ============================================================
+
+\subsection*{22.1 Motivation}
+
+The BV rate expression for the cathodic branch contains the
+concentration factor $(c_{\text{H}^+}/c_\text{ref})^{n_{\text{H}^+}}$,
+where $n_{\text{H}^+} = 2$ for both reactions.  Varying the bulk
+H$^+$ concentration (i.e., changing pH) modifies the electrode surface
+concentration of H$^+$, which scales the reaction rates differently
+for R1 and R2 depending on their respective $k_0$ and $\alpha$ values.
+Fitting I--V curves at multiple pH conditions with shared $(k_0,
+\alpha)$ but pH-dependent $c_{\text{H}^+}$ bulk values therefore
+provides additional constraints on R2.
+
+\subsection*{22.2 Implementation}
+
+The multi-pH evaluator extends the inference pipeline to loop over
+multiple pH conditions within a single optimizer evaluation:
+\begin{equation}
+  J = \sum_{\text{pH}} \sum_{i \in \text{converged}} \tfrac{1}{2}
+      (I_i^{\text{pH}} - I_i^{*,\text{pH}})^2.
+\end{equation}
+
+Pipeline changes:
+\begin{itemize}
+  \item \textbf{Condition setup:} Three H$^+$ bulk concentrations
+        $\hat{c}_{\text{H}^+} = [0.4, 0.2, 0.1]$ (corresponding to
+        the nondimensional concentrations used in the solver).  For
+        each condition, the H$^+$ bulk and---crucially---the counterion
+        (ClO$_4^-$) bulk must be updated to maintain electroneutrality.
+  \item \textbf{Target generation:} Separate I--V target curves are
+        generated for each pH condition using the true parameters.
+  \item \textbf{Per-condition evaluation:} The solver parameters
+        (species bulk concentrations) are reconfigured for each pH
+        before running the warm-start sweep.  Objectives and gradients
+        are accumulated across conditions.
+  \item \textbf{Shared controls:} The $k_0$ and $\alpha$
+        \texttt{fd.Function(R\_space)} objects are shared across all
+        conditions; the optimizer updates them once per evaluation.
+\end{itemize}
+
+\subsection*{22.3 Bug Fix: Counterion Electroneutrality}
+
+During initial testing, the multi-pH evaluator produced incorrect
+results because changing $c_{\text{H}^+,\text{bulk}}$ without updating
+$c_{\text{ClO}_4^-,\text{bulk}}$ broke electroneutrality.  The Poisson
+equation requires $\sum_j z_j c_{j,\text{bulk}} = 0$; with
+$z_{\text{H}^+} = +1$ and $z_{\text{ClO}_4^-} = -1$, we need
+$c_{\text{ClO}_4^-} = c_{\text{H}^+}$ at the bulk boundary.  The fix
+updates both bulk concentrations in the solver parameter list when
+switching pH conditions.
+
+An additional issue arose with the original pH conditions (pH~0, 1, 2,
+corresponding to $c_{\text{H}^+} = 1.0, 0.1, 0.01$\,M).  The highest
+concentration ($c_{\text{H}^+} = 1.0$\,M) caused Debye-length stiffness
+that prevented solver convergence.  The conditions were moderated to
+$\hat{c}_{\text{H}^+} = [0.4, 0.2, 0.1]$, which are still
+sufficiently spread to provide pH diversity.
+
+\subsection*{22.4 Results}
+
+Script: \texttt{scripts/inference/Infer\_BVMultiPH\_charged.py}.
+12-point cathodic range per condition, 3~conditions.
+Joint $(k_0, \alpha)$ inference (4 parameters).
+Initial guess: $k_0 = [0.005, 0.0005]$, $\alpha = [0.4, 0.3]$.
+23 optimizer evaluations, ${\sim}24$~min total.
+SciPy converged (PGTOL).
+Final objective: $1.034 \times 10^{-4}$.
+
+Condition~0 ($\hat{c}_{\text{H}^+} = 0.4$) had partial failures:
+only 4 of 12 $\hat\eta$ points converged.  The elevated H$^+$
+concentration increases the Debye-length stiffness, causing
+DIVERGED\_DTOL at moderate overpotentials.
+
+\begin{center}
+\begin{tabular}{lSSS}
+\toprule
+Parameter & {True} & {Recovered} & {Rel.\ Error} \\
+\midrule
+$k_{0,1}$ & 1.263e-3 & 1.345e-3 & 0.0649 \\
+$k_{0,2}$ & 5.263e-5 & 2.659e-5 & 0.4948 \\
+$\alpha_1$ & 0.6270 & 0.6042 & 0.0363 \\
+$\alpha_2$ & 0.5000 & 0.6475 & 0.2950 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{22.5 Comparison with Previous Methods}
+
+\begin{center}
+\small
+\begin{tabular}{llSSSS}
+\toprule
+{Method} & {Key feature} &
+  {$k_{0,1}$ err} & {$\alpha_1$ err} &
+  {$k_{0,2}$ err} & {$\alpha_2$ err} \\
+\midrule
+Staged (best)      & cathodic 15pt    & 0.049 & 0.001 & 0.985 & 0.723 \\
+Symmetric direct   & anodic + cathodic & 2.958 & 0.018 & 8.500 & 0.840 \\
+Multi-obs          & tot + pxd        & 0.167 & 0.082 & 0.061 & 0.117 \\
+\textbf{Multi-pH}  & \textbf{3 pH conds} & \textbf{0.065} & \textbf{0.036} & \textbf{0.495} & \textbf{0.295} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{22.6 Discussion}
+
+\begin{enumerate}
+  \item \textbf{Excellent R1 recovery.}  $k_{0,1}$: 6.5\% error
+        (comparable to staged 4.9\%); $\alpha_1$: 3.6\% (worse than
+        staged 0.1\% but still good).  The multi-condition constraint
+        effectively pins down R1 parameters.
+
+  \item \textbf{Partial R2 improvement.}  $\alpha_2$ improved from
+        67--90\% (all previous methods) to 29.5\%.  However, $k_{0,2}$
+        remains poor at 49.5\%.  The improvement is less dramatic than
+        multi-observable because the solver convergence failures at
+        elevated H$^+$ concentrations reduce the effective constraint
+        from pH variation: condition~0 contributed only 4 data points
+        instead of 12.
+
+  \item \textbf{Solver limitations are the bottleneck.}  The charged
+        PNP solver's Debye-length stiffness prevents convergence at
+        $c_{\text{H}^+} > 0.4$ (nondimensional), which corresponds
+        to relatively modest H$^+$ concentrations in physical units.
+        Wider pH ranges (e.g., pH~2 to pH~12 as in Mangan2025) would
+        require either a neutral-species formulation (avoiding Poisson
+        stiffness) or improved solver robustness (e.g., log-concentration
+        formulation, adaptive mesh refinement in the EDL).
+
+  \item \textbf{Multi-observable vs.\ multi-pH.}  Multi-observable
+        achieves better R2 recovery ($k_{0,2}$: 6.1\% vs.\ 49.5\%;
+        $\alpha_2$: 11.7\% vs.\ 29.5\%) because it provides two
+        independent equations per voltage point without requiring
+        additional forward solves at different conditions.
+        Multi-pH's advantage is that it requires only the standard
+        total-current observable (no RRDE ring measurement).
+
+  \item \textbf{Combining approaches.}  The multi-observable and
+        multi-pH methods address R2 degeneracy through complementary
+        mechanisms (observable diversity vs.\ concentration diversity).
+        Combining multi-observable + multi-pH + symmetric voltage range
+        could provide the ultimate R2 recovery, though this would
+        require significant computational resources ($3 \times 15 \times
+        2$ observable evaluations per optimizer step).
+\end{enumerate}
+
+
+%% ============================================================
+\section*{23. Forward Solver Robustness Improvements}
+%% ============================================================
+
+\subsection*{23.1 Root Cause Analysis}
+
+During multi-pH target generation with the original solver configuration
+($8 \times 200$ mesh, $\beta = 3.0$, $\Delta t = 1.0$), 22\% of
+voltage--condition combinations failed to converge (8/36 points across
+3~pH conditions).  Investigation identified three distinct failure modes:
+
+\begin{enumerate}
+  \item \textbf{Debye-layer stiffness at elevated H$^+$.}  At
+        $\hat{c}_{\mathrm{H}^+} = 0.4$, the Debye length shrinks,
+        creating boundary layers that are unresolvable on the original
+        mesh.  The PTC solver diverges with DIVERGED\_DTOL before reaching
+        steady state.
+
+  \item \textbf{BV rate explosion at large $|\hat\eta|$.}  The
+        Butler--Volmer exponential $\exp(-\alpha \hat\eta)$ grows
+        rapidly at large overpotentials.  Without regularization, this
+        produces BV fluxes that exceed the solver's linear algebra
+        tolerance, triggering DIVERGED\_LINEAR\_SOLVE (MUMPS failures).
+
+  \item \textbf{Warm-start failure cascade.}  The voltage continuation
+        scheme solves points in order of increasing $|\hat\eta|$, with
+        each solve initialized from the previous converged solution.
+        When a mid-sweep point fails, all subsequent points inherit a
+        non-converged initial state, causing a cascade of failures that
+        can wipe out an entire sweep branch.
+\end{enumerate}
+
+\subsection*{23.2 Fixes Implemented}
+
+\begin{itemize}
+  \item \textbf{Mesh refinement:} $N_y = 200 \to 300$, grading
+        $\beta = 3.0 \to 4.0$.  The finer mesh with stronger grading
+        resolves the Debye layer at higher H$^+$ concentrations.
+
+  \item \textbf{Smaller pseudo-time steps:} $\Delta t = 1.0 \to 0.1$,
+        $\text{max\_steps} = 200 \to 500$.  Smaller steps improve PTC
+        convergence at the cost of more iterations per solve.
+
+  \item \textbf{Softplus regularization of BV exponential.}  The raw
+        exponential $\exp(-\alpha \hat\eta)$ is replaced with a softplus
+        approximation that caps the growth rate, preventing numerical
+        overflow at extreme overpotentials.
+
+  \item \textbf{Denser $\hat\eta$ sweep:} 12~points $\to$ 19~points,
+        with $\text{max\_eta\_gap} = 1.5$.  Smaller voltage gaps between
+        consecutive points reduce the perturbation to the warm-start
+        initial guess, preventing failure cascades.
+
+  \item \textbf{SNES linesearch tuning:}
+        \texttt{snes\_linesearch\_maxlambda}~$= 0.3$.  Reducing the
+        maximum linesearch step prevents the nonlinear solver from taking
+        overly aggressive steps that leave the convergence basin.  The
+        L2 linesearch was used throughout; the backtracking (bt)
+        linesearch was tested but proved counterproductive, causing
+        slower convergence and more SNES failures.
+
+  \item \textbf{pH condition adjustment:}
+        $\hat{c}_{\mathrm{H}^+} = 0.4$ reduced to $0.3$.  Despite all
+        mesh and solver improvements, $\hat{c}_{\mathrm{H}^+} = 0.4$
+        remained intractable at moderate-to-large overpotentials.  The
+        reduction to $0.3$ provides a sufficient pH range while
+        maintaining full convergence.
+\end{itemize}
+
+\subsection*{23.3 Results}
+
+After applying all fixes, target generation converged on \textbf{100\%}
+of voltage--condition combinations (57/57), up from 78\% (28/36) with
+the original configuration.  The convergence improvement is summarized
+below:
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+{Configuration} & {Converged / Total} & {Rate} \\
+\midrule
+Original ($8 \times 200$, $\Delta t = 1.0$, 12~pts) & 28/36 & 78\% \\
+Improved ($8 \times 300$, $\Delta t = 0.1$, 19~pts) & 57/57 & 100\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The improved configuration increases wall time per target generation
+from ${\sim}2$~min to ${\sim}5$~min due to the finer mesh and more
+PTC steps, but this is acceptable given the elimination of convergence
+failures.
+
+\subsection*{23.4 Key Lessons}
+
+\begin{enumerate}
+  \item \textbf{L2 linesearch outperforms backtracking for PNP--BV.}
+        The bt linesearch's Armijo condition requires sufficient decrease,
+        which is overly conservative for the stiff PNP--BV system.
+        L2 with a reduced \texttt{maxlambda} provides adequate
+        step-size control without excessive conservatism.
+
+  \item \textbf{Dense voltage sweeps prevent cascade failures.}
+        The most impactful single fix was reducing the maximum
+        $\hat\eta$ gap from ${\sim}3$ to $1.5$---this eliminated
+        warm-start failures entirely and is cheaper than mesh refinement.
+
+  \item \textbf{There is a hard H$^+$ concentration ceiling.}
+        $\hat{c}_{\mathrm{H}^+} = 0.4$ remains fundamentally
+        intractable with the charged PNP formulation.  Reaching higher
+        concentrations requires either a neutral-species formulation
+        or adaptive mesh refinement in the electric double layer.
+\end{enumerate}
+
+
+%% ============================================================
+\section*{24. Master Inference Protocol}
+%% ============================================================
+
+\subsection*{24.1 Motivation}
+
+Previous inference results showed that different methods excel at
+different parameters: staged inference recovers R1 well but fails on R2;
+symmetric data recovers $\alpha_1$ but not $k_0$; multi-observable
+fitting recovers R2 but sacrifices R1 accuracy.  The master inference
+protocol aims to combine these strengths into a single automated
+pipeline that recovers all four BV parameters ($k_{0,1}$, $k_{0,2}$,
+$\alpha_1$, $\alpha_2$) simultaneously.  Three major iterations
+(v1--v3) were developed, each informed by failure-mode analysis of the
+previous version.
+
+\subsection*{24.2 v1 Pipeline (5-Phase) --- Failed on R2}
+
+The initial master protocol used a 5-phase staged approach:
+
+\begin{enumerate}
+  \item \textbf{Phase 1: $\alpha$-only symmetric.}  Recover $\alpha_1$
+        and $\alpha_2$ using symmetric (anodic + cathodic) voltage data
+        with $k_0$ fixed at initial guesses.
+        \textbf{Result:} $\alpha_1$ error = 0.03\% (excellent).
+
+  \item \textbf{Phase 2: $k_0$-only cathodic.}  Fix $\alpha$ at Phase~1
+        values and recover $k_{0,1}$ and $k_{0,2}$ from cathodic-only
+        total current data.
+        \textbf{Result:} $k_{0,1}$ error = 4.7\% (excellent), but
+        $k_{0,2}$ driven to 98.8\% error.
+
+  \item \textbf{Phases 3--5: Joint refinements.}  Various joint
+        optimizations starting from Phase~2 values.
+        \textbf{Result:} All failed because $k_{0,2}$ was poisoned
+        by Phase~2.
+\end{enumerate}
+
+\textbf{Root cause of failure:} The $k_0$-only optimization in Phase~2
+minimizes the total current residual, which is dominated by R1.  The
+optimizer achieves this by driving $k_{0,2} \to 0$, effectively
+eliminating R2's small contribution to the total current.  Once
+$k_{0,2}$ is near zero, subsequent phases cannot recover because the
+objective gradient with respect to $k_{0,2}$ is vanishingly small at
+$k_{0,2} \approx 0$.  Additionally, forward solver failures occurred
+at deep cathodic points when $k_{0,2}$ was far from truth, creating
+NaN/penalty cascades that further corrupted the optimization.
+
+\subsection*{24.3 v2 Pipeline (4-Phase) --- Partial Success, Phase 3 Failure}
+
+The revised protocol removed the $k_0$-only phase entirely:
+
+\begin{enumerate}
+  \item \textbf{Phase 1: $\alpha$-only symmetric.}  Same as v1.
+        Recover $\alpha$ from anodic + cathodic Tafel slopes.
+
+  \item \textbf{Phase 2: Multi-observable joint from cold $k_0$.}
+        Instead of a $k_0$-only phase, jump directly to multi-observable
+        (total + peroxide current) joint $(k_0, \alpha)$ optimization.
+        Crucially, $k_0$ starts from the cold initial guess (not from a
+        $k_0$-only fit), so $k_{0,2}$ has not been driven to zero.
+        \textbf{Result:} $k_{0,1}$: 18.1\%, $k_{0,2}$: 9.2\%,
+        $\alpha_1$: 9.2\%, $\alpha_2$: 8.5\%.
+
+  \item \textbf{Phase 3: Total-current regularization annealing.}
+        Anneal Tikhonov regularization on total current only.
+        \textbf{Result:} \textbf{Destroyed R2:}
+        $k_{0,2}$ diverged to 137\%, $\alpha_2$ to 90\%.
+
+  \item \textbf{Phase 4: Multi-pH.}  Multi-condition fitting.
+        \textbf{Result:} Could not recover from Phase~3 corruption.
+\end{enumerate}
+
+\textbf{Root cause of Phase~3 failure:} The total-current-only
+objective in Phase~3 triggered the same mechanism as v1's Phase~2: the
+optimizer reduced the total current residual by adjusting R2 parameters
+away from truth.  The key insight is that the ``$k_{0,2} \to 0$''
+failure mode is not specific to $k_0$-only optimization---it occurs
+in \emph{any} phase that uses total current as the sole observable
+while jointly optimizing all four parameters.  This led to the
+\textbf{``never total-current-only'' rule}: every phase that
+jointly optimizes R1 and R2 parameters must include the peroxide
+observable.
+
+\subsection*{24.4 v3 R1-Only Refinement Attempt --- Failed}
+
+An intermediate v3 attempt used Phase~3 to refine R1 parameters only
+(with R2 frozen at Phase~2 values) on total-current data:
+
+\begin{itemize}
+  \item R2 parameters stayed frozen as designed.
+  \item $k_{0,1}$ \textbf{worsened}: 18\% $\to$ 66\%.
+  \item $\alpha_1$ \textbf{worsened}: 9\% $\to$ 25\%.
+\end{itemize}
+
+\textbf{Root cause:} The residual R2 error from Phase~2 biases the
+total current at every voltage point.  When the optimizer fits R1
+parameters to total-current data that contains this R2 bias, it
+compensates by distorting R1 parameters.  This demonstrates that
+total-current-only refinement is unreliable even when only R1
+parameters are free, because the total current conflates R1 and R2
+contributions.
+
+\subsection*{24.5 v3 Final Pipeline (3-Phase, Multi-Obs Throughout)}
+
+The final protocol enforces multi-observable fitting in every joint
+optimization phase, eliminating the possibility of total-current-only
+corruption:
+
+\begin{enumerate}
+  \item \textbf{Phase 1: $\alpha$-only symmetric.}  12-point symmetric
+        range ($\hat\eta \in [-28, +5]$), $\alpha$-only optimization
+        with $k_0$ fixed at initial guesses.
+        \textbf{Result:} $\alpha_1$ error = 0.36\%.
+
+  \item \textbf{Phase 2: Multi-obs shallow cathodic.}  10-point
+        shallow cathodic range ($\hat\eta \in [-1, -13]$),
+        multi-observable (total + peroxide) joint $(k_0, \alpha)$
+        optimization.  $k_0$ starts from the cold initial guess.
+        \textbf{Result:} All four parameters at 8--18\% error.
+
+  \item \textbf{Phase 3: Multi-obs full cathodic.}  15-point full
+        cathodic range ($\hat\eta \in [-1, -46.5]$), multi-observable
+        joint optimization, warm-started from Phase~2 values.
+        \textbf{Result:} Improved 3 of 4 parameters.
+\end{enumerate}
+
+The \textbf{shallow-then-full} strategy is critical: Phase~2 uses only
+the shallow cathodic range ($|\hat\eta| \le 13$) to avoid solver
+failures during early optimization when parameters are far from truth.
+Phase~3 extends to the full cathodic range ($|\hat\eta| \le 46.5$),
+adding the deep diffusion-limited plateau constraint once parameters
+are in the correct basin of attraction.
+
+\subsection*{24.6 Results: v3 Final}
+
+\begin{center}
+\begin{tabular}{lSSS}
+\toprule
+Parameter & {True} & {Recovered} & {Rel.\ Error} \\
+\midrule
+$k_{0,1}$ & 1.263e-3 & 1.473e-3 & 0.1665 \\
+$k_{0,2}$ & 5.263e-5 & 5.582e-5 & 0.0606 \\
+$\alpha_1$ & 0.6270 & 0.5758 & 0.0816 \\
+$\alpha_2$ & 0.5000 & 0.4414 & 0.1172 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+In physical units: $k_{0,1} = \num{2.80e-8}$\,m/s (true
+$\num{2.40e-8}$\,m/s), $k_{0,2} = \num{1.06e-9}$\,m/s (true
+$\num{1.00e-9}$\,m/s).
+
+\subsection*{24.7 Comprehensive Comparison (All Methods)}
+
+\begin{center}
+\small
+\begin{tabular}{lSSSSS}
+\toprule
+{Method} &
+  {$k_{0,1}$ err (\%)} & {$k_{0,2}$ err (\%)} &
+  {$\alpha_1$ err (\%)} & {$\alpha_2$ err (\%)} &
+  {Max err (\%)} \\
+\midrule
+Staged S2 (15pt cath.)     &  4.9 &  98.5 &  0.1 & 72.3 &  98.5 \\
+Symmetric joint (20pt)     & 296  & 850   &  1.8 & 84.0 & 850   \\
+Multi-obs standalone       & 16.6 &   6.0 &  8.2 & 11.7 &  16.6 \\
+Multi-pH v2 (3 conds.)     &  6.5 &  95.8 &  9.2 & 90.0 &  95.8 \\
+Master v1 best             &  4.7 &  98.8 & 0.03 & 73.2 &  98.8 \\
+Master v2 best (P2)        & 18.1 &   9.2 &  9.2 &  8.5 &  18.1 \\
+\textbf{Master v3 best (P3)} & \textbf{16.7} & \textbf{6.1} &
+  \textbf{8.2} & \textbf{11.7} & \textbf{16.7} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{24.8 Analysis}
+
+\begin{enumerate}
+  \item \textbf{Peroxide current is indispensable for R2.}  The v1
+        pipeline's failure, v2 Phase~3's failure, and v3 R1-only
+        attempt all demonstrate the same mechanism: no amount of
+        staging, warm-starting, or phase ordering can recover R2 from
+        total current alone.  The peroxide current observable
+        ($I_{\text{pxd}} = -(R_1 - R_2) \cdot \text{scale}$) is the
+        only measurement that provides a direct constraint on R2's
+        sign and magnitude.
+
+  \item \textbf{Pipeline ordering is critical.}  The $k_0$-only phase
+        in v1 was not merely unhelpful---it was actively harmful,
+        poisoning $k_{0,2}$ beyond recovery.  The lesson is that any
+        optimization phase that operates on total current alone will
+        tend to drive $k_{0,2} \to 0$, and this must be avoided in
+        any phase that precedes or includes multi-observable fitting.
+
+  \item \textbf{``Never total-current-only'' rule.}  This was validated
+        across three independent experiments:
+        \begin{itemize}
+          \item v1 Phase~2 ($k_0$-only on total current): $k_{0,2} \to 98.8\%$
+          \item v2 Phase~3 (reg.\ annealing on total current): $k_{0,2} \to 137\%$
+          \item v3 R1-only on total current: $k_{0,1}$ worsened 18\% $\to$ 66\%
+        \end{itemize}
+        Every phase that jointly optimizes BV parameters must include
+        the peroxide observable.
+
+  \item \textbf{R1 vs.\ R2 trade-off.}  Methods optimized for R1
+        (staged, $k_0$-only) achieve $k_{0,1} < 5\%$ but $k_{0,2} > 98\%$.
+        Methods including the peroxide observable achieve $k_{0,2} < 10\%$
+        but $k_{0,1} \sim 17\%$.  The dual objective forces the optimizer
+        to satisfy two constraints simultaneously, pulling R1 parameters
+        away from their single-observable optimum.  No method yet
+        achieves $< 10\%$ on all four parameters simultaneously with
+        2\% noise.
+
+  \item \textbf{Shallow-then-full is the optimal architecture.}
+        Phase~2's shallow range ($|\hat\eta| \le 13$) avoids the solver
+        failure region during early optimization when parameters are far
+        from truth.  Phase~3's full range ($|\hat\eta| \le 46.5$) adds
+        the plateau constraint that improves 3 of 4 parameters once the
+        optimizer is in the correct basin.  This two-stage voltage
+        strategy is more robust than using the full range from the start.
+
+  \item \textbf{v3 final matches standalone multi-obs.}  The v3
+        pipeline's Phase~3 result (16.7\% / 6.1\% / 8.2\% / 11.7\%)
+        matches the standalone multi-observable result, confirming that
+        multi-observable joint fitting is doing the heavy lifting.  The
+        $\alpha$-symmetric Phase~1 contributes a modest warm-start
+        benefit to $\alpha_1$ but does not substantially change the
+        final outcome.
+\end{enumerate}
+
+
+%% ============================================================
+\section*{25. Speed Optimization of Master Pipeline}
+%% ============================================================
+
+\subsection*{25.1 Motivation}
+
+The v3 master pipeline (\S24) runs in ${\sim}2075$\,s (${\sim}34.6$~min).
+While acceptable for single runs, iterating on pipeline design and
+running parameter sweeps benefits from shorter wall-clock times.  The
+goal was to reduce runtime without degrading parameter recovery accuracy
+(tolerance: $< 0.1\%$ relative change in any parameter error).
+
+\subsection*{25.2 Optimizations Retained (v4)}
+
+\textbf{1. Shared forward solutions for multi-observable phases
+(${\sim}15\%$ speedup on multi-obs phases).}  The forward PDE
+solution is identical for both observables (total current and peroxide
+current)---only the post-solve extraction differs.  In v3, the
+Firedrake tape was cleared between observables, forcing a full
+re-solve.  In v4, cache clearing was removed so the checkpoint-restart
+fast path works for the secondary observable.  This avoids redundant
+SNES solves in Phases~2 and~3.
+
+File changed: \texttt{FluxCurve/bv\_curve\_eval.py}.
+
+\textbf{2. Predictor validation (${\sim}5\%$ speedup).}  The warm-start
+predictor extrapolates DOFs from the previous two converged solutions.
+When parameters are far from truth (early optimizer iterations), the
+predictor can produce states that deviate $>10\times$ from the carry
+state, causing SNES to waste 10--15 iterations before diverging and
+falling back to the simple warm-start.  In v4, a pre-solve check
+compares the predictor DOFs against the carry state; if the maximum
+deviation exceeds $10\times$, the predictor is immediately reverted.
+This reduced predictor failure retries from ${\sim}35\%$ to near-zero.
+
+File changed: \texttt{FluxCurve/bv\_point\_solve.py}.
+
+\subsection*{25.3 Optimizations Tried and Reverted}
+
+Three more aggressive strategies were tested and reverted because they
+degraded parameter accuracy by $> 2\%$:
+
+\begin{enumerate}
+  \item \textbf{Fewer voltage points} (10$\to$7 in Phase~2,
+        15$\to$10 in Phase~3).  $k_{0,1}$ error jumped from 16.7\% to
+        52\%.  Insufficient I--V curve sampling destroyed
+        identifiability---the optimizer could not distinguish between
+        parameter combinations with fewer data constraints.
+
+  \item \textbf{Skip Phase~1} ($\alpha$-only symmetric).  $k_{0,1}$
+        error jumped to 58\%.  Phase~1's $\alpha$ warm-start, though
+        modest in the final result, provides a critical starting basin
+        for Phase~2.  Without it, the optimizer converges to a
+        qualitatively different local minimum.
+
+  \item \textbf{Aggressive convergence tolerances}
+        (\texttt{maxiter}~25, \texttt{gtol}~$10^{-5}$).  $k_{0,1}$
+        error jumped to 55\%.  L-BFGS-B was terminating before
+        convergence; the default \texttt{maxiter}~40 and
+        \texttt{gtol}~$10^{-8}$ are near-minimal for this 4-parameter
+        problem.
+\end{enumerate}
+
+\subsection*{25.4 Timing Breakdown}
+
+\begin{center}
+\begin{tabular}{lSSS}
+\toprule
+Phase & {v3 Time (s)} & {v4 Time (s)} & {Speedup (\%)} \\
+\midrule
+P1 ($\alpha$ symmetric)  & 172  & 172  &  0.0 \\
+P2 (multi-obs shallow)   & 819  & 696  & 15.0 \\
+P3 (multi-obs full)      & 1084 & 964  & 11.1 \\
+\midrule
+\textbf{Total}           & \textbf{2075} & \textbf{1832} & \textbf{11.7} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Phase~1 is unaffected because it uses a single observable ($\alpha$-only
+on total current).  Phases~2 and~3 benefit from both optimizations:
+shared forward solutions eliminate redundant PDE solves, and predictor
+validation reduces wasted SNES iterations.
+
+\textbf{Accuracy verification:}  All four parameter errors match v3 to
+within 0.03\% relative: $k_{0,1}$: 16.7\%, $k_{0,2}$: 6.1\%,
+$\alpha_1$: 8.2\%, $\alpha_2$: 11.7\%.
+
+\subsection*{25.5 Diminishing Returns Analysis}
+
+The runtime breakdown reveals why further optimization is difficult
+without architectural changes:
+
+\begin{itemize}
+  \item \textbf{85\% of runtime is PETSc SNES solves + Firedrake
+        adjoint tape replays.}  These are already optimized by the
+        checkpoint-restart fast path and predictor validation.  Further
+        reduction requires either fewer solves (which breaks
+        identifiability) or faster individual solves (which requires
+        parallel hardware).
+
+  \item \textbf{The optimizer needs 20--30 evaluations for 4
+        parameters.}  This is near the minimum for L-BFGS-B on a
+        4-parameter problem with the observed condition number.
+        Gauss--Newton could reduce this, but requires second-order
+        adjoint infrastructure.
+
+  \item \textbf{Voltage point count is near-minimal.}  Fewer than
+        10 points in the shallow range or 15 in the full range breaks
+        identifiability (as demonstrated by the reverted experiments).
+
+  \item \textbf{Further $>15\%$ speedup requires parallel MPI
+        point-solves or GPU acceleration.}  Independent voltage points
+        within a single objective evaluation could be solved in
+        parallel across MPI ranks.  This would require restructuring
+        the serial sweep loop in \texttt{FluxCurve/bv\_curve\_eval.py}
+        into a distributed map-reduce pattern---a fundamental
+        architectural change.
+\end{itemize}
+
+
+%% ============================================================
+\section*{27. Parallelism Optimization of Master Pipeline (v5--v7)}
+%% ============================================================
+
+Following the 11.7\% speedup in Section~25, three rounds of deeper
+optimization were applied to the 3-phase master inference pipeline,
+achieving a cumulative \textbf{4.4$\times$ wall-clock speedup}
+(1832\,s $\to$ 415\,s) while simultaneously \emph{improving} accuracy
+on all four BV parameters.
+
+\subsection*{27.1 Key Insight: Parallel Fast Path}
+
+The BV flux-curve inference pipeline evaluates the objective function
+by sweeping over voltage points in sequence.  The \emph{first}
+evaluation must be sequential because warm-start continuation uses each
+converged solution as the initial condition for the next voltage point.
+However, once this first sweep completes, the converged solutions are
+cached in a checkpoint dictionary keyed by~$\hat\eta$.  All subsequent
+L-BFGS-B evaluations (with updated parameters) can therefore solve
+each voltage point \textbf{independently} from its cached IC, with no
+inter-point data dependency.
+
+This observation enables process-level parallelism: after the first
+sequential sweep, the ``fast path'' dispatches voltage-point
+forward$+$adjoint solves to a pool of worker processes.
+
+\subsection*{27.2 Round 1: Parallel Fast Path (v5)}
+
+\textbf{Implementation.}  A \texttt{ProcessPoolExecutor} with
+\texttt{spawn} context (following the existing Robin pipeline pattern
+in \texttt{FluxCurve/point\_solve.py}) distributes independent
+voltage-point solves across worker processes.
+
+\textbf{New file:} \texttt{FluxCurve/bv\_parallel.py}, containing:
+\begin{itemize}
+  \item \texttt{BVParallelPointConfig} --- a frozen, pickle-serializable
+        dataclass holding all mesh/physics/solver parameters needed to
+        reconstruct a BV solve context in a worker process.
+  \item \texttt{\_bv\_worker\_init(config\_bytes)} --- called once per
+        worker at pool creation.  Sets \texttt{OMP\_NUM\_THREADS=1}
+        (critical for avoiding thread contention within PETSc), imports
+        firedrake, builds the mesh and function spaces.
+  \item \texttt{\_bv\_worker\_solve\_point(task)} --- receives a
+        7-element tuple (parameter values, voltage, target flux, cached
+        IC data), builds the BV context and forms, loads the cached IC
+        into a firedrake Function, performs the forward solve$+$adjoint,
+        and returns the point objective value and gradient.
+  \item \texttt{BVPointSolvePool} --- manages the
+        \texttt{ProcessPoolExecutor} lifecycle (creation, submit, shutdown).
+\end{itemize}
+
+\textbf{Modified files:}
+\begin{itemize}
+  \item \texttt{FluxCurve/bv\_point\_solve.py} --- added
+        \texttt{\_solve\_cached\_fast\_path\_parallel()}, module-level
+        \texttt{\_parallel\_pool} variable, and
+        \texttt{set\_parallel\_pool()}/\texttt{close\_parallel\_pool()}
+        functions.  The fast-path dispatcher checks whether a parallel
+        pool is active and the current observable mode matches the
+        pool's config; if so, it submits all voltage points as futures
+        and gathers results.
+  \item \texttt{FluxCurve/bv\_config.py} --- added
+        \texttt{parallel\_fast\_path: bool} and
+        \texttt{parallel\_workers: int} fields to
+        \texttt{BVFluxCurveInferenceRequest}.
+  \item \texttt{FluxCurve/\_\_init\_\_.py} --- added parallel exports.
+\end{itemize}
+
+\textbf{Results:}
+\begin{center}
+\small
+\begin{tabular}{lSSS}
+\toprule
+{Phase} & {v4 (s)} & {v5 (s)} & {Speedup} \\
+\midrule
+P1 ($\alpha$-symmetric, single-obs) & 172 & 167 & {1.03$\times$} \\
+P2 (multi-obs shallow)               & 696 & 346 & {2.01$\times$} \\
+P3 (multi-obs full)                   & 964 & 408 & {2.36$\times$} \\
+\midrule
+\textbf{Total}                       & \textbf{1832} & \textbf{923} & {$\mathbf{2.0\times}$} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Issue identified:}  The secondary observable (peroxide current)
+fell back to sequential execution because the pool's config was built
+for the primary observable (total current).  An observable-mode
+compatibility check rejected the peroxide dispatch, causing
+${\sim}36\%$ of v5 runtime to remain sequential.
+
+\subsection*{27.3 Round 2: Multi-Observable Workers (v6)}
+
+\textbf{Key insight:}  Workers can compute \emph{both} adjoint
+gradients (primary and secondary observable) after a single forward
+PDE solve, completely eliminating the sequential secondary-observable
+sweep.
+
+\textbf{Implementation --- ``Two-tape-pass'' approach:}
+\begin{enumerate}
+  \item The forward PDE solves to convergence (unchanged).
+  \item The adjoint tape is cleared.
+  \item The BV context and forms are rebuilt from scratch.
+  \item The converged IC is loaded into fresh firedrake Functions.
+  \item A single SNES step is executed (converged state $\to$
+        converged state, typically ${\sim}1$ Newton iteration with
+        residual below tolerance).  This re-records the solve on a
+        clean tape.
+  \item The primary observable form is built and the adjoint is
+        computed.
+  \item Steps 2--6 are repeated for the secondary observable (with
+        the appropriate observable-mode flag).
+\end{enumerate}
+
+This ``two-tape-pass'' pattern was encapsulated in a new function
+\texttt{\_bv\_worker\_adjoint\_tape\_pass()} in
+\texttt{bv\_parallel.py}.  The task tuple was extended from 7 to 9
+elements to carry the secondary target flux and a multi-obs flag.
+
+\textbf{Modified files:}
+\begin{itemize}
+  \item \texttt{FluxCurve/bv\_parallel.py} --- added
+        \texttt{\_bv\_worker\_adjoint\_tape\_pass()}, extended
+        \texttt{\_bv\_worker\_solve\_point()} to handle 9-element tasks.
+  \item \texttt{FluxCurve/bv\_point\_solve.py} --- added
+        \texttt{\_solve\_cached\_fast\_path\_parallel\_multi\_obs()}.
+  \item \texttt{FluxCurve/bv\_curve\_eval.py} --- modified
+        \texttt{evaluate\_bv\_multi\_observable\_objective\_and\_gradient()}
+        to detect a multi-obs-capable pool and skip the second (sequential)
+        evaluation call entirely.
+\end{itemize}
+
+\textbf{Worker sizing:}  $\min(n_{\text{points}},\,
+\texttt{cpu\_count} - 1) = \min(10, 9) = 9$ workers on a 10-core
+machine.
+
+\textbf{Results:}
+\begin{center}
+\small
+\begin{tabular}{lSSS}
+\toprule
+{Phase} & {v5 (s)} & {v6 (s)} & {Speedup vs.\ v5} \\
+\midrule
+P1 ($\alpha$-symmetric)  & 167 & 162 & {1.03$\times$} \\
+P2 (multi-obs shallow)   & 346 & 168 & {2.06$\times$} \\
+P3 (multi-obs full)      & 408 & 188 & {2.17$\times$} \\
+\midrule
+\textbf{Total}           & \textbf{923} & \textbf{520} & {$\mathbf{1.78\times}$} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Cumulative speedup vs.\ v4: \textbf{3.5$\times$}.  Accuracy was
+slightly improved relative to v5 (no degradation).
+
+\subsection*{27.4 Round 3: Optimizer Tolerances + Pool Reuse (v7)}
+
+\textbf{Relaxed optimizer convergence.}  L-BFGS-B tolerance parameters
+for Phases~2 and~3 were relaxed:
+\begin{itemize}
+  \item \texttt{gtol}: $1 \times 10^{-6} \to 5 \times 10^{-6}$
+        (gradient norm tolerance)
+  \item \texttt{ftol}: $1 \times 10^{-10} \to 1 \times 10^{-8}$
+        (relative function value tolerance)
+\end{itemize}
+This reduced the number of objective evaluations: Phase~2 from
+${\sim}40$ to ${\sim}26$, Phase~3 from ${\sim}38$ to ${\sim}15$.
+Accuracy \emph{paradoxically improved}, suggesting the tighter
+tolerances had caused the optimizer to overshoot past the true
+minimum in the noisy (2\% noise) objective landscape.
+
+\textbf{Pool reuse.}  In v5/v6, a new \texttt{ProcessPoolExecutor}
+was created and destroyed for each phase.  In v7, a single pool is
+created before Phase~2 and reused for Phase~3, saving ${\sim}10$\,s
+of \texttt{spawn}-context overhead (firedrake import + mesh
+construction in each worker).
+
+\textbf{Results:}
+\begin{center}
+\small
+\begin{tabular}{lSSS}
+\toprule
+{Phase} & {v6 (s)} & {v7 (s)} & {Speedup vs.\ v6} \\
+\midrule
+P1 ($\alpha$-symmetric)  & 162 & 162 & {1.00$\times$} \\
+P2 (multi-obs shallow)   & 168 & 135 & {1.24$\times$} \\
+P3 (multi-obs full)      & 188 & 117 & {1.61$\times$} \\
+\midrule
+\textbf{Total}           & \textbf{520} & \textbf{415} & {$\mathbf{1.25\times}$} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Cumulative speedup vs.\ v4: \textbf{4.4$\times$} (1832\,s $\to$ 415\,s).
+
+\subsection*{27.5 Complete Timing and Accuracy Comparison}
+
+\begin{center}
+\small
+\begin{tabular}{lSSSS[round-precision=1]}
+\toprule
+{Version} & {P1 (s)} & {P2 (s)} & {P3 (s)} & {Total (s)} \\
+\midrule
+v4 (serial baseline)         & 172 & 696 & 964 & 1832 \\
+v5 (parallel fast path)      & 167 & 346 & 408 &  923 \\
+v6 (multi-obs workers)       & 162 & 168 & 188 &  520 \\
+v7 (tolerances + pool reuse) & 162 & 135 & 117 &  415 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\small
+\begin{tabular}{lSSSS}
+\toprule
+{Parameter} & {v4 err (\%)} & {v7 err (\%)} & {Change (pp)} \\
+\midrule
+$k_{0,1}$  & 16.7 & 10.9 & -5.8 \\
+$k_{0,2}$  &  6.1 &  2.6 & -3.5 \\
+$\alpha_1$ &  8.2 &  5.6 & -2.6 \\
+$\alpha_2$ & 11.7 &  8.8 & -2.9 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The accuracy improvement is a side effect of the relaxed tolerances
+in Round~3.  All four parameters improved by 2.6--5.8 percentage
+points, with $k_{0,2}$ (the hardest parameter historically)
+improving from 6.1\% to 2.6\%.
+
+\subsection*{27.6 Diminishing Returns Analysis}
+
+The remaining 415\,s runtime breaks down approximately as:
+
+\begin{center}
+\small
+\begin{tabular}{lr}
+\toprule
+{Component} & {Time (s)} \\
+\midrule
+Target generation (sequential warm-start sweeps) & 65--80 \\
+First sequential sweep per phase (warm-start IC population) & 50--60 \\
+Parallel fast-path evaluations (9 workers) & 200--220 \\
+Pool init/shutdown overhead (\texttt{spawn} + firedrake import) & 35--45 \\
+Miscellaneous (optimizer overhead, data marshalling) & 10--20 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Target generation and the first sweep per phase are \textbf{inherently
+sequential}: BV physics at large overpotentials diverges without
+warm-start continuation from the previous voltage point.  The parallel
+fast path is already at 9~workers on a 10-core machine.  Pool
+initialization overhead is dominated by the firedrake import
+(${\sim}3$\,s per worker) and mesh construction, which are
+irreducible with the \texttt{spawn} context required by firedrake's
+PETSc backend.
+
+\textbf{Strategies assessed and rejected:}
+\begin{itemize}
+  \item \textbf{Worker solver reuse} (${\sim}5$--10\% potential gain):
+        Reusing the firedrake solver object across evaluations within a
+        worker would avoid form recompilation.  However, the adjoint
+        tape requires fresh forms for each pass (the tape records
+        operator assembly), making reuse incompatible with correct
+        gradient computation.  High implementation complexity for low
+        reward.
+
+  \item \textbf{Multi-fidelity mesh} (${\sim}15$--20\% potential gain):
+        Using a coarser mesh for early optimizer evaluations and
+        switching to the fine mesh for final evaluations.  Cache
+        invalidation on mesh switch negates the fast-path advantage
+        (all cached ICs must be recomputed on the new mesh), and the
+        fine-mesh sweep becomes the new bottleneck.
+
+  \item \textbf{Speculative parallel first evaluation} (${\sim}10$--15\%
+        potential gain):  Running the first sweep in parallel by
+        launching all voltage points simultaneously from the
+        equilibrium IC (instead of sequentially from warm-start).
+        BV physics at $|\hat\eta| > 10$ diverges from the equilibrium
+        IC without intermediate warm-start states; only 3--4 of 10
+        points would converge, requiring a sequential fallback anyway.
+
+  \item \textbf{MPI Ensemble parallelism} (${\sim}2$--$3\times$
+        potential gain):  Distributing voltage-point solves across MPI
+        ranks using firedrake's Ensemble parallelism.  Would require
+        restructuring from a single-process
+        \texttt{ProcessPoolExecutor} architecture to an
+        \texttt{mpiexec}-launched distributed pattern.  Deferred to
+        future work as a separate development effort.
+\end{itemize}
+
+\subsection*{27.7 New Files Created}
+
+\begin{itemize}
+  \item \texttt{FluxCurve/bv\_parallel.py} --- Parallel worker
+        infrastructure: \texttt{BVParallelPointConfig} (serializable
+        config), \texttt{\_bv\_worker\_init} (per-worker firedrake
+        setup), \texttt{\_bv\_worker\_solve\_point} (forward + adjoint
+        from cached IC), \texttt{\_bv\_worker\_adjoint\_tape\_pass}
+        (two-tape-pass for multi-observable), \texttt{BVPointSolvePool}
+        (executor lifecycle management).
+
+  \item \texttt{scripts/inference/Infer\_BVMaster\_charged\_v5.py} ---
+        v5 master script with parallel fast-path dispatch.
+
+  \item \texttt{scripts/inference/Infer\_BVMaster\_charged\_v6.py} ---
+        v6 master script with multi-observable workers.
+
+  \item \texttt{scripts/inference/Infer\_BVMaster\_charged\_v7.py} ---
+        v7 master script with relaxed tolerances and pool reuse.
+\end{itemize}
+
+\subsection*{27.8 Files Modified}
+
+\begin{itemize}
+  \item \texttt{FluxCurve/bv\_config.py} --- Added
+        \texttt{parallel\_fast\_path} and \texttt{parallel\_workers}
+        fields to \texttt{BVFluxCurveInferenceRequest}.
+
+  \item \texttt{FluxCurve/bv\_point\_solve.py} --- Added parallel
+        dispatch (\texttt{\_solve\_cached\_fast\_path\_parallel},
+        \texttt{\_solve\_cached\_fast\_path\_parallel\_multi\_obs}),
+        pool management (\texttt{set\_parallel\_pool},
+        \texttt{close\_parallel\_pool}), and observable-mode
+        compatibility checking.
+
+  \item \texttt{FluxCurve/bv\_curve\_eval.py} --- Added multi-obs
+        parallel path in
+        \texttt{evaluate\_bv\_multi\_observable\_objective\_and\_gradient()},
+        fixed module-level variable access for pool detection.
+
+  \item \texttt{FluxCurve/\_\_init\_\_.py} --- Added parallel exports
+        (\texttt{BVPointSolvePool}, \texttt{set\_parallel\_pool},
+        \texttt{close\_parallel\_pool}).
+\end{itemize}
+
+\subsection*{27.9 Architecture Summary}
+
+The parallelism architecture follows a three-tier pattern:
+
+\begin{enumerate}
+  \item \textbf{Outer loop} (L-BFGS-B optimizer): sequential parameter
+        updates.  Unchanged.
+
+  \item \textbf{Middle loop} (voltage-point sweep): sequential for the
+        first evaluation (warm-start IC population), then parallel for
+        all subsequent evaluations (fast-path from cached ICs).
+
+  \item \textbf{Inner loop} (per-point solve): each worker performs a
+        forward PDE solve followed by one or two adjoint tape passes
+        (primary and optionally secondary observable).  Workers are
+        fully independent after receiving their cached IC, parameters,
+        and target flux.
+\end{enumerate}
+
+The \texttt{spawn} context is required (not \texttt{fork}) because
+firedrake and PETSc maintain internal state that is not fork-safe.
+Each worker sets \texttt{OMP\_NUM\_THREADS=1} to prevent PETSc's
+internal threading from contending with the process-level parallelism.
+Worker-to-main communication uses pickle serialization of numpy arrays
+(firedrake Functions are converted to \texttt{.dat} arrays before
+sending and reconstructed on receipt).
+
+
+%% ============================================================
+\section*{28. Updated Next Steps}
+%% ============================================================
+
+\subsection*{Completed}
+
+\begin{enumerate}
+  \item \textbf{Multi-observable joint fitting.}  \textsc{COMPLETED.}
+        Fitting total current and peroxide current simultaneously achieved
+        the R2 breakthrough: $k_{0,2}$ error 6.1\%, $\alpha_2$ error
+        11.7\%.  Multi-observable is the recommended approach for R2
+        recovery.
+
+  \item \textbf{Multi-pH inference.}  \textsc{COMPLETED.}  Three-condition
+        multi-pH with shared $(k_0, \alpha)$ achieved excellent R1
+        ($k_{0,1}$: 6.5\%, $\alpha_1$: 3.6\%) and partial R2
+        improvement ($\alpha_2$: 29.5\%).
+
+  \item \textbf{Master inference protocol v1/v2/v3.}  \textsc{COMPLETED.}
+        Three iterations of pipeline design converged on a 3-phase
+        multi-obs-throughout architecture.  v1's $k_0$-only phase
+        poisoned R2; v2's total-current Phase~3 destroyed R2; v3's
+        multi-obs-throughout approach recovers all four parameters to
+        within 17\%.  Final best: $k_{0,1}$: 16.7\%, $k_{0,2}$: 6.1\%,
+        $\alpha_1$: 8.2\%, $\alpha_2$: 11.7\%.
+
+  \item \textbf{Forward solver robustness.}  \textsc{COMPLETED.}
+        Mesh refinement ($N_y = 300$, $\beta = 4.0$), smaller timesteps
+        ($\Delta t = 0.1$), denser voltage sweeps (19~points), softplus
+        regularization, and SNES linesearch tuning raised target
+        generation convergence from 78\% to 100\% (57/57).
+
+  \item \textbf{Speed optimization of master pipeline.}  \textsc{COMPLETED.}
+        Shared forward solutions for multi-observable phases and predictor
+        validation achieved 11.7\% wall-clock speedup (2075\,s $\to$
+        1832\,s, ${\sim}30.5$~min) with identical accuracy (all parameter
+        errors within 0.03\% of v3).  More aggressive strategies (fewer
+        voltage points, skipping Phase~1, relaxed convergence tolerances)
+        were tried and reverted due to $> 2\%$ accuracy degradation.
+
+  \item \textbf{Parallelism optimization (v5--v7).}  \textsc{COMPLETED.}
+        Three rounds of optimization achieved a 4.4$\times$ cumulative
+        speedup (1832\,s $\to$ 415\,s, ${\sim}6.9$~min) while
+        \emph{improving} accuracy on all four parameters by
+        2.6--5.8 percentage points.  Round~1: parallel fast-path
+        dispatch via \texttt{ProcessPoolExecutor} (2.0$\times$).
+        Round~2: multi-observable workers computing both adjoint
+        gradients per forward solve (3.5$\times$ cumulative).
+        Round~3: relaxed optimizer tolerances and pool reuse
+        (4.4$\times$ cumulative).  The pipeline is now near the
+        practical ceiling for single-machine process-level parallelism;
+        further speedup requires MPI Ensemble or GPU acceleration.
+\end{enumerate}
+
+\subsection*{Future work}
+
+\begin{enumerate}\setcounter{enumi}{6}
+  \item \textbf{Combined multi-observable + multi-pH + symmetric.}
+        Multi-observable breaks R2 degeneracy (two equations per voltage),
+        multi-pH adds concentration diversity ($[\text{H}^+]^2$ scaling),
+        and symmetric data constrains $\alpha$ via the anodic Tafel slope.
+        Combining all three in a single pipeline could push the R1--R2
+        trade-off frontier below the current 11\% maximum error.
+
+  \item \textbf{Neutral-species formulation for wider pH range.}  The
+        charged solver fails at $c_{\text{H}^+} > 0.3$ (nondimensional)
+        due to Debye-length stiffness.  A neutral-species formulation
+        would avoid Poisson stiffness entirely, enabling multi-pH
+        inference across the full experimentally relevant range (pH~2
+        to pH~12 as in Mangan2025).
+
+  \item \textbf{Gauss--Newton optimizer.}  The current L-BFGS-B
+        optimizer uses only gradient information.  A Gauss--Newton
+        or Levenberg--Marquardt method could exploit the least-squares
+        structure to better condition the $k_0$--$\alpha$ joint
+        optimization, potentially breaking the R1--R2 accuracy
+        trade-off.
+
+  \item \textbf{Experimental data fitting.}  Apply the validated v7
+        pipeline to real RRDE data from Mangan et~al.\ (2025), which
+        provides both disk (total) and ring (peroxide) currents---the
+        exact observables the pipeline is designed for.
+
+  \item \textbf{Bayesian uncertainty quantification.}  Replace point
+        estimates with posterior distributions via ensemble Kalman
+        inversion (EKI) or MCMC to characterize parameter uncertainty
+        and the R1--R2 correlation structure.
+
+  \item \textbf{Transient (chronoamperometric) data.}  R1 and R2 reach
+        steady state on different timescales; fitting $I(t)$ at fixed
+        overpotentials provides temporal separation invisible in
+        steady-state data.
+
+  \item \textbf{MPI Ensemble parallelism for further speedup.}  The
+        current \texttt{ProcessPoolExecutor} approach is near its
+        ceiling (9~workers on 10~cores, ${\sim}40$\,s pool init
+        overhead).  MPI Ensemble parallelism would distribute
+        voltage-point solves across MPI ranks, potentially yielding
+        $2$--$3\times$ additional speedup on cluster hardware.  This
+        requires restructuring from a single-process to an
+        \texttt{mpiexec}-launched architecture.
+\end{enumerate}
+
+
+\end{document}

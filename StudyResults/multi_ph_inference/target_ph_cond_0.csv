@@ -1,0 +1,29 @@
+phi_applied,flux_clean,flux_noisy,converged,steps_taken,final_time,final_relative_change,final_absolute_change,species_flux,failure_reason
+-1,-0.002936007926334249,-0.007143170468137812,1,10,5,4.320377435469578e-06,1.268471719806027e-08,0.0160036242300688;1.194293650937314e-05,
+-2,-0.02868758266431891,-0.03253138112622909,1,12,6,2.760356245100364e-06,7.918816655183569e-08,0.1553932900625168;0.001093994214268728,
+-3,-0.09798183888459353,-0.09386486062402767,1,11,5.5,3.104396428019878e-06,3.041754149252229e-07,0.5164397586245294;0.01803928950267226,
+-5,-0.2250051588336617,-0.2256267160301709,1,11,5.5,5.003509137839642e-06,1.125821001340954e-06,0.9403176014112805;0.2870582519728602,
+-8,nan,nan,0,1,0.5,,,6.169761058767736;1.286505830417118,"ConvergenceError: Nonlinear solve failed to converge after 10 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL"
+-10,nan,nan,0,1,0.5,,,21.62108652698569;3.497085421029465,"ConvergenceError: Nonlinear solve failed to converge after 7 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL"
+-13,nan,nan,0,1,0.5,,,141.8358493624184;15.67284950946634,"ConvergenceError: Nonlinear solve failed to converge after 6 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL"
+-17,nan,nan,0,1,0.5,,,1741.793253628267;115.8075642555446,"ConvergenceError: Nonlinear solve failed to converge after 4 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL"
+-22,nan,nan,0,1,0.5,,,40041.45087060944;1410.824952146951,"ConvergenceError: Nonlinear solve failed to converge after 8 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL"
+-28,nan,nan,0,1,0.5,,,1723160.165119728;28337.17666850206,"ConvergenceError: Nonlinear solve failed to converge after 8 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL"
+-35,nan,nan,0,1,0.5,,,138817470.7830652;938398.4126107566,"ConvergenceError: Nonlinear solve failed to converge after 4 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL"
+-46.5,nan,nan,0,1,0.5,,,187899008819.8086;294836016.8692209,"ConvergenceError: Nonlinear solve failed to converge after 4 nonlinear iterations.
+Reason:
+   DIVERGED_DTOL"

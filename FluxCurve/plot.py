@@ -106,8 +106,9 @@ class _LiveFitPlot:
             self.ax.grid(True, alpha=0.25)
             self.ax.legend()
             self.fig.tight_layout()
-            # Keep one persistent, interactive window open for the entire fit.
-            self.fig.show()
+            # Do NOT call self.fig.show() — it opens an interactive window
+            # that blocks headless runs.  The figure is still usable for
+            # savefig() and GIF export without being displayed.
             self.eval_cmap = plt.get_cmap("turbo")
             self.fig.canvas.draw_idle()
             self.fig.canvas.flush_events()
@@ -394,8 +395,18 @@ def export_live_fit_gif(
         ax.legend(loc="lower right", fontsize=8)
         fig.tight_layout()
         fig.canvas.draw()
-        w, h = fig.canvas.get_width_height()
-        rgba = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8).reshape(h, w, 4)
+        buf = fig.canvas.buffer_rgba()
+        buf_arr = np.frombuffer(buf, dtype=np.uint8)
+        # Use actual buffer size (accounts for high-DPI scaling)
+        w_px, h_px = fig.canvas.get_width_height()
+        actual_pixels = buf_arr.size // 4
+        if actual_pixels != w_px * h_px:
+            # High-DPI: renderer size differs from logical size
+            rw = int(fig.canvas.get_renderer().width)
+            rh = int(fig.canvas.get_renderer().height)
+            rgba = buf_arr.reshape(rh, rw, 4)
+        else:
+            rgba = buf_arr.reshape(h_px, w_px, 4)
         frame = Image.fromarray(rgba, mode="RGBA").convert("P", palette=Image.Palette.ADAPTIVE)
         frames.append(frame)
         plt.close(fig)

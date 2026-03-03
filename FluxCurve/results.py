@@ -45,6 +45,7 @@ class PointAdjointResult:
     final_relative_change: Optional[float] = None
     final_absolute_change: Optional[float] = None
     diagnostics_valid: bool = True
+    is_bridge: bool = False
 
 
 @dataclass
@@ -103,6 +104,7 @@ def _point_result_to_payload(point: PointAdjointResult) -> Dict[str, object]:
             None if point.final_absolute_change is None else float(point.final_absolute_change)
         ),
         "diagnostics_valid": bool(point.diagnostics_valid),
+        "is_bridge": bool(point.is_bridge),
     }
 
 
@@ -130,4 +132,5 @@ def _point_result_from_payload(payload: Mapping[str, object]) -> PointAdjointRes
             else float(payload.get("final_absolute_change"))
         ),
         diagnostics_valid=bool(payload.get("diagnostics_valid", False)),
+        is_bridge=bool(payload.get("is_bridge", False)),
     )
