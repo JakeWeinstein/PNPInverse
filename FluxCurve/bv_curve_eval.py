@@ -36,10 +36,10 @@ def evaluate_bv_curve_objective_and_gradient(
     elif control_mode == "joint":
         n_controls = int(k0_values.size) + (int(alpha_values.size) if alpha_values is not None else 0)
     elif control_mode == "steric":
-        n_species = int(request.base_solver_params[0])
+        n_species = int(request.base_solver_params.n_species) if hasattr(request.base_solver_params, 'n_species') else int(request.base_solver_params[0])
         n_controls = n_species
     elif control_mode == "full":
-        n_species = int(request.base_solver_params[0])
+        n_species = int(request.base_solver_params.n_species) if hasattr(request.base_solver_params, 'n_species') else int(request.base_solver_params[0])
         n_controls = int(k0_values.size) + (int(alpha_values.size) if alpha_values is not None else 0) + n_species
     else:
         n_controls = int(k0_values.size)
@@ -211,9 +211,9 @@ def evaluate_bv_multi_observable_objective_and_gradient(
     elif control_mode == "joint":
         n_controls = int(k0_values.size) + (int(alpha_values.size) if alpha_values is not None else 0)
     elif control_mode == "steric":
-        n_controls = int(request.base_solver_params[0])
+        n_controls = int(request.base_solver_params.n_species) if hasattr(request.base_solver_params, 'n_species') else int(request.base_solver_params[0])
     elif control_mode == "full":
-        n_species = int(request.base_solver_params[0])
+        n_species = int(request.base_solver_params.n_species) if hasattr(request.base_solver_params, 'n_species') else int(request.base_solver_params[0])
         n_controls = int(k0_values.size) + (int(alpha_values.size) if alpha_values is not None else 0) + n_species
     else:
         n_controls = int(k0_values.size)
@@ -445,7 +445,8 @@ def evaluate_bv_multi_ph_objective_and_gradient(
         # Create modified request with this condition's c_H+ bulk
         cond_request = copy.deepcopy(request)
         # Modify bulk concentration for H+ in solver params
-        bulk_concs = list(cond_request.base_solver_params[8])
+        _bsp = cond_request.base_solver_params
+        bulk_concs = list(_bsp.c0_vals if hasattr(_bsp, 'c0_vals') else _bsp[8])
         bulk_concs[c_hp_idx] = c_hp_hat
         # Also update counterion for electroneutrality (e.g. ClO4- matches H+)
         counterion_idx = cond.get("counterion_species_index", None)
@@ -453,7 +454,8 @@ def evaluate_bv_multi_ph_objective_and_gradient(
             bulk_concs[int(counterion_idx)] = c_hp_hat
         cond_request.base_solver_params[8] = bulk_concs
         # Also update the bv_bc cathodic_conc_factors c_ref_nondim for H+
-        bv_cfg = cond_request.base_solver_params[10].get("bv_bc", {})
+        _opts = _bsp.solver_options if hasattr(_bsp, 'solver_options') else _bsp[10]
+        bv_cfg = _opts.get("bv_bc", {})
         reactions = bv_cfg.get("reactions", [])
         for rxn in reactions:
             for ccf in rxn.get("cathodic_conc_factors", []):

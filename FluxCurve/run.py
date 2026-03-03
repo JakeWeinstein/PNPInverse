@@ -531,7 +531,7 @@ def run_robin_kappa_flux_curve_inference(
         raise ValueError("initial_guess must be set.")
     initial_kappa = np.asarray(initial_kappa_list, dtype=float)
 
-    n_species = int(request_runtime.base_solver_params[0])
+    n_species = int(request_runtime.base_solver_params.n_species) if hasattr(request_runtime.base_solver_params, 'n_species') else int(request_runtime.base_solver_params[0])
     lower = np.full(n_species, float(request_runtime.kappa_lower), dtype=float)
     upper = np.full(n_species, float(request_runtime.kappa_upper), dtype=float)
 

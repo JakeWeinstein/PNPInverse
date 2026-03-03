@@ -198,15 +198,16 @@ def solve_point_objective_and_gradient(
         phi_applied=float(phi_applied),
         kappa_values=kappa_list,
     )
-    n_species = int(baseline_params[0])
+    n_species = int(baseline_params.n_species) if hasattr(baseline_params, 'n_species') else int(baseline_params[0])
     abs_tol = float(max(steady.absolute_tolerance, 1e-16))
     rel_tol = float(steady.relative_tolerance)
     max_steps = int(max(1, steady.max_steps))
     required_steady = int(max(1, steady.consecutive_steps))
 
     baseline_options: Mapping[str, Any] = {}
-    if isinstance(baseline_params[10], dict):
-        baseline_options = copy.deepcopy(baseline_params[10])
+    _ps_bl_opts = baseline_params.solver_options if hasattr(baseline_params, 'solver_options') else baseline_params[10]
+    if isinstance(_ps_bl_opts, dict):
+        baseline_options = copy.deepcopy(_ps_bl_opts)
 
     last_reason = "forward solve did not converge"
     last_flux = float("nan")
@@ -219,14 +220,15 @@ def solve_point_objective_and_gradient(
             phi_applied=float(phi_applied),
             kappa_values=kappa_list,
         )
-        if isinstance(params[10], dict):
+        _ps_opts = params.solver_options if hasattr(params, 'solver_options') else params[10]
+        if isinstance(_ps_opts, dict):
             phase, phase_step, _cycle_index = _attempt_phase_state(attempt, forward_recovery)
             _relax_solver_options_for_attempt(
-                params[10],
+                _ps_opts,
                 phase=phase,
                 phase_step=phase_step,
                 recovery=forward_recovery,
-                baseline_options=baseline_options if baseline_options else params[10],
+                baseline_options=baseline_options if baseline_options else _ps_opts,
             )
 
         tape = adj.get_working_tape()
@@ -244,7 +246,8 @@ def solve_point_objective_and_gradient(
 
         jac = fd.derivative(F_res, U)
         problem = fd.NonlinearVariationalProblem(F_res, U, bcs=bcs, J=jac)
-        solver = fd.NonlinearVariationalSolver(problem, solver_parameters=params[10])
+        _ps_so = params.solver_options if hasattr(params, 'solver_options') else params[10]
+        solver = fd.NonlinearVariationalSolver(problem, solver_parameters=_ps_so)
 
         observable_form = _build_observable_form(
             ctx,

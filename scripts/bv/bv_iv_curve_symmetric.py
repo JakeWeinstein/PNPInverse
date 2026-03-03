@@ -27,10 +27,21 @@ _ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("FIREDRAKE_TSFC_KERNEL_CACHE_DIR", "/tmp/firedrake-tsfc")
-os.environ.setdefault("PYOP2_CACHE_DIR", "/tmp/pyop2")
-os.environ.setdefault("MPLCONFIGDIR", "/tmp")
+from scripts._bv_common import (
+    setup_firedrake_env,
+    F_CONST, V_T, N_ELECTRONS,
+    D_O2, D_H2O2, D_HP, D_CLO4,
+    C_O2, C_H2O2, C_HP, C_CLO4,
+    K0_PHYS_R1 as K0_1_PHYS, ALPHA_R1 as ALPHA_1,
+    K0_PHYS_R2 as K0_2_PHYS, ALPHA_R2 as ALPHA_2,
+    L_REF, D_REF, C_SCALE, K_SCALE,
+    D_O2_HAT, D_H2O2_HAT, D_HP_HAT, D_CLO4_HAT,
+    C_O2_HAT, C_H2O2_HAT, C_HP_HAT, C_CLO4_HAT,
+    SNES_OPTS_CHARGED as SNES_OPTS,
+)
+setup_firedrake_env()
+
+E_EQ_RHE = 0.695  # V vs RHE (O2/H2O2 at pH 4)
 
 import firedrake as fd
 import matplotlib
@@ -44,53 +55,6 @@ from Forward.bv_solver import (
     make_graded_rectangle_mesh,
 )
 from Forward.params import SolverParams
-
-
-# ---------------------------------------------------------------------------
-# Physical constants (same as bv_iv_curve_charged.py)
-# ---------------------------------------------------------------------------
-
-F_CONST   = 96485.3329
-R_GAS     = 8.31446
-T_REF     = 298.15
-V_T       = R_GAS * T_REF / F_CONST
-E_EQ_RHE  = 0.695
-N_ELECTRONS = 2
-
-D_O2   = 1.9e-9;   C_O2   = 0.5
-D_H2O2 = 1.6e-9;   C_H2O2 = 0.0
-D_HP   = 9.311e-9;  C_HP   = 0.1
-D_CLO4 = 1.792e-9;  C_CLO4 = 0.1
-
-K0_1_PHYS  = 2.4e-8;  ALPHA_1 = 0.627
-K0_2_PHYS  = 1e-9;    ALPHA_2 = 0.5
-
-L_REF = 1.0e-4
-D_REF = D_O2;  C_SCALE = C_O2;  K_SCALE = D_REF / L_REF
-
-D_O2_HAT   = D_O2 / D_REF;   D_H2O2_HAT = D_H2O2 / D_REF
-D_HP_HAT   = D_HP / D_REF;   D_CLO4_HAT = D_CLO4 / D_REF
-C_O2_HAT   = C_O2 / C_SCALE; C_H2O2_HAT = C_H2O2 / C_SCALE
-C_HP_HAT   = C_HP / C_SCALE; C_CLO4_HAT = C_CLO4 / C_SCALE
-
-I_SCALE_MA_CM2 = N_ELECTRONS * F_CONST * (D_REF * C_SCALE / L_REF) * 0.1
-
-
-SNES_OPTS = {
-    "snes_type":                "newtonls",
-    "snes_max_it":              300,
-    "snes_atol":                1e-7,
-    "snes_rtol":                1e-10,
-    "snes_stol":                1e-12,
-    "snes_linesearch_type":     "l2",
-    "snes_linesearch_maxlambda": 0.5,
-    "snes_divergence_tolerance": 1e12,
-    "ksp_type":                 "preonly",
-    "pc_type":                  "lu",
-    "pc_factor_mat_solver_type": "mumps",
-    "mat_mumps_icntl_8":        77,
-    "mat_mumps_icntl_14":       80,
-}
 
 
 def _make_sp(eta_hat: float, dt: float, t_end: float,

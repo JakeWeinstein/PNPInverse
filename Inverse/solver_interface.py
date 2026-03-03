@@ -60,7 +60,14 @@ def deep_copy_solver_params(solver_params: Sequence[Any]) -> SolverParams:
     The inverse pipeline mutates values such as diffusion coefficients and
     boundary parameters. Deep-copying ensures a request can reuse a base
     parameter object without side effects.
+
+    Accepts both legacy lists and :class:`Forward.params.SolverParams`
+    frozen dataclass instances. For SolverParams, returns a deep-copied
+    ``SolverParams`` instance (the frozen dataclass, not a list).
     """
+    from Forward.params import SolverParams as _SolverParams
+    if isinstance(solver_params, _SolverParams):
+        return solver_params.deep_copy()
     return copy.deepcopy(list(solver_params))
 
 

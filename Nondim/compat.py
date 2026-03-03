@@ -9,7 +9,7 @@ used by current-density studies.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Sequence
+from typing import Any, Sequence
 
 from Nondim.scales import build_physical_scales as _nondim_build_physical_scales
 from Nondim.constants import DEFAULT_TEMPERATURE_K, DEFAULT_RELATIVE_PERMITTIVITY_WATER
@@ -23,7 +23,7 @@ def build_physical_scales_dict(
     temperature_k: float = DEFAULT_TEMPERATURE_K,
     relative_permittivity: float = DEFAULT_RELATIVE_PERMITTIVITY_WATER,
     length_scale_m: float = 1.0e-4,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Return nondim scales as a plain dict (backward-compat wrapper).
 
     New code should import ``build_physical_scales`` from ``Nondim.scales``
@@ -39,7 +39,7 @@ def build_physical_scales_dict(
     ).to_dict()
 
 
-def build_solver_options(scales: Dict[str, Any]) -> Dict[str, Any]:
+def build_solver_options(scales: dict[str, Any]) -> dict[str, Any]:
     """Build PETSc/SNES + Robin + nondim option block for current-density studies."""
     return {
         "snes_type": "newtonls",

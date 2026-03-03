@@ -135,9 +135,9 @@ def main() -> None:
                 phi_applied=float(phi_applied),
                 kappa_values=[0.8, 0.8],
             )
-            solver_opts = trial_params[10]
+            solver_opts = trial_params.solver_options if hasattr(trial_params, 'solver_options') else trial_params[10]
             if not isinstance(solver_opts, dict):
-                raise ValueError("Expected solver_params[10] to be a dict.")
+                raise ValueError("Expected solver_options to be a dict.")
             solver_opts["snes_max_it"] = int(max_it)
 
             trial = solve_to_steady_state_for_phi_applied(

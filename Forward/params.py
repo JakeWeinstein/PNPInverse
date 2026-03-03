@@ -1,16 +1,4 @@
-"""SolverParams — a named-attribute view of the PNP 11-entry parameter list.
-
-Why a list subclass?
---------------------
-All forward solvers (dirichlet_solver, robin_solver, steady_state) expect and
-mutate the classic 11-entry list.  Subclassing ``list`` means:
-
-* All existing code that unpacks ``n_s, order, dt, ... = solver_params`` or
-  reads ``solver_params[7]`` continues to work with zero changes.
-* New code can use readable attribute access: ``params.phi_applied``,
-  ``params.D_vals``, etc.
-* ``deep_copy_solver_params()`` and ``configure_robin_solver_params()``
-  return ``SolverParams`` instances automatically.
+"""SolverParams — frozen dataclass for PNP solver parameters.
 
 Entry layout
 ------------
@@ -33,11 +21,14 @@ Index  Name             Type   Description
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, List, Optional, Sequence, Union
+import dataclasses
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Union
 
 
-class SolverParams(list):
-    """Named-attribute list for PNP solver parameters.
+@dataclass(frozen=True)
+class SolverParams:
+    """Frozen dataclass for PNP solver parameters.
 
     Construct via :func:`build_default_solver_params` in :mod:`Inverse.inference_runner`,
     or directly::
@@ -48,8 +39,21 @@ class SolverParams(list):
             phi_applied=0.05, c0_vals=[0.1, 0.1], phi0=0.05,
             solver_options={...},
         )
-        params.phi_applied = 0.10   # mutates in-place; params[7] also changes
+        # Immutable: use replace helpers for mutation
+        new_params = params.with_phi_applied(0.10)
     """
+
+    n_species: int
+    order: int
+    dt: float
+    t_end: float
+    z_vals: List[float] = field(default_factory=list)
+    D_vals: List[float] = field(default_factory=list)
+    a_vals: List[float] = field(default_factory=list)
+    phi_applied: float = 0.0
+    c0_vals: List[float] = field(default_factory=list)
+    phi0: float = 0.0
+    solver_options: Dict[str, Any] = field(default_factory=dict)
 
     _NAMES = (
         "n_species", "order", "dt", "t_end",
@@ -58,150 +62,65 @@ class SolverParams(list):
     )
     _N = len(_NAMES)  # 11
 
-    def __new__(cls, *args, **kwargs) -> "SolverParams":
-        return list.__new__(cls)
-
-    def __init__(
-        self,
-        n_species: int,
-        order: int,
-        dt: float,
-        t_end: float,
-        z_vals: Sequence[float],
-        D_vals: Sequence[float],
-        a_vals: Sequence[float],
-        phi_applied: float,
-        c0_vals: Sequence[float],
-        phi0: float,
-        solver_options: Dict[str, Any],
-    ) -> None:
-        super().__init__(
-            [
-                int(n_species),
-                int(order),
-                float(dt),
-                float(t_end),
-                list(z_vals),
-                list(D_vals),
-                list(a_vals),
-                float(phi_applied),
-                list(c0_vals),
-                float(phi0),
-                solver_options,
-            ]
-        )
+    def __post_init__(self) -> None:
+        # Normalize types on construction (using object.__setattr__ since frozen)
+        object.__setattr__(self, "n_species", int(self.n_species))
+        object.__setattr__(self, "order", int(self.order))
+        object.__setattr__(self, "dt", float(self.dt))
+        object.__setattr__(self, "t_end", float(self.t_end))
+        object.__setattr__(self, "z_vals", list(self.z_vals))
+        object.__setattr__(self, "D_vals", list(self.D_vals))
+        object.__setattr__(self, "a_vals", list(self.a_vals))
+        object.__setattr__(self, "phi_applied", float(self.phi_applied))
+        object.__setattr__(self, "c0_vals", list(self.c0_vals))
+        object.__setattr__(self, "phi0", float(self.phi0))
 
     # ------------------------------------------------------------------
-    # Named getters / setters for each slot
+    # Backward compat: iteration, indexing, length
     # ------------------------------------------------------------------
 
-    @property
-    def n_species(self) -> int:
-        return self[0]
+    def __iter__(self) -> Iterator:
+        """Yield values in the same order as the original 11-entry list."""
+        return iter(self.to_list())
 
-    @n_species.setter
-    def n_species(self, v: int) -> None:
-        self[0] = int(v)
+    def __getitem__(self, index: int) -> Any:
+        """Support ``params[i]`` index access for backward compat."""
+        return self.to_list()[index]
 
-    @property
-    def order(self) -> int:
-        return self[1]
+    def __setitem__(self, index: int, value: Any) -> None:
+        """Support ``params[i] = value`` for backward compat with code that
+        deep-copies then mutates. Uses object.__setattr__ to bypass frozen."""
+        name = self._NAMES[index]
+        if name in ("z_vals", "D_vals", "a_vals", "c0_vals"):
+            value = list(value)
+        elif name in ("n_species", "order"):
+            value = int(value)
+        elif name in ("dt", "t_end", "phi_applied", "phi0"):
+            value = float(value)
+        object.__setattr__(self, name, value)
 
-    @order.setter
-    def order(self, v: int) -> None:
-        self[1] = int(v)
-
-    @property
-    def dt(self) -> float:
-        return self[2]
-
-    @dt.setter
-    def dt(self, v: float) -> None:
-        self[2] = float(v)
-
-    @property
-    def t_end(self) -> float:
-        return self[3]
-
-    @t_end.setter
-    def t_end(self, v: float) -> None:
-        self[3] = float(v)
-
-    @property
-    def z_vals(self) -> List[float]:
-        return self[4]
-
-    @z_vals.setter
-    def z_vals(self, v: Sequence[float]) -> None:
-        self[4] = list(v)
-
-    @property
-    def D_vals(self) -> List[float]:
-        return self[5]
-
-    @D_vals.setter
-    def D_vals(self, v: Sequence[float]) -> None:
-        self[5] = list(v)
-
-    @property
-    def a_vals(self) -> List[float]:
-        return self[6]
-
-    @a_vals.setter
-    def a_vals(self, v: Sequence[float]) -> None:
-        self[6] = list(v)
-
-    @property
-    def phi_applied(self) -> float:
-        return self[7]
-
-    @phi_applied.setter
-    def phi_applied(self, v: float) -> None:
-        self[7] = float(v)
-
-    @property
-    def c0_vals(self) -> List[float]:
-        return self[8]
-
-    @c0_vals.setter
-    def c0_vals(self, v: Sequence[float]) -> None:
-        self[8] = list(v)
-
-    @property
-    def phi0(self) -> float:
-        return self[9]
-
-    @phi0.setter
-    def phi0(self, v: float) -> None:
-        self[9] = float(v)
-
-    @property
-    def solver_options(self) -> Dict[str, Any]:
-        return self[10]
-
-    @solver_options.setter
-    def solver_options(self, v: Dict[str, Any]) -> None:
-        self[10] = v
+    def __len__(self) -> int:
+        return self._N
 
     # ------------------------------------------------------------------
-    # Convenience helpers
+    # Conversion helpers
     # ------------------------------------------------------------------
 
-    def deep_copy(self) -> "SolverParams":
-        """Return an independent deep copy."""
-        return SolverParams(
-            n_species=self.n_species,
-            order=self.order,
-            dt=self.dt,
-            t_end=self.t_end,
-            z_vals=copy.deepcopy(self.z_vals),
-            D_vals=copy.deepcopy(self.D_vals),
-            a_vals=copy.deepcopy(self.a_vals),
-            phi_applied=self.phi_applied,
-            c0_vals=copy.deepcopy(self.c0_vals),
-            phi0=self.phi0,
-            solver_options=copy.deepcopy(self.solver_options),
-        )
+    def to_list(self) -> List[Any]:
+        """Return a plain 11-entry list (same order as the original layout)."""
+        return [
+            self.n_species,
+            self.order,
+            self.dt,
+            self.t_end,
+            self.z_vals,
+            self.D_vals,
+            self.a_vals,
+            self.phi_applied,
+            self.c0_vals,
+            self.phi0,
+            self.solver_options,
+        ]
 
     @classmethod
     def from_list(cls, params: Sequence[Any]) -> "SolverParams":
@@ -223,6 +142,66 @@ class SolverParams(list):
             phi0=params[9],
             solver_options=params[10],
         )
+
+    # ------------------------------------------------------------------
+    # Deep copy
+    # ------------------------------------------------------------------
+
+    def deep_copy(self) -> "SolverParams":
+        """Return an independent deep copy."""
+        return SolverParams(
+            n_species=self.n_species,
+            order=self.order,
+            dt=self.dt,
+            t_end=self.t_end,
+            z_vals=copy.deepcopy(self.z_vals),
+            D_vals=copy.deepcopy(self.D_vals),
+            a_vals=copy.deepcopy(self.a_vals),
+            phi_applied=self.phi_applied,
+            c0_vals=copy.deepcopy(self.c0_vals),
+            phi0=self.phi0,
+            solver_options=copy.deepcopy(self.solver_options),
+        )
+
+    # ------------------------------------------------------------------
+    # Mutation helpers (return new frozen instances)
+    # ------------------------------------------------------------------
+
+    def with_phi_applied(self, phi: float) -> "SolverParams":
+        """Return a new SolverParams with updated phi_applied."""
+        return dataclasses.replace(self, phi_applied=float(phi))
+
+    def with_phi0(self, phi0: float) -> "SolverParams":
+        """Return a new SolverParams with updated phi0."""
+        return dataclasses.replace(self, phi0=float(phi0))
+
+    def with_dt(self, dt: float) -> "SolverParams":
+        """Return a new SolverParams with updated dt."""
+        return dataclasses.replace(self, dt=float(dt))
+
+    def with_solver_options(self, opts: Dict[str, Any]) -> "SolverParams":
+        """Return a new SolverParams with updated solver_options."""
+        return dataclasses.replace(self, solver_options=opts)
+
+    def with_D_vals(self, D_vals: Sequence[float]) -> "SolverParams":
+        """Return a new SolverParams with updated D_vals."""
+        return dataclasses.replace(self, D_vals=list(D_vals))
+
+    def with_a_vals(self, a_vals: Sequence[float]) -> "SolverParams":
+        """Return a new SolverParams with updated a_vals."""
+        return dataclasses.replace(self, a_vals=list(a_vals))
+
+    def with_c0_vals(self, c0_vals: Sequence[float]) -> "SolverParams":
+        """Return a new SolverParams with updated c0_vals."""
+        return dataclasses.replace(self, c0_vals=list(c0_vals))
+
+    def with_z_vals(self, z_vals: Sequence[float]) -> "SolverParams":
+        """Return a new SolverParams with updated z_vals."""
+        return dataclasses.replace(self, z_vals=list(z_vals))
+
+    # ------------------------------------------------------------------
+    # Display
+    # ------------------------------------------------------------------
 
     def __repr__(self) -> str:
         return (

@@ -22,7 +22,7 @@ def evaluate_curve_objective_and_gradient(
     point_executor: Optional[_PointSolveExecutor] = None,
 ) -> CurveAdjointResult:
     """Evaluate curve objective + gradient, with anisotropy recovery fallback."""
-    n_species = int(request.base_solver_params[0])
+    n_species = int(request.base_solver_params.n_species) if hasattr(request.base_solver_params, 'n_species') else int(request.base_solver_params[0])
 
     def _evaluate_once(kappa_eval: np.ndarray) -> CurveAdjointResult:
         points: List[PointAdjointResult] = []

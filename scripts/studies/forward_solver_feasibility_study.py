@@ -37,10 +37,19 @@ _ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("FIREDRAKE_TSFC_KERNEL_CACHE_DIR", "/tmp/firedrake-tsfc")
-os.environ.setdefault("PYOP2_CACHE_DIR", "/tmp/pyop2")
-os.environ.setdefault("MPLCONFIGDIR", "/tmp")
+from scripts._bv_common import (
+    setup_firedrake_env,
+    F_CONST, V_T, N_ELECTRONS,
+    D_O2, D_H2O2, D_HP, D_CLO4,
+    C_O2, C_H2O2, C_HP, C_CLO4,
+    K0_PHYS_R1 as K0_1_PHYS,
+    K0_PHYS_R2 as K0_2_PHYS,
+    ALPHA_R1 as ALPHA_1,
+    ALPHA_R2 as ALPHA_2,
+    L_REF, D_REF, C_SCALE,
+    SNES_OPTS_CHARGED as SNES_OPTS,
+)
+setup_firedrake_env()
 
 import firedrake as fd
 import matplotlib
@@ -57,55 +66,15 @@ from Forward.params import SolverParams
 
 
 # ---------------------------------------------------------------------------
-# Physical constants
+# Script-local constants
 # ---------------------------------------------------------------------------
 
-F_CONST   = 96485.3329
-R_GAS     = 8.31446
-T_REF     = 298.15
-V_T       = R_GAS * T_REF / F_CONST
-E_EQ_RHE  = 0.695
-N_ELECTRONS = 2
-
-D_O2   = 1.9e-9
-C_O2   = 0.5
-D_H2O2 = 1.6e-9
-C_H2O2 = 0.0
-D_HP   = 9.311e-9
-C_HP   = 0.1
-D_CLO4 = 1.792e-9
-C_CLO4 = 0.1
-
-K0_1_PHYS = 2.4e-8
-ALPHA_1   = 0.627
-K0_2_PHYS = 1e-9
-ALPHA_2   = 0.5
-L_REF     = 1.0e-4
-
-D_REF   = D_O2
-C_SCALE = C_O2
+E_EQ_RHE = 0.695
 
 ETA_TARGET = (-0.5 - E_EQ_RHE) / V_T
 
 # Steric a for all feasibility tests (moderate value that helps convergence)
 STERIC_A = 0.05
-
-# SNES options
-SNES_OPTS = {
-    "snes_type":                 "newtonls",
-    "snes_max_it":               300,
-    "snes_atol":                 1e-7,
-    "snes_rtol":                 1e-10,
-    "snes_stol":                 1e-12,
-    "snes_linesearch_type":      "l2",
-    "snes_linesearch_maxlambda": 0.5,
-    "snes_divergence_tolerance": 1e12,
-    "ksp_type":                  "preonly",
-    "pc_type":                   "lu",
-    "pc_factor_mat_solver_type": "mumps",
-    "mat_mumps_icntl_8":         77,
-    "mat_mumps_icntl_14":        80,
-}
 
 
 # ---------------------------------------------------------------------------

@@ -44,10 +44,21 @@ _ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("FIREDRAKE_TSFC_KERNEL_CACHE_DIR", "/tmp/firedrake-tsfc")
-os.environ.setdefault("PYOP2_CACHE_DIR", "/tmp/pyop2")
-os.environ.setdefault("MPLCONFIGDIR", "/tmp")
+from scripts._bv_common import (
+    setup_firedrake_env,
+    F_CONST, R_GAS, T_REF, V_T, N_ELECTRONS,
+    D_O2, D_H2O2, D_HP, D_CLO4,
+    C_O2, C_H2O2, C_HP, C_CLO4,
+    K0_PHYS_R1 as K0_1_PHYS, ALPHA_R1 as ALPHA_1,
+    K0_PHYS_R2 as K0_2_PHYS, ALPHA_R2 as ALPHA_2,
+    L_REF, D_REF, C_SCALE, K_SCALE, I_SCALE,
+    D_O2_HAT, D_H2O2_HAT, D_HP_HAT, D_CLO4_HAT,
+    C_O2_HAT, C_H2O2_HAT, C_HP_HAT, C_CLO4_HAT,
+    SNES_OPTS_CHARGED as SNES_OPTS,
+)
+setup_firedrake_env()
+
+E_EQ_RHE = 0.695  # V vs RHE (O2/H2O2 at pH 4)
 
 import firedrake as fd
 import matplotlib
@@ -61,88 +72,6 @@ from Forward.bv_solver import (
     make_graded_rectangle_mesh,
 )
 from Forward.params import SolverParams
-
-
-# ---------------------------------------------------------------------------
-# Physical constants
-# ---------------------------------------------------------------------------
-
-F_CONST   = 96485.3329   # C/mol
-R_GAS     = 8.31446      # J/(mol K)
-T_REF     = 298.15       # K
-V_T       = R_GAS * T_REF / F_CONST   # 0.025693 V
-E_EQ_RHE  = 0.695        # V vs RHE (O2/H2O2 at pH 4)
-N_ELECTRONS = 2
-
-# --- Species data ---
-# Species 0: O2 (neutral)
-D_O2   = 1.9e-9     # m2/s
-C_O2   = 0.5        # mol/m3 (dissolved O2)
-
-# Species 1: H2O2 (neutral)
-D_H2O2 = 1.6e-9     # m2/s
-C_H2O2 = 0.0        # mol/m3 (initially zero)
-
-# Species 2: H+ (z=+1)
-D_HP   = 9.311e-9   # m2/s
-C_HP   = 0.1        # mol/m3 (pH 4 = 10^-4 M = 0.1 mol/m3)
-
-# Species 3: ClO4- (z=-1)
-D_CLO4 = 1.792e-9   # m2/s
-C_CLO4 = 0.1        # mol/m3 (electroneutrality: equals H+ at pH 4)
-
-# Kinetics
-K0_1_PHYS  = 2.4e-8   # m/s (R1)
-ALPHA_1    = 0.627
-K0_2_PHYS  = 1e-9     # m/s (R2)
-ALPHA_2    = 0.5
-
-# Default domain
-L_REF = 1.0e-4   # 100 um — diffusion-layer scale
-
-# Reference scales
-D_REF = D_O2
-C_SCALE = C_O2   # 0.5 mol/m3
-
-# Nondimensional species quantities
-D_O2_HAT   = D_O2 / D_REF       # 1.0
-D_H2O2_HAT = D_H2O2 / D_REF     # ~0.842
-D_HP_HAT   = D_HP / D_REF       # ~4.9
-D_CLO4_HAT = D_CLO4 / D_REF     # ~0.943
-
-C_O2_HAT   = C_O2 / C_SCALE     # 1.0
-C_H2O2_HAT = C_H2O2 / C_SCALE   # 0.0
-C_HP_HAT   = C_HP / C_SCALE     # 0.2
-C_CLO4_HAT = C_CLO4 / C_SCALE   # 0.2
-
-# Kappa (transfer coefficient) scale
-K_SCALE = D_REF / L_REF
-
-# Current density scale
-J_SCALE_MOL_M2_S = D_REF * C_SCALE / L_REF
-I_SCALE_A_M2     = N_ELECTRONS * F_CONST * J_SCALE_MOL_M2_S
-I_SCALE_MA_CM2   = I_SCALE_A_M2 * 0.1   # A/m2 -> mA/cm2
-
-
-# ---------------------------------------------------------------------------
-# SNES options — conservative Newton for charged system
-# ---------------------------------------------------------------------------
-
-SNES_OPTS = {
-    "snes_type":                "newtonls",
-    "snes_max_it":              300,
-    "snes_atol":                1e-7,
-    "snes_rtol":                1e-10,
-    "snes_stol":                1e-12,
-    "snes_linesearch_type":     "l2",
-    "snes_linesearch_maxlambda": 0.5,
-    "snes_divergence_tolerance": 1e12,
-    "ksp_type":                 "preonly",
-    "pc_type":                  "lu",
-    "pc_factor_mat_solver_type": "mumps",
-    "mat_mumps_icntl_8":        77,     # auto-scaling
-    "mat_mumps_icntl_14":       80,     # extra memory
-}
 
 
 # ---------------------------------------------------------------------------

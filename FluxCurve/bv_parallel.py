@@ -205,7 +205,8 @@ def _bv_worker_adjoint_tape_pass(
 
     jac = fd.derivative(F_res, U)
     problem = fd.NonlinearVariationalProblem(F_res, U, bcs=bcs, J=jac)
-    solve_params = dict(params[10]) if isinstance(params[10], dict) else {}
+    _bpar_opts = params.solver_options if hasattr(params, 'solver_options') else params[10]
+    solve_params = dict(_bpar_opts) if isinstance(_bpar_opts, dict) else {}
     solve_params.setdefault("snes_lag_jacobian", 2)
     solve_params.setdefault("snes_lag_jacobian_persists", True)
     solver = fd.NonlinearVariationalSolver(problem, solver_parameters=solve_params)
@@ -395,7 +396,8 @@ def _bv_worker_solve_point(
 
     jac = fd.derivative(F_res, U)
     problem = fd.NonlinearVariationalProblem(F_res, U, bcs=bcs, J=jac)
-    solve_params = dict(params[10]) if isinstance(params[10], dict) else {}
+    _bpar_opts = params.solver_options if hasattr(params, 'solver_options') else params[10]
+    solve_params = dict(_bpar_opts) if isinstance(_bpar_opts, dict) else {}
     solve_params.setdefault("snes_lag_jacobian", 2)
     solve_params.setdefault("snes_lag_jacobian_persists", True)
     solver = fd.NonlinearVariationalSolver(problem, solver_parameters=solve_params)

@@ -65,11 +65,6 @@ from Forward.steady_state import (
     read_phi_applied_flux_csv,
     results_to_flux_array,
     all_results_converged,
-    # backward-compat aliases
-    solve_to_steady_state_for_phi0,
-    sweep_phi0_steady_flux,
-    write_phi0_flux_csv,
-    read_phi0_flux_csv,
 )
 
 # Noise injection
@@ -113,10 +108,6 @@ __all__ = [
     "read_phi_applied_flux_csv",
     "results_to_flux_array",
     "all_results_converged",
-    "solve_to_steady_state_for_phi0",
-    "sweep_phi0_steady_flux",
-    "write_phi0_flux_csv",
-    "read_phi0_flux_csv",
     # noise
     "generate_noisy_data",
     "generate_noisy_data_robin",

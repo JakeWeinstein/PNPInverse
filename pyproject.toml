@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "pnpinverse"
+version = "0.1.0"
+description = "PNP forward solver and inverse inference framework for electrochemical kinetics"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "h5py",
+    # firedrake is installed separately via its own installer
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.setuptools.packages.find]
+include = ["Forward*", "Inverse*", "FluxCurve*", "Nondim*", "Surrogate*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests requiring Firedrake FEM environment (deselect with '-m \"not slow\"')",
+]

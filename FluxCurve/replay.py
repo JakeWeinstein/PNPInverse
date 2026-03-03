@@ -63,8 +63,9 @@ def _build_replay_point_flux_functional(
     target_steady = int(required_steady + extra_steady)
 
     baseline_options: Mapping[str, Any] = {}
-    if isinstance(baseline_params[10], dict):
-        baseline_options = copy.deepcopy(baseline_params[10])
+    _bl_opts = baseline_params.solver_options if hasattr(baseline_params, 'solver_options') else baseline_params[10]
+    if isinstance(_bl_opts, dict):
+        baseline_options = copy.deepcopy(_bl_opts)
 
     last_reason = (
         "dynamic replay build failed before reaching steady state "
@@ -77,14 +78,15 @@ def _build_replay_point_flux_functional(
             phi_applied=float(phi_applied),
             kappa_values=kappa_list,
         )
-        if isinstance(params[10], dict):
+        _rp_opts = params.solver_options if hasattr(params, 'solver_options') else params[10]
+        if isinstance(_rp_opts, dict):
             phase, phase_step, _cycle_index = _attempt_phase_state(attempt, forward_recovery)
             _relax_solver_options_for_attempt(
-                params[10],
+                _rp_opts,
                 phase=phase,
                 phase_step=phase_step,
                 recovery=forward_recovery,
-                baseline_options=baseline_options if baseline_options else params[10],
+                baseline_options=baseline_options if baseline_options else _rp_opts,
             )
 
         tape = adj.Tape()
@@ -104,7 +106,8 @@ def _build_replay_point_flux_functional(
 
                 jac = fd.derivative(F_res, U)
                 problem = fd.NonlinearVariationalProblem(F_res, U, bcs=bcs, J=jac)
-                solver = fd.NonlinearVariationalSolver(problem, solver_parameters=params[10])
+                _replay_so = params.solver_options if hasattr(params, 'solver_options') else params[10]
+                solver = fd.NonlinearVariationalSolver(problem, solver_parameters=_replay_so)
 
                 observable_form = _build_observable_form(
                     ctx,
