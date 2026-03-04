@@ -1,0 +1,2 @@
+phase,k0_1,k0_2,alpha_1,alpha_2,k0_1_err_pct,k0_2_err_pct,alpha_1_err_pct,alpha_2_err_pct,loss,time_s
+"Phase 1 (multi-start, surr)",1.37384303e-03,4.86479367e-05,0.597167,0.468246,8.7626,7.5689,4.7580,6.3507,6.307420425829e-05,0.2

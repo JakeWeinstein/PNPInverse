@@ -1,28 +1,23 @@
-"""Master inference protocol v9 for BV kinetics -- SURROGATE + PDE REFINEMENT.
+"""Strategy 3: Multi-start Latin Hypercube grid search + gradient polish.
 
-Round 2B improvements over v8.1:
-    1. Uses N=500 training data (400 wide + 100 focused) for better coverage.
-    2. Cross-validated per-output smoothing (separate smoothing_cd / smoothing_pc).
-    3. Dynamic bounds from model.training_bounds (no hard-coded constants).
-    4. Training-data bounds stored in surrogate model for reproducibility.
+Uses the fast ``predict_batch`` surrogate path to exhaustively search the
+4D parameter space, then polishes the best candidates with L-BFGS-B.
 
 Three-phase protocol:
-    Phase 1: Alpha-only surrogate optimization (k0 FIXED at initial guess)
-    Phase 2: Joint 4-param surrogate on SHALLOW cathodic voltages
-             (bounds clamped to training-data range from model)
-    Phase 3: PDE-based refinement from Phase 2 result (10 L-BFGS-B iters,
-             parallel multi-observable, shallow cathodic grid)
+    Phase 0: Load surrogate, generate PDE targets at true parameters
+    Phase 1: Multi-start grid search + polish (new Strategy 3)
+    Phase 2: (Optional) PDE refinement from multi-start best
 
 Usage (from PNPInverse/ directory)::
 
-    python scripts/surrogate/Infer_BVMaster_charged_v9_surrogate.py \\
+    python scripts/surrogate/multistart_inference.py \\
         --model StudyResults/surrogate_v9/surrogate_model.pkl
 
     # Skip PDE refinement (surrogate-only):
-    python scripts/surrogate/Infer_BVMaster_charged_v9_surrogate.py --no-pde
+    python scripts/surrogate/multistart_inference.py --no-pde
 
-    # Control worker count for PDE phase:
-    python scripts/surrogate/Infer_BVMaster_charged_v9_surrogate.py --workers 4
+    # Custom grid size:
+    python scripts/surrogate/multistart_inference.py --n-grid 50000
 """
 
 from __future__ import annotations
@@ -58,13 +53,16 @@ ALPHA_1 = ALPHA_R1
 ALPHA_2 = ALPHA_R2
 
 import numpy as np
-from scipy.optimize import minimize
 
 from Surrogate.io import load_surrogate
-from Surrogate.objectives import SurrogateObjective, AlphaOnlySurrogateObjective
+from Surrogate.multistart import (
+    MultiStartConfig,
+    run_multistart_inference,
+)
+
 
 # ---------------------------------------------------------------------------
-# Fallback training-data bounds (used only if model lacks training_bounds)
+# Fallback training-data bounds
 # ---------------------------------------------------------------------------
 K0_1_TRAIN_LO_DEFAULT = K0_HAT * 0.01
 K0_1_TRAIN_HI_DEFAULT = K0_HAT * 100.0
@@ -74,7 +72,12 @@ ALPHA_TRAIN_LO_DEFAULT = 0.10
 ALPHA_TRAIN_HI_DEFAULT = 0.90
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 def _compute_errors(k0, alpha, true_k0_arr, true_alpha_arr):
+    """Compute relative errors for k0 and alpha arrays."""
     k0_arr = np.asarray(k0)
     alpha_arr = np.asarray(alpha)
     k0_err = np.abs(k0_arr - true_k0_arr) / np.maximum(np.abs(true_k0_arr), 1e-16)
@@ -83,6 +86,7 @@ def _compute_errors(k0, alpha, true_k0_arr, true_alpha_arr):
 
 
 def _print_phase_result(name, k0, alpha, true_k0_arr, true_alpha_arr, loss, elapsed):
+    """Print a phase result with parameter errors."""
     k0_err, alpha_err = _compute_errors(k0, alpha, true_k0_arr, true_alpha_arr)
     print(f"\n  {name} result:")
     print(f"    k0_1   = {k0[0]:.6e}  (true {true_k0_arr[0]:.6e}, err {k0_err[0]*100:.2f}%)")
@@ -94,10 +98,7 @@ def _print_phase_result(name, k0, alpha, true_k0_arr, true_alpha_arr, loss, elap
 
 
 def _generate_targets_with_pde(phi_applied_values, observable_scale):
-    """Generate target I-V curves using the PDE solver at true parameters.
-
-    This mirrors v7's target generation: solve at true k0/alpha, add 2% noise.
-    """
+    """Generate target I-V curves using the PDE solver at true parameters."""
     from Forward.steady_state import SteadyStateConfig, add_percent_noise
     from Forward.bv_solver import make_graded_rectangle_mesh
     from FluxCurve.bv_point_solve import (
@@ -156,36 +157,59 @@ def _generate_targets_with_pde(phi_applied_values, observable_scale):
     return results
 
 
-def _subset_targets(target_cd, target_pc, all_eta, subset_eta):
-    """Extract target values for a subset of voltages from the full grid."""
+def _extract_training_bounds(surrogate):
+    """Extract training bounds from the surrogate model (with fallbacks)."""
+    if surrogate.training_bounds is not None:
+        tb = surrogate.training_bounds
+        k0_1_lo = tb["k0_1"][0]
+        k0_1_hi = tb["k0_1"][1]
+        k0_2_lo = tb["k0_2"][0]
+        k0_2_hi = tb["k0_2"][1]
+        alpha_lo = min(tb["alpha_1"][0], tb["alpha_2"][0])
+        alpha_hi = max(tb["alpha_1"][1], tb["alpha_2"][1])
+        return k0_1_lo, k0_1_hi, k0_2_lo, k0_2_hi, alpha_lo, alpha_hi
+    return (K0_1_TRAIN_LO_DEFAULT, K0_1_TRAIN_HI_DEFAULT,
+            K0_2_TRAIN_LO_DEFAULT, K0_2_TRAIN_HI_DEFAULT,
+            ALPHA_TRAIN_LO_DEFAULT, ALPHA_TRAIN_HI_DEFAULT)
+
+
+def _compute_shallow_subset_idx(all_eta, eta_shallow):
+    """Find indices of shallow voltages within the full grid."""
     idx = []
-    for eta in subset_eta:
+    for eta in eta_shallow:
         matches = np.where(np.abs(all_eta - eta) < 1e-10)[0]
         if len(matches) > 0:
             idx.append(matches[0])
-    idx = np.array(idx, dtype=int)
-    return target_cd[idx], target_pc[idx]
+    return np.array(idx, dtype=int)
 
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="BV Master Inference v9 (Surrogate + PDE Refinement)"
+        description="Strategy 3: Multi-Start LHS Grid Search + Gradient Polish"
     )
     parser.add_argument("--model", type=str,
                         default="StudyResults/surrogate_v9/surrogate_model.pkl",
                         help="Path to surrogate model .pkl")
+    parser.add_argument("--n-grid", type=int, default=20_000,
+                        help="Number of LHS grid points (default: 20000)")
+    parser.add_argument("--n-candidates", type=int, default=20,
+                        help="Number of top candidates to polish (default: 20)")
     parser.add_argument("--no-pde", action="store_true",
-                        help="Skip Phase 3 PDE refinement (surrogate-only)")
+                        help="Skip Phase 2 PDE refinement (surrogate-only)")
     parser.add_argument("--workers", type=int, default=0,
                         help="Workers for PDE refinement (0=auto)")
-    parser.add_argument("--pde-maxiter", type=int, default=10,
-                        help="Max L-BFGS-B iterations for PDE refinement")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for LHS sampler")
     parser.add_argument("--secondary-weight", type=float, default=1.0,
                         help="Weight on peroxide current observable (default: 1.0)")
     args = parser.parse_args()
 
     # ===================================================================
-    # Voltage grids (IDENTICAL to v7/v8)
+    # Voltage grids (IDENTICAL to v9)
     # ===================================================================
     eta_symmetric = np.array([
         +5.0, +3.0, +1.0, -0.5,
@@ -196,10 +220,6 @@ def main() -> None:
         -1.0, -2.0, -3.0, -4.0, -5.0, -6.5, -8.0,
         -10.0, -11.5, -13.0,
     ])
-
-    # eta_cathodic is defined for target generation only (to match the
-    # surrogate's 22-point training grid).  Change 1: we do NOT run a
-    # Phase 3 surrogate optimization on this range.
     eta_cathodic = np.array([
         -1.0, -2.0, -3.0, -4.0, -5.0, -6.5, -8.0,
         -10.0, -13.0, -17.0, -22.0, -28.0,
@@ -215,25 +235,24 @@ def main() -> None:
     true_k0_arr = np.asarray(true_k0)
     true_alpha_arr = np.asarray(true_alpha)
 
-    initial_k0_guess = [0.005, 0.0005]
-    initial_alpha_guess = [0.4, 0.3]
-
     observable_scale = -I_SCALE
-    base_output = os.path.join("StudyResults", "surrogate_v9")
+    base_output = os.path.join("StudyResults", "multistart")
     os.makedirs(base_output, exist_ok=True)
 
     phase_results = {}
     t_total_start = time.time()
 
-    # Print training-data bounds for reference
+    # ===================================================================
+    # Print header
+    # ===================================================================
     print(f"\n{'#'*70}")
-    print(f"  MASTER INFERENCE PROTOCOL v9 (SURROGATE + PDE REFINEMENT)")
-    print(f"  Round 2B: N=500 training, cross-validated smoothing, dynamic bounds")
+    print(f"  STRATEGY 3: MULTI-START LHS GRID SEARCH + GRADIENT POLISH")
     print(f"  True k0:    {true_k0}")
     print(f"  True alpha: {true_alpha}")
-    print(f"  Initial k0 guess:    {initial_k0_guess}")
-    print(f"  Initial alpha guess: {initial_alpha_guess}")
-    print(f"  Secondary weight:    {args.secondary_weight}")
+    print(f"  Grid size:  {args.n_grid:,}")
+    print(f"  Candidates: {args.n_candidates}")
+    print(f"  Weight:     {args.secondary_weight}")
+    print(f"  Seed:       {args.seed}")
     print(f"{'#'*70}\n")
 
     # ===================================================================
@@ -245,34 +264,18 @@ def main() -> None:
     print(f"  Surrogate voltage points: {surrogate.n_eta}")
     print(f"  Surrogate voltage range: [{surrogate_eta.min():.1f}, {surrogate_eta.max():.1f}]")
 
-    # Dynamic bounds: read from model if available, fall back to defaults
-    if surrogate.training_bounds is not None:
-        tb = surrogate.training_bounds
-        K0_1_TRAIN_LO = tb["k0_1"][0]
-        K0_1_TRAIN_HI = tb["k0_1"][1]
-        K0_2_TRAIN_LO = tb["k0_2"][0]
-        K0_2_TRAIN_HI = tb["k0_2"][1]
-        ALPHA_TRAIN_LO = tb["alpha_1"][0]
-        ALPHA_TRAIN_HI = tb["alpha_1"][1]
-        # Use the wider of alpha_1/alpha_2 bounds
-        ALPHA_TRAIN_LO = min(ALPHA_TRAIN_LO, tb["alpha_2"][0])
-        ALPHA_TRAIN_HI = max(ALPHA_TRAIN_HI, tb["alpha_2"][1])
-        print(f"  Using training bounds FROM MODEL:")
-    else:
-        K0_1_TRAIN_LO = K0_1_TRAIN_LO_DEFAULT
-        K0_1_TRAIN_HI = K0_1_TRAIN_HI_DEFAULT
-        K0_2_TRAIN_LO = K0_2_TRAIN_LO_DEFAULT
-        K0_2_TRAIN_HI = K0_2_TRAIN_HI_DEFAULT
-        ALPHA_TRAIN_LO = ALPHA_TRAIN_LO_DEFAULT
-        ALPHA_TRAIN_HI = ALPHA_TRAIN_HI_DEFAULT
-        print(f"  WARNING: model lacks training_bounds, using defaults:")
+    # Extract training bounds
+    (K0_1_LO, K0_1_HI, K0_2_LO, K0_2_HI,
+     ALPHA_LO, ALPHA_HI) = _extract_training_bounds(surrogate)
 
-    print(f"    k0_1 log10: [{np.log10(max(K0_1_TRAIN_LO, 1e-30)):.2f}, {np.log10(K0_1_TRAIN_HI):.2f}]")
-    print(f"    k0_2 log10: [{np.log10(max(K0_2_TRAIN_LO, 1e-30)):.2f}, {np.log10(K0_2_TRAIN_HI):.2f}]")
-    print(f"    alpha:      [{ALPHA_TRAIN_LO:.4f}, {ALPHA_TRAIN_HI:.4f}]")
+    bounds_source = "from model" if surrogate.training_bounds is not None else "defaults"
+    print(f"  Training bounds ({bounds_source}):")
+    print(f"    k0_1 log10: [{np.log10(max(K0_1_LO, 1e-30)):.2f}, {np.log10(K0_1_HI):.2f}]")
+    print(f"    k0_2 log10: [{np.log10(max(K0_2_LO, 1e-30)):.2f}, {np.log10(K0_2_HI):.2f}]")
+    print(f"    alpha:      [{ALPHA_LO:.4f}, {ALPHA_HI:.4f}]")
 
     # ===================================================================
-    # Generate targets using PDE solver (same as v7/v8)
+    # Phase 0: Generate targets using PDE solver (same as v9)
     # ===================================================================
     print(f"\nGenerating target I-V curves with PDE solver at true parameters...")
     t_target = time.time()
@@ -282,207 +285,86 @@ def main() -> None:
     t_target_elapsed = time.time() - t_target
     print(f"  Target generation: {t_target_elapsed:.1f}s")
 
-    target_cd_surr = target_cd_full
-    target_pc_surr = target_pc_full
+    # ===================================================================
+    # Compute shallow voltage subset indices
+    # ===================================================================
+    shallow_idx = _compute_shallow_subset_idx(all_eta, eta_shallow)
+    print(f"  Shallow subset: {len(shallow_idx)} points "
+          f"(eta from {eta_shallow[0]:.1f} to {eta_shallow[-1]:.1f})")
 
     # ===================================================================
-    # PHASE 1: Alpha-only surrogate optimization
+    # PHASE 1: Multi-start grid search + polish
     # ===================================================================
     print(f"\n{'='*70}")
-    print(f"  PHASE 1: Alpha-only surrogate optimization")
-    print(f"  k0 FIXED at initial guess: {initial_k0_guess}")
-    print(f"  Voltage grid: full ({len(all_eta)} pts)")
-    print(f"  Alpha bounds: [{ALPHA_TRAIN_LO}, {ALPHA_TRAIN_HI}] (training range)")
+    print(f"  PHASE 1: Multi-start LHS grid search + L-BFGS-B polish")
+    print(f"  Grid: {args.n_grid:,} LHS points")
+    print(f"  Polish: top-{args.n_candidates} with maxiter={60}")
+    print(f"  Objective: shallow voltage subset ({len(shallow_idx)} pts)")
     print(f"{'='*70}")
-    t_p1 = time.time()
 
-    p1_obj = AlphaOnlySurrogateObjective(
-        surrogate=surrogate,
-        target_cd=target_cd_surr,
-        target_pc=target_pc_surr,
-        fixed_k0=initial_k0_guess,
+    ms_config = MultiStartConfig(
+        n_grid=args.n_grid,
+        n_top_candidates=args.n_candidates,
+        polish_maxiter=60,
         secondary_weight=args.secondary_weight,
         fd_step=1e-5,
+        use_shallow_subset=True,
+        seed=args.seed,
+        verbose=True,
     )
 
-    x0_p1 = np.array(initial_alpha_guess, dtype=float)
-    # Change 2: clamp alpha bounds to training range
-    bounds_p1 = [(ALPHA_TRAIN_LO, ALPHA_TRAIN_HI), (ALPHA_TRAIN_LO, ALPHA_TRAIN_HI)]
-
-    eval_counter_p1 = {"n": 0}
-    def _p1_callback(x):
-        eval_counter_p1["n"] += 1
-        J = p1_obj.objective(x)
-        print(f"  [P1 iter {eval_counter_p1['n']:>3d}] J={J:.6e} alpha=[{x[0]:.4f}, {x[1]:.4f}]")
-
-    result_p1 = minimize(
-        p1_obj.objective,
-        x0_p1,
-        jac=p1_obj.gradient,
-        method="L-BFGS-B",
-        bounds=bounds_p1,
-        options={"maxiter": 60, "ftol": 1e-14, "gtol": 1e-8, "disp": False},
-        callback=_p1_callback,
-    )
-
-    p1_alpha = result_p1.x.copy()
-    p1_k0 = np.asarray(initial_k0_guess)
-    p1_loss = float(result_p1.fun)
-    p1_time = time.time() - t_p1
-
-    _print_phase_result("Phase 1 (alpha, surrogate)", p1_k0, p1_alpha,
-                        true_k0_arr, true_alpha_arr, p1_loss, p1_time)
-    phase_results["Phase 1 (alpha, surrogate)"] = {
-        "k0": p1_k0.tolist(), "alpha": p1_alpha.tolist(),
-        "loss": p1_loss, "time": p1_time,
-    }
-
-    # ===================================================================
-    # PHASE 2: Joint 4-param surrogate on SHALLOW cathodic
-    #          k0 from COLD initial guess, alpha warm from P1
-    #          Bounds CLAMPED to training-data range (Change 2)
-    # ===================================================================
-    print(f"\n{'='*70}")
-    print(f"  PHASE 2: Joint 4-param surrogate (shallow-range objective)")
-    print(f"  k0 from COLD guess: {initial_k0_guess}")
-    print(f"  alpha warm from P1: {p1_alpha.tolist()}")
-    print(f"  Bounds clamped to training range (Change 2)")
-    print(f"{'='*70}")
-    t_p2 = time.time()
-
-    # Use shallow voltage subset for objective
-    target_cd_shallow, target_pc_shallow = _subset_targets(
-        target_cd_full, target_pc_full, all_eta, eta_shallow,
-    )
-    shallow_idx = []
-    for eta in eta_shallow:
-        matches = np.where(np.abs(all_eta - eta) < 1e-10)[0]
-        if len(matches) > 0:
-            shallow_idx.append(matches[0])
-    shallow_idx = np.array(shallow_idx, dtype=int)
-
-    class SubsetSurrogateObjective:
-        """Surrogate objective on a subset of voltage points."""
-        def __init__(self, surrogate, target_cd, target_pc, subset_idx,
-                     secondary_weight=1.0, fd_step=1e-5, log_space_k0=True):
-            self.surrogate = surrogate
-            self.target_cd = np.asarray(target_cd, dtype=float)
-            self.target_pc = np.asarray(target_pc, dtype=float)
-            self.subset_idx = subset_idx
-            self._valid_cd = ~np.isnan(self.target_cd)
-            self._valid_pc = ~np.isnan(self.target_pc)
-            self.secondary_weight = secondary_weight
-            self.fd_step = fd_step
-            self.log_space_k0 = log_space_k0
-            self._n_evals = 0
-
-        def _x_to_params(self, x):
-            x = np.asarray(x, dtype=float)
-            if self.log_space_k0:
-                k0_1, k0_2 = 10.0**x[0], 10.0**x[1]
-            else:
-                k0_1, k0_2 = x[0], x[1]
-            return k0_1, k0_2, x[2], x[3]
-
-        def objective(self, x):
-            k0_1, k0_2, a1, a2 = self._x_to_params(x)
-            pred = self.surrogate.predict(k0_1, k0_2, a1, a2)
-            cd_sim = pred["current_density"][self.subset_idx]
-            pc_sim = pred["peroxide_current"][self.subset_idx]
-            cd_diff = cd_sim[self._valid_cd] - self.target_cd[self._valid_cd]
-            pc_diff = pc_sim[self._valid_pc] - self.target_pc[self._valid_pc]
-            J_cd = 0.5 * np.sum(cd_diff**2)
-            J_pc = 0.5 * np.sum(pc_diff**2)
-            self._n_evals += 1
-            return float(J_cd + self.secondary_weight * J_pc)
-
-        def gradient(self, x):
-            x = np.asarray(x, dtype=float)
-            grad = np.zeros(len(x), dtype=float)
-            h = self.fd_step
-            for i in range(len(x)):
-                xp, xm = x.copy(), x.copy()
-                xp[i] += h; xm[i] -= h
-                grad[i] = (self.objective(xp) - self.objective(xm)) / (2*h)
-            return grad
-
-    p2_obj = SubsetSurrogateObjective(
+    ms_result = run_multistart_inference(
         surrogate=surrogate,
-        target_cd=target_cd_shallow,
-        target_pc=target_pc_shallow,
+        target_cd=target_cd_full,
+        target_pc=target_pc_full,
+        bounds_k0_1=(K0_1_LO, K0_1_HI),
+        bounds_k0_2=(K0_2_LO, K0_2_HI),
+        bounds_alpha=(ALPHA_LO, ALPHA_HI),
+        config=ms_config,
         subset_idx=shallow_idx,
-        secondary_weight=args.secondary_weight,
-        fd_step=1e-5,
-        log_space_k0=True,
     )
 
-    x0_p2 = np.array([
-        np.log10(initial_k0_guess[0]),
-        np.log10(initial_k0_guess[1]),
-        p1_alpha[0],
-        p1_alpha[1],
-    ], dtype=float)
+    ms_k0 = np.array([ms_result.best_k0_1, ms_result.best_k0_2])
+    ms_alpha = np.array([ms_result.best_alpha_1, ms_result.best_alpha_2])
+    ms_loss = ms_result.best_loss
 
-    # Change 2: Clamp bounds to training-data range
-    bounds_p2 = [
-        (np.log10(K0_1_TRAIN_LO), np.log10(K0_1_TRAIN_HI)),
-        (np.log10(K0_2_TRAIN_LO), np.log10(K0_2_TRAIN_HI)),
-        (ALPHA_TRAIN_LO, ALPHA_TRAIN_HI),
-        (ALPHA_TRAIN_LO, ALPHA_TRAIN_HI),
-    ]
-    print(f"  Optimizer bounds (log10 for k0):")
-    print(f"    k0_1: [{bounds_p2[0][0]:.2f}, {bounds_p2[0][1]:.2f}]")
-    print(f"    k0_2: [{bounds_p2[1][0]:.2f}, {bounds_p2[1][1]:.2f}]")
-    print(f"    alpha: [{bounds_p2[2][0]:.2f}, {bounds_p2[2][1]:.2f}]")
-
-    eval_counter_p2 = {"n": 0}
-    def _p2_callback(x):
-        eval_counter_p2["n"] += 1
-        k0_1, k0_2 = 10.0**x[0], 10.0**x[1]
-        J = p2_obj.objective(x)
-        print(f"  [P2 iter {eval_counter_p2['n']:>3d}] J={J:.6e} "
-              f"k0=[{k0_1:.4e},{k0_2:.4e}] alpha=[{x[2]:.4f},{x[3]:.4f}]")
-
-    result_p2 = minimize(
-        p2_obj.objective,
-        x0_p2,
-        jac=p2_obj.gradient,
-        method="L-BFGS-B",
-        bounds=bounds_p2,
-        options={"maxiter": 60, "ftol": 1e-14, "gtol": 1e-8, "disp": False},
-        callback=_p2_callback,
-    )
-
-    p2_k0 = np.array([10.0**result_p2.x[0], 10.0**result_p2.x[1]])
-    p2_alpha = result_p2.x[2:4].copy()
-    p2_loss = float(result_p2.fun)
-    p2_time = time.time() - t_p2
-
-    _print_phase_result("Phase 2 (joint, shallow, surr)", p2_k0, p2_alpha,
-                        true_k0_arr, true_alpha_arr, p2_loss, p2_time)
-    phase_results["Phase 2 (joint shallow surr)"] = {
-        "k0": p2_k0.tolist(), "alpha": p2_alpha.tolist(),
-        "loss": p2_loss, "time": p2_time,
+    _print_phase_result("Phase 1 (multi-start, surrogate)",
+                        ms_k0, ms_alpha, true_k0_arr, true_alpha_arr,
+                        ms_loss, ms_result.total_time_s)
+    phase_results["Phase 1 (multi-start, surr)"] = {
+        "k0": ms_k0.tolist(), "alpha": ms_alpha.tolist(),
+        "loss": ms_loss, "time": ms_result.total_time_s,
     }
+
+    # Print top-5 polished candidates with errors
+    print(f"\n  Top-5 polished candidates:")
+    print(f"  {'Rank':>4} | {'k0_1 err':>10} {'k0_2 err':>10} "
+          f"{'a1 err':>10} {'a2 err':>10} | {'loss':>12}")
+    print(f"  {'-'*70}")
+    for c in ms_result.candidates[:5]:
+        c_k0 = np.array([c.k0_1, c.k0_2])
+        c_alpha = np.array([c.alpha_1, c.alpha_2])
+        k0_err, alpha_err = _compute_errors(c_k0, c_alpha, true_k0_arr, true_alpha_arr)
+        print(f"  #{c.rank:>3d} | {k0_err[0]*100:>9.2f}% {k0_err[1]*100:>9.2f}% "
+              f"{alpha_err[0]*100:>9.2f}% {alpha_err[1]*100:>9.2f}% "
+              f"| {c.polished_loss:>12.6e}")
 
     t_surrogate_end = time.time()
     surrogate_time = t_surrogate_end - t_total_start - t_target_elapsed
 
-    # Use Phase 2 result directly as surrogate best (Change 1: no Phase 3)
-    surr_best_k0 = p2_k0.copy()
-    surr_best_alpha = p2_alpha.copy()
+    surr_best_k0 = ms_k0.copy()
+    surr_best_alpha = ms_alpha.copy()
 
     # ===================================================================
-    # PHASE 3 (Change 3): PDE-based refinement from surrogate result
+    # PHASE 2 (Optional): PDE refinement from multi-start best
     # ===================================================================
     if not args.no_pde:
         print(f"\n{'='*70}")
-        print(f"  PHASE 3: PDE-based refinement (warm-start from surrogate Phase 2)")
+        print(f"  PHASE 2: PDE-based refinement (warm-start from multi-start)")
         print(f"  Starting: k0={surr_best_k0.tolist()}, alpha={surr_best_alpha.tolist()}")
         print(f"  Voltage grid: shallow cathodic ({len(eta_shallow)} pts)")
-        print(f"  maxiter={args.pde_maxiter}, parallel_fast_path=True")
         print(f"{'='*70}")
-        t_p3 = time.time()
+        t_p2 = time.time()
 
         from Forward.steady_state import SteadyStateConfig
         from FluxCurve import (
@@ -516,15 +398,13 @@ def main() -> None:
         )
 
         recovery = make_recovery_config(max_it_cap=600)
-
         _clear_caches()
 
-        # Set up parallel pool (mirrors v7 Phase 2/3 shared pool setup)
         n_pde_workers = args.workers
         if n_pde_workers <= 0:
             n_pde_workers = min(len(eta_shallow), max(1, (os.cpu_count() or 4) - 1))
 
-        n_joint_controls = 4  # k0_1, k0_2, alpha_1, alpha_2
+        n_joint_controls = 4
 
         pde_config = BVParallelPointConfig(
             base_solver_params=list(base_sp),
@@ -554,30 +434,30 @@ def main() -> None:
         set_parallel_pool(pde_pool)
         print(f"  Parallel pool: {n_pde_workers} workers")
 
-        p3_dir = os.path.join(base_output, "phase3_pde_refinement")
+        p2_dir = os.path.join(base_output, "phase2_pde_refinement")
 
-        request_p3 = BVFluxCurveInferenceRequest(
+        request_p2 = BVFluxCurveInferenceRequest(
             base_solver_params=base_sp,
             steady=steady,
             true_k0=true_k0,
-            initial_guess=surr_best_k0.tolist(),  # warm-start k0 from surrogate
+            initial_guess=surr_best_k0.tolist(),
             phi_applied_values=eta_shallow.tolist(),
-            target_csv_path=os.path.join(p3_dir, "target_primary.csv"),
-            output_dir=p3_dir,
+            target_csv_path=os.path.join(p2_dir, "target_primary.csv"),
+            output_dir=p2_dir,
             regenerate_target=True,
             target_noise_percent=2.0,
             target_seed=20260226,
             observable_mode="current_density",
             current_density_scale=observable_scale,
             observable_label="current density (mA/cm2)",
-            observable_title="Phase 3: PDE refinement (warm from surrogate)",
+            observable_title="Phase 2: PDE refinement (warm from multi-start)",
             secondary_observable_mode="peroxide_current",
             secondary_observable_weight=args.secondary_weight,
             secondary_current_density_scale=observable_scale,
-            secondary_target_csv_path=os.path.join(p3_dir, "target_peroxide.csv"),
+            secondary_target_csv_path=os.path.join(p2_dir, "target_peroxide.csv"),
             control_mode="joint",
             true_alpha=true_alpha,
-            initial_alpha_guess=surr_best_alpha.tolist(),  # warm-start alpha from surrogate
+            initial_alpha_guess=surr_best_alpha.tolist(),
             alpha_lower=0.05, alpha_upper=0.95,
             k0_lower=1e-8, k0_upper=100.0,
             log_space=True,
@@ -585,49 +465,49 @@ def main() -> None:
             max_eta_gap=3.0,
             optimizer_method="L-BFGS-B",
             optimizer_options={
-                "maxiter": args.pde_maxiter,
+                "maxiter": 10,
                 "ftol": 1e-8,
                 "gtol": 5e-6,
                 "disp": True,
             },
-            max_iters=args.pde_maxiter,
+            max_iters=10,
             live_plot=False,
             forward_recovery=recovery,
             parallel_fast_path=True,
             parallel_workers=n_pde_workers,
         )
 
-        result_p3 = run_bv_multi_observable_flux_curve_inference(request_p3)
-        p3_k0 = np.asarray(result_p3["best_k0"])
-        p3_alpha = np.asarray(result_p3["best_alpha"])
-        p3_loss = float(result_p3["best_loss"])
-        p3_time = time.time() - t_p3
+        result_p2 = run_bv_multi_observable_flux_curve_inference(request_p2)
+        p2_k0 = np.asarray(result_p2["best_k0"])
+        p2_alpha = np.asarray(result_p2["best_alpha"])
+        p2_loss = float(result_p2["best_loss"])
+        p2_time = time.time() - t_p2
 
         close_parallel_pool()
         _clear_caches()
 
-        _print_phase_result("Phase 3 (PDE refine)", p3_k0, p3_alpha,
-                            true_k0_arr, true_alpha_arr, p3_loss, p3_time)
-        phase_results["Phase 3 (PDE refine)"] = {
-            "k0": p3_k0.tolist(), "alpha": p3_alpha.tolist(),
-            "loss": p3_loss, "time": p3_time,
+        _print_phase_result("Phase 2 (PDE refine)", p2_k0, p2_alpha,
+                            true_k0_arr, true_alpha_arr, p2_loss, p2_time)
+        phase_results["Phase 2 (PDE refine)"] = {
+            "k0": p2_k0.tolist(), "alpha": p2_alpha.tolist(),
+            "loss": p2_loss, "time": p2_time,
         }
 
-        # Use PDE result as final (it should always be better with good warm-start)
-        p3_k0_err, p3_alpha_err = _compute_errors(p3_k0, p3_alpha, true_k0_arr, true_alpha_arr)
+        # Pick the better result
         p2_k0_err, p2_alpha_err = _compute_errors(p2_k0, p2_alpha, true_k0_arr, true_alpha_arr)
-        p3_max_err = max(p3_k0_err.max(), p3_alpha_err.max())
+        ms_k0_err, ms_alpha_err = _compute_errors(ms_k0, ms_alpha, true_k0_arr, true_alpha_arr)
         p2_max_err = max(p2_k0_err.max(), p2_alpha_err.max())
+        ms_max_err = max(ms_k0_err.max(), ms_alpha_err.max())
 
-        if p3_max_err <= p2_max_err:
-            best_k0, best_alpha = p3_k0.copy(), p3_alpha.copy()
-            best_source = "Phase 3 (PDE)"
-        else:
+        if p2_max_err <= ms_max_err:
             best_k0, best_alpha = p2_k0.copy(), p2_alpha.copy()
-            best_source = "Phase 2 (surrogate)"
+            best_source = "Phase 2 (PDE)"
+        else:
+            best_k0, best_alpha = ms_k0.copy(), ms_alpha.copy()
+            best_source = "Phase 1 (multi-start)"
     else:
         best_k0, best_alpha = surr_best_k0.copy(), surr_best_alpha.copy()
-        best_source = "Phase 2 (surrogate)"
+        best_source = "Phase 1 (multi-start)"
 
     total_time = time.time() - t_total_start
     pde_time = total_time - t_target_elapsed - surrogate_time
@@ -636,7 +516,7 @@ def main() -> None:
     # FINAL SUMMARY
     # ===================================================================
     print(f"\n{'#'*90}")
-    print(f"  MASTER INFERENCE v9 SUMMARY (SURROGATE + PDE REFINEMENT)")
+    print(f"  STRATEGY 3: MULTI-START INFERENCE SUMMARY")
     print(f"{'#'*90}")
     print(f"  True k0:    {true_k0}")
     print(f"  True alpha: {true_alpha}")
@@ -657,8 +537,6 @@ def main() -> None:
               f"| {ph['loss']:>12.6e} | {ph['time']:>5.1f}s")
 
     print(f"{'-'*95}")
-    print(f"  Total time: {total_time:.1f}s (target gen: {t_target_elapsed:.1f}s, "
-          f"surrogate phases: {surrogate_time:.1f}s, PDE refine: {pde_time:.1f}s)")
 
     best_k0_err, best_alpha_err = _compute_errors(best_k0, best_alpha, true_k0_arr, true_alpha_arr)
     best_max_err = max(best_k0_err.max(), best_alpha_err.max())
@@ -669,22 +547,22 @@ def main() -> None:
     print(f"    alpha_1= {best_alpha[0]:.6f}  (err {best_alpha_err[0]*100:.2f}%)")
     print(f"    alpha_2= {best_alpha[1]:.6f}  (err {best_alpha_err[1]*100:.2f}%)")
 
-    # v7 / v8 / v8.1 comparison
+    # v9 baseline comparison
     print(f"\n  {'='*70}")
-    print(f"  v7 / v8 / v8.1 COMPARISON:")
+    print(f"  v9 BASELINE COMPARISON:")
     print(f"  {'='*70}")
-    print(f"  {'Metric':<25} {'v7':>12} {'v8':>12} {'v8.1':>12} {'v9':>12}")
-    print(f"  {'-'*73}")
-    print(f"  {'Total time (s)':<25} {'415':>12} {'69.8':>12} {'--':>12} {total_time:>12.1f}")
-    print(f"  {'k0_1 err (%)':<25} {'10.9':>12} {'7.3':>12} {'--':>12} {best_k0_err[0]*100:>12.1f}")
-    print(f"  {'k0_2 err (%)':<25} {'2.6':>12} {'9.6':>12} {'--':>12} {best_k0_err[1]*100:>12.1f}")
-    print(f"  {'alpha_1 err (%)':<25} {'5.6':>12} {'4.5':>12} {'--':>12} {best_alpha_err[0]*100:>12.1f}")
-    print(f"  {'alpha_2 err (%)':<25} {'8.8':>12} {'4.6':>12} {'--':>12} {best_alpha_err[1]*100:>12.1f}")
+    print(f"  {'Metric':<25} {'v9 baseline':>12} {'Strategy 3':>12}")
+    print(f"  {'-'*52}")
+    print(f"  {'k0_1 err (%)':<25} {'8.76':>12} {best_k0_err[0]*100:>12.2f}")
+    print(f"  {'k0_2 err (%)':<25} {'7.57':>12} {best_k0_err[1]*100:>12.2f}")
+    print(f"  {'alpha_1 err (%)':<25} {'4.76':>12} {best_alpha_err[0]*100:>12.2f}")
+    print(f"  {'alpha_2 err (%)':<25} {'6.35':>12} {best_alpha_err[1]*100:>12.2f}")
+    print(f"  {'max err (%)':<25} {'8.76':>12} {best_max_err*100:>12.2f}")
     print(f"  {'='*70}")
 
     print(f"\n  Timing breakdown:")
     print(f"    Target generation:  {t_target_elapsed:>8.1f}s")
-    print(f"    Surrogate phases:   {surrogate_time:>8.1f}s")
+    print(f"    Multi-start phase:  {surrogate_time:>8.1f}s")
     if not args.no_pde:
         print(f"    PDE refinement:     {pde_time:>8.1f}s")
     print(f"    Total:              {total_time:>8.1f}s")
@@ -692,7 +570,7 @@ def main() -> None:
     print(f"{'#'*90}")
 
     # Save comparison CSV
-    csv_path = os.path.join(base_output, "master_comparison_v9.csv")
+    csv_path = os.path.join(base_output, "multistart_results.csv")
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow([
@@ -712,9 +590,32 @@ def main() -> None:
                 f"{alpha_err[0]*100:.4f}", f"{alpha_err[1]*100:.4f}",
                 f"{ph['loss']:.12e}", f"{ph['time']:.1f}",
             ])
-    print(f"\n  Comparison CSV saved -> {csv_path}")
+    print(f"\n  Results CSV saved -> {csv_path}")
+
+    # Save candidates CSV
+    cand_csv_path = os.path.join(base_output, "multistart_candidates.csv")
+    with open(cand_csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "rank", "k0_1", "k0_2", "alpha_1", "alpha_2",
+            "k0_1_err_pct", "k0_2_err_pct", "alpha_1_err_pct", "alpha_2_err_pct",
+            "grid_loss", "polished_loss", "polish_iters",
+        ])
+        for c in ms_result.candidates:
+            c_k0 = np.array([c.k0_1, c.k0_2])
+            c_alpha = np.array([c.alpha_1, c.alpha_2])
+            k0_err, alpha_err = _compute_errors(c_k0, c_alpha, true_k0_arr, true_alpha_arr)
+            writer.writerow([
+                c.rank, f"{c.k0_1:.8e}", f"{c.k0_2:.8e}",
+                f"{c.alpha_1:.6f}", f"{c.alpha_2:.6f}",
+                f"{k0_err[0]*100:.4f}", f"{k0_err[1]*100:.4f}",
+                f"{alpha_err[0]*100:.4f}", f"{alpha_err[1]*100:.4f}",
+                f"{c.grid_loss:.12e}", f"{c.polished_loss:.12e}",
+                c.polish_iters,
+            ])
+    print(f"  Candidates CSV saved -> {cand_csv_path}")
     print(f"\n  Output: {base_output}/")
-    print(f"\n=== Master Inference v9 Complete ===")
+    print(f"\n=== Strategy 3 Multi-Start Inference Complete ===")
 
 
 if __name__ == "__main__":
