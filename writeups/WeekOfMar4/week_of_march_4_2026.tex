@@ -591,16 +591,87 @@ Key conclusions:
 
 
 %% ============================================================
+\section{Overnight Surrogate Training (v11 Data Expansion)}
+%% ============================================================
+
+With the v11 inference pipeline established as the best-performing approach,
+the next priority is improving the underlying surrogate fidelity.  An overnight
+training pipeline was launched to expand the training dataset by $7\times$ and
+evaluate multiple surrogate architectures.
+
+\subsection{Phase 1: Data Generation (Complete)}
+
+3{,}000 new parameter samples were generated using parallel grouped workers
+(8 workers on a 10-core CPU), with parameter-space nearest-neighbor ordering
+for cross-sample warm-starting of the PDE solver:
+\begin{itemize}
+  \item 2{,}000 wide-coverage samples:
+        $k_{0,1} \in [10^{-6}, 1.0]$,
+        $k_{0,2} \in [10^{-7}, 0.1]$,
+        $\alpha \in [0.1, 0.9]$.
+  \item 1{,}000 focused-refinement samples:
+        $k_{0,1} \in [10^{-4}, 10^{-1}]$,
+        $k_{0,2} \in [10^{-5}, 10^{-2}]$,
+        $\alpha \in [0.2, 0.7]$.
+  \item \textbf{2{,}749/3{,}000 valid} (91.6\% convergence rate).
+        Merged with existing v9 data (445 samples) $\to$
+        \textbf{3{,}194 total training samples} ($7\times$ increase).
+  \item Train/test split: 2{,}715 train / 479 test (15\% holdout).
+  \item Wall time: \SI{12}{h}\,\SI{24}{min}.
+\end{itemize}
+
+\subsection{Phase 2: Model Training (In Progress)}
+
+Four model families are being trained on the 2{,}715-sample training set:
+\begin{itemize}
+  \item \textbf{Model~A (Baseline RBF):} 0.2\,s fit.  Same architecture as v9,
+        now on $7\times$ more data.
+  \item \textbf{Model~B (POD-RBF, log1p PC transform):} 130.8\,s fit.
+        11 POD modes retain 99.90\% variance; per-mode smoothing via 5-fold CV.
+  \item \textbf{Model~C (POD-RBF, no log1p):} 132.5\,s fit.
+        11 POD modes, 99.92\% variance.  Control variant to measure
+        the log1p transform effect.
+  \item \textbf{Model~D (NN Ensemble):} 5 architecture configs $\times$ 5
+        ensemble members each.  D1--D3 complete (445--701\,s each);
+        D4--D5 pending.
+        \emph{Note:} initial run crashed due to a \texttt{libomp} conflict
+        between Firedrake and PyTorch on macOS; fixed with
+        \texttt{KMP\_DUPLICATE\_LIB\_OK=TRUE}.
+\end{itemize}
+
+\subsection{Phase 3: Evaluation (Pending)}
+
+All models will be evaluated on the 479-sample held-out test set:
+surrogate accuracy metrics (RMSE, NRMSE, max error), parameter recovery
+on 10 synthetic cases via cascade inference, and a comparison table
+ranking models by peroxide-current NRMSE.  The best surrogate will then
+replace the v9 surrogate in the v11 inference pipeline to measure
+end-to-end accuracy improvement.
+
+
+%% ============================================================
 \section{Next Steps}
 %% ============================================================
 
 \begin{enumerate}
-  \item \textbf{Push $k_{0,1}$ below 5\% (primary path):} v11 achieves
-        $k_{0,1} = 9.4\%$---the largest remaining error.  Two levers:
-        (a)~adaptive surrogate retraining with ${\sim}500$ focused PDE
-        samples near the v11 best estimate to tighten the warm start;
-        (b)~increasing Phase~4 \texttt{maxiter} from 25 to 50--80 to allow
-        the PDE optimizer more freedom to refine $k_{0,1}$.
+  \item \textbf{Complete v11 surrogate evaluation (immediate):} Finish
+        NN ensemble training (D4, D5), run the Phase~3 evaluation on all
+        models, and select the best surrogate by peroxide-current NRMSE.
+        The $7\times$ data expansion is expected to substantially reduce
+        the current 11.43\% PC NRMSE bottleneck identified in
+        \S\ref{sec:root_cause}.
+
+  \item \textbf{Re-run v11 inference with the improved surrogate:}
+        Replace the v9 surrogate in the v11 pipeline (surrogate warm start
+        $\to$ PDE refinement) with the best v11-trained model and measure
+        end-to-end parameter recovery.  The improved warm start should
+        push $k_{0,1}$ below 5\%.
+
+  \item \textbf{Push $k_{0,1}$ below 5\%:} v11 achieves
+        $k_{0,1} = 9.4\%$---the largest remaining error.  Beyond the
+        improved surrogate, additional levers include increasing Phase~4
+        \texttt{maxiter} from 25 to 50--80 to give the PDE optimizer more
+        freedom to refine $k_{0,1}$.
 
   \item \textbf{Noise robustness study:} v11 achieves 1.07\% max error at
         $0\%$ noise but 9.43\% at $2\%$ noise---a $9\times$ degradation.

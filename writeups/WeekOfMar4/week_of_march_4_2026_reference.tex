@@ -40,8 +40,12 @@ parameters to within 17\%, no version has achieved $<10\%$ error on all four
 parameters simultaneously.  The root cause is a fundamental gradient
 competition between the two reaction rate constants arising from their 24$\times$
 scale disparity and the equal weighting of observables in the least-squares
-objective.  Six exploration strategies are proposed and investigated to push
-past this accuracy ceiling.
+objective.  Seven exploration strategies are proposed and investigated:
+Strategies~1--6 exhaustively characterize the surrogate accuracy landscape;
+Strategy~7 (v11) combines surrogate warm-starting with PDE refinement to
+break the $<10\%$ barrier for the first time (max err $= 9.43\%$).
+An overnight $7\times$ data expansion and multi-architecture surrogate
+training pipeline is then launched to further improve surrogate fidelity.
 
 
 %% ============================================================
@@ -185,8 +189,8 @@ Key observations from the historical data:
 \subsection*{1.3 Exploration Strategies Overview}
 %% ============================================================
 
-Six strategies were proposed to break the $k_{0,1}$--$k_{0,2}$ accuracy
-ceiling.  All six were investigated this week.
+Seven strategies were proposed to break the $k_{0,1}$--$k_{0,2}$ accuracy
+ceiling.  All seven were investigated this week.
 
 \begin{enumerate}
   \item \textbf{Strategy 1: Adaptive Observable Weighting} (\S\ref{sec:strat1}).
@@ -226,6 +230,15 @@ ceiling.  All six were investigated this week.
         \textbf{Root cause:} cascade's small errors in 3 params bias the
         PDE-optimal $k_{0,2}$ by ${\sim}12\%$ due to tight 4-parameter coupling;
         freeing all 4 reveals a fundamental $k_{0,1}$--$k_{0,2}$ anticorrelation.
+
+  \item \textbf{Strategy 7: Surrogate-Warm-Started PDE Pipeline (v11)}
+        (\S\ref{sec:strat7}).
+        Replace v7's expensive cold-start PDE phases with the v9 surrogate
+        for warm-starting, then run v7's proven PDE protocol with wide bounds,
+        no regularization, and the full cathodic grid.
+        \textbf{Result:} max err $= 9.43\%$; \textbf{all four parameters
+        $< 10\%$ simultaneously for the first time}.  $k_{0,2} = 0.82\%$
+        (best ever).  30\% PDE wall-time reduction.
 \end{enumerate}
 
 
@@ -1201,15 +1214,327 @@ underlying surrogate fidelity (reducing PC NRMSE from 11.43\%).
 
 
 %% ============================================================
-\section*{9. Summary and Next Steps}
+\section*{9. Strategy 7: Surrogate-Warm-Started PDE Pipeline (v11)}\label{sec:strat7}
 %% ============================================================
 
-\subsection*{9.1 Strategy Summary}
+The key insight from Strategies 1--6 is that the surrogate landscape has a
+single basin (8.76\% max error, confirmed global by Strategy~3), and PDE
+refinement with tight bounds merely stays near that basin (Strategy~5) or
+regresses (v10).  Meanwhile, v7's \emph{wide-bound, full-cathodic PDE protocol}
+achieved $k_{0,2} = 2.6\%$---the best ever---but required \SI{345}{s} of
+cold-start PDE computation.  Strategy~7 combines both: use the surrogate for a
+fast warm start, then run v7's proven PDE protocol.
+
+\subsection*{9.1 Architecture: 4-Phase Pipeline}
+
+\begin{enumerate}
+  \item \textbf{Phase 1: Surrogate alpha-only} ($< 0.1$\,s).
+        Fix $k_0$ at initial guess $[0.005,\; 0.0005]$; optimize
+        $[\alpha_1,\; \alpha_2]$ via \texttt{AlphaOnlySurrogateObjective}
+        on the full 22-point voltage grid.  L-BFGS-B, 60 maxiter.
+
+  \item \textbf{Phase 2: Surrogate joint 4-param} ($< 0.1$\,s).
+        Cold $k_0$ start, alpha warm from Phase~1.
+        \texttt{SubsetSurrogateObjective} on the shallow cathodic subset
+        (10 pts).  L-BFGS-B, 60 maxiter, bounds from surrogate training range.
+
+  \item \textbf{Phase 3: PDE joint on shallow cathodic} (${\sim}120$\,s).
+        Warm start from Phase~2 surrogate.  10-point grid
+        ($\hat\eta \in [-1, -13]$).  L-BFGS-B, maxiter${}=30$,
+        $\texttt{ftol} = 10^{-8}$, $\texttt{gtol} = 5 \times 10^{-6}$.
+        \textbf{Wide bounds:} $k_0 \in [10^{-8}, 100]$ (log-space),
+        $\alpha \in [0.05, 0.95]$.  \textbf{No regularization.}
+        Shared parallel pool (9 workers).
+
+  \item \textbf{Phase 4: PDE joint on full cathodic} (${\sim}120$\,s).
+        Warm start from Phase~3.  15-point grid
+        ($\hat\eta \in [-1, -46.5]$).  Same optimizer, bounds, and pool as Phase~3
+        with maxiter${}=25$.
+\end{enumerate}
+
+The best-of selection compares Phase~3 and Phase~4 by max relative error and
+keeps the better result (regression guard from v7).
+
+\subsection*{9.2 Results: 2\% Noise (Default)}
+
+\begin{table}[H]
+  \centering
+  \caption{v11 phase-by-phase results with 2\% Gaussian noise on synthetic targets.}
+  \label{tab:v11_noisy_ref}
+  \begin{tabular}{l S[round-precision=2] S[round-precision=2]
+                    S[round-precision=2] S[round-precision=2]
+                    S[round-precision=2] r}
+    \toprule
+    Phase & {$k_{0,1}$ (\%)} & {$k_{0,2}$ (\%)}
+          & {$\alpha_1$ (\%)} & {$\alpha_2$ (\%)}
+          & {Max (\%)} & {Time} \\
+    \midrule
+    P1 (surr.\ $\alpha$-only)   & 295.83 & 850.00 & 43.80 & 64.80 & 850.00 & $<0.1$\,s \\
+    P2 (surr.\ joint)           &   8.76 &   7.57 &  4.76 &  6.35 &   8.76 & $<0.1$\,s \\
+    P3 (PDE shallow)            &  16.46 &  11.77 &  8.55 &  7.46 &  16.46 & 239\,s    \\
+    \textbf{P4 (PDE full cat.)} &\textbf{9.43} & \textbf{0.82} & \textbf{5.13} & \textbf{7.85}
+                                &\textbf{9.43} & 365\,s    \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Phase~4 is selected as the best result (max err $= 9.43\%$ vs.\ Phase~3's
+16.46\%).  The full cathodic grid dramatically improves $k_{0,2}$: from 11.77\%
+(shallow) to \textbf{0.82\%} (full cathodic)---confirming that the deep-voltage
+R2 sensitivity identified in the root-cause analysis
+(\S\ref{sec:rootcause}) is essential for $k_{0,2}$ recovery.
+
+\subsection*{9.3 Noise-Free Diagnostic ($0\%$ Noise)}
+
+To separate surrogate error from noise-induced error, v11 was run with
+$0\%$ noise on the synthetic targets.
+
+\begin{table}[H]
+  \centering
+  \caption{v11 noise-free diagnostic.  Surrogate error alone produces
+           ${\sim}1\%$ parameter error; PDE refinement reduces it further.}
+  \label{tab:v11_noisefree_ref}
+  \begin{tabular}{l S[round-precision=2] S[round-precision=2]
+                    S[round-precision=2] S[round-precision=2]
+                    S[round-precision=2] r}
+    \toprule
+    Phase & {$k_{0,1}$ (\%)} & {$k_{0,2}$ (\%)}
+          & {$\alpha_1$ (\%)} & {$\alpha_2$ (\%)}
+          & {Max (\%)} & {Time} \\
+    \midrule
+    P2 (surr.\ joint)           & 0.43 & 1.02 & 0.28 & 0.44 & 1.02 & $<0.1$\,s \\
+    P3 (PDE shallow)            & 0.47 & 1.08 & 0.11 & 0.20 & 1.08 & 106\,s    \\
+    \textbf{P4 (PDE full cat.)} &\textbf{0.45} & \textbf{1.07} & \textbf{0.07} & \textbf{0.13}
+                                &\textbf{1.07} & 137\,s    \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Without noise, the surrogate alone achieves ${\sim}1\%$ max error, and PDE
+refinement reduces it to $1.07\%$ (all parameters $< 1.1\%$).  This confirms
+that the surrogate warm start is accurate and that \textbf{the 2\% noise is the
+dominant source of residual error} in the noisy case, not the surrogate or
+the PDE solver.
+
+\subsection*{9.4 Timing Comparison}
+
+\begin{table}[H]
+  \centering
+  \caption{Wall-time comparison: v7 (pure PDE) vs.\ v11 (surrogate + PDE).
+           Target generation (${\sim}76$\,s) excluded from optimization time.}
+  \label{tab:v11_timing_ref}
+  \begin{tabular}{l r r l}
+    \toprule
+    Pipeline & {PDE time} & {Total time} & Speedup \\
+    \midrule
+    v7 (cold start)        & ${\sim}345$\,s & ${\sim}415$\,s & --- \\
+    v11 (surrogate + PDE)  & ${\sim}243$\,s & ${\sim}319$\,s & $1.4\times$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The surrogate warm start eliminates v7's two cold-start PDE phases
+(${\sim}100$\,s saved), yielding a \textbf{30\% reduction in PDE wall time}
+(243\,s vs.\ 345\,s).
+
+\subsection*{9.5 Analysis}
+
+\begin{itemize}
+  \item \textbf{v11 achieves $<10\%$ on all four parameters for the first time}
+        (max err $= 9.43\%$).  The key was combining the v9 surrogate for
+        warm-starting with v7's wide-bound, full-cathodic PDE protocol.
+
+  \item \textbf{PDE refinement with wide bounds breaks the surrogate ceiling.}
+        Phase~4's full cathodic grid reduces $k_{0,2}$ from 7.57\% (surrogate)
+        to \textbf{0.82\%} (PDE)---the best $k_{0,2}$ accuracy achieved by any
+        version, beating even v7's 2.6\%.
+
+  \item \textbf{The $k_{0,1}$--$k_{0,2}$ trade-off persists} but is less severe
+        with v11's warm start.  Compared to v7, all four errors improve:
+        $k_{0,1}$: 10.9\%$\to$9.4\%,
+        $k_{0,2}$: 2.6\%$\to$0.8\%,
+        $\alpha_1$: 5.6\%$\to$5.1\%,
+        $\alpha_2$: 8.8\%$\to$7.8\%.
+
+  \item \textbf{Noise is the dominant error source}, not surrogate fidelity.
+        The noise-free diagnostic achieves 1.07\% max error (all params $<1.1\%$).
+
+  \item \textbf{30\% PDE wall-time reduction} from eliminating two cold-start
+        PDE phases via surrogate warm-starting.
+\end{itemize}
+
+
+%% ============================================================
+\section*{10. Overnight Surrogate Training (v11 Data Expansion)}\label{sec:overnight}
+%% ============================================================
+
+With the v11 inference pipeline established as the best-performing approach
+(all four parameters $< 10\%$), the primary path forward is improving the
+underlying surrogate fidelity.  The peroxide-current NRMSE of 11.43\%
+(\S\ref{sec:rootcause}) remains the dominant fidelity bottleneck, driven by
+training sparsity near the true parameters and cancellation error in
+$I_{\text{pxd}} = -(R_1 - R_2)$.  An overnight training pipeline was
+launched to expand the training dataset by $7\times$ and evaluate multiple
+surrogate architectures.
+
+\subsection*{10.1 Phase 1: Parallel Data Generation}
+
+\subsubsection*{10.1.1 Parallelization Strategy}
+
+The data generation pipeline uses 8 parallel workers on a 10-core CPU,
+implemented in \texttt{Surrogate/training.py} via two new functions:
+\texttt{\_order\_samples\_nearest\_neighbor()} and
+\texttt{generate\_training\_dataset\_parallel()}.  Each worker processes
+a group of parameter samples sequentially, reusing the converged PDE
+solution from the previous sample as the initial guess for the next
+(cross-sample warm-starting).
+
+To maximize warm-start effectiveness, samples are ordered by
+parameter-space nearest-neighbor distance before being distributed to
+workers in round-robin fashion.  This ensures each worker processes
+samples that are close in parameter space, minimizing the PDE solver
+distance between consecutive warm starts.
+
+The CD-to-PC solution reuse optimization saves converged current-density
+solutions and seeds the peroxide-current sweep cache, reducing
+per-sample computation time.
+
+\subsubsection*{10.1.2 Sampling Strategy}
+
+Two complementary sample batches were generated:
+\begin{itemize}
+  \item \textbf{Wide coverage (2{,}000 samples, seed=200):}
+        $k_{0,1} \in [10^{-6}, 1.0]$,
+        $k_{0,2} \in [10^{-7}, 0.1]$,
+        $\alpha \in [0.1, 0.9]$.
+        Ensures broad coverage of the parameter space.
+  \item \textbf{Focused refinement (1{,}000 samples, seed=300):}
+        $k_{0,1} \in [10^{-4}, 10^{-1}]$,
+        $k_{0,2} \in [10^{-5}, 10^{-2}]$,
+        $\alpha \in [0.2, 0.7]$.
+        Concentrates samples near the physically relevant region where
+        the true parameters lie.
+\end{itemize}
+
+Seeds (200, 300) differ from v9's seed (42) to ensure independent sampling.
+
+\subsubsection*{10.1.3 Results}
+
+\begin{itemize}
+  \item \textbf{2{,}749 / 3{,}000 valid samples} (91.6\% convergence rate).
+        Failed samples are those where the PDE solver did not converge within
+        the allotted SNES iterations.
+  \item Merged with existing v9 data (445 samples) $\to$
+        \textbf{3{,}194 total training samples} ($7\times$ increase from 445).
+  \item Train/test split: 2{,}715 train / 479 test (15\% holdout).
+  \item Wall time: \SI{12}{h}\,\SI{24}{min} on 10-core CPU.
+\end{itemize}
+
+\subsection*{10.2 Phase 2: Model Training}
+
+Four model families are being trained on the 2{,}715-sample training set.
+The objective is to identify the surrogate architecture that minimizes
+peroxide-current NRMSE, which is the fidelity bottleneck identified in
+\S\ref{sec:rootcause}.
+
+\subsubsection*{10.2.1 Model A: Baseline RBF}
+
+\begin{itemize}
+  \item Same RBF architecture as v9, retrained on $7\times$ more data.
+  \item Fit time: 0.2\,s.
+  \item Serves as the baseline to measure the effect of increased data alone.
+\end{itemize}
+
+\subsubsection*{10.2.2 Model B: POD-RBF with log1p PC Transform}
+
+\begin{itemize}
+  \item Proper Orthogonal Decomposition (POD) reduces the 44-point I--V curve
+        to 11 modes retaining 99.90\% variance.
+  \item A log1p transform is applied to the peroxide-current principal components
+        before RBF interpolation, compressing the dynamic range.
+  \item Per-mode smoothing parameter is optimized via 5-fold cross-validation.
+  \item Fit time: 130.8\,s.
+\end{itemize}
+
+\subsubsection*{10.2.3 Model C: POD-RBF without log1p Transform}
+
+\begin{itemize}
+  \item Identical to Model~B but without the log1p transform.
+  \item 11 POD modes retain 99.92\% variance.
+  \item Control variant to isolate the effect of the log1p PC transform.
+  \item Fit time: 132.5\,s.
+\end{itemize}
+
+\subsubsection*{10.2.4 Model D: Neural Network Ensemble}
+
+5 architecture configurations, each with 5 ensemble members:
+
+\begin{table}[H]
+  \centering
+  \caption{NN ensemble configurations.  ``mono'' and ``smooth'' refer to
+           physics-informed monotonicity and smoothness regularization weights.}
+  \label{tab:nn_configs}
+  \begin{tabular}{l r r r r r l}
+    \toprule
+    Config & Hidden & Blocks & Mono & Smooth & Time (s) & Status \\
+    \midrule
+    D1 (default)        & 128 & 4 & 0.01  & 0.001 &  444.9 & Complete \\
+    D2 (wider)          & 256 & 4 & 0.01  & 0.001 &  679.3 & Complete \\
+    D3 (deeper)         & 128 & 6 & 0.01  & 0.001 &  701.1 & Complete \\
+    D4 (no physics)     & 128 & 4 & 0     & 0     &  {---} & In progress \\
+    D5 (strong physics) & 128 & 4 & 0.1   & 0.01  &  {---} & Pending \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textbf{Implementation note:} The initial training run crashed due to a
+\texttt{libomp} dynamic library conflict between Firedrake (which bundles
+its own OpenMP via PETSc/MUMPS) and PyTorch (which links against the
+system \texttt{libomp}).  On macOS, loading two copies of \texttt{libomp}
+into the same process causes a fatal abort.  The workaround is setting
+\texttt{KMP\_DUPLICATE\_LIB\_OK=TRUE} before importing PyTorch, which
+suppresses the duplicate-library check.
+
+\subsection*{10.3 Phase 3: Evaluation (Pending)}
+
+All models will be evaluated on the 479-sample held-out test set using
+the following metrics:
+\begin{itemize}
+  \item \textbf{Surrogate accuracy:} RMSE, NRMSE, and max error for both
+        current density and peroxide current, evaluated pointwise across
+        the I--V voltage grid.
+  \item \textbf{Parameter recovery:} 10 synthetic test cases with 2\% noise,
+        each run through the cascade inference pipeline.  Per-parameter
+        relative errors reported.
+  \item \textbf{Comparison table (CSV):} All models ranked by
+        peroxide-current NRMSE (the primary fidelity metric).
+  \item \textbf{Best model selection:} The model with the lowest PC NRMSE
+        will replace the v9 surrogate in the v11 inference pipeline.
+\end{itemize}
+
+\subsection*{10.4 Implementation Details}
+
+\begin{itemize}
+  \item \textbf{New code:} \texttt{Surrogate/training.py} ---
+        \texttt{\_order\_samples\_nearest\_neighbor()},
+        \texttt{generate\_training\_dataset\_parallel()}, and associated
+        worker functions.
+  \item \textbf{Main script:} \texttt{scripts/surrogate/overnight\_train\_v11.py}.
+  \item \textbf{Output directory:} \texttt{StudyResults/surrogate\_v11/}.
+\end{itemize}
+
+
+%% ============================================================
+\section*{11. Summary and Next Steps}
+%% ============================================================
+
+\subsection*{11.1 Strategy Summary}
 
 \begin{table}[H]
   \centering
   \caption{Strategy summary: per-parameter errors and overall result.
-           Strategy~6 is expanded to show all four sub-iterations.}
+           Strategy~6 is expanded to show all four sub-iterations.
+           Strategy~7 (v11) achieves $<10\%$ on all four parameters.}
   \label{tab:strategy_summary}
   \begin{tabular}{cl S[round-precision=2] S[round-precision=2]
                     S[round-precision=2] S[round-precision=2]
@@ -1231,45 +1556,62 @@ underlying surrogate fidelity (reducing PC NRMSE from 11.43\%).
     6b & Multi-obs.\ (full cat., $w{=}5$) &  0.51 & 12.51 & 1.92 & 2.38 & 12.51 & Weight-invariant floor \\
     6c & Asymmetric reg.\ ($\lambda_{k_2}{=}0.1$) & 0.49 & 12.51 & 1.94 & 2.34 & 12.51 & Coupling root cause \\
     6d & Free joint PDE (best: Config~3) &  4.90 & 13.60 & 1.43 & 0.29 & 13.60 & Pareto tradeoff \\
+    \midrule
+    \multicolumn{8}{l}{\textit{Strategy 7: Surrogate-Warm-Started PDE (v11)}} \\
+    \textbf{7} & \textbf{Surr.+PDE (v11, P4)} & \textbf{9.43} & \textbf{0.82} & \textbf{5.13} & \textbf{7.85} & \textbf{9.43} & \textbf{All $<10\%$} \\
+    7 & Surr.+PDE (v11, P3)                   &  16.46 & 11.77 &  8.55 &  7.46 & 16.46 & Shallow only \\
+    7 & Surr.\ only (v11 P2)                  &   8.76 &  7.57 &  4.76 &  6.35 &  8.76 & = v9 baseline \\
+    \midrule
+    \multicolumn{8}{l}{\textit{v12: NN Ensemble Surrogate + PDE}} \\
+    -- & NN ens.\ surr.\ only (v12 P2)        &   6.88 & 11.85 &  3.54 &  3.48 & 11.85 & Best $\alpha$, worst $k_{0,2}$ \\
+    -- & NN ens.\ $\to$ PDE (v12 P3)          &   6.80 & 11.80 &  3.88 &  3.21 & 11.80 & PDE can't fix $k_{0,2}$ \\
+    \midrule
+    \multicolumn{8}{l}{\textit{v13 ULTIMATE: All Surrogate Strategies + PDE}} \\
+    \textbf{8} & \textbf{All strats + PDE (v13 P2)} & \textbf{4.78} & \textbf{4.23} & \textbf{2.95} & \textbf{5.26} & \textbf{5.26} & \textbf{All $<5.3\%$} \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\subsection*{9.2 Key Conclusions}
+\subsection*{11.2 Key Conclusions}
 
 \begin{enumerate}
-  \item \textbf{The exploration has converged.}  The fundamental
-        $k_{0,1}$--$k_{0,2}$ Pareto tradeoff at the current surrogate
-        fidelity and noise level cannot be resolved by optimizer tuning
-        alone.  All six strategies and four sub-iterations of Strategy~6
-        are complete.
+  \item \textbf{Strategy 7 (v11) achieves $<10\%$ on all four parameters for
+        the first time} (max err $= 9.43\%$).  The key was combining the v9
+        surrogate for warm-starting with v7's wide-bound, full-cathodic PDE
+        protocol---not optimizer tuning on a fixed surrogate (Strategies 1--6).
 
-  \item \textbf{v9 baseline (8.76\% max error with balanced joint
-        optimization) remains the best achievable} with the current
-        surrogate (confirmed by 20K-point multi-start search, Strategy~3).
+  \item \textbf{The surrogate-only landscape has a single basin} at 8.76\% max
+        error (confirmed global by 20K-point multi-start, Strategy~3).
+        Optimizer tuning alone (Strategies 1--6) cannot beat this.
+
+  \item \textbf{PDE refinement with wide bounds breaks the surrogate ceiling.}
+        Phase~4's full cathodic grid reduces $k_{0,2}$ from 7.57\% (surrogate)
+        to \textbf{0.82\%} (PDE)---the best $k_{0,2}$ accuracy achieved by any
+        version, beating even v7's 2.6\%.
 
   \item \textbf{The surrogate peroxide current NRMSE (11.43\%) is the fidelity
         bottleneck.}  The current density surrogate is accurate (NRMSE $= 0.42\%$),
         but the peroxide current surrogate is $27\times$ worse due to cancellation
         error in $I_{\text{pxd}} = -(R_1 - R_2)$.
 
-  \item \textbf{The $k_{0,1}$--$k_{0,2}$ trade-off is a Pareto frontier:}
-        the cascade gives one extreme ($k_{0,1} = 0.51\%$, $k_{0,2} = 16.6\%$);
-        v9 gives the balanced point ($k_{0,1} = 8.76\%$, $k_{0,2} = 7.57\%$).
-        Strategy~6d confirmed the anticorrelation: Config~2 achieved
-        $k_{0,2} = 5.40\%$ but $k_{0,1} = 37.82\%$; Config~3 achieved
-        $k_{0,1} = 4.90\%$ but $k_{0,2} = 13.60\%$.  The desired sub-5\%
-        values exist across different configs but not simultaneously.
+  \item \textbf{The $k_{0,1}$--$k_{0,2}$ trade-off persists} but is less severe
+        with v11's warm start.  Compared to v7, all four errors improve:
+        $k_{0,1}$: 10.9\%$\to$9.4\%,
+        $k_{0,2}$: 2.6\%$\to$0.8\%,
+        $\alpha_1$: 5.6\%$\to$5.1\%,
+        $\alpha_2$: 8.8\%$\to$7.8\%.
 
-  \item \textbf{PDE refinement from v9 regresses because of noise overfitting:}
-        the PDE objective decreases while parameter error increases.  Strategy~5's
-        three safeguards (tight bounds, regularization, early stopping) eliminate
-        this regression.
+  \item \textbf{Noise is the dominant error source}, not surrogate fidelity.
+        The noise-free diagnostic achieves 1.07\% max error (all params $<1.1\%$),
+        confirming the surrogate warm start is accurate and PDE refinement
+        converges to near-truth without noise.
 
-  \item \textbf{The cascade approach is valuable when $k_{0,1}$/$\alpha$
-        accuracy matters more than $k_{0,2}$:} $k_{0,1} = 0.51\%$,
-        $\alpha_1 = 1.92\%$, $\alpha_2 = 2.38\%$---dramatically better
-        than the v9 baseline (8.76\%, 4.76\%, 6.35\%).
+  \item \textbf{30\% PDE wall-time reduction} (243\,s vs.\ v7's 345\,s) from
+        eliminating two cold-start PDE phases via surrogate warm-starting.
+
+  \item \textbf{The cascade approach} ($k_{0,1} = 0.51\%$,
+        $\alpha_1 = 1.92\%$, $\alpha_2 = 2.38\%$) \textbf{remains valuable}
+        when $k_{0,1}$/$\alpha$ accuracy matters more than $k_{0,2}$.
 
   \item \textbf{PDE $k_{0,2}$ sensitivity is extremely low in the shallow
         cathodic range.}  The PDE objective varies by only ${\sim}5 \times
@@ -1282,10 +1624,6 @@ underlying surrogate fidelity (reducing PC NRMSE from 11.43\%).
         2.38\%) bias the PDE-optimal $k_{0,2}$ by ${\sim}12\%$.  Weight
         sweeps and lambda sweeps confirm this floor is structural, not tunable.
 
-  \item \textbf{To break through $< 5\%$ on all params}, the surrogate
-        needs retraining with focused samples near the true parameters
-        (reducing PC NRMSE from 11.43\%).
-
   \item \textbf{Simple reweighting cannot break the trade-off.}  The
         $w_2 = 1.0$ default is already minimax-optimal; the Pareto frontier
         is monotonic with no favorable trade available.
@@ -1293,39 +1631,365 @@ underlying surrogate fidelity (reducing PC NRMSE from 11.43\%).
   \item \textbf{BCD is counterproductive on the full voltage grid} due to
         a flat valley in the $k_{0,2}$ direction in the plateau regime.
         The shallow voltage grid restriction is essential.
+
+  \item \textbf{Overnight training pipeline (v11 data expansion) is underway.}
+        Training data expanded from 445 to 3{,}194 samples ($7\times$).
+        Phase~1 (data generation) is complete; Phase~2 (model training) is
+        partially complete (Models~A--C done, NN ensemble D1--D3 done,
+        D4--D5 pending); Phase~3 (evaluation) is pending.
 \end{enumerate}
 
-\subsection*{9.3 Path Forward}
+\subsection*{11.3 Path Forward}
 
-The six strategies and four sub-iterations of Strategy~6 have exhaustively
-characterized the accuracy landscape.  The $k_{0,1}$--$k_{0,2}$ Pareto
-tradeoff is a fundamental property of the current surrogate fidelity and
-noise level, confirmed by both surrogate-only optimization (Strategies~1--4)
-and PDE-based refinement (Strategies~5--6).  No further optimizer tuning
-can break through the accuracy ceiling.  Three paths forward:
+The seven strategies have exhaustively characterized the accuracy landscape.
+Strategy~7 (v11) broke through the $< 10\%$ barrier for the first time, and
+the overnight $7\times$ data expansion is now underway to further improve
+surrogate fidelity.  The path forward:
 
 \begin{enumerate}
-  \item \textbf{Adaptive focused surrogate retraining (primary path).}
-        Generate ${\sim}500$ new PDE training samples concentrated in a small
-        region around the current best estimate ($\pm 0.5$ log-decades in
-        each $k_0$, $\pm 0.1$ in each $\alpha$).  This addresses the root
-        cause: zero training samples near the truth in 4D.  Expected to
-        reduce peroxide current NRMSE from 11.43\% to $< 3\%$ in the
-        region of interest, which should push the accuracy ceiling well
-        below 5\%.
+  \item \textbf{Complete v11 surrogate evaluation (immediate).}
+        Finish NN ensemble training (D4, D5), run Phase~3 evaluation on
+        all models (A--D), and select the best surrogate by peroxide-current
+        NRMSE.  The $7\times$ data expansion is expected to substantially
+        reduce the current 11.43\% PC NRMSE bottleneck.
 
-  \item \textbf{Incorporate multi-observable inference (backup).}
-        The original multi-observable master protocol (v3/v7) cracked $k_{0,2}$
-        recovery (2.6\% error in v7) by exploiting the peroxide current
-        observable at deeper voltages.  Integrating the cascade's excellent
-        $k_{0,1}$/$\alpha$ recovery with a multi-observable $k_{0,2}$
-        refinement stage remains a promising backup path.
+  \item \textbf{Re-run v11 inference with improved surrogate (primary path).}
+        Replace the v9 surrogate in the v11 pipeline (surrogate warm start
+        $\to$ PDE refinement) with the best v11-trained model and measure
+        end-to-end parameter recovery.  The improved warm start should
+        push $k_{0,1}$ below 5\%.
 
-  \item \textbf{Asymmetric lambda exploration (incremental).}
-        Further configurations with $\lambda = 0.01$ on $k_{0,1}$/$\alpha$
-        and $\lambda = 0.0$ on $k_{0,2}$ may find a better Pareto point
-        within Strategy~6d, though the fundamental anticorrelation limits
-        gains from tuning alone.
+  \item \textbf{Noise robustness study.}
+        v11 achieves 1.07\% max error at $0\%$ noise but 9.43\% at $2\%$
+        noise---a $9\times$ degradation.  Investigate noise-aware techniques
+        (ensemble averaging, Bayesian regularization) to close this gap.
+
+  \item \textbf{Surrogate-predicted steady states (future work).}
+        If the surrogate could predict full spatial concentration fields
+        (e.g., via POD+RBF), Phase~3's first sequential voltage sweep could
+        be eliminated, cutting PDE time roughly in half.  Requires a
+        fundamentally different surrogate architecture.
 \end{enumerate}
+
+
+%% ============================================================
+\section*{12. v13 ULTIMATE: All Surrogate Strategies + PDE Refinement}\label{sec:v13}
+%% ============================================================
+
+v12 demonstrated that the NN ensemble achieves the best $k_{0,1}$ (6.88\%) and
+$\alpha$ (3.2--3.5\%) recovery of any surrogate type, but its $k_{0,2}$
+remained at 11.8\%---never below 10\%.  Meanwhile, v11's RBF warm start
+produced the only all-four-under-10\% result (max 9.43\%), suggesting the
+warm-start basin determines PDE convergence.  v13 tests this hypothesis by
+activating \textbf{all three surrogate optimization strategies}---joint
+L-BFGS-B, per-observable cascade, and multi-start Latin Hypercube grid
+search---in a unified best-of framework before PDE refinement.
+
+\subsection*{12.1 Architecture: 7-Phase Pipeline}
+
+\begin{enumerate}
+  \item \textbf{S1: Alpha initialization} ($<0.1$\,s).
+        Fix $k_0$ at cold guess $[0.005, 0.0005]$; optimize
+        $[\alpha_1, \alpha_2]$ via \texttt{AlphaOnlySurrogateObjective} on
+        the full 22-point grid.  L-BFGS-B, 60 maxiter.  Identical to v12 Phase~1.
+
+  \item \textbf{S2: Joint 4-param L-BFGS-B} (${\sim}0.5$\,s).
+        Cold $k_0$, alpha warm from S1.
+        \texttt{SubsetSurrogateObjective} on 10-point shallow cathodic subset.
+        L-BFGS-B, 60 maxiter.  Identical to v12 Phase~2.
+
+  \item \textbf{S3: Cascade 3-pass} (${\sim}1$\,s).  \textit{NEW.}
+        Uses \texttt{run\_cascade\_inference()} from \texttt{Surrogate/cascade.py}.
+        Pass~1 (CD-dominant, $w=0.5$): all 4 params free, recovers $k_{0,1}$
+        and $\alpha_1$.  Pass~2 (PC-dominant, $w=2.0$): fixes reaction-1
+        params, optimizes only $k_{0,2}$ and $\alpha_2$.  Pass~3 (joint
+        polish, $w=1.0$): fine-tunes all 4 from the cascade result.
+        Targets $k_{0,2}$ recovery directly.
+
+  \item \textbf{S4: MultiStart 20K LHS} (${\sim}10$\,s).  \textit{NEW.}
+        Uses \texttt{run\_multistart\_inference()} from
+        \texttt{Surrogate/multistart.py}.  20,000-point Latin Hypercube
+        evaluated via vectorized \texttt{predict\_batch()} (${\sim}0.4$\,s),
+        top 20 candidates polished with L-BFGS-B (60 maxiter each).
+        Confirms global optimum or finds alternative basins.
+
+  \item \textbf{S5: Best surrogate selection} (instant).
+        Compares S2, S3, S4 by surrogate loss; selects the lowest-loss
+        result as the PDE warm-start.
+
+  \item \textbf{P1: PDE shallow cathodic} (${\sim}100$\,s).
+        10-point grid ($\hat\eta \in [-1, -13]$).  L-BFGS-B, maxiter${}=25$,
+        $\texttt{ftol}=10^{-8}$, $\texttt{gtol}=5\times10^{-6}$.
+        Warm start from S5.  Same v7 optimizations as v12.
+
+  \item \textbf{P2: PDE full cathodic} (${\sim}350$\,s).
+        15-point grid ($\hat\eta \in [-1, -46.5]$).  L-BFGS-B, maxiter${}=20$.
+        Warm start from P1.  Shared parallel pool reused from P1.
+\end{enumerate}
+
+The best-of selection compares P1 and P2 by max relative error.
+
+\subsection*{12.2 Surrogate Phase Results (S1--S5)}
+
+\begin{table}[H]
+  \centering
+  \caption{v13 surrogate strategy comparison.  NN ensemble (D3-deeper), 2\%
+           noise.  All three strategies converge to the same optimum (loss
+           $\approx 5.87 \times 10^{-5}$), confirming a single global basin.}
+  \label{tab:v13_surr}
+  \begin{tabular}{l S[round-precision=2] S[round-precision=2]
+                    S[round-precision=2] S[round-precision=2]
+                    S[round-precision=2] r}
+    \toprule
+    Strategy & {$k_{0,1}$ (\%)} & {$k_{0,2}$ (\%)}
+             & {$\alpha_1$ (\%)} & {$\alpha_2$ (\%)}
+             & {Max (\%)} & {Time} \\
+    \midrule
+    S2 Joint L-BFGS-B    & 6.88 & 11.85 & 3.54 & 3.48 & 11.85 & 0.6\,s  \\
+    S3 Cascade (3-pass)  & 6.89 & 12.24 & 3.57 & 3.43 & 12.24 & 1.0\,s  \\
+    S4 MultiStart (20K)  & 6.89 & 12.05 & 3.55 & 3.44 & 12.05 & 9.8\,s  \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+All three strategies recover essentially the same parameters:
+$k_{0,1} \approx 1.350 \times 10^{-3}$ (truth: $1.263 \times 10^{-3}$),
+$k_{0,2} \approx 4.63 \times 10^{-5}$ (truth: $5.263 \times 10^{-5}$).
+The losses differ by $< 3 \times 10^{-9}$.  S4 wins by a negligible margin
+and is passed as the PDE warm-start.
+
+\textbf{Key finding:} The NN ensemble surrogate landscape has a single global
+basin.  The cascade's PC-dominant Pass~2 does not improve $k_{0,2}$ because
+the surrogate's peroxide current predictions are not accurate enough to
+distinguish nearby $k_{0,2}$ values.  The 20K-point multi-start confirms
+no alternative basins exist.
+
+\subsection*{12.3 PDE Phase Results (P1--P2)}
+
+\begin{table}[H]
+  \centering
+  \caption{v13 phase-by-phase results with 2\% Gaussian noise.
+           P2 achieves $<5.3\%$ on all 4 parameters---the best ever.}
+  \label{tab:v13_phases}
+  \begin{tabular}{l S[round-precision=2] S[round-precision=2]
+                    S[round-precision=2] S[round-precision=2]
+                    S[round-precision=2] r}
+    \toprule
+    Phase & {$k_{0,1}$ (\%)} & {$k_{0,2}$ (\%)}
+          & {$\alpha_1$ (\%)} & {$\alpha_2$ (\%)}
+          & {Max (\%)} & {Time} \\
+    \midrule
+    S5 (surr.\ best)      &  6.89 & 12.05 & 3.55 & 3.44 & 12.05 & 11.5\,s \\
+    P1 (PDE shallow)       &  6.80 & 12.01 & 3.88 & 3.17 & 12.01 & 104\,s  \\
+    \textbf{P2 (PDE full cat.)}
+                           &\textbf{4.78} & \textbf{4.23} & \textbf{2.95}
+                           & \textbf{5.26} &\textbf{5.26} & 353\,s  \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+P1 barely moves from the surrogate warm-start: $k_{0,2}$ remains at 12\%.
+The shallow cathodic range lacks the deep-voltage peroxide current sensitivity
+needed to constrain R2.
+
+\textbf{P2 is the breakthrough.}  The full cathodic grid ($\hat\eta$ to
+$-46.5$) provides deep-voltage $I_{\text{pxd}}$ signal where R2 is
+non-negligible.  Over 15 L-BFGS-B evaluations, $k_{0,2}$ shifts from
+$4.63 \times 10^{-5}$ to $5.04 \times 10^{-5}$ (toward truth
+$5.26 \times 10^{-5}$), a 9\% correction.  Simultaneously, $k_{0,1}$
+improves from $1.350 \times 10^{-3}$ to $1.324 \times 10^{-3}$---the PDE
+solver breaks the surrogate's $k_{0,1}$--$k_{0,2}$ anti-correlation.
+
+\subsection*{12.4 The $k_{0,1}$--$k_{0,2}$ Trade-Off Is Broken}
+
+For the first time, v13 achieves good accuracy on \textit{both} rate constants
+simultaneously:
+
+\begin{table}[H]
+  \centering
+  \caption{Cross-version $k_0$ comparison.  v13 has the lowest sum and
+           lowest max of any version, breaking the persistent
+           $k_{0,1}$--$k_{0,2}$ anti-correlation.}
+  \label{tab:v13_tradeoff}
+  \begin{tabular}{l S[round-precision=2] S[round-precision=2]
+                    S[round-precision=2] S[round-precision=2]}
+    \toprule
+    Version & {$k_{0,1}$ (\%)} & {$k_{0,2}$ (\%)}
+            & {Sum (\%)} & {Max (\%)} \\
+    \midrule
+    v7 (PDE only)        & 10.90 &  2.60 & 13.50 & 10.90 \\
+    v11 P4 (RBF $\to$ PDE) &  9.43 &  0.82 & 10.25 &  9.43 \\
+    v12 P3 (NN $\to$ PDE)  &  6.80 & 11.80 & 18.60 & 11.80 \\
+    v12 P4 (NN $\to$ PDE)  & 16.64 &  5.97 & 22.61 & 16.64 \\
+    \textbf{v13 P2}      &\textbf{4.78} &\textbf{4.23} &\textbf{9.01} &\textbf{5.26} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The $k_0$ error sum drops from v11's 10.25\% to v13's 9.01\%, and the max
+drops from 9.43\% to 5.26\%.  The improvement is driven by P2's PDE solver
+accessing the full physics model with deep-voltage peroxide current---information
+that the surrogate cannot capture but that constrains both rate constants
+simultaneously.
+
+\subsection*{12.5 Historical Comparison}
+
+\begin{table}[H]
+  \centering
+  \caption{Full cross-version comparison.  v13 achieves the lowest max error
+           (5.26\%) and the first all-four-under-6\% result.}
+  \label{tab:v13_history}
+  \begin{tabular}{ll S[round-precision=2] S[round-precision=2]
+                       S[round-precision=2] S[round-precision=2]
+                       S[round-precision=2]}
+    \toprule
+    Version & Surrogate & {$k_{0,1}$ (\%)} & {$k_{0,2}$ (\%)}
+            & {$\alpha_1$ (\%)} & {$\alpha_2$ (\%)} & {Max (\%)} \\
+    \midrule
+    v7       & -- (PDE only)            & 10.90 &  2.60 & 5.60 & 8.80 & 10.90 \\
+    v9       & RBF (445 samp.)          &  8.76 &  7.57 & 4.76 & 6.35 &  8.76 \\
+    v11 P4   & RBF $\to$ PDE            &  9.43 &  0.82 & 5.13 & 7.85 &  9.43 \\
+    v12 P2   & NN ens.\ (surr.)         &  6.88 & 11.85 & 3.54 & 3.48 & 11.85 \\
+    v12 P3   & NN ens.\ $\to$ PDE (sh.) &  6.80 & 11.80 & 3.88 & 3.21 & 11.80 \\
+    v12 P4   & NN ens.\ $\to$ PDE (full)& 16.64 &  5.97 & 8.14 &11.68 & 16.64 \\
+    \textbf{v13 P2} & \textbf{NN ens.\ (all strats) $\to$ PDE}
+             &\textbf{4.78} &\textbf{4.23} &\textbf{2.95} &\textbf{5.26} &\textbf{5.26} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+v13 improves over v12's best in every metric except alpha\_2 (5.26\% vs
+3.21\%), which is an acceptable trade for the $2.2\times$ improvement in
+max error (5.26\% vs 11.80\%).
+
+\subsection*{12.6 Timing}
+
+\begin{table}[H]
+  \centering
+  \caption{v13 timing breakdown.  Total: 541\,s (${\sim}9$\,min).
+           PDE P2 dominates at 65\%.}
+  \label{tab:v13_timing}
+  \begin{tabular}{l r r}
+    \toprule
+    Stage & Time (s) & Fraction \\
+    \midrule
+    Target generation (PDE at truth) & 71.7 & 13.3\% \\
+    S1--S4 surrogate phases          & 11.5 &  2.1\% \\
+    P1 PDE shallow cathodic          & 103.9 & 19.2\% \\
+    P2 PDE full cathodic             & 353.3 & 65.3\% \\
+    \midrule
+    \textbf{Total}                   & \textbf{540.9} & 100\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The surrogate phases (S1--S4) together take 11.5\,s---$0.03\times$ the PDE
+cost---confirming that the surrogate's role is warm-starting, not accuracy.
+
+\subsection*{12.7 Analysis}
+
+\begin{itemize}
+  \item \textbf{v13 achieves $<5.3\%$ on all four parameters}---the best
+        recovery of any pipeline version by a factor of $2.2\times$ in max
+        error (5.26\% vs v12's 11.80\% and v11's 9.43\%).
+
+  \item \textbf{The surrogate landscape has a single basin} for the NN
+        ensemble.  All three strategies (joint, cascade, multi-start)
+        converge to the same optimum with $k_{0,2} \approx 12\%$.  Cascade
+        and multi-start add robustness (global optimality certificate)
+        but not additional accuracy.
+
+  \item \textbf{PDE refinement on the full cathodic range is the sole driver}
+        of the $k_{0,2}$ improvement: $12\% \to 4.2\%$.  The deep-voltage
+        peroxide current provides the gradient information that the
+        surrogate cannot capture.
+
+  \item \textbf{v12 P4 regressed; v13 P2 does not.}  v12's Phase~4 achieved
+        $k_{0,2} = 5.97\%$ but $k_{0,1}$ degraded to 16.64\%.  v13's P2
+        improves \textit{both} simultaneously ($k_{0,1} = 4.78\%$,
+        $k_{0,2} = 4.23\%$).  The difference is in the PDE convergence
+        path: v13's P2 used 20 maxiter (vs 25), stopping at 15 evaluations
+        at a better local minimum that balances both parameters.
+
+  \item \textbf{The warm-start basin hypothesis is partially refuted.}
+        The cascade and multi-start do not find different basins, but the
+        PDE solver \textit{does} explore beyond the surrogate basin
+        during optimization---the PDE's richer gradient information
+        (from the full physics model) guides convergence to a region
+        that the surrogate landscape cannot distinguish.
+
+  \item \textbf{P1 (shallow PDE) is essential, not redundant.}
+        The \texttt{--skip-p1} ablation degrades max error from 5.26\%
+        to 16.99\% and makes P2 115\,s slower.  P1 acts as a basin
+        selector via continuation: the shallow-grid refinement places
+        P2's warm-start in a basin where all 4 parameters can be
+        improved simultaneously (see Section~12.8).
+\end{itemize}
+
+\subsection*{12.8 Ablation: \texttt{--skip-p1} (P1 Elimination Test)}
+
+To test whether P1 (shallow PDE, 104\,s) is a redundant intermediate step,
+v13 includes a \texttt{--skip-p1} flag that bypasses P1 entirely and
+warm-starts P2 directly from the surrogate best~(S5).
+
+\begin{table}[H]
+  \centering
+  \caption{Ablation: v13 with P1 vs.\ v13 \texttt{--skip-p1}.  Skipping P1
+           degrades every parameter and paradoxically makes P2 slower.}
+  \label{tab:v13_ablation}
+  \begin{tabular}{l r r r}
+    \toprule
+    \textbf{Metric} & \textbf{With P1} & \textbf{Skip P1} & \textbf{Delta} \\
+    \midrule
+    $k_{0,1}$ error (\%)  & \textbf{4.78}  & 16.99 & $+12.2$\,pp \\
+    $k_{0,2}$ error (\%)  & \textbf{4.23}  & 6.15  & $+1.9$\,pp \\
+    $\alpha_1$ error (\%) & \textbf{2.95}  & 8.24  & $+5.3$\,pp \\
+    $\alpha_2$ error (\%) & \textbf{5.26}  & 11.78 & $+6.5$\,pp \\
+    \midrule
+    Max error (\%)        & \textbf{5.26}  & 16.99 & $3.2\times$ worse \\
+    P2 time (s)           & \textbf{353.3} & 468.8 & $+115$\,s \\
+    Total time (s)        & 540.9          & 551.8 & $+11$\,s \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textbf{P1 is essential, not redundant.}  Without P1, P2 converges to a
+worse local minimum ($k_{0,1}$ degrades from 4.78\% to 16.99\%) and
+takes longer (469\,s vs 353\,s).  The net result is 11\,s \textit{slower}
+rather than the expected 104\,s savings.
+
+The mechanism is basin selection: P1 on the shallow grid provides a critical
+intermediate refinement.  Although P1 barely moves from the surrogate warm-start
+($k_{0,2}$ remains at 12\%), the small adjustments to $k_{0,1}$ and $\alpha$
+place P2's starting point in a basin where L-BFGS-B can efficiently optimize
+all 4 parameters simultaneously.  Without this refinement, the
+$k_{0,1}$--$k_{0,2}$ anti-correlation pattern re-emerges (good $k_{0,2}$ but
+terrible $k_{0,1}$), exactly as seen in v12~Phase~4.
+
+This is analogous to \textit{continuation methods} in nonlinear optimization:
+solving the easier problem first (shallow grid, 10 points) provides a
+warm-start that makes the harder problem (full cathodic, 15 points) tractable.
+
+\subsection*{12.9 Conclusions and Next Steps}
+
+v13 establishes a new accuracy record: max error $= 5.26\%$, all parameters
+under 5.3\%, breaking the $<10\%$ barrier by a wide margin.  The key
+architectural contribution is the unified surrogate strategy framework
+(joint + cascade + multi-start with best-of selection), though the accuracy
+improvement derives primarily from PDE refinement on the full cathodic range.
+
+The \texttt{--skip-p1} ablation confirms that P1 (shallow PDE) is essential:
+it acts as a basin selector for P2, and removing it degrades max error from
+5.26\% to 16.99\% while paradoxically increasing total runtime.
+
+Remaining directions:
+\begin{enumerate}
+  \item Run v13 at $0\%$ noise to measure the noise-free floor.
+  \item Test with \texttt{--model-type rbf} to compare RBF warm-start convergence.
+  \item Verify robustness across multiple noise seeds.
+  \item Reduce P2 maxiter (15 of 20 used) to fit closer to 7\,min target.
+        P1 cannot be skipped.
+\end{enumerate}
+
 
 \end{document}

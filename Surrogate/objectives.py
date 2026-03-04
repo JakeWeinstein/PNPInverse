@@ -414,3 +414,122 @@ class ReactionBlockSurrogateObjective:
     def n_evals(self) -> int:
         """Number of surrogate evaluations performed."""
         return self._n_evals
+
+
+class SubsetSurrogateObjective:
+    """Surrogate objective on a subset of voltage points.
+
+    Evaluates the full surrogate grid but computes the loss only on the
+    voltage indices in *subset_idx*.  Useful for phase-2 shallow-range
+    optimization where the surrogate spans a wider grid than the target.
+
+    Parameters
+    ----------
+    surrogate
+        Any surrogate model with a ``.predict(k0_1, k0_2, alpha_1, alpha_2)``
+        method returning ``{'current_density': ..., 'peroxide_current': ...}``.
+    target_cd : np.ndarray
+        Target current density at the subset voltages.
+    target_pc : np.ndarray
+        Target peroxide current at the subset voltages.
+    subset_idx : np.ndarray of int
+        Indices into the full surrogate output to compare against targets.
+    secondary_weight : float
+        Weight on the peroxide current objective term.
+    fd_step : float
+        Finite difference step size for gradient computation.
+    log_space_k0 : bool
+        If True (default), x[0:2] are log10(k0).
+    """
+
+    def __init__(
+        self,
+        surrogate,
+        target_cd: np.ndarray,
+        target_pc: np.ndarray,
+        subset_idx: np.ndarray,
+        secondary_weight: float = 1.0,
+        fd_step: float = 1e-5,
+        log_space_k0: bool = True,
+    ):
+        self.surrogate = surrogate
+        self.target_cd = np.asarray(target_cd, dtype=float)
+        self.target_pc = np.asarray(target_pc, dtype=float)
+        self.subset_idx = np.asarray(subset_idx, dtype=int)
+        self._valid_cd = ~np.isnan(self.target_cd)
+        self._valid_pc = ~np.isnan(self.target_pc)
+        self.secondary_weight = secondary_weight
+        self.fd_step = fd_step
+        self.log_space_k0 = log_space_k0
+        self._n_evals = 0
+
+    def _x_to_params(self, x: np.ndarray) -> Tuple[float, float, float, float]:
+        """Convert optimizer x-vector to (k0_1, k0_2, alpha_1, alpha_2)."""
+        x = np.asarray(x, dtype=float)
+        if self.log_space_k0:
+            k0_1 = 10.0 ** x[0]
+            k0_2 = 10.0 ** x[1]
+        else:
+            k0_1 = x[0]
+            k0_2 = x[1]
+        return k0_1, k0_2, float(x[2]), float(x[3])
+
+    def objective(self, x: np.ndarray) -> float:
+        """Evaluate objective on the subset of voltage points.
+
+        Parameters
+        ----------
+        x : np.ndarray of shape (4,)
+            Control vector [log10(k0_1), log10(k0_2), alpha_1, alpha_2].
+
+        Returns
+        -------
+        float
+        """
+        k0_1, k0_2, a1, a2 = self._x_to_params(x)
+        pred = self.surrogate.predict(k0_1, k0_2, a1, a2)
+        cd_sim = pred["current_density"][self.subset_idx]
+        pc_sim = pred["peroxide_current"][self.subset_idx]
+
+        cd_diff = cd_sim[self._valid_cd] - self.target_cd[self._valid_cd]
+        pc_diff = pc_sim[self._valid_pc] - self.target_pc[self._valid_pc]
+
+        j_cd = 0.5 * np.sum(cd_diff ** 2)
+        j_pc = 0.5 * np.sum(pc_diff ** 2)
+
+        self._n_evals += 1
+        return float(j_cd + self.secondary_weight * j_pc)
+
+    def gradient(self, x: np.ndarray) -> np.ndarray:
+        """Central finite-difference gradient.
+
+        Parameters
+        ----------
+        x : np.ndarray of shape (4,)
+
+        Returns
+        -------
+        np.ndarray of shape (4,)
+        """
+        x = np.asarray(x, dtype=float)
+        n = len(x)
+        grad = np.zeros(n, dtype=float)
+        h = self.fd_step
+        for i in range(n):
+            xp = x.copy()
+            xm = x.copy()
+            xp[i] += h
+            xm[i] -= h
+            grad[i] = (self.objective(xp) - self.objective(xm)) / (2 * h)
+        return grad
+
+    def objective_and_gradient(self, x: np.ndarray) -> Tuple[float, np.ndarray]:
+        """Compute objective and gradient in one call."""
+        j = self.objective(x)
+        g = self.gradient(x)
+        return j, g
+
+    @property
+    def n_evals(self) -> int:
+        """Number of surrogate evaluations performed."""
+        return self._n_evals
