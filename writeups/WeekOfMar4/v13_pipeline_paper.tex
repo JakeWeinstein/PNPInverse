@@ -26,6 +26,10 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,decorations.pathreplacing,calc,fit,shapes.geometric}
 
+% ── Plots ──
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
 % ── Algorithms ──
 \usepackage[ruled,vlined,linesnumbered]{algorithm2e}
 
@@ -373,8 +377,7 @@ partitioned as shown in \cref{fig:domain}.
   left and right boundaries (markers~1,2) are no-flux (symmetry).
   The mesh is graded in $y$ with $\beta=2$, clustering elements near
   the electrode to resolve steep concentration gradients and the Debye
-  screening layer. Arrows indicate dominant O$_2$ diffusion toward and
-  H$_2$O$_2$ production away from the electrode.}
+  screening layer.}
 \label{fig:domain}
 \end{figure}
 
@@ -403,6 +406,26 @@ consumes it, $I_{\mathrm{PC}}$ is sensitive to the ratio
 $\kzero^{(2)}/\kzero^{(1)}$ and is essential for identifiability of the
 four-parameter system. Without $I_{\mathrm{PC}}$, the $\kzero^{(1)}$--$\kzero^{(2)}$
 pair is poorly determined.
+
+\paragraph{Experimental measurement.}
+Both observables are accessible in a single experiment using a
+rotating ring-disk electrode (RRDE)~\cite{ruggiero2022}.
+An RRDE consists of a small \emph{disk} (the catalyst surface)
+surrounded by a concentric \emph{ring}, both submerged in solution
+and spinning.  The disk voltage is swept while its current is
+recorded---this is $I_{\mathrm{CD}}$, capturing the total
+electrochemical activity (both O$_2 \to$ H$_2$O$_2$ and
+H$_2$O$_2 \to$ H$_2$O).  The ring is held at a fixed potential
+that oxidizes any H$_2$O$_2$ drifting outward from the disk; its
+current, after dividing by a known geometric correction factor
+(collection efficiency~$N$), gives $I_{\mathrm{PC}}$.
+Sweeping the disk potential therefore produces both I--V curves
+simultaneously---exactly the pair of observables the inverse problem
+needs to disentangle the two reaction rate constants.
+This experimental grounding motivates the two-observable objective
+function~\eqref{eq:objective}: the disk current constrains the dominant
+reaction (R$_1$) while the ring current constrains the secondary
+reaction (R$_2$).
 
 %==========================================================================
 \section{Forward Solver}\label{sec:forward}
@@ -1181,6 +1204,87 @@ $\hat{\vect{\theta}} \gets \textsc{P2-PDE-Full}(\vect{\theta}_{\text{P1}}, \math
 
 All results use synthetic observations generated from the true parameters
 (\cref{tab:constants}) with $2\%$ additive Gaussian noise (seed 20260226).
+\Cref{fig:iv_curves} shows the forward model I--V curves at the true
+parameter values, illustrating the two observables that the inverse
+problem seeks to match.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.85\textwidth,
+  height=7cm,
+  xlabel={Potential (V vs.\ RHE)},
+  ylabel={Current density (\si{\milli\ampere\per\centi\metre\squared})},
+  xmin=-0.55, xmax=0.75,
+  ymin=-2.6, ymax=2.2,
+  grid=major,
+  grid style={gray!20},
+  legend style={at={(0.02,0.02)}, anchor=south west, font=\small,
+    fill=white, fill opacity=0.9, draw=gray!50},
+  every axis plot/.append style={thick},
+  tick label style={font=\small},
+  label style={font=\small},
+]
+% Total current density (I_CD) — from bv_iv_curve.csv
+\addplot[blue, mark=*, mark size=1.2pt] coordinates {
+  (-0.500, -2.317) (-0.452, -2.308) (-0.404, -2.285)
+  (-0.357, -2.231) (-0.309, -2.116) (-0.261, -1.911)
+  (-0.213, -1.644) (-0.165, -1.400)
+  (-0.106, -1.798) (-0.058, -1.572)
+  (-0.010, -1.267)
+  (0.038, -0.942) (0.074, -0.738) (0.097, -0.644)
+  (0.121, -0.589) (0.157, -1.906) (0.169, -1.629)
+  (0.193, -1.211) (0.217, -0.963)
+  (0.253, -0.708) (0.289, -0.536) (0.325, -0.400)
+  (0.360, -0.284) (0.396, -0.182) (0.432, -0.102)
+  (0.468, -0.051) (0.504, -0.023) (0.552, -0.007)
+  (0.599, -0.002) (0.671, 0.000)
+};
+\addlegendentry{$I_{\mathrm{CD}}$ (total current)}
+
+% Peroxide current density (I_PC) — from bv_iv_curve.csv
+\addplot[red, mark=triangle*, mark size=1.4pt] coordinates {
+  (-0.500, 1.969) (-0.452, 1.960) (-0.404, 1.938)
+  (-0.357, 1.884) (-0.309, 1.769) (-0.261, 1.564)
+  (-0.213, 1.296) (-0.165, 1.052)
+  (-0.106, 1.448) (-0.058, 1.230)
+  (-0.010, 0.903)
+  (0.038, 0.547) (0.074, 0.292) (0.097, 0.143)
+  (0.121, 0.013) (0.157, -1.498) (0.169, -1.271)
+  (0.193, -0.943) (0.217, -0.770)
+  (0.253, -0.599) (0.289, -0.480) (0.325, -0.374)
+  (0.360, -0.273) (0.396, -0.178) (0.432, -0.101)
+  (0.468, -0.050) (0.504, -0.023) (0.552, -0.007)
+  (0.599, -0.002) (0.671, 0.000)
+};
+\addlegendentry{$I_{\mathrm{PC}}$ (peroxide current)}
+
+% Zero line
+\draw[gray, thin, dashed] (axis cs:-0.55,0) -- (axis cs:0.75,0);
+
+% Equilibrium annotation
+\draw[gray, thin, dotted] (axis cs:0.695,-2.6) -- (axis cs:0.695,2.2);
+\node[gray, font=\scriptsize, rotate=90, anchor=south] at (axis cs:0.695,1.5)
+  {$E_{\mathrm{eq}} \approx 0.695$ V};
+
+\end{axis}
+\end{tikzpicture}
+\caption{Forward model I--V curves at the true parameter values
+  ($\kzero^{(1)} = 2.4\times10^{-8}$~m/s,
+   $\kzero^{(2)} = 1.0\times10^{-9}$~m/s,
+   $\alpha_1 = 0.627$, $\alpha_2 = 0.5$).
+  Blue: total current density $I_{\mathrm{CD}}$ (analogous to disk
+  current in RRDE). Red: peroxide current density $I_{\mathrm{PC}}$
+  (analogous to ring current). Near equilibrium ($\sim\!0.7$~V vs.\ RHE)
+  both currents vanish; at cathodic potentials the total current
+  approaches the diffusion-limited plateau while the peroxide current
+  reflects the competition between R$_1$ (production) and R$_2$
+  (consumption). The non-monotonic feature in $I_{\mathrm{PC}}$ near
+  $0.1$--$0.15$~V arises from the transition where R$_2$ begins to
+  dominate peroxide consumption.}
+\label{fig:iv_curves}
+\end{figure}
 
 \subsection{Surrogate Phase Results}\label{sec:surr_results}
 
@@ -1514,9 +1618,14 @@ electrode geometries.
 \begin{thebibliography}{9}
 
 \bibitem{mangan2025}
-N.~Mangan \emph{et al.},
-``Electrochemical Kinetics of Oxygen Reduction on Rotating Disk Electrodes,''
-\emph{Catalysis}, 2025.
+N.~M.~Mangan \emph{et al.},
+``Mathematical Investigation of Bulk and Local Effects in Electrocatalysis,''
+Northwestern University, 2025.
+
+\bibitem{ruggiero2022}
+B.~Ruggiero, L.~Seitz \emph{et al.},
+``pH Effects on Oxygen Reduction Catalysis on Carbon-Supported Catalysts,''
+\emph{J.\ Catalysis}, vol.~414, pp.~33--43, 2022.
 
 \bibitem{firedrake}
 F.~Rathgeber \emph{et al.},
