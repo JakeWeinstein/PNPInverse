@@ -12,7 +12,7 @@ Bottom-up verification of the PNP-BV electrochemical inference pipeline, startin
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Nondimensionalization & Weak Form Audit** - Verify dimensional transforms and confirm MMS tests the production weak form
+- [x] **Phase 1: Nondimensionalization & Weak Form Audit** - Verify dimensional transforms and confirm MMS tests the production weak form (completed 2026-03-06)
 - [ ] **Phase 2: MMS Convergence Verification** - Automated convergence rate tests with GCI for the forward PDE solver
 - [ ] **Phase 3: Surrogate Fidelity** - Error characterization of v13 surrogate across parameter space
 - [ ] **Phase 4: Inverse Problem Verification** - Parameter recovery, gradient consistency, and optimizer convergence for v13
@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. Running `pytest` executes nondimensionalization roundtrip tests that convert physical parameters to nondim and back, recovering original values within machine epsilon for all parameter types (diffusivities, concentrations, potentials, rate constants)
   2. A documented audit confirms MMS convergence script uses the same weak form as production `bv_solver.py`, or differences are identified and resolved
   3. All nondim and audit tests pass without manual intervention
-**Plans:** 3 plans (2 executed, 1 gap closure)
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 01-01-PLAN.md — Textbook audit of existing nondim tests + roundtrip tests for all parameter types
@@ -111,7 +111,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Nondimensionalization & Weak Form Audit | 2/3 | Gap closure |  |
+| 1. Nondimensionalization & Weak Form Audit | 3/3 | Complete   | 2026-03-06 |
 | 2. MMS Convergence Verification | 0/2 | Not started | - |
 | 3. Surrogate Fidelity | 0/2 | Not started | - |
 | 4. Inverse Problem Verification | 0/2 | Not started | - |

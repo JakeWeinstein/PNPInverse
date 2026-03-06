@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-03-06T19:55:45Z"
-last_activity: 2026-03-06 -- Completed 01-02 MMS weak form audit
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-03-06T20:09:04Z"
+last_activity: 2026-03-06 -- Completed 01-03 BV scaling skip guard (gap closure)
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 3
+  completed_plans: 3
   percent: 100
 ---
 
@@ -26,27 +26,27 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 ## Current Position
 
 Phase: 1 of 6 (Nondimensionalization & Weak Form Audit) -- COMPLETE
-Plan: 2 of 2 in current phase
-Status: Phase 1 complete
-Last activity: 2026-03-06 -- Completed 01-02 MMS weak form audit
+Plan: 3 of 3 in current phase
+Status: Phase 1 complete (including gap closure)
+Last activity: 2026-03-06 -- Completed 01-03 BV scaling skip guard (gap closure)
 
 Progress: [##########] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 5 min
-- Total execution time: 0.17 hours
+- Total plans completed: 3
+- Average duration: 4 min
+- Total execution time: 0.18 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-nondim-audit | 2 | 10 min | 5 min |
+| 01-nondim-audit | 3 | 11 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4 min), 01-02 (6 min)
+- Last 5 plans: 01-01 (4 min), 01-02 (6 min), 01-03 (1 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -65,6 +65,7 @@ Recent decisions affecting current work:
 - 01-02: Option A (thin wrapper) for MMS: call production build_forms() directly, no production code changes
 - 01-02: Nondim passthrough config: all *_inputs_are_dimensionless=True with unit scales
 - 01-02: Large dt (1e30) to neutralize time-stepping for steady-state MMS
+- 01-03: Class-level @skip_without_firedrake on TestBVScalingRoundtrip (not per-method)
 
 ### Pending Todos
 
@@ -76,6 +77,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-06T19:55:45Z
-Stopped at: Completed 01-02-PLAN.md (Phase 1 complete)
-Resume file: .planning/phases/01-nondimensionalization-weak-form-audit/01-02-SUMMARY.md
+Last session: 2026-03-06T20:09:04Z
+Stopped at: Completed 01-03-PLAN.md (Phase 1 complete, gap closure done)
+Resume file: .planning/phases/01-nondimensionalization-weak-form-audit/01-03-SUMMARY.md
