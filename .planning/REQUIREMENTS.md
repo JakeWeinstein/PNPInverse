@@ -71,26 +71,26 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FWD-01 | - | Pending |
-| FWD-02 | - | Pending |
-| FWD-03 | - | Pending |
-| FWD-04 | - | Pending |
-| FWD-05 | - | Pending |
-| SUR-01 | - | Pending |
-| SUR-02 | - | Pending |
-| SUR-03 | - | Pending |
-| INV-01 | - | Pending |
-| INV-02 | - | Pending |
-| INV-03 | - | Pending |
-| PIP-01 | - | Pending |
-| PIP-02 | - | Pending |
-| RPT-01 | - | Pending |
+| FWD-01 | Phase 2 | Pending |
+| FWD-02 | Phase 1 | Pending |
+| FWD-03 | Phase 2 | Pending |
+| FWD-04 | Phase 1 | Pending |
+| FWD-05 | Phase 2 | Pending |
+| SUR-01 | Phase 3 | Pending |
+| SUR-02 | Phase 3 | Pending |
+| SUR-03 | Phase 3 | Pending |
+| INV-01 | Phase 4 | Pending |
+| INV-02 | Phase 4 | Pending |
+| INV-03 | Phase 4 | Pending |
+| PIP-01 | Phase 5 | Pending |
+| PIP-02 | Phase 5 | Pending |
+| RPT-01 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 14 total
-- Mapped to phases: 0
-- Unmapped: 14
+- Mapped to phases: 14
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-06*
-*Last updated: 2026-03-06 after initial definition*
+*Last updated: 2026-03-06 after roadmap creation*
