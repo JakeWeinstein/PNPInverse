@@ -569,3 +569,402 @@ class TestNondimCompat:
         assert "nondim" in opts
         assert opts["nondim"]["enabled"] is True
         assert isinstance(opts["robin_bc"]["kappa"], list)
+
+
+# ===================================================================
+# Roundtrip tests: physical -> nondim -> physical identity
+# ===================================================================
+
+# Parametrized species configurations for roundtrip testing
+_ROUNDTRIP_CASES = [
+    pytest.param(
+        {
+            "D_phys": [9.311e-9],
+            "c0_phys": [100.0],
+            "c_inf_phys": [10.0],
+            "phi_phys": 0.05,
+            "kappa_phys": [1e-4],
+        },
+        id="1-species",
+    ),
+    pytest.param(
+        {
+            "D_phys": [9.311e-9, 5.273e-9],
+            "c0_phys": [100.0, 50.0],
+            "c_inf_phys": [10.0, 5.0],
+            "phi_phys": 0.1,
+            "kappa_phys": [1e-4, 2e-4],
+        },
+        id="2-species",
+    ),
+    pytest.param(
+        {
+            "D_phys": [1.97e-9, 1.4e-9, 9.311e-9, 1.792e-9],
+            "c0_phys": [0.27, 0.01, 0.01, 0.01],
+            "c_inf_phys": [0.27, 0.01, 0.01, 0.01],
+            "phi_phys": 0.05,
+            "kappa_phys": [1e-4, 1e-4, 1e-4, 1e-4],
+        },
+        id="4-species-v13",
+    ),
+    pytest.param(
+        {
+            "D_phys": [1e-11, 1e-11],
+            "c0_phys": [1e6, 1e6],
+            "c_inf_phys": [1e5, 1e5],
+            "phi_phys": 0.5,
+            "kappa_phys": [1e-6, 1e-6],
+        },
+        id="synthetic-extreme",
+    ),
+]
+
+
+def _build_enabled_scaling(case):
+    """Helper to call build_model_scaling with nondim enabled for roundtrip tests."""
+    from Nondim.transform import build_model_scaling
+
+    n = len(case["D_phys"])
+    params = {
+        "nondim": {
+            "enabled": True,
+            "kappa_inputs_are_dimensionless": False,
+        },
+        "robin_bc": {
+            "kappa": case["kappa_phys"],
+            "c_inf": case["c_inf_phys"],
+        },
+    }
+    return build_model_scaling(
+        params=params,
+        n_species=n,
+        dt=0.001,
+        t_end=1.0,
+        D_vals=case["D_phys"],
+        c0_vals=case["c0_phys"],
+        phi_applied=case["phi_phys"],
+        phi0=0.0,
+    )
+
+
+class TestNondimRoundtrip:
+    """Roundtrip tests: physical -> nondim -> physical identity.
+
+    For each parameter type, verify that model_val * scale == physical_val.
+    """
+
+    @pytest.mark.parametrize("case", _ROUNDTRIP_CASES)
+    def test_roundtrip_diffusivity(self, case):
+        scaling = _build_enabled_scaling(case)
+        D_scale = scaling["diffusivity_scale_m2_s"]
+        for i, D_phys in enumerate(case["D_phys"]):
+            D_recovered = scaling["D_model_vals"][i] * D_scale
+            assert D_recovered == pytest.approx(D_phys, rel=1e-12), (
+                f"D roundtrip failed for species {i}"
+            )
+
+    @pytest.mark.parametrize("case", _ROUNDTRIP_CASES)
+    def test_roundtrip_c0(self, case):
+        scaling = _build_enabled_scaling(case)
+        c_scale = scaling["concentration_scale_mol_m3"]
+        for i, c0_phys in enumerate(case["c0_phys"]):
+            c0_recovered = scaling["c0_model_vals"][i] * c_scale
+            assert c0_recovered == pytest.approx(c0_phys, rel=1e-12), (
+                f"c0 roundtrip failed for species {i}"
+            )
+
+    @pytest.mark.parametrize("case", _ROUNDTRIP_CASES)
+    def test_roundtrip_c_inf(self, case):
+        scaling = _build_enabled_scaling(case)
+        c_scale = scaling["concentration_scale_mol_m3"]
+        for i, c_inf_phys in enumerate(case["c_inf_phys"]):
+            c_inf_recovered = scaling["c_inf_model_vals"][i] * c_scale
+            assert c_inf_recovered == pytest.approx(c_inf_phys, rel=1e-12), (
+                f"c_inf roundtrip failed for species {i}"
+            )
+
+    @pytest.mark.parametrize("case", _ROUNDTRIP_CASES)
+    def test_roundtrip_phi(self, case):
+        scaling = _build_enabled_scaling(case)
+        phi_scale = scaling["potential_scale_v"]
+        phi_recovered = scaling["phi_applied_model"] * phi_scale
+        assert phi_recovered == pytest.approx(case["phi_phys"], rel=1e-12)
+
+    @pytest.mark.parametrize("case", _ROUNDTRIP_CASES)
+    def test_roundtrip_dt(self, case):
+        scaling = _build_enabled_scaling(case)
+        t_scale = scaling["time_scale_s"]
+        dt_phys = 0.001
+        dt_recovered = scaling["dt_model"] * t_scale
+        assert dt_recovered == pytest.approx(dt_phys, rel=1e-12)
+
+    @pytest.mark.parametrize("case", _ROUNDTRIP_CASES)
+    def test_roundtrip_t_end(self, case):
+        scaling = _build_enabled_scaling(case)
+        t_scale = scaling["time_scale_s"]
+        t_end_phys = 1.0
+        t_end_recovered = scaling["t_end_model"] * t_scale
+        assert t_end_recovered == pytest.approx(t_end_phys, rel=1e-12)
+
+    @pytest.mark.parametrize("case", _ROUNDTRIP_CASES)
+    def test_roundtrip_kappa(self, case):
+        scaling = _build_enabled_scaling(case)
+        kappa_scale = scaling["kappa_scale_m_s"]
+        for i, kappa_phys in enumerate(case["kappa_phys"]):
+            kappa_recovered = scaling["kappa_model_vals"][i] * kappa_scale
+            assert kappa_recovered == pytest.approx(kappa_phys, rel=1e-12), (
+                f"kappa roundtrip failed for species {i}"
+            )
+
+
+class TestDerivedQuantityConsistency:
+    """Verify derived quantities are consistent with their component scales."""
+
+    @pytest.mark.parametrize("case", _ROUNDTRIP_CASES)
+    def test_flux_scale_consistency(self, case):
+        """flux_scale == D_ref * c_ref / L_ref."""
+        scaling = _build_enabled_scaling(case)
+        D_ref = scaling["diffusivity_scale_m2_s"]
+        c_ref = scaling["concentration_scale_mol_m3"]
+        L_ref = scaling["length_scale_m"]
+        expected_flux = D_ref * c_ref / L_ref
+        assert scaling["flux_scale_mol_m2_s"] == pytest.approx(expected_flux, rel=1e-12)
+
+    @pytest.mark.parametrize("case", _ROUNDTRIP_CASES)
+    def test_current_density_scale_consistency(self, case):
+        """current_density_scale == F * flux_scale."""
+        from Nondim.constants import FARADAY_CONSTANT
+        scaling = _build_enabled_scaling(case)
+        expected_j = FARADAY_CONSTANT * scaling["flux_scale_mol_m2_s"]
+        assert scaling["current_density_scale_a_m2"] == pytest.approx(expected_j, rel=1e-12)
+
+    @pytest.mark.parametrize("case", _ROUNDTRIP_CASES)
+    def test_debye_ratio_consistency(self, case):
+        """debye_to_length_ratio == debye_length / L_ref."""
+        scaling = _build_enabled_scaling(case)
+        expected_ratio = scaling["debye_length_m"] / scaling["length_scale_m"]
+        assert scaling["debye_to_length_ratio"] == pytest.approx(expected_ratio, rel=1e-12)
+
+    @pytest.mark.parametrize("case", _ROUNDTRIP_CASES)
+    def test_time_scale_consistency(self, case):
+        """time_scale == L_ref^2 / D_ref."""
+        scaling = _build_enabled_scaling(case)
+        L = scaling["length_scale_m"]
+        D = scaling["diffusivity_scale_m2_s"]
+        expected_time = L * L / D
+        assert scaling["time_scale_s"] == pytest.approx(expected_time, rel=1e-12)
+
+    @pytest.mark.parametrize("case", _ROUNDTRIP_CASES)
+    def test_kappa_scale_consistency(self, case):
+        """kappa_scale == D_ref / L_ref."""
+        scaling = _build_enabled_scaling(case)
+        expected_kappa = scaling["diffusivity_scale_m2_s"] / scaling["length_scale_m"]
+        assert scaling["kappa_scale_m_s"] == pytest.approx(expected_kappa, rel=1e-12)
+
+
+class TestBVScalingRoundtrip:
+    """Roundtrip tests for BV-specific scaling (k0, c_ref, E_eq).
+
+    Uses _add_bv_reactions_scaling_to_transform with the 4-species config.
+    """
+
+    def _build_4species_scaling(self):
+        """Build nondim scaling for the 4-species v13 config."""
+        from Nondim.transform import build_model_scaling
+
+        D_phys = [1.97e-9, 1.4e-9, 9.311e-9, 1.792e-9]
+        c0_phys = [0.27, 0.01, 0.01, 0.01]
+        c_inf_phys = [0.27, 0.01, 0.01, 0.01]
+        kappa_phys = [1e-4, 1e-4, 1e-4, 1e-4]
+
+        params = {
+            "nondim": {
+                "enabled": True,
+                "kappa_inputs_are_dimensionless": False,
+            },
+            "robin_bc": {
+                "kappa": kappa_phys,
+                "c_inf": c_inf_phys,
+            },
+        }
+        return build_model_scaling(
+            params=params,
+            n_species=4,
+            dt=0.001,
+            t_end=1.0,
+            D_vals=D_phys,
+            c0_vals=c0_phys,
+            phi_applied=0.05,
+            phi0=0.0,
+        )
+
+    def test_bv_k0_roundtrip(self):
+        """k0_model * kappa_scale == k0_phys when kappa_inputs_dimless=False."""
+        from Forward.bv_solver.nondim import _add_bv_reactions_scaling_to_transform
+
+        scaling = self._build_4species_scaling()
+        kappa_scale = scaling["kappa_scale_m_s"]
+
+        # Mock BV reactions with known physical k0 values
+        k0_phys_values = [1e-5, 2e-5]
+        c_ref_phys_values = [100.0, 50.0]
+        E_eq_phys = 0.3  # Volts
+
+        reactions = [
+            {
+                "k0": k0_phys_values[0],
+                "c_ref": c_ref_phys_values[0],
+                "alpha": 0.5,
+                "stoichiometry": [1, 0, -1, 0],
+                "cathodic_conc_factors": [],
+            },
+            {
+                "k0": k0_phys_values[1],
+                "c_ref": c_ref_phys_values[1],
+                "alpha": 0.5,
+                "stoichiometry": [0, 1, 0, -1],
+                "cathodic_conc_factors": [],
+            },
+        ]
+
+        result = _add_bv_reactions_scaling_to_transform(
+            scaling,
+            reactions,
+            nondim_enabled=True,
+            kappa_inputs_dimless=False,
+            E_eq_v=E_eq_phys,
+        )
+
+        for i, rxn in enumerate(result["bv_reactions"]):
+            k0_recovered = rxn["k0_model"] * kappa_scale
+            assert k0_recovered == pytest.approx(k0_phys_values[i], rel=1e-12), (
+                f"k0 roundtrip failed for reaction {i}"
+            )
+
+    def test_bv_c_ref_roundtrip(self):
+        """c_ref_model * conc_scale == c_ref_phys when concentration_inputs_dimless=False."""
+        from Forward.bv_solver.nondim import _add_bv_reactions_scaling_to_transform
+
+        scaling = self._build_4species_scaling()
+        conc_scale = scaling["concentration_scale_mol_m3"]
+
+        c_ref_phys_values = [100.0, 50.0]
+        reactions = [
+            {
+                "k0": 1e-5,
+                "c_ref": c_ref_phys_values[0],
+                "alpha": 0.5,
+                "stoichiometry": [1, 0, -1, 0],
+                "cathodic_conc_factors": [],
+            },
+            {
+                "k0": 2e-5,
+                "c_ref": c_ref_phys_values[1],
+                "alpha": 0.5,
+                "stoichiometry": [0, 1, 0, -1],
+                "cathodic_conc_factors": [],
+            },
+        ]
+
+        result = _add_bv_reactions_scaling_to_transform(
+            scaling,
+            reactions,
+            nondim_enabled=True,
+            kappa_inputs_dimless=False,
+            concentration_inputs_dimless=False,
+            E_eq_v=0.3,
+        )
+
+        for i, rxn in enumerate(result["bv_reactions"]):
+            c_ref_recovered = rxn["c_ref_model"] * conc_scale
+            assert c_ref_recovered == pytest.approx(c_ref_phys_values[i], rel=1e-12), (
+                f"c_ref roundtrip failed for reaction {i}"
+            )
+
+    def test_bv_E_eq_roundtrip(self):
+        """E_eq_model * potential_scale == E_eq_phys."""
+        from Forward.bv_solver.nondim import _add_bv_reactions_scaling_to_transform
+
+        scaling = self._build_4species_scaling()
+        potential_scale = scaling["potential_scale_v"]
+        E_eq_phys = 0.3  # Volts
+
+        reactions = [
+            {
+                "k0": 1e-5,
+                "c_ref": 100.0,
+                "alpha": 0.5,
+                "stoichiometry": [1, 0, -1, 0],
+                "cathodic_conc_factors": [],
+            },
+        ]
+
+        result = _add_bv_reactions_scaling_to_transform(
+            scaling,
+            reactions,
+            nondim_enabled=True,
+            kappa_inputs_dimless=False,
+            E_eq_v=E_eq_phys,
+        )
+
+        E_eq_recovered = result["bv_E_eq_model"] * potential_scale
+        assert E_eq_recovered == pytest.approx(E_eq_phys, rel=1e-12)
+
+    def test_bv_exponent_scale_unity_nondim(self):
+        """In nondim mode, BV exponent scale should be 1.0 (potential already in V_T)."""
+        from Forward.bv_solver.nondim import _add_bv_reactions_scaling_to_transform
+
+        scaling = self._build_4species_scaling()
+        reactions = [
+            {
+                "k0": 1e-5,
+                "c_ref": 100.0,
+                "alpha": 0.5,
+                "stoichiometry": [1, 0, -1, 0],
+                "cathodic_conc_factors": [],
+            },
+        ]
+
+        result = _add_bv_reactions_scaling_to_transform(
+            scaling,
+            reactions,
+            nondim_enabled=True,
+            kappa_inputs_dimless=False,
+            E_eq_v=0.3,
+        )
+
+        assert result["bv_exponent_scale"] == pytest.approx(1.0, rel=1e-12)
+
+    def test_bv_cathodic_conc_factor_roundtrip(self):
+        """cathodic_conc_factors c_ref_nondim roundtrips through concentration scale."""
+        from Forward.bv_solver.nondim import _add_bv_reactions_scaling_to_transform
+
+        scaling = self._build_4species_scaling()
+        conc_scale = scaling["concentration_scale_mol_m3"]
+
+        c_ref_nondim_phys = 200.0  # mol/m3
+
+        reactions = [
+            {
+                "k0": 1e-5,
+                "c_ref": 100.0,
+                "alpha": 0.5,
+                "stoichiometry": [1, 0, -1, 0],
+                "cathodic_conc_factors": [
+                    {"species_idx": 0, "c_ref_nondim": c_ref_nondim_phys, "exponent": 1.0},
+                ],
+            },
+        ]
+
+        result = _add_bv_reactions_scaling_to_transform(
+            scaling,
+            reactions,
+            nondim_enabled=True,
+            kappa_inputs_dimless=False,
+            concentration_inputs_dimless=False,
+            E_eq_v=0.0,
+        )
+
+        factor = result["bv_reactions"][0]["cathodic_conc_factors"][0]
+        recovered = factor["c_ref_nondim"] * conc_scale
+        assert recovered == pytest.approx(c_ref_nondim_phys, rel=1e-12)
