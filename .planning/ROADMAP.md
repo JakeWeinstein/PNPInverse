@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. Running `pytest` executes nondimensionalization roundtrip tests that convert physical parameters to nondim and back, recovering original values within machine epsilon for all parameter types (diffusivities, concentrations, potentials, rate constants)
   2. A documented audit confirms MMS convergence script uses the same weak form as production `bv_solver.py`, or differences are identified and resolved
   3. All nondim and audit tests pass without manual intervention
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 01-01-PLAN.md — Textbook audit of existing nondim tests + roundtrip tests for all parameter types
@@ -110,7 +110,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Nondimensionalization & Weak Form Audit | 0/2 | Planning complete | - |
+| 1. Nondimensionalization & Weak Form Audit | 1/2 | In Progress|  |
 | 2. MMS Convergence Verification | 0/2 | Not started | - |
 | 3. Surrogate Fidelity | 0/2 | Not started | - |
 | 4. Inverse Problem Verification | 0/2 | Not started | - |
