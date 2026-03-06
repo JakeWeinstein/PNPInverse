@@ -33,10 +33,6 @@ from typing import Optional, Sequence, Tuple
 import numpy as np
 from scipy.optimize import minimize
 
-from Surrogate.objectives import (
-    ReactionBlockSurrogateObjective,
-    SurrogateObjective,
-)
 from Surrogate.surrogate_model import BVSurrogateModel
 
 
@@ -531,8 +527,8 @@ def run_cascade_inference(
         surrogate, target_cd, target_pc,
         fixed_k0_1=p1.k0_1,
         fixed_alpha_1=p1.alpha_1,
-        initial_k0_2=p1.k0_2,
-        initial_alpha_2=p1.alpha_2,
+        initial_k0_2=initial_k0[1],
+        initial_alpha_2=initial_alpha[1],
         bounds_log_k0_2=bounds_log_k0_2,
         bounds_alpha=bounds_alpha,
         config=config,
@@ -574,6 +570,20 @@ def run_cascade_inference(
 
     total_time = time.time() - t_start
 
+    # Re-evaluate best under canonical secondary_weight=1.0 for commensurable loss
+    canonical_obj, _, _ = _make_subset_objective_fn(
+        surrogate, target_cd, target_pc,
+        secondary_weight=1.0,
+        subset_idx=subset_idx,
+    )
+    canonical_x = np.array([
+        np.log10(max(best.k0_1, 1e-30)),
+        np.log10(max(best.k0_2, 1e-30)),
+        best.alpha_1,
+        best.alpha_2,
+    ], dtype=float)
+    canonical_loss = canonical_obj(canonical_x)
+
     if config.verbose:
         print(f"\n  [Cascade] Done: total_evals={total_evals}, "
               f"total_time={total_time:.2f}s")
@@ -583,7 +593,7 @@ def run_cascade_inference(
         best_k0_2=best.k0_2,
         best_alpha_1=best.alpha_1,
         best_alpha_2=best.alpha_2,
-        best_loss=best.loss,
+        best_loss=canonical_loss,
         pass_results=tuple(pass_results),
         total_evals=total_evals,
         total_time_s=total_time,

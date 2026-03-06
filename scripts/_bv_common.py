@@ -250,7 +250,7 @@ FOUR_SPECIES_CHARGED = SpeciesConfig(
     k0_legacy=[K0_HAT_R1] * 4,
     alpha_legacy=[ALPHA_R1] * 4,
     stoichiometry_legacy=[-1, +1, -2, 0],
-    c_ref_legacy=[1.0] * 4,
+    c_ref_legacy=[1.0, 0.0, 1.0, 1.0],  # H2O2 c_ref=0 matches per-reaction config
 )
 
 
@@ -427,7 +427,7 @@ def make_bv_solver_params(
         list(species.a_vals_hat),
         eta_hat,
         c0,
-        0.0,  # phi0
+        0.0,  # phi0: intentionally zero for BV path — equilibrium potential is in E_eq_v of bv_bc config
         params,
     ])
 
@@ -438,7 +438,7 @@ def make_bv_solver_params(
 
 def make_recovery_config(
     *,
-    max_attempts: int = 6,
+    max_attempts: int = 6,  # 6 (not class default 8): enough for typical BV solves, avoids wasting time on hopeless points
     max_it_only_attempts: int = 2,
     anisotropy_only_attempts: int = 1,
     tolerance_relax_attempts: int = 2,

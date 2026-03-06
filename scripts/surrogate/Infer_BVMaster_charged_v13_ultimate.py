@@ -160,9 +160,81 @@ def _log_ensemble_uncertainty(surrogate, k0, alpha, phase_name):
           f"mean PC std={pc_std_mean:.4e}")
 
 
+_TARGET_CACHE_DIR = os.path.join("StudyResults", "target_cache")
+
+
+def _target_cache_path(phi_applied_values, observable_scale):
+    """Build a cache file path based on ALL inputs that affect the PDE solution."""
+    import hashlib
+    species = FOUR_SPECIES_CHARGED
+    parts = [
+        phi_applied_values.tobytes(),
+        str(observable_scale).encode(),
+        # True kinetic parameters (the 4 being inferred)
+        f"k0={K0_HAT},{K0_2_HAT}".encode(),
+        f"alpha={ALPHA_1},{ALPHA_2}".encode(),
+        # Species transport config (diffusion, charge, concentrations, stoichiometry)
+        f"n_species={species.n_species}".encode(),
+        f"z={species.z_vals}".encode(),
+        f"D={species.d_vals_hat}".encode(),
+        f"a={species.a_vals_hat}".encode(),
+        f"c0={species.c0_vals_hat}".encode(),
+        f"stoi_r1={species.stoichiometry_r1}".encode(),
+        f"stoi_r2={species.stoichiometry_r2}".encode(),
+        # Mesh and solver settings baked into _solve_clean_targets
+        f"Nx=8,Ny=200,beta=3.0,dt=0.5,max_ss=100".encode(),
+    ]
+    key = hashlib.sha256(b"|".join(parts)).hexdigest()[:16]
+    return os.path.join(_TARGET_CACHE_DIR, f"clean_targets_{key}.npz")
+
+
 def _generate_targets_with_pde(phi_applied_values, observable_scale, noise_percent, noise_seed):
-    """Generate target I-V curves using the PDE solver at true parameters."""
-    from Forward.steady_state import SteadyStateConfig, add_percent_noise
+    """Generate target I-V curves using the PDE solver at true parameters.
+
+    Caches the clean (noise-free) PDE solution so that repeated runs with
+    different noise seeds / model types skip the ~70s PDE solve.
+    """
+    from Forward.steady_state import add_percent_noise
+
+    cache_path = _target_cache_path(phi_applied_values, observable_scale)
+
+    # Try loading cached clean targets
+    if os.path.exists(cache_path):
+        try:
+            cached = np.load(cache_path)
+            clean_cd = cached["current_density"]
+            clean_pc = cached["peroxide_current"]
+            cached_eta = cached["phi_applied"]
+            if (clean_cd.shape[0] == len(phi_applied_values)
+                    and np.allclose(cached_eta, phi_applied_values)):
+                print(f"  Using cached clean targets from {cache_path}")
+            else:
+                print(f"  Cache shape mismatch, regenerating...")
+                clean_cd, clean_pc = _solve_clean_targets(phi_applied_values, observable_scale)
+                _save_clean_targets(cache_path, phi_applied_values, clean_cd, clean_pc)
+        except Exception as exc:
+            print(f"  Cache load failed ({exc}), regenerating...")
+            clean_cd, clean_pc = _solve_clean_targets(phi_applied_values, observable_scale)
+            _save_clean_targets(cache_path, phi_applied_values, clean_cd, clean_pc)
+    else:
+        clean_cd, clean_pc = _solve_clean_targets(phi_applied_values, observable_scale)
+        _save_clean_targets(cache_path, phi_applied_values, clean_cd, clean_pc)
+
+    # Apply noise
+    results = {}
+    if noise_percent > 0:
+        results["current_density"] = add_percent_noise(clean_cd, noise_percent, seed=noise_seed)
+        results["peroxide_current"] = add_percent_noise(clean_pc, noise_percent, seed=noise_seed + 1)
+    else:
+        results["current_density"] = clean_cd.copy()
+        results["peroxide_current"] = clean_pc.copy()
+
+    return results
+
+
+def _solve_clean_targets(phi_applied_values, observable_scale):
+    """Run the PDE solver to get noise-free target I-V curves."""
+    from Forward.steady_state import SteadyStateConfig
     from Forward.bv_solver import make_graded_rectangle_mesh
     from FluxCurve.bv_point_solve import (
         solve_bv_curve_points_with_warmstart,
@@ -186,14 +258,11 @@ def _generate_targets_with_pde(phi_applied_values, observable_scale, noise_perce
 
     mesh = make_graded_rectangle_mesh(Nx=8, Ny=200, beta=3.0)
     recovery = make_recovery_config(max_it_cap=600)
-
     dummy_target = np.zeros_like(phi_applied_values, dtype=float)
 
-    results = {}
+    clean = {}
     for obs_mode in ["current_density", "peroxide_current"]:
         _clear_caches()
-        seed_offset = 0 if obs_mode == "current_density" else 1
-
         points = solve_bv_curve_points_with_warmstart(
             base_solver_params=base_sp,
             steady=steady,
@@ -211,16 +280,20 @@ def _generate_targets_with_pde(phi_applied_values, observable_scale, noise_perce
             control_mode="joint",
             max_eta_gap=3.0,
         )
-
-        clean_flux = np.array([float(p.simulated_flux) for p in points], dtype=float)
-        if noise_percent > 0:
-            noisy_flux = add_percent_noise(clean_flux, noise_percent, seed=noise_seed + seed_offset)
-        else:
-            noisy_flux = clean_flux.copy()
-        results[obs_mode] = noisy_flux
+        clean[obs_mode] = np.array([float(p.simulated_flux) for p in points], dtype=float)
 
     _clear_caches()
-    return results
+    return clean["current_density"], clean["peroxide_current"]
+
+
+def _save_clean_targets(cache_path, phi_applied_values, clean_cd, clean_pc):
+    """Save clean targets to disk cache."""
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+    np.savez(cache_path,
+             current_density=clean_cd,
+             peroxide_current=clean_pc,
+             phi_applied=phi_applied_values)
+    print(f"  Saved clean targets to {cache_path}")
 
 
 def _subset_targets(target_cd, target_pc, all_eta, subset_eta):
@@ -608,6 +681,8 @@ def main() -> None:
                         help="P2 (full cathodic) max L-BFGS-B iterations")
     parser.add_argument("--pde-secondary-weight", type=float, default=1.0,
                         help="Weight on peroxide current for PDE phases")
+    parser.add_argument("--pde-cold-start", action="store_true",
+                        help="Skip surrogate phases; run PDE from cold initial guesses")
     parser.add_argument("--workers", type=int, default=0,
                         help="PDE parallel workers (0=auto)")
 
@@ -684,60 +759,95 @@ def main() -> None:
     print(f"{'#'*70}\n")
 
     # ===================================================================
-    # Load primary surrogate model
+    # PDE cold-start shortcut: skip surrogate, use initial guesses
     # ===================================================================
-    print(f"Loading primary surrogate model ({args.model_type})...")
-    surrogate = _load_model(args.model_type, args)
-    surrogate_eta = surrogate.phi_applied
-    print(f"  Surrogate voltage points: {surrogate.n_eta}")
-    print(f"  Surrogate voltage range: [{surrogate_eta.min():.1f}, {surrogate_eta.max():.1f}]")
+    if args.pde_cold_start:
+        print(f"\n  --pde-cold-start: skipping surrogate phases")
+        print(f"  PDE will warm-start from cold initial guesses:")
+        print(f"    k0   = {initial_k0_guess}")
+        print(f"    alpha= {initial_alpha_guess}")
 
-    # ===================================================================
-    # Generate targets using PDE solver
-    # ===================================================================
-    print(f"\nGenerating target I-V curves with PDE solver at true parameters...")
-    t_target = time.time()
-    targets = _generate_targets_with_pde(all_eta, observable_scale, args.noise_percent, args.noise_seed)
-    target_cd_full = targets["current_density"]
-    target_pc_full = targets["peroxide_current"]
-    t_target_elapsed = time.time() - t_target
-    print(f"  Target generation: {t_target_elapsed:.1f}s")
+        # Still need targets generated via PDE
+        print(f"\nGenerating target I-V curves with PDE solver at true parameters...")
+        t_target = time.time()
+        targets = _generate_targets_with_pde(all_eta, observable_scale, args.noise_percent, args.noise_seed)
+        target_cd_full = targets["current_density"]
+        target_pc_full = targets["peroxide_current"]
+        t_target_elapsed = time.time() - t_target
+        print(f"  Target generation: {t_target_elapsed:.1f}s")
 
-    target_cd_surr = target_cd_full
-    target_pc_surr = target_pc_full
+        # Surrogate targets not available in cold-start mode
+        target_cd_surr = target_cd_full
+        target_pc_surr = target_pc_full
 
-    # ===================================================================
-    # PHASES S1-S5: Surrogate optimization (primary model)
-    # ===================================================================
-    print(f"\n{'='*70}")
-    print(f"  PHASES S1-S5: Surrogate optimization ({args.model_type})")
-    print(f"  Strategy: {args.surr_strategy}")
-    print(f"{'='*70}")
+        surrogate_time = 0.0
+        surr_best_k0 = np.asarray(initial_k0_guess)
+        surr_best_alpha = np.asarray(initial_alpha_guess)
+        surr_best_source = "cold-start"
 
-    primary_result = _run_surrogate_phases(
-        surrogate=surrogate,
-        model_label=args.model_type,
-        args=args,
-        target_cd_surr=target_cd_surr,
-        target_pc_surr=target_pc_surr,
-        target_cd_full=target_cd_full,
-        target_pc_full=target_pc_full,
-        all_eta=all_eta,
-        eta_shallow=eta_shallow,
-        initial_k0_guess=initial_k0_guess,
-        initial_alpha_guess=initial_alpha_guess,
-        true_k0_arr=true_k0_arr,
-        true_alpha_arr=true_alpha_arr,
-        secondary_weight=args.secondary_weight,
-    )
-    phase_results.update(primary_result["phase_results"])
+        if args.compare:
+            print("  WARNING: --compare is incompatible with --pde-cold-start; skipping comparison.")
+            args.compare = False
 
-    t_surrogate_end = time.time()
-    surrogate_time = t_surrogate_end - t_total_start - t_target_elapsed
+    else:
+        # ===================================================================
+        # Load primary surrogate model
+        # ===================================================================
+        print(f"Loading primary surrogate model ({args.model_type})...")
+        surrogate = _load_model(args.model_type, args)
+        surrogate_eta = surrogate.phi_applied
+        print(f"  Surrogate voltage points: {surrogate.n_eta}")
+        print(f"  Surrogate voltage range: [{surrogate_eta.min():.1f}, {surrogate_eta.max():.1f}]")
 
-    surr_best_k0 = primary_result["surr_best_k0"].copy()
-    surr_best_alpha = primary_result["surr_best_alpha"].copy()
-    surr_best_source = primary_result["surr_best_source"]
+        if surrogate.n_eta != len(all_eta):
+            raise ValueError(
+                f"Surrogate has {surrogate.n_eta} voltage points but all_eta has {len(all_eta)}. "
+                f"Ensure the surrogate was trained on the same voltage grid."
+            )
+
+        # ===================================================================
+        # Generate targets using PDE solver
+        # ===================================================================
+        print(f"\nGenerating target I-V curves with PDE solver at true parameters...")
+        t_target = time.time()
+        targets = _generate_targets_with_pde(all_eta, observable_scale, args.noise_percent, args.noise_seed)
+        target_cd_full = targets["current_density"]
+        target_pc_full = targets["peroxide_current"]
+        t_target_elapsed = time.time() - t_target
+        print(f"  Target generation: {t_target_elapsed:.1f}s")
+
+        target_cd_surr = target_cd_full
+        target_pc_surr = target_pc_full
+
+        # ===================================================================
+        # PHASES S1-S5: Surrogate optimization (primary model)
+        # ===================================================================
+        print(f"\n{'='*70}")
+        print(f"  PHASES S1-S5: Surrogate optimization ({args.model_type})")
+        print(f"  Strategy: {args.surr_strategy}")
+        print(f"{'='*70}")
+
+        primary_result = _run_surrogate_phases(
+            surrogate=surrogate,
+            model_label=args.model_type,
+            args=args,
+            target_cd_surr=target_cd_surr,
+            target_pc_surr=target_pc_surr,
+            target_cd_full=target_cd_full,
+            target_pc_full=target_pc_full,
+            all_eta=all_eta,
+            eta_shallow=eta_shallow,
+            initial_k0_guess=initial_k0_guess,
+            initial_alpha_guess=initial_alpha_guess,
+            true_k0_arr=true_k0_arr,
+            true_alpha_arr=true_alpha_arr,
+            secondary_weight=args.secondary_weight,
+        )
+        phase_results.update(primary_result["phase_results"])
+
+        surr_best_k0 = primary_result["surr_best_k0"].copy()
+        surr_best_alpha = primary_result["surr_best_alpha"].copy()
+        surr_best_source = primary_result["surr_best_source"]
 
     print(f"\n  Surrogate best: {surr_best_source}")
     print(f"    k0   = {surr_best_k0.tolist()}")
@@ -805,6 +915,11 @@ def main() -> None:
                     f"{ph['loss']:.12e}", f"{ph['time']:.1f}",
                 ])
         print(f"\n  Comparison CSV saved -> {comp_csv_path}")
+
+    # Compute surrogate time AFTER comparison block (M5 fix: excludes PDE time)
+    if not args.pde_cold_start:
+        t_surrogate_end = time.time()
+        surrogate_time = t_surrogate_end - t_total_start - t_target_elapsed
 
     # ===================================================================
     # PDE PHASES P1-P2 (warm-started by best surrogate result)

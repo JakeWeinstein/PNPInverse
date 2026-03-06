@@ -1220,7 +1220,7 @@ problem seeks to match.
   ymin=-2.6, ymax=2.2,
   grid=major,
   grid style={gray!20},
-  legend style={at={(0.02,0.02)}, anchor=south west, font=\small,
+  legend style={at={(0.98,0.02)}, anchor=south east, font=\small,
     fill=white, fill opacity=0.9, draw=gray!50},
   every axis plot/.append style={thick},
   tick label style={font=\small},
@@ -1606,10 +1606,41 @@ measurements with $< 5.3\%$ maximum error. The key results are:
     explaining the $12\% \to 4.2\%$ improvement from P1 to P2.
 \end{enumerate}
 
-Future work includes noise robustness studies across multiple noise
-seeds, exploration of alternative surrogate architectures (e.g.,
-physics-informed neural operators), and extension to three-dimensional
-electrode geometries.
+\paragraph{Noise robustness remains an open challenge.}
+The $5.26\%$ headline result was obtained with a single noise seed.
+Preliminary experiments across five independent $2\%$-noise realisations
+reveal substantial seed-to-seed variability: the median maximum error
+rises to $\approx 23\%$ for both the NN-ensemble and POD-RBF-log
+surrogates, with only one out of five seeds achieving $< 10\%$ maximum
+error for either model.  We additionally compared four surrogate
+architectures (NN ensemble, thin-plate-spline RBF, and two POD-RBF
+variants) in a surrogate-only setting (no PDE refinement) and found that
+the noise-free ranking is \emph{inverted} under noise: the RBF
+interpolant, which is the most accurate at $0\%$ noise ($0.27\%$ max
+error), drops to second place at $2\%$ noise ($22.7\%$ mean), while the
+NN ensemble's implicit smoothing makes it the most noise-robust
+($19.7\%$ mean).  This bias--variance trade-off, combined with the
+observation that one adversarial noise seed drives \emph{all} models
+above $55\%$ error, indicates that surrogate warm-starting alone is
+insufficient for robust recovery.  Because the PDE refinement phases
+(P1--P2) are local optimisers, their success depends critically on the
+quality of the initial guess supplied by the surrogate.  When noise
+corrupts the surrogate's parameter estimate---particularly
+$\kzero^{(2)}$, which sits in a shallow, poorly resolved region of the
+loss landscape---the PDE optimiser inherits a starting point far from
+the true basin and cannot recover.  This suggests that the primary
+bottleneck is not the PDE solver itself but the surrogate's ability to
+provide a reliable warm-start under noisy observations.  Improved
+surrogate training---larger and more diverse training sets, noise-aware
+data augmentation, or architectures with better extrapolation
+properties---could therefore yield substantial gains in end-to-end
+robustness without modifying the PDE refinement stages.
+
+Beyond surrogate improvements, future work includes regularisation
+strategies for the PDE objective (Tikhonov penalties, restricted voltage
+ranges), ensembling over multiple noise seeds, exploration of
+alternative surrogate architectures (e.g., physics-informed neural
+operators), and extension to three-dimensional electrode geometries.
 
 
 %==========================================================================

@@ -456,9 +456,19 @@ class SubsetSurrogateObjective:
         self.target_cd = np.asarray(target_cd, dtype=float)
         self.target_pc = np.asarray(target_pc, dtype=float)
         self.subset_idx = np.asarray(subset_idx, dtype=int)
+        if len(self.target_cd) != len(self.subset_idx):
+            raise ValueError(
+                f"target_cd length ({len(self.target_cd)}) != subset_idx length ({len(self.subset_idx)})"
+            )
+        if len(self.target_pc) != len(self.subset_idx):
+            raise ValueError(
+                f"target_pc length ({len(self.target_pc)}) != subset_idx length ({len(self.subset_idx)})"
+            )
         self._valid_cd = ~np.isnan(self.target_cd)
         self._valid_pc = ~np.isnan(self.target_pc)
         self.secondary_weight = secondary_weight
+        # fd_step=1e-5 is applied uniformly to log-k0 and linear-alpha dimensions;
+        # acceptable for typical parameter ranges but may need tuning for extreme scales.
         self.fd_step = fd_step
         self.log_space_k0 = log_space_k0
         self._n_evals = 0

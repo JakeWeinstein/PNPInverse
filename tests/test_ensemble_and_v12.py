@@ -110,12 +110,11 @@ class TestEnsembleMeanWrapper:
         wrapper = EnsembleMeanWrapper([m1, m2])
         tb = wrapper.training_bounds
         assert tb is not None
-        # min of lows
-        assert tb["k0_1"][0] == pytest.approx(1e-5)
-        # max of highs
-        assert tb["k0_1"][1] == pytest.approx(1e-1)
-        assert tb["alpha_1"][0] == pytest.approx(0.1)
-        assert tb["alpha_1"][1] == pytest.approx(0.9)
+        # Intersection bounds: max of lows, min of highs (H4 fix)
+        assert tb["k0_1"][0] == pytest.approx(1e-4)
+        assert tb["k0_1"][1] == pytest.approx(5e-2)
+        assert tb["alpha_1"][0] == pytest.approx(0.2)
+        assert tb["alpha_1"][1] == pytest.approx(0.8)
 
     def test_is_fitted(self):
         wrapper = EnsembleMeanWrapper([_MockSurrogateModel()])

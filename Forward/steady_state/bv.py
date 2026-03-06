@@ -314,6 +314,7 @@ def sweep_phi_applied_steady_bv_flux(
     phi_applied_values: Sequence[float],
     steady: SteadyStateConfig,
     k0_values: Sequence[float] | None = None,
+    alpha_values: Sequence[float] | None = None,
     i_scale: float = 1.0,
     mesh: Any = None,
     blob_initial_condition: bool = False,
@@ -335,6 +336,7 @@ def sweep_phi_applied_steady_bv_flux(
     first_phi = float(phi_applied_values[0]) if len(phi_applied_values) > 0 else 0.0
     params0 = configure_bv_solver_params(
         base_solver_params, phi_applied=first_phi, k0_values=k0_values,
+        alpha_values=alpha_values,
     )
     dt = float(params0.dt)
 

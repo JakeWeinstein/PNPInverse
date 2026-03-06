@@ -43,6 +43,7 @@ def ensure_bv_target_curve(
     force_regenerate: bool,
     blob_initial_condition: bool,
     mesh: Any = None,
+    alpha_values: Optional[Sequence[float]] = None,
 ) -> Dict[str, np.ndarray]:
     """Load target BV data from CSV or generate synthetic target if missing."""
     if os.path.exists(target_csv_path) and not force_regenerate:
@@ -71,6 +72,7 @@ def ensure_bv_target_curve(
         phi_applied_values=phi_applied_values.tolist(),
         steady=steady,
         k0_values=k0_true,
+        alpha_values=alpha_values,
         i_scale=-current_density_scale,
         mesh=mesh,
         blob_initial_condition=bool(blob_initial_condition),
@@ -129,6 +131,7 @@ def _generate_observable_target(
     mesh: Any,
     target_csv_path: str,
     force_regenerate: bool,
+    alpha_values: Optional[Sequence[float]] = None,
 ) -> np.ndarray:
     """Generate synthetic target data for a specific observable mode.
 
@@ -165,8 +168,8 @@ def _generate_observable_target(
         observable_reaction_index=None,
         observable_scale=observable_scale,
         mesh=mesh,
-        alpha_values=None,
-        control_mode="k0",
+        alpha_values=alpha_values,
+        control_mode="joint" if alpha_values is not None else "k0",
         max_eta_gap=0.0,
     )
 

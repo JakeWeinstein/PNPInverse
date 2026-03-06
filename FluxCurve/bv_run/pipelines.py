@@ -1321,6 +1321,13 @@ def run_bv_multi_observable_flux_curve_inference(
 
     os.makedirs(request_runtime.output_dir, exist_ok=True)
 
+    # Extract true_alpha for target generation (C2 fix: targets must use true alpha)
+    _true_alpha = (
+        list(request_runtime.true_alpha)
+        if request_runtime.true_alpha is not None
+        else None
+    )
+
     # Generate primary target (e.g. total current density)
     primary_target_csv = request_runtime.target_csv_path
     target_data_primary = ensure_bv_target_curve(
@@ -1335,6 +1342,7 @@ def run_bv_multi_observable_flux_curve_inference(
         force_regenerate=bool(request_runtime.regenerate_target),
         blob_initial_condition=False,
         mesh=mesh,
+        alpha_values=_true_alpha,
     )
     target_flux_primary = np.asarray(target_data_primary["flux"], dtype=float)
     phi_applied_values = np.asarray(target_data_primary["phi_applied"], dtype=float)
@@ -1359,6 +1367,7 @@ def run_bv_multi_observable_flux_curve_inference(
         mesh=mesh,
         target_csv_path=secondary_target_csv,
         force_regenerate=bool(request_runtime.regenerate_target),
+        alpha_values=_true_alpha,
     )
 
     _clear_caches()

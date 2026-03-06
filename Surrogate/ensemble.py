@@ -39,15 +39,22 @@ class EnsembleMeanWrapper:
         self._phi_applied: np.ndarray = models[0].phi_applied
         self._n_eta: int = models[0].n_eta
 
-        # Merge training_bounds: min of lows, max of highs across members
+        # Validate all members share the same phi_applied grid
+        for i, m in enumerate(models[1:], 1):
+            if not np.allclose(m.phi_applied, self._phi_applied):
+                raise ValueError(
+                    f"Ensemble member {i} has different phi_applied grid than member 0."
+                )
+
+        # Merge training_bounds: intersection (max of lows, min of highs)
         self.training_bounds: Optional[Dict[str, Tuple[float, float]]] = None
         bounds_list = [m.training_bounds for m in models if m.training_bounds is not None]
         if bounds_list:
             keys = bounds_list[0].keys()
             merged: Dict[str, Tuple[float, float]] = {}
             for k in keys:
-                lo = min(b[k][0] for b in bounds_list)
-                hi = max(b[k][1] for b in bounds_list)
+                lo = max(b[k][0] for b in bounds_list)
+                hi = min(b[k][1] for b in bounds_list)
                 merged[k] = (lo, hi)
             self.training_bounds = merged
 
@@ -90,9 +97,9 @@ class EnsembleMeanWrapper:
         pc_stack = np.stack(pc_preds, axis=0)
         return (
             cd_stack.mean(axis=0),
-            cd_stack.std(axis=0),
+            cd_stack.std(axis=0, ddof=1),
             pc_stack.mean(axis=0),
-            pc_stack.std(axis=0),
+            pc_stack.std(axis=0, ddof=1),
         )
 
     def predict_batch(self, parameters: np.ndarray) -> Dict[str, np.ndarray]:

@@ -81,6 +81,12 @@ class BVParallelPointConfig:
     secondary_observable_reaction_index: Optional[int] = None
     secondary_observable_scale: Optional[float] = None
 
+    def __post_init__(self) -> None:
+        """Validate that secondary_observable_scale is float-compatible when set."""
+        if self.secondary_observable_scale is not None:
+            # Eagerly coerce to float so callers don't hit float(None) later
+            object.__setattr__(self, "secondary_observable_scale", float(self.secondary_observable_scale))
+
 
 # Module-level worker state (set by initializer, used by solve function)
 _WORKER_CONFIG: Optional[BVParallelPointConfig] = None

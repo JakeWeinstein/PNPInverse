@@ -471,22 +471,383 @@ grid, fewer points) provides a warm-start that makes the harder problem
    - Use fewer multistart candidates (saves ~5s)
 
 
+## POD-RBF-log Warm-Start Experiment
+
+**Motivation:** v12 showed POD-RBF-log achieves the best surrogate k0_2 (1.64%
+vs 11.85% for NN ensemble).  Does this advantage survive the full v13 pipeline
+(all surrogate strategies + PDE refinement)?
+
+**Command:**
+```bash
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --model-type pod-rbf-log
+```
+
+### Surrogate Phases (S1--S5)
+
+All three surrogate strategies converge to the **identical** optimum -- a single
+basin in the POD-RBF-log landscape:
+
+| Phase | k0_1 err | k0_2 err | α1 err | α2 err | Loss |
+|-------|----------|----------|--------|--------|------|
+| S2 joint | 11.77% | 1.64% | 5.94% | 7.93% | 6.66e-5 |
+| S3 cascade | 11.77% | 1.64% | 5.94% | 7.93% | 6.66e-5 |
+| S4 multistart | 11.77% | 1.64% | 5.94% | 7.93% | 6.66e-5 |
+
+All 20 multistart candidates polish to the same point.  No alternative basin
+exists in this surrogate landscape.
+
+### PDE Phases (P1--P2)
+
+| Phase | k0_1 err | k0_2 err | α1 err | α2 err | Loss | Time |
+|-------|----------|----------|--------|--------|------|------|
+| P1 (shallow) | 19.00% | 8.46% | 9.48% | 8.94% | 5.29e-5 | 199.5s |
+| **P2 (full cathodic)** | **12.00%** | **1.56%** | **6.24%** | **9.25%** | 1.25e-4 | 361.8s |
+
+P1 degraded all parameters relative to the surrogate (k0_1: 11.77% → 19.00%,
+k0_2: 1.64% → 8.46%).  P2 recovered k0_2 back to 1.56% but k0_1 settled at
+12.00%.  Total time: 637.8s.
+
+### Comparison: POD-RBF-log vs NN-ensemble in v13
+
+| Param | POD-RBF-log v13 | NN-ensemble v13 | Winner |
+|-------|-----------------|-----------------|--------|
+| k0_1 | 12.00% | **5.26%** | NN |
+| k0_2 | **1.56%** | 4.23% | POD-RBF |
+| α1 | 6.24% | **6.17%** | NN (≈tie) |
+| α2 | 9.25% | **5.26%** | NN |
+| **Max err** | 12.00% | **5.26%** | **NN** |
+| Total time | 637.8s | 541.0s | NN |
+
+### Findings
+
+1. **k0_1--k0_2 trade-off persists through PDE refinement.**  POD-RBF-log's
+   surrogate-level advantage on k0_2 (1.64%) survives PDE refinement (1.56%),
+   but its k0_1 weakness (11.77%) also survives (12.00%).  PDE phases do not
+   break the surrogate-induced anti-correlation.
+
+2. **P1 is counterproductive with POD-RBF-log.**  The shallow PDE phase moved
+   parameters away from the surrogate optimum (k0_2: 1.64% → 8.46%), and P2
+   had to spend iterations recovering.  The POD-RBF-log surrogate optimum was
+   already close to the PDE-resolved truth for k0_2, so P1's "basin selection"
+   role was unnecessary and harmful.
+
+3. **No alternative basin discovered.**  Multistart (20K grid, 20 polished
+   candidates) found only one basin.  The POD-RBF-log landscape is unimodal in
+   the training region, confirming that its k0_1 bias is structural (from the
+   POD decomposition), not a local-minimum artifact.
+
+4. **NN-ensemble remains the better overall choice.**  Max error 5.26% vs
+   12.00%.  The NN ensemble's balanced performance across all 4 parameters
+   provides a better warm-start for PDE refinement than POD-RBF-log's
+   k0_2-specialized accuracy.
+
+5. **Potential hybrid strategy (not yet tested):** Use POD-RBF-log's k0_2
+   estimate as a warm-start constraint for a subsequent NN-ensemble run, or
+   inject POD-RBF-log's k0_2 into the PDE initial guess directly.
+
+
+## Noise-Free Floor (0% Noise)
+
+**Command:**
+```bash
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --noise-percent 0.0
+```
+
+| Phase | k0_1 err | k0_2 err | α1 err | α2 err | Loss |
+|-------|----------|----------|--------|--------|------|
+| S4 multistart (best surr.) | 2.85% | 4.70% | 1.83% | 2.83% | 2.47e-6 |
+| P1 (shallow) | 2.86% | 4.70% | 1.83% | 2.82% | 1.83e-7 |
+| **P2 (full cathodic)** | **3.57%** | **4.33%** | **1.62%** | **2.15%** | **1.00e-7** |
+
+**Max error: 4.33%.**  All 4 parameters under 5%.  The surrogate already
+provides an excellent warm-start (2.85% k0_1), and PDE refinement polishes
+further.  P2 improves the loss by 2x over P1 without degrading any parameter.
+This confirms the pipeline architecture is sound -- noise is the dominant error
+source.
+
+
+## Noise Seed Robustness Study (2% Noise, 5 Seeds)
+
+**Commands:**
+```bash
+# Original seed (already reported above)
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --noise-seed 20260226
+# 4 additional seeds
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --noise-seed 42
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --noise-seed 123
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --noise-seed 7777
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --noise-seed 99999
+```
+
+### Per-seed results (best phase selected per seed)
+
+| Seed | k0_1 err | k0_2 err | α1 err | α2 err | Max err | Best phase |
+|------|----------|----------|--------|--------|---------|------------|
+| 20260226 | 5.26% | 4.23% | 6.17% | 5.26% | **5.26%** | P2 |
+| 42 | 28.22% | 28.64% | 20.07% | 25.70% | **28.64%** | P2 |
+| 123 | 18.60% | 23.12% | 8.53% | 11.69% | **23.12%** | P2 |
+| 7777 | 14.62% | 10.28% | 12.37% | 10.41% | **14.62%** | P1 |
+| 99999 | 24.18% | 7.06% | 10.48% | 11.07% | **24.18%** | P1 |
+
+### Surrogate-only results (S4 multistart, before PDE)
+
+| Seed | k0_1 err | k0_2 err | α1 err | α2 err | Max err |
+|------|----------|----------|--------|--------|---------|
+| 20260226 | 6.88% | 11.85% | 3.54% | 3.48% | 11.85% |
+| 42 | 32.48% | 55.34% | 10.94% | 16.70% | 55.34% |
+| 123 | 12.83% | 7.09% | 7.18% | 3.64% | 12.83% |
+| 7777 | 1.15% | 8.28% | 1.74% | 3.42% | 8.28% |
+| 99999 | 3.68% | 9.79% | 3.69% | 5.35% | 9.79% |
+
+### Summary statistics (2% noise, 5 seeds)
+
+| Metric | k0_1 | k0_2 | α1 | α2 | Max err |
+|--------|------|------|----|----|---------|
+| **Mean** | 18.18% | 14.67% | 11.53% | 12.83% | 19.16% |
+| **Median** | 18.60% | 10.28% | 10.48% | 11.07% | 23.12% |
+| **Min (best)** | 5.26% | 4.23% | 6.17% | 5.26% | 5.26% |
+| **Max (worst)** | 28.22% | 28.64% | 20.07% | 25.70% | 28.64% |
+| **Std dev** | 8.65% | 10.33% | 5.19% | 7.99% | 8.83% |
+
+### Findings
+
+1. **The 5.26% result is strongly seed-dependent.**  Only 1 of 5 seeds achieves
+   < 10% max error.  The other 4 range from 14.6% to 28.6%.  The original seed
+   (20260226) was exceptionally favorable.
+
+2. **The surrogate is the bottleneck, not PDE refinement.**  Seed 42 already has
+   55% surrogate error on k0_2 -- no amount of PDE refinement can recover from
+   that starting point.  Seeds 7777 and 99999 have good surrogate results (8--10%
+   max) but PDE phases degrade rather than improve them.
+
+3. **PDE phases frequently make things worse.**  For seeds 7777 and 99999, P1 is
+   the best phase -- P2 (full cathodic) degrades accuracy.  This confirms the
+   observation from the skip-P1 ablation: the extended voltage range introduces
+   local minima that trap the optimizer.
+
+4. **The noise-free floor (4.33%) vs noisy mean (19.16%) quantifies the noise
+   amplification factor.**  2% observation noise translates to ~4.4x amplification
+   in parameter recovery error on average, confirming that this inverse problem
+   is severely ill-conditioned with respect to noise.
+
+5. **Seed 42 is a worst case.**  The noise realization at seed 42 creates a
+   surrogate landscape where k0_2 error starts at 55% -- likely because the noise
+   distorts the peroxide current I_PC at critical voltage points where k0_2 is
+   most identifiable.
+
+
+## POD-RBF-log Noise-Free Floor (0% Noise)
+
+**Command:**
+```bash
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --model-type pod-rbf-log --noise-percent 0.0
+```
+
+| Phase | k0_1 err | k0_2 err | α1 err | α2 err | Loss |
+|-------|----------|----------|--------|--------|------|
+| S4 multistart (best surr.) | 0.05% | 0.32% | 0.03% | 0.18% | 4.49e-9 |
+| P1 (shallow) | 0.32% | 0.05% | 0.06% | 0.08% | 6.15e-10 |
+| **P2 (full cathodic)** | **0.82%** | **0.81%** | **0.35%** | **0.44%** | **4.49e-9** |
+
+**Max error: 0.82%.**  All 4 parameters under 1%.  This is dramatically better
+than NN-ensemble's 0% noise floor (4.33% max), revealing that POD-RBF-log's
+structural representation captures the PDE physics more faithfully when noise is
+absent.  The surrogate optimum is nearly exact (0.32% max), and PDE refinement
+maintains sub-1% accuracy.
+
+
+## POD-RBF-log Noise Seed Robustness Study (2% Noise, 5 Seeds)
+
+**Commands:**
+```bash
+# Original seed
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --model-type pod-rbf-log --noise-seed 20260226
+# 4 additional seeds
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --model-type pod-rbf-log --noise-seed 42
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --model-type pod-rbf-log --noise-seed 123
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --model-type pod-rbf-log --noise-seed 7777
+python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --model-type pod-rbf-log --noise-seed 99999
+```
+
+### Per-seed results (best phase selected per seed)
+
+| Seed | k0_1 err | k0_2 err | α1 err | α2 err | Max err | Best phase |
+|------|----------|----------|--------|--------|---------|------------|
+| 20260226 | 12.00% | 1.56% | 3.71% | 3.73% | **12.00%** | P2 |
+| 42 | 28.64% | 29.09% | 20.34% | 26.04% | **29.09%** | P2 |
+| 123 | 18.59% | 23.12% | 8.52% | 11.68% | **23.12%** | P2 |
+| 7777 | 3.52% | 7.03% | 6.51% | 6.60% | **7.03%** | P2 |
+| 99999 | 27.40% | 16.59% | 11.43% | 13.42% | **27.40%** | P1 |
+
+### Surrogate-only results (S4 multistart, before PDE)
+
+| Seed | k0_1 err | k0_2 err | α1 err | α2 err | Max err |
+|------|----------|----------|--------|--------|---------|
+| 20260226 | 11.77% | 1.64% | 5.94% | 7.93% | 11.77% |
+| 42 | 27.21% | 69.17% | 8.25% | 16.07% | 69.17% |
+| 123 | 16.13% | 6.25% | 8.64% | 4.66% | 16.13% |
+| 7777 | 9.85% | 6.43% | 3.49% | 4.21% | 9.85% |
+| 99999 | 7.37% | 30.91% | 5.18% | 10.33% | 30.91% |
+
+### Summary statistics (2% noise, 5 seeds)
+
+| Metric | k0_1 | k0_2 | α1 | α2 | Max err |
+|--------|------|------|----|----|---------|
+| **Mean** | 18.03% | 15.48% | 10.10% | 12.29% | 19.73% |
+| **Median** | 18.59% | 16.59% | 8.52% | 11.68% | 23.12% |
+| **Min (best)** | 3.52% | 1.56% | 3.71% | 3.73% | 7.03% |
+| **Max (worst)** | 28.64% | 29.09% | 20.34% | 26.04% | 29.09% |
+| **Std dev** | 9.66% | 10.85% | 6.29% | 8.32% | 9.24% |
+
+### Cross-model comparison (NN-ensemble vs POD-RBF-log, with PDE)
+
+| Metric | NN-ensemble | POD-RBF-log |
+|--------|-------------|-------------|
+| **0% noise max err** | 4.33% | **0.82%** |
+| **Mean max err (2% noise)** | 19.16% | 19.73% |
+| **Median max err (2% noise)** | 23.12% | 23.12% |
+| **Best seed max err** | **5.26%** | 7.03% |
+| **Worst seed max err** | 28.64% | **29.09%** |
+| **Seeds with max err < 10%** | 1 / 5 | 1 / 5 |
+
+
+## Surrogate-Only Comparison (All Models, No PDE)
+
+Ran all 4 working surrogate model types with `--no-pde` across all noise
+configurations to isolate surrogate accuracy from PDE refinement.
+(`nn-single` failed on all runs due to model loading issue; excluded.)
+
+### Max error (%) — surrogate only
+
+| Model | 0% | seed=20260226 | seed=42 | seed=123 | seed=7777 | seed=99999 |
+|-------|-----|---------------|---------|----------|-----------|------------|
+| **nn-ensemble** | 4.70 | 12.05 | 55.34 | 12.88 | 8.28 | 9.79 |
+| **rbf** | **0.27** | **10.03** | **56.30** | **15.56** | **10.01** | 21.67 |
+| **pod-rbf-log** | 4.21 | 11.77 | 69.17 | 16.13 | 9.85 | 30.91 |
+| **pod-rbf-nolog** | 3.20 | 12.16 | 67.98 | 16.01 | 10.95 | 29.09 |
+
+### k0_1 error (%) — surrogate only
+
+| Model | 0% | seed=20260226 | seed=42 | seed=123 | seed=7777 | seed=99999 |
+|-------|-----|---------------|---------|----------|-----------|------------|
+| **nn-ensemble** | 2.85 | 6.89 | 32.48 | 12.88 | 1.15 | 3.68 |
+| **rbf** | 0.03 | 10.03 | 24.40 | 15.56 | 2.42 | 4.68 |
+| **pod-rbf-log** | 1.03 | 11.77 | 27.21 | 16.13 | 9.85 | 7.37 |
+| **pod-rbf-nolog** | 0.42 | 12.16 | 28.11 | 16.01 | 10.95 | 7.45 |
+
+### k0_2 error (%) — surrogate only
+
+| Model | 0% | seed=20260226 | seed=42 | seed=123 | seed=7777 | seed=99999 |
+|-------|-----|---------------|---------|----------|-----------|------------|
+| **nn-ensemble** | 4.70 | 12.05 | 55.34 | 7.07 | 8.28 | 9.79 |
+| **rbf** | 0.27 | 9.41 | 56.30 | 4.05 | 10.01 | 21.67 |
+| **pod-rbf-log** | 4.21 | 1.64 | 69.17 | 6.25 | 6.43 | 30.91 |
+| **pod-rbf-nolog** | 3.20 | 3.08 | 67.98 | 4.78 | 5.75 | 29.09 |
+
+### α1 error (%) — surrogate only
+
+| Model | 0% | seed=20260226 | seed=42 | seed=123 | seed=7777 | seed=99999 |
+|-------|-----|---------------|---------|----------|-----------|------------|
+| **nn-ensemble** | 1.83 | 3.55 | 10.94 | 7.21 | 1.74 | 3.69 |
+| **rbf** | 0.00 | 5.44 | 8.04 | 8.47 | 1.81 | 4.34 |
+| **pod-rbf-log** | 0.77 | 5.94 | 8.25 | 8.64 | 3.48 | 5.18 |
+| **pod-rbf-nolog** | 0.34 | 6.22 | 8.69 | 8.42 | 4.07 | 5.37 |
+
+### α2 error (%) — surrogate only
+
+| Model | 0% | seed=20260226 | seed=42 | seed=123 | seed=7777 | seed=99999 |
+|-------|-----|---------------|---------|----------|-----------|------------|
+| **nn-ensemble** | 2.83 | 3.44 | 16.70 | 3.66 | 3.42 | 5.35 |
+| **rbf** | 0.04 | 5.93 | 14.57 | 5.02 | 3.60 | 8.24 |
+| **pod-rbf-log** | 0.12 | 7.93 | 16.07 | 4.66 | 4.21 | 10.33 |
+| **pod-rbf-nolog** | 0.34 | 7.91 | 16.32 | 4.66 | 4.62 | 10.26 |
+
+### Summary statistics — surrogate only (mean across 5 noise seeds at 2%)
+
+| Model | Mean max err | Median max err | Min max err | Max max err |
+|-------|-------------|---------------|------------|------------|
+| **nn-ensemble** | **19.67%** | **12.05%** | **8.28%** | **55.34%** |
+| **rbf** | 22.71% | 15.56% | 10.01% | 56.30% |
+| **pod-rbf-log** | 27.57% | 16.13% | 9.85% | 69.17% |
+| **pod-rbf-nolog** | 27.24% | 16.01% | 10.95% | 67.98% |
+
+### Findings (surrogate-only comparison)
+
+1. **nn-ensemble is the most noise-robust surrogate.**  Best mean (19.67%) and
+   median (12.05%) across noise seeds.  The ensemble's averaging over 5 diverse
+   NN members provides implicit regularization against noise.
+
+2. **rbf is the best noise-free surrogate** (0.27% max error) but drops to
+   second at 2% noise (22.71% mean).  Exact interpolation is a double-edged
+   sword: perfect on clean data, but it interpolates noise too.
+
+3. **Noise-free vs noisy rankings are inverted** (bias-variance tradeoff):
+   - Noise-free:  rbf (0.27) > pod-rbf-nolog (3.20) > pod-rbf-log (4.21) > nn-ensemble (4.70)
+   - 2% noise:  nn-ensemble (19.67) > rbf (22.71) > pod-rbf-nolog (27.24) > pod-rbf-log (27.57)
+
+   Models that interpolate training data exactly (rbf, pod-rbf) excel at 0% noise
+   but overfit noise realizations.  The NN ensemble's implicit smoothing acts as
+   a regularizer.
+
+4. **Seed 42 is universally catastrophic.**  All 4 models fail with >55% max
+   error (k0_2 dominates).  This noise realization creates an adversarial
+   corruption pattern that pushes all surrogates to the wrong basin.
+
+5. **pod-rbf-log ≈ pod-rbf-nolog.**  The log1p transform provides negligible
+   benefit at the surrogate-only level (mean 27.57% vs 27.24%).  The log
+   transform's main benefit appears during PDE refinement, not surrogate
+   optimization itself.
+
+6. **k0_2 is the bottleneck for all models.**  Across all noise seeds, k0_2
+   has the highest error for every model.  The k0_1-k0_2 anti-correlation is
+   a fundamental property of the inverse problem, not a surrogate deficiency.
+
+7. **Alpha parameters are the most robust.**  α1 and α2 errors stay below 17%
+   even on seed 42, while k0 errors reach 55-69%.  The transfer coefficients
+   affect BV exponent shape (well-constrained by I-V curve shape) whereas rate
+   constants affect magnitude (confounded by noise).
+
+
 ## Next Steps
 
-1. **Noise robustness study** -- Run v13 at 0% noise to measure the noise-free
-   floor.  v11 achieved 1.07% at 0% noise; v13 should match or beat this with
-   the improved surrogate.
+1. ~~**Noise robustness study**~~ -- **Done.**  See above.  0% noise achieves
+   4.33% max error (NN) / 0.82% (POD-RBF-log).  2% noise is highly
+   seed-dependent (5--29% max error for both models).
 
-2. **RBF warm-start comparison** -- Run v13 with `--model-type rbf` to test
-   whether the RBF surrogate (which had better k0_2 at 9.41% in v12) produces
-   a different PDE convergence path.
+2. ~~**RBF warm-start comparison**~~ -- **Partially done.** Surrogate-only
+   comparison complete (see above).  RBF is best noise-free (0.27%) but drops
+   to second at 2% noise.  Full PDE runs with RBF warm-start still pending.
 
 3. **Timing optimization** -- Reduce P2 maxiter (it used 15 of 20 available)
    to fit closer to the 7-min target.  P1 cannot be skipped (see ablation above).
 
-4. **Different noise seeds** -- Verify the 5.26% result is not seed-dependent
-   by running with 3-5 different noise seeds and reporting the distribution.
+4. ~~**Different noise seeds**~~ -- **Done.**  See above.  The 5.26% result is
+   not representative; median max error across 5 seeds is 23.12% for both models.
 
-5. **POD-RBF-log warm-start** -- v12 showed POD-RBF-log achieves the best
-   surrogate k0_2 (1.64%).  Test whether the multistart strategy discovers a
-   different basin with this model type.
+5. ~~**POD-RBF-log warm-start**~~ -- **Done.** See section above.  Result:
+   max error 12.00% (vs 5.26% for NN ensemble).  k0_2 excellent (1.56%) but
+   k0_1 bottleneck (12.00%) persists through PDE refinement.
+
+6. ~~**POD-RBF-log noise robustness**~~ -- **Done.** See section above.  Nearly
+   identical noise statistics to NN-ensemble (median 23.12% for both).  POD-RBF-log
+   has dramatically better noise-free floor (0.82% vs 4.33%).
+
+7. **Hybrid warm-start** -- Use POD-RBF-log's k0_2 estimate combined with
+   NN-ensemble's k0_1/alpha estimates as the PDE initial guess.  Could get
+   the best of both surrogates.
+
+8. **Noise-robust PDE strategy** -- The current P2 (full cathodic) degrades
+   results for most noise seeds.  Options: (a) restrict P2 voltage range,
+   (b) add Tikhonov regularization to the PDE objective, (c) use P1-only
+   (skip P2) as a more conservative strategy, (d) run multiple noise-seed
+   trials and select the best by surrogate-evaluated loss.
+
+9. ~~**Surrogate-only cross-model comparison**~~ -- **Done.** See section above.
+   nn-ensemble is the most noise-robust (19.67% mean), rbf is the best
+   noise-free (0.27%).  Noise-free and noisy rankings are inverted (bias-variance
+   tradeoff).  All models fail on seed 42 (>55% max error).
+
+10. **Full PDE cross-model comparison** -- Run all 4 model types with PDE
+    refinement across noise seeds to see if the surrogate-only ranking holds
+    after PDE optimization.  RBF's strong noise-free performance (0.27%) may
+    translate to better PDE convergence on favorable noise seeds.

@@ -318,12 +318,12 @@ class EnsembleMeanWrapper:
 
 ## Next Steps
 
-1. **Warm-start selection experiment** -- The v12 PDE results confirm that the
-   warm-start basin matters: the NN ensemble warm start yields the best k0_1
-   and alpha but poor k0_2, while v11's RBF warm start yields the best k0_2.
-   Run PDE Phases 3--4 warm-started from the POD-RBF-log P2 result (which has
-   the best surrogate k0_2 at 1.64%) to test whether PDE refinement can
-   preserve that advantage.  This is now the highest-priority experiment.
+1. ~~**Warm-start selection experiment**~~ -- **Done in v13.**  Running the full
+   v13 pipeline with `--model-type pod-rbf-log` confirms: PDE refinement
+   preserves POD-RBF-log's k0_2 advantage (1.56% final) but also preserves its
+   k0_1 weakness (12.00% final).  Max error 12.00% vs 5.26% for NN ensemble.
+   The k0_1--k0_2 anti-correlation is structural, not a basin artifact.
+   See `v13_ultimate_inference.md` § "POD-RBF-log Warm-Start Experiment".
 
 2. **Hybrid surrogate strategy** -- The POD-RBF-log model's 1.64% k0_2 error
    suggests it captures the peroxide current structure better than either the

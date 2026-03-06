@@ -179,7 +179,7 @@ def _generate_lhs_grid(
     # Scale to bounds: dimensions 0,1 in log10 space, 2,3 in linear
     lo = np.array([
         bounds_log_k0_1[0], bounds_log_k0_2[0],
-        bounds_alpha[0], bounds_alpha[1 - 1],  # alpha lower
+        bounds_alpha[0], bounds_alpha[0],
     ])
     hi = np.array([
         bounds_log_k0_1[1], bounds_log_k0_2[1],
@@ -258,8 +258,8 @@ def _evaluate_grid_objectives(
     objectives = j_cd + secondary_weight * j_pc
 
     # Mark points with any NaN prediction as infinite
-    has_nan_cd = np.any(np.isnan(pred["current_density"]), axis=1)
-    has_nan_pc = np.any(np.isnan(pred["peroxide_current"]), axis=1)
+    has_nan_cd = np.any(np.isnan(cd_pred), axis=1)
+    has_nan_pc = np.any(np.isnan(pc_pred), axis=1)
     objectives = np.where(has_nan_cd | has_nan_pc, np.inf, objectives)
 
     return objectives
