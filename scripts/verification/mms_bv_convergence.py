@@ -3,6 +3,14 @@
 Verifies the Butler-Volmer PNP solver by demonstrating optimal convergence
 rates on problems with known exact solutions.
 
+**FWD-02 Compliance:** All ``run_mms_*`` functions import and use the production
+``build_context()`` / ``build_forms()`` from ``Forward.bv_solver.forms``, ensuring
+MMS tests the actual production weak form rather than an inline replica.  The only
+additions to the production F_res are:
+  - MMS volume source terms (S_c, S_phi)
+  - MMS boundary correction terms (g_i)
+  - Neutralization of the time-stepping residual via large dt
+
 Three test cases:
   1. Single neutral species (z=0) + single irreversible BV reaction.
   2. Two neutral species + 2 BV reactions (O2, H2O2 system).
@@ -78,6 +86,8 @@ import matplotlib.pyplot as plt
 
 from math import pi, log
 
+from Forward.bv_solver.forms import build_context, build_forms
+
 
 # ---------------------------------------------------------------------------
 # SNES options -- direct solver (MUMPS), tight tolerances for MMS
@@ -96,6 +106,110 @@ SNES_OPTS = {
     "pc_factor_mat_solver_type":   "mumps",
     "mat_mumps_icntl_14":          100,
 }
+
+
+# ---------------------------------------------------------------------------
+# Large dt to neutralize time-stepping residual for steady-state MMS.
+#
+# Production build_forms() includes (c - c_old)/dt * v * dx.  By setting
+# dt = 1e30 and U_prev = U (initial guess), the time-stepping contribution
+# is O(1e-30) -- negligible compared to MMS tolerances of O(1e-12).
+# ---------------------------------------------------------------------------
+_LARGE_DT = 1.0e30
+
+
+# ===========================================================================
+# Helper: build solver_params for MMS with production nondim passthrough
+# ===========================================================================
+
+def _build_mms_solver_params(
+    *,
+    n_species: int,
+    D_vals: list[float],
+    z_vals: list[float],
+    c0_vals: list[float],
+    phi_applied: float,
+    eps_hat: float,
+    bv_config: dict,
+) -> list:
+    """Construct the 11-element solver_params tuple for MMS.
+
+    All MMS parameters are nondimensional.  We configure the nondim pipeline
+    with ``*_inputs_are_dimensionless=True`` so values pass through unchanged.
+
+    The key settings that make production build_forms() match MMS:
+      - nondim.enabled=True with all *_inputs_are_dimensionless=True
+      - potential_scale_v = thermal_voltage_v => electromigration_prefactor = 1.0
+      - regularize_concentration=False (no concentration floor)
+      - clip_exponent=False (no exponent clipping)
+      - a_vals=[0]*n (no steric terms)
+      - dt = 1e30 (neutralize time-stepping for steady-state)
+      - poisson_coefficient and charge_rhs_prefactor controlled by nondim pipeline
+
+    The Poisson coefficient (lambda_D/L)^2 must equal eps_hat.  With:
+      permittivity * potential_scale / (F * conc_scale * L^2) = eps_hat
+    We set permittivity_f_m, potential_scale_v, concentration_scale, length_scale
+    so that this relationship holds.
+    """
+    # Nondim config: all inputs already dimensionless, pass through unchanged.
+    # We need poisson_coefficient = eps_hat.
+    # Formula: poisson_coefficient = permittivity * potential_scale / (F * c_scale * L^2)
+    # Choose: potential_scale = V_T, c_scale = 1.0, L = 1.0
+    # Then: permittivity = eps_hat * F * 1.0 * 1.0 / V_T
+    from Nondim.constants import FARADAY_CONSTANT, GAS_CONSTANT, DEFAULT_TEMPERATURE_K
+    V_T = GAS_CONSTANT * DEFAULT_TEMPERATURE_K / FARADAY_CONSTANT
+
+    permittivity_for_eps = eps_hat * FARADAY_CONSTANT * 1.0 * (1.0 ** 2) / V_T
+
+    nondim_cfg = {
+        "enabled": True,
+        "diffusivity_inputs_are_dimensionless": True,
+        "concentration_inputs_are_dimensionless": True,
+        "potential_inputs_are_dimensionless": True,
+        "time_inputs_are_dimensionless": True,
+        "kappa_inputs_are_dimensionless": True,
+        # Reference scales: all set to 1.0 to preserve nondim values
+        "diffusivity_scale_m2_s": 1.0,
+        "concentration_scale_mol_m3": 1.0,
+        "length_scale_m": 1.0,
+        "potential_scale_v": V_T,
+        "time_scale_s": 1.0,
+        "kappa_scale_m_s": 1.0,
+        "permittivity_f_m": permittivity_for_eps,
+    }
+
+    # BV convergence config: disable all optional features for MMS
+    bv_convergence_cfg = {
+        "clip_exponent": False,
+        "exponent_clip": 50.0,
+        "regularize_concentration": False,
+        "conc_floor": 1e-8,
+        "use_eta_in_bv": True,  # eta from phi_applied, not interior phi
+    }
+
+    params_dict = {
+        "nondim": nondim_cfg,
+        "bv_bc": bv_config,
+        "bv_convergence": bv_convergence_cfg,
+    }
+
+    # 11-element solver_params:
+    # [n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0, phi0, params]
+    solver_params = [
+        n_species,
+        1,             # CG order
+        _LARGE_DT,     # large dt to suppress time-stepping
+        _LARGE_DT,     # t_end (irrelevant for steady-state)
+        z_vals,
+        D_vals,
+        [0.0] * n_species,  # a_vals = 0 (no steric)
+        phi_applied,
+        c0_vals,
+        0.0,           # phi0 (ground reference)
+        params_dict,
+    ]
+
+    return solver_params
 
 
 # ===========================================================================
@@ -150,6 +264,54 @@ def _boundary_correction_charged(
 
 
 # ===========================================================================
+# Helper: inject MMS source terms into production F_res
+# ===========================================================================
+
+def _inject_mms_sources(
+    F_res,
+    *,
+    source_terms: list,  # [(S_c_i, v_i), ...] for each species
+    poisson_source: tuple | None,  # (S_phi, w) or None
+    boundary_corrections: list,  # [(g_i, v_i), ...] for each species
+    electrode_marker: int,
+    dx,
+    ds,
+):
+    """Add MMS volume sources and boundary corrections to production F_res.
+
+    Parameters
+    ----------
+    F_res : UFL form
+        Production residual from build_forms().
+    source_terms : list of (S_c_i, v_i) tuples
+        Volume source for each species NP equation.
+    poisson_source : (S_phi, w) or None
+        Volume source for Poisson equation.
+    boundary_corrections : list of (g_i, v_i) tuples
+        Boundary correction at electrode for each species.
+    electrode_marker : int
+        Mesh marker for electrode boundary.
+    dx, ds : Measures
+        Volume and surface measures.
+
+    Returns
+    -------
+    Modified F_res with MMS sources injected.
+    """
+    for S_ci, v_i in source_terms:
+        F_res -= S_ci * v_i * dx
+
+    if poisson_source is not None:
+        S_phi, w = poisson_source
+        F_res -= S_phi * w * dx
+
+    for g_i, v_i in boundary_corrections:
+        F_res -= g_i * v_i * ds(electrode_marker)
+
+    return F_res
+
+
+# ===========================================================================
 # Case 1: Single neutral species, single irreversible BV reaction
 # ===========================================================================
 
@@ -171,6 +333,8 @@ def run_mms_single_species(
     Domain: unit square [0,1]^2.
     RectangleMesh markers: 1=left, 2=right, 3=bottom, 4=top.
     Electrode = bottom (marker 3), bulk = top (marker 4).
+
+    Uses production build_forms() from Forward.bv_solver.forms (FWD-02).
     """
     # --- MMS parameters ---
     D_hat   = 1.0     # nondim diffusivity
@@ -188,6 +352,7 @@ def run_mms_single_species(
 
     print("\n" + "=" * 70)
     print("  MMS Convergence Study: Single Neutral Species + BV")
+    print("  [Using production build_forms() from Forward.bv_solver.forms]")
     print("=" * 70)
     print(f"  D_hat={D_hat}, c0={c0_val}, A={A_val}, beta={beta_c}")
     print(f"  eta0={eta0}, B={B_val}, k0={k0_hat}, alpha={alpha}")
@@ -201,6 +366,33 @@ def run_mms_single_species(
         "phi_L2": [], "phi_H1": [],
     }
 
+    # BV config for production build_forms():
+    # Legacy per-species path (no "reactions" key).
+    # c_ref=0 makes the anodic term vanish (irreversible cathodic only).
+    bv_config = {
+        "k0": [k0_hat],
+        "alpha": [alpha],
+        "stoichiometry": [int(stoi)],
+        "c_ref": [0.0],
+        "E_eq_v": 0.0,
+        "electrode_marker": 3,   # bottom of RectangleMesh
+        "concentration_marker": 4,  # top of RectangleMesh
+        "ground_marker": 4,     # top of RectangleMesh
+    }
+
+    solver_params = _build_mms_solver_params(
+        n_species=1,
+        D_vals=[D_hat],
+        z_vals=[0.0],
+        c0_vals=[c0_val],
+        phi_applied=eta0,
+        eps_hat=eps_hat,
+        bv_config=bv_config,
+    )
+
+    electrode_marker = 3
+    bulk_marker = 4
+
     for N in N_vals:
         t0 = time.time()
         h = 1.0 / N
@@ -209,17 +401,19 @@ def run_mms_single_species(
         mesh = fd.RectangleMesh(N, N, 1.0, 1.0)
         x, y = fd.SpatialCoordinate(mesh)
 
-        # Markers: 1=left, 2=right, 3=bottom (electrode), 4=top (bulk)
-        electrode_marker = 3
-        bulk_marker = 4
+        # --- Build production weak form via build_context + build_forms ---
+        ctx = build_context(solver_params, mesh=mesh)
+        ctx = build_forms(ctx, solver_params)
 
-        # --- Function spaces ---
-        V = fd.FunctionSpace(mesh, "CG", 1)
-        W = fd.MixedFunctionSpace([V, V])  # [c, phi]
-        U = fd.Function(W, name="U")
-        v_c, v_phi = fd.TestFunctions(W)
+        F_res = ctx["F_res"]
+        W = ctx["W"]
+        U = ctx["U"]
+        U_prev = ctx["U_prev"]
 
-        c_h, phi_h = fd.split(U)
+        # Test functions (need fresh references matching the built form)
+        v_tests = fd.TestFunctions(W)
+        v_c = v_tests[0]   # species 0 test function
+        w = v_tests[1]     # potential test function (last)
 
         # --- Manufactured solutions (UFL expressions) ---
         c_exact = c0_val + A_val * fd.cos(pi * x) * (1.0 - fd.exp(-beta_c * y))
@@ -242,32 +436,24 @@ def run_mms_single_species(
         # c_exact(x,0) = c0_val, phi_exact(x,0) = eta0
         R_bv_exact = k0_hat * c0_val * fd.exp(-alpha * eta0)
 
-        # g = D * dot(grad(c_exact), n_outward) - stoi * R_bv_exact
         g_0 = _boundary_correction_neutral(
             D_hat, c_exact, n_vec,
             stoi_list=[stoi], R_bv_exact_list=[R_bv_exact],
         )
 
-        # --- Assemble weak form ---
-        # Diffusion bilinear form (NP for z=0):
-        F_res = D_hat * fd.dot(fd.grad(c_h), fd.grad(v_c)) * dx
+        # --- Inject MMS sources into production F_res ---
+        F_res = _inject_mms_sources(
+            F_res,
+            source_terms=[(S_c, v_c)],
+            poisson_source=(S_phi, w),
+            boundary_corrections=[(g_0, v_c)],
+            electrode_marker=electrode_marker,
+            dx=dx,
+            ds=ds,
+        )
 
-        # BV flux at electrode (on NUMERICAL unknowns):
-        # R_bv = k0 * c_h * exp(-alpha * eta0)  (irreversible cathodic)
-        R_bv_numerical = k0_hat * c_h * fd.exp(-alpha * eta0)
-        F_res -= stoi * R_bv_numerical * v_c * ds(electrode_marker)
-
-        # MMS volume source
-        F_res -= S_c * v_c * dx
-
-        # MMS boundary correction
-        F_res -= g_0 * v_c * ds(electrode_marker)
-
-        # Poisson equation:
-        F_res += eps_hat * fd.dot(fd.grad(phi_h), fd.grad(v_phi)) * dx
-        F_res -= S_phi * v_phi * dx
-
-        # --- Dirichlet BCs ---
+        # --- Override Dirichlet BCs for MMS ---
+        # Production BCs use constant c0 at bulk; MMS needs exact solution at bulk
         bc_c_bulk = fd.DirichletBC(W.sub(0), c_exact, bulk_marker)
         bc_phi_elec = fd.DirichletBC(W.sub(1), fd.Constant(eta0), electrode_marker)
         bc_phi_bulk = fd.DirichletBC(W.sub(1), fd.Constant(0.0), bulk_marker)
@@ -276,6 +462,8 @@ def run_mms_single_species(
         # --- Initial guess: interpolate manufactured solution ---
         U.sub(0).interpolate(c_exact)
         U.sub(1).interpolate(phi_exact)
+        # Set U_prev = U so time-stepping term (c - c_old)/dt ~ 0
+        U_prev.assign(U)
 
         # --- Solve ---
         J_form = fd.derivative(F_res, U)
@@ -289,6 +477,7 @@ def run_mms_single_species(
             continue
 
         # --- Compute errors ---
+        V = ctx["V_scalar"]
         c_h_sol = U.sub(0)
         phi_h_sol = U.sub(1)
 
@@ -339,6 +528,8 @@ def run_mms_two_species(
       R2 = k02 * c_H2O2 * exp(-alpha2 * eta)  (irreversible)
 
     Stoichiometry:  s = [[-1, 0], [+1, -1]]
+
+    Uses production build_forms() via multi-reaction BV path (FWD-02).
     """
     D0_hat = 1.0
     D1_hat = 0.85
@@ -363,6 +554,7 @@ def run_mms_two_species(
 
     print("\n" + "=" * 70)
     print("  MMS Convergence Study: Two Neutral Species + 2 BV Reactions")
+    print("  [Using production build_forms() from Forward.bv_solver.forms]")
     print("=" * 70)
     print(f"  D0={D0_hat}, D1={D1_hat}")
     print(f"  c0_O2={c0_0}, c0_H2O2={c0_1}, A0={A0}, A1={A1}")
@@ -379,20 +571,73 @@ def run_mms_two_species(
         "phi_L2": [], "phi_H1": [],
     }
 
+    # Multi-reaction BV config for production build_forms():
+    bv_config = {
+        "electrode_marker": 3,
+        "concentration_marker": 4,
+        "ground_marker": 4,
+        "E_eq_v": 0.0,
+        "k0": [1.0, 1.0],      # placeholders, overridden by reactions
+        "alpha": [0.5, 0.5],
+        "stoichiometry": [-1, 0],
+        "c_ref": [c_ref1, 1.0],
+        "reactions": [
+            {
+                "k0": k01,
+                "alpha": alpha1,
+                "cathodic_species": 0,        # O2
+                "anodic_species": 0,          # same species for reversible
+                "c_ref": c_ref1,
+                "stoichiometry": [-1, +1],    # R1: consumes O2, produces H2O2
+                "n_electrons": 2,
+                "reversible": True,
+            },
+            {
+                "k0": k02,
+                "alpha": alpha2,
+                "cathodic_species": 1,        # H2O2
+                "anodic_species": None,
+                "c_ref": 1.0,
+                "stoichiometry": [0, -1],     # R2: consumes H2O2 only
+                "n_electrons": 2,
+                "reversible": False,
+            },
+        ],
+    }
+
+    solver_params = _build_mms_solver_params(
+        n_species=2,
+        D_vals=[D0_hat, D1_hat],
+        z_vals=[0.0, 0.0],
+        c0_vals=[c0_0, c0_1],
+        phi_applied=eta0,
+        eps_hat=eps_hat,
+        bv_config=bv_config,
+    )
+
+    electrode_marker = 3
+    bulk_marker = 4
+
     for N in N_vals:
         t0 = time.time()
         h = 1.0 / N
 
         mesh = fd.RectangleMesh(N, N, 1.0, 1.0)
         x, y = fd.SpatialCoordinate(mesh)
-        electrode_marker = 3
-        bulk_marker = 4
 
-        V = fd.FunctionSpace(mesh, "CG", 1)
-        W = fd.MixedFunctionSpace([V, V, V])  # [c0, c1, phi]
-        U = fd.Function(W, name="U")
-        v0, v1, w = fd.TestFunctions(W)
-        c0_h, c1_h, phi_h = fd.split(U)
+        # --- Build production weak form ---
+        ctx = build_context(solver_params, mesh=mesh)
+        ctx = build_forms(ctx, solver_params)
+
+        F_res = ctx["F_res"]
+        W = ctx["W"]
+        U = ctx["U"]
+        U_prev = ctx["U_prev"]
+
+        v_tests = fd.TestFunctions(W)
+        v0 = v_tests[0]
+        v1 = v_tests[1]
+        w = v_tests[2]  # potential test function (last)
 
         # --- Manufactured solutions ---
         c0_exact = c0_0 + A0 * fd.cos(pi * x) * (1.0 - fd.exp(-beta0 * y))
@@ -423,28 +668,16 @@ def run_mms_two_species(
             stoi_list=stoi[1], R_bv_exact_list=[R1_exact, R2_exact],
         )
 
-        # --- Weak form ---
-        F_res = D0_hat * fd.dot(fd.grad(c0_h), fd.grad(v0)) * dx
-        F_res += D1_hat * fd.dot(fd.grad(c1_h), fd.grad(v1)) * dx
-
-        # BV flux (numerical unknowns)
-        R1_num = k01 * (c0_h * fd.exp(-alpha1 * eta0)
-                        - c_ref1 * fd.exp((1.0 - alpha1) * eta0))
-        R2_num = k02 * c1_h * fd.exp(-alpha2 * eta0)
-
-        for j, R_num in enumerate([R1_num, R2_num]):
-            F_res -= stoi[0][j] * R_num * v0 * ds(electrode_marker)
-            F_res -= stoi[1][j] * R_num * v1 * ds(electrode_marker)
-
-        # MMS sources
-        F_res -= S_c0 * v0 * dx
-        F_res -= S_c1 * v1 * dx
-        F_res -= g_0 * v0 * ds(electrode_marker)
-        F_res -= g_1 * v1 * ds(electrode_marker)
-
-        # Poisson
-        F_res += eps_hat * fd.dot(fd.grad(phi_h), fd.grad(w)) * dx
-        F_res -= S_phi * w * dx
+        # --- Inject MMS sources ---
+        F_res = _inject_mms_sources(
+            F_res,
+            source_terms=[(S_c0, v0), (S_c1, v1)],
+            poisson_source=(S_phi, w),
+            boundary_corrections=[(g_0, v0), (g_1, v1)],
+            electrode_marker=electrode_marker,
+            dx=dx,
+            ds=ds,
+        )
 
         # --- BCs ---
         bcs = [
@@ -458,6 +691,7 @@ def run_mms_two_species(
         U.sub(0).interpolate(c0_exact)
         U.sub(1).interpolate(c1_exact)
         U.sub(2).interpolate(phi_exact)
+        U_prev.assign(U)
 
         # --- Solve ---
         J_form = fd.derivative(F_res, U)
@@ -471,6 +705,7 @@ def run_mms_two_species(
             continue
 
         # --- Errors ---
+        V = ctx["V_scalar"]
         c0_h_sol = U.sub(0)
         c1_h_sol = U.sub(1)
         phi_h_sol = U.sub(2)
@@ -526,6 +761,8 @@ def run_mms_charged(
     Stoichiometry: s = [-1, 0]
 
     This tests electromigration coupling and the Poisson source term.
+
+    Uses production build_forms() from Forward.bv_solver.forms (FWD-02).
     """
     D0_hat = 1.0
     D1_hat = 0.8
@@ -547,6 +784,7 @@ def run_mms_charged(
 
     print("\n" + "=" * 70)
     print("  MMS Convergence Study: Two Charged Species + Poisson + BV")
+    print("  [Using production build_forms() from Forward.bv_solver.forms]")
     print("=" * 70)
     print(f"  D0={D0_hat}, D1={D1_hat}, z0={z0}, z1={z1}")
     print(f"  c0_cat={c0_0}, c0_an={c0_1}, A0={A0}, A1={A1}")
@@ -562,20 +800,52 @@ def run_mms_charged(
         "phi_L2": [], "phi_H1": [],
     }
 
+    # Legacy per-species BV config.
+    # c_ref=[0,0] makes anodic terms vanish (irreversible cathodic only).
+    bv_config = {
+        "k0": [k0_hat, k0_hat],
+        "alpha": [alpha, alpha],
+        "stoichiometry": [int(stoi_vals[0]), int(stoi_vals[1])],
+        "c_ref": [0.0, 0.0],
+        "E_eq_v": 0.0,
+        "electrode_marker": 3,
+        "concentration_marker": 4,
+        "ground_marker": 4,
+    }
+
+    solver_params = _build_mms_solver_params(
+        n_species=2,
+        D_vals=[D0_hat, D1_hat],
+        z_vals=[z0, z1],
+        c0_vals=[c0_0, c0_1],
+        phi_applied=eta0,
+        eps_hat=eps_hat,
+        bv_config=bv_config,
+    )
+
+    electrode_marker = 3
+    bulk_marker = 4
+
     for N in N_vals:
         t0 = time.time()
         h = 1.0 / N
 
         mesh = fd.RectangleMesh(N, N, 1.0, 1.0)
         x, y = fd.SpatialCoordinate(mesh)
-        electrode_marker = 3
-        bulk_marker = 4
 
-        V = fd.FunctionSpace(mesh, "CG", 1)
-        W = fd.MixedFunctionSpace([V, V, V])
-        U = fd.Function(W, name="U")
-        v0, v1, w = fd.TestFunctions(W)
-        c0_h, c1_h, phi_h = fd.split(U)
+        # --- Build production weak form ---
+        ctx = build_context(solver_params, mesh=mesh)
+        ctx = build_forms(ctx, solver_params)
+
+        F_res = ctx["F_res"]
+        W = ctx["W"]
+        U = ctx["U"]
+        U_prev = ctx["U_prev"]
+
+        v_tests = fd.TestFunctions(W)
+        v0 = v_tests[0]
+        v1 = v_tests[1]
+        w = v_tests[2]
 
         # --- Manufactured solutions ---
         c0_exact = c0_0 + A0 * fd.cos(pi * x) * (1.0 - fd.exp(-beta0 * y))
@@ -588,7 +858,7 @@ def run_mms_charged(
         S_c0 = -fd.div(J0_exact)
         S_c1 = -fd.div(J1_exact)
 
-        # Poisson: -eps*laplacian(phi) = sum(z*c) + S_phi
+        # Poisson: -eps*laplacian(phi_exact) = sum(z*c) + S_phi
         S_phi = -eps_hat * fd.div(fd.grad(phi_exact)) - (z0 * c0_exact + z1 * c1_exact)
 
         # --- Boundary correction ---
@@ -607,29 +877,16 @@ def run_mms_charged(
             stoi_list=[stoi_vals[1]], R_bv_exact_list=[R_bv_exact],
         )
 
-        # --- Weak form ---
-        F_res = D0_hat * fd.dot(
-            fd.grad(c0_h) + em * z0 * c0_h * fd.grad(phi_h), fd.grad(v0)
-        ) * dx
-        F_res += D1_hat * fd.dot(
-            fd.grad(c1_h) + em * z1 * c1_h * fd.grad(phi_h), fd.grad(v1)
-        ) * dx
-
-        # BV (numerical)
-        R_bv_num = k0_hat * c0_h * fd.exp(-alpha * eta0)
-        F_res -= stoi_vals[0] * R_bv_num * v0 * ds(electrode_marker)
-        F_res -= stoi_vals[1] * R_bv_num * v1 * ds(electrode_marker)
-
-        # Poisson
-        F_res += eps_hat * fd.dot(fd.grad(phi_h), fd.grad(w)) * dx
-        F_res -= (z0 * c0_h + z1 * c1_h) * w * dx
-
-        # MMS sources
-        F_res -= S_c0 * v0 * dx
-        F_res -= S_c1 * v1 * dx
-        F_res -= S_phi * w * dx
-        F_res -= g_0 * v0 * ds(electrode_marker)
-        F_res -= g_1 * v1 * ds(electrode_marker)
+        # --- Inject MMS sources ---
+        F_res = _inject_mms_sources(
+            F_res,
+            source_terms=[(S_c0, v0), (S_c1, v1)],
+            poisson_source=(S_phi, w),
+            boundary_corrections=[(g_0, v0), (g_1, v1)],
+            electrode_marker=electrode_marker,
+            dx=dx,
+            ds=ds,
+        )
 
         # --- BCs ---
         bcs = [
@@ -643,6 +900,7 @@ def run_mms_charged(
         U.sub(0).interpolate(c0_exact)
         U.sub(1).interpolate(c1_exact)
         U.sub(2).interpolate(phi_exact)
+        U_prev.assign(U)
 
         # --- Solve ---
         J_form = fd.derivative(F_res, U)
@@ -656,6 +914,7 @@ def run_mms_charged(
             continue
 
         # --- Errors ---
+        V = ctx["V_scalar"]
         c0_ex_f = fd.Function(V); c0_ex_f.interpolate(c0_exact)
         c1_ex_f = fd.Function(V); c1_ex_f.interpolate(c1_exact)
         phi_ex_f = fd.Function(V); phi_ex_f.interpolate(phi_exact)
