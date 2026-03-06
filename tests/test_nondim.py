@@ -10,6 +10,8 @@ import math
 import numpy as np
 import pytest
 
+from conftest import skip_without_firedrake
+
 
 # ===================================================================
 # Nondim.constants
@@ -762,6 +764,7 @@ class TestDerivedQuantityConsistency:
         assert scaling["kappa_scale_m_s"] == pytest.approx(expected_kappa, rel=1e-12)
 
 
+@skip_without_firedrake
 class TestBVScalingRoundtrip:
     """Roundtrip tests for BV-specific scaling (k0, c_ref, E_eq).
 
