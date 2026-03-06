@@ -28,4 +28,5 @@ include = ["Forward*", "Inverse*", "FluxCurve*", "Nondim*", "Surrogate*"]
 testpaths = ["tests"]
 markers = [
     "slow: marks tests requiring Firedrake FEM environment (deselect with '-m \"not slow\"')",
+    "firedrake: marks tests that require Firedrake (deselect with '-m \"not firedrake\"')",
 ]
