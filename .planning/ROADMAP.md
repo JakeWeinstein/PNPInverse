@@ -58,11 +58,11 @@ Plans:
   1. A fidelity map exists showing surrogate-vs-PDE error at LHS-sampled parameter sets spanning the v13 inference domain (not just training points)
   2. Hold-out validation demonstrates surrogate accuracy on parameter sets not used during training
   3. Error statistics (max, mean, 95th percentile relative error) are computed and saved as referenceable test output
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md — Core fidelity test: hold-out validation, error stats, JSON/CSV artifacts for all 4 surrogate models
+- [ ] 03-02-PLAN.md — Diagnostic plots (worst-case I-V overlay, error-vs-parameter scatter) + remove subsumed Test 5
 
 ### Phase 4: Inverse Problem Verification
 **Goal**: v13 parameter inference is proven to recover known parameters from synthetic data
