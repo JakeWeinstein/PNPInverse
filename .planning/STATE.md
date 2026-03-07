@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-03-07T07:04:29.327Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-07T07:28:30.164Z"
 last_activity: 2026-03-07 -- Completed 02-01 MMS convergence test with rate assertions and GCI
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 5
 ---
 
 ---
@@ -66,6 +66,7 @@ Progress: [##########] 100%
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 03 P01 | 4 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,8 @@ Recent decisions affecting current work:
 - 02-01: Removed deprecated 1/2-species MMS scripts; 4-species case strictly subsumes them
 - 02-01: Removed orphaned 'firedrake' pytest marker; all Firedrake tests use @pytest.mark.slow
 - 02-01: Class-scoped fixture runs MMS study once for all 4 test methods
+- [Phase 03]: Soft gate uses median NRMSE (not mean) because PC near-zero-range samples inflate mean to 50-200%
+- [Phase 03]: POD-RBF models loaded via direct pickle (not load_surrogate) due to type hierarchy mismatch
 
 ### Pending Todos
 
@@ -96,6 +99,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-07T07:04:29.325Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-surrogate-fidelity/03-CONTEXT.md
+Last session: 2026-03-07T07:28:30.162Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None

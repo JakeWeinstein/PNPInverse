@@ -15,9 +15,9 @@
 
 ### Surrogate Verification
 
-- [ ] **SUR-01**: Surrogate fidelity map using LHS-sampled parameter sets across the v13 inference domain
-- [ ] **SUR-02**: Hold-out validation testing the v13 surrogate on unseen parameter sets (not training data)
-- [ ] **SUR-03**: Error bound quantification (max, mean, percentile errors) for the v13 surrogate
+- [x] **SUR-01**: Surrogate fidelity map using LHS-sampled parameter sets across the v13 inference domain
+- [x] **SUR-02**: Hold-out validation testing the v13 surrogate on unseen parameter sets (not training data)
+- [x] **SUR-03**: Error bound quantification (max, mean, percentile errors) for the v13 surrogate
 
 ### Inverse Problem Verification
 
@@ -76,9 +76,9 @@
 | FWD-03 | Phase 2 | Complete |
 | FWD-04 | Phase 1 | Complete |
 | FWD-05 | Phase 2 | Complete |
-| SUR-01 | Phase 3 | Pending |
-| SUR-02 | Phase 3 | Pending |
-| SUR-03 | Phase 3 | Pending |
+| SUR-01 | Phase 3 | Complete |
+| SUR-02 | Phase 3 | Complete |
+| SUR-03 | Phase 3 | Complete |
 | INV-01 | Phase 4 | Pending |
 | INV-02 | Phase 4 | Pending |
 | INV-03 | Phase 4 | Pending |
