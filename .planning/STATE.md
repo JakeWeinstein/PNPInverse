@@ -3,29 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-03-07T06:28:29.364Z"
-last_activity: 2026-03-06 -- Completed 01-03 BV scaling skip guard (gap closure)
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-07T06:43:00Z"
+last_activity: 2026-03-07 -- Completed 02-01 MMS convergence test with rate assertions and GCI
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
----
-
----
-gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-03-06T20:09:04Z"
-last_activity: 2026-03-06 -- Completed 01-03 BV scaling skip guard (gap closure)
-progress:
-  total_phases: 6
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  completed_phases: 2
+  total_plans: 4
+  completed_plans: 4
   percent: 100
 ---
 
@@ -36,32 +21,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-06)
 
 **Core value:** Every layer of the pipeline has independently verifiable proof of correctness that can withstand peer review.
-**Current focus:** Phase 1: Nondimensionalization & Weak Form Audit
+**Current focus:** Phase 2: MMS Convergence Verification -- COMPLETE
 
 ## Current Position
 
-Phase: 1 of 6 (Nondimensionalization & Weak Form Audit) -- COMPLETE
-Plan: 3 of 3 in current phase
-Status: Phase 1 complete (including gap closure)
-Last activity: 2026-03-06 -- Completed 01-03 BV scaling skip guard (gap closure)
+Phase: 2 of 6 (MMS Convergence Verification) -- COMPLETE
+Plan: 1 of 1 in current phase
+Status: Phase 2 complete
+Last activity: 2026-03-07 -- Completed 02-01 MMS convergence test with rate assertions and GCI
 
 Progress: [##########] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: 4 min
-- Total execution time: 0.18 hours
+- Total execution time: 0.22 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-nondim-audit | 3 | 11 min | 4 min |
+| 02-mms-convergence-verification | 1 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4 min), 01-02 (6 min), 01-03 (1 min)
+- Last 5 plans: 01-01 (4 min), 01-02 (6 min), 01-03 (1 min), 02-01 (2 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -81,6 +67,9 @@ Recent decisions affecting current work:
 - 01-02: Nondim passthrough config: all *_inputs_are_dimensionless=True with unit scales
 - 01-02: Large dt (1e30) to neutralize time-stepping for steady-state MMS
 - 01-03: Class-level @skip_without_firedrake on TestBVScalingRoundtrip (not per-method)
+- 02-01: Removed deprecated 1/2-species MMS scripts; 4-species case strictly subsumes them
+- 02-01: Removed orphaned 'firedrake' pytest marker; all Firedrake tests use @pytest.mark.slow
+- 02-01: Class-scoped fixture runs MMS study once for all 4 test methods
 
 ### Pending Todos
 
@@ -92,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-07T06:28:29.363Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-mms-convergence-verification/02-CONTEXT.md
+Last session: 2026-03-07T06:43:00Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: .planning/phases/02-mms-convergence-verification/02-01-SUMMARY.md

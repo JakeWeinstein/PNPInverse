@@ -7,11 +7,11 @@
 
 ### Forward Solver Verification
 
-- [ ] **FWD-01**: MMS convergence tests wrapped in pytest with automated rate assertions (L2 ~ O(h^2), H1 ~ O(h))
+- [x] **FWD-01**: MMS convergence tests wrapped in pytest with automated rate assertions (L2 ~ O(h^2), H1 ~ O(h))
 - [x] **FWD-02**: MMS weak form audit confirming MMS tests the production `bv_solver.py` weak form, not a hand-built replica
-- [ ] **FWD-03**: 4-species MMS case matching the v13 production configuration (O2, H2O2, H+, ClO4-)
+- [x] **FWD-03**: 4-species MMS case matching the v13 production configuration (O2, H2O2, H+, ClO4-)
 - [x] **FWD-04**: Nondimensionalization roundtrip tests verifying physical -> nondim -> physical identity for all parameter types
-- [ ] **FWD-05**: Mesh convergence study with Grid Convergence Index (GCI) uncertainty quantification
+- [x] **FWD-05**: Mesh convergence study with Grid Convergence Index (GCI) uncertainty quantification
 
 ### Surrogate Verification
 
@@ -71,11 +71,11 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FWD-01 | Phase 2 | Pending |
+| FWD-01 | Phase 2 | Complete |
 | FWD-02 | Phase 1 | Complete |
-| FWD-03 | Phase 2 | Pending |
+| FWD-03 | Phase 2 | Complete |
 | FWD-04 | Phase 1 | Complete |
-| FWD-05 | Phase 2 | Pending |
+| FWD-05 | Phase 2 | Complete |
 | SUR-01 | Phase 3 | Pending |
 | SUR-02 | Phase 3 | Pending |
 | SUR-03 | Phase 3 | Pending |
