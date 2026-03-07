@@ -27,6 +27,7 @@ import os
 import pickle
 from datetime import datetime, timezone
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
@@ -267,6 +268,87 @@ def fidelity_artifacts(all_metrics, holdout_data):
     return summary
 
 
+@pytest.fixture(scope="module")
+def generate_plots(all_models, all_metrics, holdout_data):
+    """Generate worst-case I-V overlay and error-vs-parameter scatter plots.
+
+    Produces 12 PNGs total (per model: 1 worst-case overlay + 2 scatter).
+    Returns list of generated file paths for test verification.
+    """
+    os.makedirs(_OUTPUT_DIR, exist_ok=True)
+
+    test_params = holdout_data["test_params"]
+    test_cd = holdout_data["test_cd"]
+    phi_applied = holdout_data["phi_applied"]
+    generated_paths = []
+
+    param_names = ["k0_1", "k0_2", "alpha_1", "alpha_2"]
+
+    for model_name in MODEL_NAMES:
+        model = all_models[model_name]
+        metrics = all_metrics[model_name]
+        cd_nrmse = metrics["cd_nrmse_per_sample"]
+        pc_nrmse = metrics["pc_nrmse_per_sample"]
+
+        # --- (a) Worst-case I-V overlay (top 3 worst CD NRMSE) ---
+        worst_3 = np.argsort(cd_nrmse)[-3:][::-1]
+        fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+        for ax, idx in zip(axes, worst_3):
+            pred = model.predict_batch(test_params[idx : idx + 1])
+            ax.plot(phi_applied, test_cd[idx], "k-", label="PDE truth")
+            ax.plot(
+                phi_applied, pred["current_density"][0], "r--", label="Surrogate"
+            )
+            ax.set_title(f"Sample {idx}, NRMSE={cd_nrmse[idx] * 100:.1f}%")
+            ax.set_xlabel("phi_applied")
+            ax.set_ylabel("CD")
+            ax.legend(fontsize=7)
+        fig.suptitle(f"{model_name} -- Worst-Case I-V Overlay (CD)")
+        fig.tight_layout()
+        overlay_path = os.path.join(
+            _OUTPUT_DIR, f"worst_iv_overlay_{model_name}.png"
+        )
+        fig.savefig(overlay_path, dpi=150)
+        plt.close(fig)
+        generated_paths.append(overlay_path)
+
+        # --- (b) Error vs parameter scatter -- CD ---
+        fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+        for ax, j, name in zip(axes, range(4), param_names):
+            ax.scatter(test_params[:, j], cd_nrmse * 100, s=8, alpha=0.5)
+            ax.set_xlabel(name)
+            ax.set_ylabel("CD NRMSE (%)")
+            if j < 2:
+                ax.set_xscale("log")
+        fig.suptitle(f"{model_name} -- CD Error vs Parameters")
+        fig.tight_layout()
+        cd_scatter_path = os.path.join(
+            _OUTPUT_DIR, f"error_vs_params_cd_{model_name}.png"
+        )
+        fig.savefig(cd_scatter_path, dpi=150)
+        plt.close(fig)
+        generated_paths.append(cd_scatter_path)
+
+        # --- (c) Error vs parameter scatter -- PC ---
+        fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+        for ax, j, name in zip(axes, range(4), param_names):
+            ax.scatter(test_params[:, j], pc_nrmse * 100, s=8, alpha=0.5)
+            ax.set_xlabel(name)
+            ax.set_ylabel("PC NRMSE (%)")
+            if j < 2:
+                ax.set_xscale("log")
+        fig.suptitle(f"{model_name} -- PC Error vs Parameters")
+        fig.tight_layout()
+        pc_scatter_path = os.path.join(
+            _OUTPUT_DIR, f"error_vs_params_pc_{model_name}.png"
+        )
+        fig.savefig(pc_scatter_path, dpi=150)
+        plt.close(fig)
+        generated_paths.append(pc_scatter_path)
+
+    return generated_paths
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -378,3 +460,31 @@ class TestSurrogateFidelity:
             f"Train ({len(train_set)}) + test ({len(test_set)}) = "
             f"{len(combined)}, expected {n_total}"
         )
+
+    def test_worst_iv_overlay_plots_generated(self, generate_plots):
+        """All 4 worst-case I-V overlay PNGs exist and have nonzero size."""
+        for model_name in MODEL_NAMES:
+            path = os.path.join(
+                _OUTPUT_DIR, f"worst_iv_overlay_{model_name}.png"
+            )
+            assert os.path.isfile(path), (
+                f"Worst-case overlay plot missing: {path}"
+            )
+            assert os.path.getsize(path) > 0, (
+                f"Worst-case overlay plot is empty: {path}"
+            )
+
+    def test_error_scatter_plots_generated(self, generate_plots):
+        """All 8 error-vs-parameter scatter PNGs exist (4 models x CD/PC)."""
+        for model_name in MODEL_NAMES:
+            for output_type in ("cd", "pc"):
+                path = os.path.join(
+                    _OUTPUT_DIR,
+                    f"error_vs_params_{output_type}_{model_name}.png",
+                )
+                assert os.path.isfile(path), (
+                    f"Error scatter plot missing: {path}"
+                )
+                assert os.path.getsize(path) > 0, (
+                    f"Error scatter plot is empty: {path}"
+                )
