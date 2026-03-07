@@ -72,11 +72,11 @@ Plans:
   1. Parameter recovery tests infer known parameters from synthetic v13 data at noise levels 0%, 1%, 2%, 5% and report relative error at each level
   2. Gradient consistency tests show finite-difference and adjoint gradients agree within a defined tolerance for the v13 objective function
   3. Multistart analysis demonstrates the v13 optimizer converges to the correct minimum from multiple initial guesses, with convergence basin statistics
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md — Noise model update (multiplicative mode) + surrogate FD gradient convergence test (INV-02b)
+- [ ] 04-02-PLAN.md — Parameter recovery (INV-01), PDE gradient consistency (INV-02a), multistart basin (INV-03), cleanup old tests
 
 ### Phase 5: Pipeline Reproducibility
 **Goal**: v13 pipeline produces deterministic, regression-tested results
