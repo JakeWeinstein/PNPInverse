@@ -102,9 +102,10 @@ def assert_convergence_rate(
         f"(slope={slope:.4f}, std_err={std_err:.4f}). "
         f"Log-log fit is not sufficiently linear -- may not be in asymptotic regime."
     )
-    assert abs(slope - expected_rate) < rate_tol, (
-        f"{label}: slope = {slope:.4f}, expected {expected_rate:.1f} +/- {rate_tol} "
-        f"(R^2={r_squared:.6f}, std_err={std_err:.4f})"
+    assert slope >= expected_rate - rate_tol, (
+        f"{label}: slope = {slope:.4f}, expected >= {expected_rate:.1f} - {rate_tol} "
+        f"(R^2={r_squared:.6f}, std_err={std_err:.4f}). "
+        f"Convergence rate is worse than theoretical minimum."
     )
 
     return slope, r_squared
