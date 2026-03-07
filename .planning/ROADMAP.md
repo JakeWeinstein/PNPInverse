@@ -12,7 +12,7 @@ Bottom-up verification of the PNP-BV electrochemical inference pipeline, startin
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Nondimensionalization & Weak Form Audit** - Verify dimensional transforms and confirm MMS tests the production weak form (completed 2026-03-06)
+- [x] **Phase 1: Nondimensionalization & Weak Form Audit** - Verify dimensional transforms and confirm MMS tests the production weak form (completed 2026-03-06)
 - [ ] **Phase 2: MMS Convergence Verification** - Automated convergence rate tests with GCI for the forward PDE solver
 - [ ] **Phase 3: Surrogate Fidelity** - Error characterization of v13 surrogate across parameter space
 - [ ] **Phase 4: Inverse Problem Verification** - Parameter recovery, gradient consistency, and optimizer convergence for v13
@@ -45,11 +45,10 @@ Plans:
   2. A 4-species MMS case (O2, H2O2, H+, ClO4-) matching the v13 production configuration passes convergence rate assertions
   3. Grid Convergence Index (GCI) uncertainty bounds are computed and available as test output for each mesh refinement level
   4. All convergence tests run as standard pytest tests without manual script execution
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — 4-species MMS convergence test with rate assertions, GCI output, and deprecated script cleanup
 
 ### Phase 3: Surrogate Fidelity
 **Goal**: v13 surrogate model error is characterized across the inference parameter domain
@@ -112,7 +111,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Nondimensionalization & Weak Form Audit | 3/3 | Complete   | 2026-03-06 |
-| 2. MMS Convergence Verification | 0/2 | Not started | - |
+| 2. MMS Convergence Verification | 0/1 | Not started | - |
 | 3. Surrogate Fidelity | 0/2 | Not started | - |
 | 4. Inverse Problem Verification | 0/2 | Not started | - |
 | 5. Pipeline Reproducibility | 0/1 | Not started | - |
