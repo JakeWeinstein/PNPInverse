@@ -68,7 +68,7 @@ from scripts._bv_common import (
     setup_firedrake_env,
 )
 
-from tests.conftest import skip_without_firedrake
+from tests.conftest import FIREDRAKE_AVAILABLE, skip_without_firedrake
 
 # ---------------------------------------------------------------------------
 # Path constants
@@ -164,7 +164,6 @@ def _pde_cd_at_params(k0_1, k0_2, alpha_1, alpha_2, phi_applied):
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
-@skip_without_firedrake
 def pde_targets(nn_ensemble):
     """Generate PDE targets at the surrogate's voltage grid for INV-01/INV-03.
 
@@ -183,6 +182,8 @@ def pde_targets(nn_ensemble):
     and (b) the peroxide current plays a secondary role (weighted by
     secondary_weight) in the objective.
     """
+    if not FIREDRAKE_AVAILABLE:
+        pytest.skip("Firedrake is not installed or not importable in this environment")
     model = nn_ensemble["model"]
     phi_applied = model.phi_applied  # production voltage grid
 
