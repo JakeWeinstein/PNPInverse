@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-08T18:22:00Z"
-last_activity: 2026-03-08 -- Completed 04-01 noise model + surrogate FD convergence
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-08T18:35:00Z"
+last_activity: 2026-03-08 -- Completed 04-02 inverse verification tests (INV-01, INV-02, INV-03)
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -20,23 +20,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-06)
 
 **Core value:** Every layer of the pipeline has independently verifiable proof of correctness that can withstand peer review.
-**Current focus:** Phase 4: Inverse Problem Verification -- Plan 01 complete
+**Current focus:** Phase 4 complete. Ready for Phase 5.
 
 ## Current Position
 
-Phase: 4 of 6 (Inverse Problem Verification)
-Plan: 1 of 2 in current phase -- COMPLETE
-Status: Executing Phase 4
-Last activity: 2026-03-08 -- Completed 04-01 noise model + surrogate FD convergence
+Phase: 4 of 6 (Inverse Problem Verification) -- COMPLETE
+Plan: 2 of 2 in current phase -- COMPLETE
+Status: Phase 4 complete
+Last activity: 2026-03-08 -- Completed 04-02 inverse verification tests (INV-01, INV-02, INV-03)
 
-Progress: [########--] 87%
+Progress: [##########] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 4 min
-- Total execution time: 0.47 hours
+- Total plans completed: 8
+- Average duration: 5 min
+- Total execution time: 0.68 hours
 
 **By Phase:**
 
@@ -45,10 +45,10 @@ Progress: [########--] 87%
 | 01-nondim-audit | 3 | 11 min | 4 min |
 | 02-mms-convergence-verification | 1 | 2 min | 2 min |
 | 03-surrogate-fidelity | 2 | 6 min | 3 min |
-| 04-inverse-problem-verification | 1 | 7 min | 7 min |
+| 04-inverse-problem-verification | 2 | 20 min | 10 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (6 min), 01-03 (1 min), 02-01 (2 min), 03-01 (4 min), 04-01 (7 min)
+- Last 5 plans: 01-03 (1 min), 02-01 (2 min), 03-01 (4 min), 04-01 (7 min), 04-02 (13 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -78,6 +78,10 @@ Recent decisions affecting current work:
 - 04-01: Convergence rate assertion only on params with observable truncation error; rate tolerance [1.5, 3.0]
 - 04-01: FD-vs-analytic comparison uses same fd_step for self-consistency
 - 04-01: Evaluate FD convergence at perturbed point (not optimum) because J=0 at true params
+- 04-02: Surrogate-only inference (S1+S2) for INV-01 parameter recovery (not full 7-phase pipeline)
+- 04-02: FD convergence rate verification as adjoint fallback for PDE gradient test (per RESEARCH.md)
+- 04-02: Relative FD steps (h * |param|) for PDE gradient to handle scale differences across parameters
+- 04-02: Multistart use_shallow_subset=False for full-grid evaluation in basin test
 
 ### Pending Todos
 
@@ -89,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-08T18:22:00Z
-Stopped at: Completed 04-01-PLAN.md
-Resume file: .planning/phases/04-inverse-problem-verification/04-01-SUMMARY.md
+Last session: 2026-03-08T18:35:00Z
+Stopped at: Completed 04-02-PLAN.md
+Resume file: .planning/phases/04-inverse-problem-verification/04-02-SUMMARY.md

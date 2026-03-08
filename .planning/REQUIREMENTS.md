@@ -21,9 +21,9 @@
 
 ### Inverse Problem Verification
 
-- [ ] **INV-01**: Parameter recovery from v13 synthetic data at multiple noise levels (0%, 1%, 2%, 5%)
+- [x] **INV-01**: Parameter recovery from v13 synthetic data at multiple noise levels (0%, 1%, 2%, 5%)
 - [x] **INV-02**: Gradient consistency verification (finite-difference vs adjoint) for the v13 objective function
-- [ ] **INV-03**: Multistart convergence basin analysis showing the v13 optimizer finds the correct minimum
+- [x] **INV-03**: Multistart convergence basin analysis showing the v13 optimizer finds the correct minimum
 
 ### Pipeline & Reproducibility
 
@@ -79,9 +79,9 @@
 | SUR-01 | Phase 3 | Complete |
 | SUR-02 | Phase 3 | Complete |
 | SUR-03 | Phase 3 | Complete |
-| INV-01 | Phase 4 | Pending |
+| INV-01 | Phase 4 | Complete |
 | INV-02 | Phase 4 | Complete |
-| INV-03 | Phase 4 | Pending |
+| INV-03 | Phase 4 | Complete |
 | PIP-01 | Phase 5 | Pending |
 | PIP-02 | Phase 5 | Pending |
 | RPT-01 | Phase 6 | Pending |
