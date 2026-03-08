@@ -134,18 +134,57 @@ def observed_flux_from_species_flux(
 
 
 def add_percent_noise(
-    values: Sequence[float], noise_percent: float, *, seed: int | None = None
+    values: Sequence[float],
+    noise_percent: float,
+    *,
+    seed: int | None = None,
+    mode: str = "rms",
 ) -> np.ndarray:
-    """Add zero-mean Gaussian noise using sigma = pct * RMS(finite values).
+    """Add zero-mean Gaussian noise to *values*.
 
-    NaN entries in *values* are preserved (noise is only added to finite
-    entries).  The RMS is computed over finite entries only so that a
-    single NaN does not poison the entire array.
+    Two noise modes are supported:
+
+    ``mode="rms"`` (default, legacy)
+        Global sigma: ``sigma = (noise_percent / 100) * RMS(finite values)``.
+        Every finite entry receives noise drawn from the same Gaussian.
+        This is the original behavior and all existing callers use it.
+
+    ``mode="signal"``
+        Per-point multiplicative sigma:
+        ``sigma_i = (noise_percent / 100) * |values_i|`` for each point.
+        A floor of 1e-12 is applied to sigma_i so that near-zero values
+        still receive a tiny perturbation rather than exactly zero noise.
+        Useful when the signal spans several orders of magnitude and a
+        uniform percentage of the *local* signal is desired.
+
+    In both modes NaN entries in *values* are preserved (noise is only
+    added to finite entries).
+
+    Parameters
+    ----------
+    values : Sequence[float]
+        Input signal array.
+    noise_percent : float
+        Noise level as a percentage (e.g., 5.0 means 5 %).
+    seed : int or None
+        Random seed for reproducibility.
+    mode : str
+        ``"rms"`` for global-sigma noise (default) or ``"signal"`` for
+        per-point multiplicative noise.
+
+    Returns
+    -------
+    np.ndarray
+        Noisy copy of *values*.
     """
     v = np.asarray(values, dtype=float)
     pct = float(noise_percent)
     if pct < 0:
         raise ValueError(f"noise_percent must be non-negative; got {pct}.")
+    if mode not in ("rms", "signal"):
+        raise ValueError(
+            f"Unknown noise mode '{mode}'. Use 'rms' or 'signal'."
+        )
     if pct == 0:
         return v.copy()
     rng = np.random.default_rng(seed)
@@ -153,13 +192,23 @@ def add_percent_noise(
     v_finite = v[finite_mask]
     if v_finite.size == 0:
         return v.copy()
-    rms = float(np.sqrt(np.mean(v_finite * v_finite)))
-    sigma = (pct / 100.0) * max(rms, 1e-12)
+
     out = v.copy()
-    # Draw noise for ALL positions (preserves RNG state reproducibility
-    # relative to the original implementation when there are no NaN values)
-    noise = rng.normal(0.0, sigma, size=v.shape)
-    out[finite_mask] += noise[finite_mask]
+
+    if mode == "rms":
+        # Legacy global-sigma mode
+        rms = float(np.sqrt(np.mean(v_finite * v_finite)))
+        sigma = (pct / 100.0) * max(rms, 1e-12)
+        # Draw noise for ALL positions (preserves RNG state reproducibility
+        # relative to the original implementation when there are no NaN values)
+        noise = rng.normal(0.0, sigma, size=v.shape)
+        out[finite_mask] += noise[finite_mask]
+    else:
+        # Per-point multiplicative mode
+        sigma_all = np.maximum((pct / 100.0) * np.abs(v), 1e-12)
+        noise = rng.standard_normal(size=v.shape) * sigma_all
+        out[finite_mask] += noise[finite_mask]
+
     return out
 
 
