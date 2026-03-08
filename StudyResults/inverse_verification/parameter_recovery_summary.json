@@ -1,0 +1,75 @@
+{
+  "timestamp": "2026-03-08T22:21:19.446455+00:00",
+  "test": "parameter_recovery",
+  "noise_levels": [
+    0.0,
+    1.0,
+    2.0,
+    5.0
+  ],
+  "realizations_per_level": 3,
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "target_source": "PDE-generated (no inverse crime)",
+  "inference_method": "surrogate-only (S1 alpha-only + S2 joint L-BFGS-B)",
+  "noise_mode": "signal (per-point multiplicative)",
+  "surrogate_bias": 0.10672300234815457,
+  "surrogate_bias_note": "Irreducible error from surrogate approximation -- the surrogate optimum differs from PDE truth by this amount even at 0% noise",
+  "results": {
+    "0.0": {
+      "median_max_relative_error": 0.10672300234815457,
+      "mean_max_relative_error": 0.10672300234815457,
+      "std_max_relative_error": 0.0,
+      "gate_threshold": 0.15,
+      "informational": false,
+      "pass": true,
+      "per_run_max_errors": [
+        0.10672300234815457,
+        0.10672300234815457,
+        0.10672300234815457
+      ]
+    },
+    "1.0": {
+      "median_max_relative_error": 0.17687006015830506,
+      "mean_max_relative_error": 1.0631847245565562,
+      "std_max_relative_error": 1.2816269944041507,
+      "gate_threshold": 0.25,
+      "informational": false,
+      "pass": true,
+      "per_run_max_errors": [
+        0.17687006015830506,
+        0.13715019075129037,
+        2.875533922760073
+      ]
+    },
+    "2.0": {
+      "median_max_relative_error": 0.27271029469736596,
+      "mean_max_relative_error": 1.4743719006671352,
+      "std_max_relative_error": 1.788333982170944,
+      "gate_threshold": 0.3,
+      "informational": false,
+      "pass": true,
+      "per_run_max_errors": [
+        0.27271029469736596,
+        0.1479729077442518,
+        4.002432499559788
+      ]
+    },
+    "5.0": {
+      "median_max_relative_error": 4.655892978735331,
+      "mean_max_relative_error": 3.3626074589692223,
+      "std_max_relative_error": 2.2343003177961642,
+      "gate_threshold": 0.5,
+      "informational": true,
+      "pass": false,
+      "per_run_max_errors": [
+        4.655892978735331,
+        0.2192255680537454,
+        5.212703830118592
+      ]
+    }
+  }
+}

@@ -26,12 +26,16 @@ if _ROOT not in sys.path:
 # ---------------------------------------------------------------------------
 
 def _firedrake_available() -> bool:
-    """Return True if Firedrake can be imported."""
-    try:
-        import firedrake  # noqa: F401
-        return True
-    except Exception:
-        return False
+    """Return True if Firedrake is installed.
+
+    Uses importlib.util.find_spec to check availability WITHOUT importing
+    firedrake.  Importing firedrake loads PETSc/MPI C extensions which
+    corrupt PyTorch batch operations (segfault in torch.tensor).  By
+    deferring the actual import to tests that need it, PyTorch-only tests
+    like TestMultistartBasin can run safely in the same process.
+    """
+    import importlib.util
+    return importlib.util.find_spec("firedrake") is not None
 
 
 FIREDRAKE_AVAILABLE = _firedrake_available()
