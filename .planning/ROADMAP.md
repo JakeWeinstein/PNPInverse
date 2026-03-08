@@ -72,7 +72,7 @@ Plans:
   1. Parameter recovery tests infer known parameters from synthetic v13 data at noise levels 0%, 1%, 2%, 5% and report relative error at each level
   2. Gradient consistency tests show finite-difference and adjoint gradients agree within a defined tolerance for the v13 objective function
   3. Multistart analysis demonstrates the v13 optimizer converges to the correct minimum from multiple initial guesses, with convergence basin statistics
-**Plans:** 4 plans
+**Plans:** 3/4 plans executed
 
 Plans:
 - [x] 04-01-PLAN.md — Noise model update (multiplicative mode) + surrogate FD gradient convergence test (INV-02b)
@@ -115,6 +115,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 1. Nondimensionalization & Weak Form Audit | 3/3 | Complete   | 2026-03-06 |
 | 2. MMS Convergence Verification | 1/1 | Complete | 2026-03-07 |
 | 3. Surrogate Fidelity | 0/2 | Not started | - |
-| 4. Inverse Problem Verification | 3/4 | Gap closure | - |
+| 4. Inverse Problem Verification | 3/4 | In Progress|  |
 | 5. Pipeline Reproducibility | 0/1 | Not started | - |
 | 6. V&V Report | 0/1 | Not started | - |
