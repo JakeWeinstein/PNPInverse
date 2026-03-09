@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-03-09T18:46:20.277Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-09T19:13:33.127Z"
 last_activity: 2026-03-09 -- Completed 04-03 user verification (all 4 slow tests pass with PDE targets)
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 10
-  completed_plans: 10
+  total_plans: 12
+  completed_plans: 11
 ---
 
 ---
@@ -67,6 +67,7 @@ Progress: [##########] 100%
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 05 P01 | 2min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,7 @@ Recent decisions affecting current work:
 - 04-03: PDE targets generated via subprocess to avoid Firedrake/PyTorch PETSc segfault
 - 04-03: Peroxide current remains surrogate-generated (PDE helper returns only current density; acceptable for secondary observable)
 - 04-03: NaN PDE points backfilled with surrogate predictions (failed PDE solver points at extreme voltages)
+- [Phase 05]: surr_strategy=joint runs only S1+S2 for fast surrogate-only reproducibility test
 
 ### Pending Todos
 
@@ -115,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-09T18:46:20.271Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-pipeline-reproducibility/05-CONTEXT.md
+Last session: 2026-03-09T19:13:33.126Z
+Stopped at: Completed 05-01-PLAN.md
+Resume file: None

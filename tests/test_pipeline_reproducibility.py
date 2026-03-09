@@ -6,6 +6,10 @@ This module implements the PIP requirements for Phase 5:
   produces identical results across runs, verified at rel=1e-10 against
   saved JSON baselines.
 
+- **PIP-01** (TestFullPipelineReproducibility): Full 7-phase pipeline
+  (S1-S5 + P1-P2) produces deterministic results within solver tolerance
+  (rel=1e-4), verified via subprocess execution and CSV parsing.
+
 - **PIP-02**: Regression baselines infrastructure -- ``--update-baselines``
   pytest flag regenerates baselines, missing baselines produce a clear error,
   and tolerance failures display a diff table.
@@ -14,6 +18,10 @@ Artifacts produced (under StudyResults/pipeline_reproducibility/):
     - regression_baselines.json
 
 Run fast tests only::
+
+    pytest tests/test_pipeline_reproducibility.py -x -v -m "not slow"
+
+Run all tests (requires Firedrake)::
 
     pytest tests/test_pipeline_reproducibility.py -x -v
 
@@ -24,6 +32,7 @@ Regenerate baselines::
 
 from __future__ import annotations
 
+import csv
 import json
 import os
 import subprocess as sp
@@ -39,6 +48,8 @@ if _ROOT not in sys.path:
 
 import numpy as np
 import pytest
+
+from tests.conftest import skip_without_firedrake
 
 
 # ===================================================================
@@ -349,6 +360,218 @@ class TestSurrogateReproducibility:
             current=current,
             section="surrogate_only_loss",
             tolerance=1e-10,
+            baselines=baselines,
+            update_baselines=update_baselines,
+            baselines_path=_BASELINES_PATH,
+        )
+
+
+# ===================================================================
+# Full pipeline results fixture (slow -- subprocess execution)
+# ===================================================================
+
+@pytest.fixture(scope="module")
+def full_pipeline_results():
+    """Run the full v13 7-phase pipeline via subprocess and parse CSV output.
+
+    The pipeline is invoked as a subprocess to avoid Firedrake/PyTorch
+    PETSc segfault issues that occur when both are imported in the same
+    process.
+
+    Returns a dict with S1, P1, P2, and final parameter values extracted
+    from the ``master_comparison_v13.csv`` written by the pipeline script.
+    """
+    cmd = [
+        sys.executable,
+        "scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py",
+        "--noise-percent", "0",
+        "--noise-seed", "42",
+    ]
+
+    proc = sp.run(
+        cmd,
+        cwd=_ROOT,
+        timeout=900,
+        capture_output=True,
+        text=True,
+    )
+
+    if proc.returncode != 0:
+        pytest.fail(
+            f"Full pipeline subprocess failed (rc={proc.returncode}).\n"
+            f"STDERR (last 2000 chars):\n{proc.stderr[-2000:]}"
+        )
+
+    # Parse the output CSV written by the v13 script
+    csv_path = os.path.join(
+        _ROOT, "StudyResults", "master_inference_v13",
+        "master_comparison_v13.csv",
+    )
+    if not os.path.isfile(csv_path):
+        pytest.fail(f"Pipeline CSV not found at {csv_path}")
+
+    rows: dict[str, dict[str, str]] = {}
+    with open(csv_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            phase_name = row["phase"].strip()
+            rows[phase_name] = row
+
+    # Find S1 row (key contains "S1 alpha")
+    s1_row = None
+    for name, row in rows.items():
+        if "S1 alpha" in name:
+            s1_row = row
+            break
+
+    # Find P1 row
+    p1_row = None
+    for name, row in rows.items():
+        if "P1" in name:
+            p1_row = row
+            break
+
+    # Find P2 row (the final phase)
+    p2_row = None
+    for name, row in rows.items():
+        if "P2" in name:
+            p2_row = row
+            break
+
+    if s1_row is None:
+        pytest.fail(
+            f"S1 phase not found in pipeline CSV. "
+            f"Available phases: {list(rows.keys())}"
+        )
+    if p2_row is None:
+        pytest.fail(
+            f"P2 phase not found in pipeline CSV. "
+            f"Available phases: {list(rows.keys())}"
+        )
+
+    result = {
+        # S1 intermediate values
+        "s1_k0_1": float(s1_row["k0_1"]),
+        "s1_k0_2": float(s1_row["k0_2"]),
+        "s1_alpha_1": float(s1_row["alpha_1"]),
+        "s1_alpha_2": float(s1_row["alpha_2"]),
+        "s1_loss": float(s1_row["loss"]),
+    }
+
+    # P1 intermediate values (if present)
+    if p1_row is not None:
+        result.update({
+            "p1_k0_1": float(p1_row["k0_1"]),
+            "p1_k0_2": float(p1_row["k0_2"]),
+            "p1_alpha_1": float(p1_row["alpha_1"]),
+            "p1_alpha_2": float(p1_row["alpha_2"]),
+            "p1_loss": float(p1_row["loss"]),
+        })
+
+    # P2 values (also used as "final" since P2 is the last phase)
+    result.update({
+        "p2_k0_1": float(p2_row["k0_1"]),
+        "p2_k0_2": float(p2_row["k0_2"]),
+        "p2_alpha_1": float(p2_row["alpha_1"]),
+        "p2_alpha_2": float(p2_row["alpha_2"]),
+        "p2_loss": float(p2_row["loss"]),
+        "final_k0_1": float(p2_row["k0_1"]),
+        "final_k0_2": float(p2_row["k0_2"]),
+        "final_alpha_1": float(p2_row["alpha_1"]),
+        "final_alpha_2": float(p2_row["alpha_2"]),
+        "final_loss": float(p2_row["loss"]),
+    })
+
+    return result
+
+
+# ===================================================================
+# PIP-01: Full pipeline reproducibility tests (slow, Firedrake)
+# ===================================================================
+
+@pytest.mark.slow
+@skip_without_firedrake
+class TestFullPipelineReproducibility:
+    """PIP-01: Full 7-phase pipeline (S1-S5 + P1-P2) is deterministic.
+
+    Runs the complete v13 pipeline via subprocess, parses the output CSV,
+    and compares final inferred parameters + loss + key intermediates
+    (S1, P2) against saved baselines at the PDE solver tolerance (rel=1e-4).
+
+    Marked ``@pytest.mark.slow`` and ``@skip_without_firedrake`` because
+    the full pipeline takes several minutes (PDE solves in P1 and P2).
+    """
+
+    def test_full_pipeline_parameters_reproducible(
+        self, full_pipeline_results, update_baselines,
+    ):
+        """Final (P2) and intermediate (S1) parameters match baselines at rel=1e-4."""
+        r = full_pipeline_results
+        current = {
+            "s1_k0_1": r["s1_k0_1"],
+            "s1_k0_2": r["s1_k0_2"],
+            "s1_alpha_1": r["s1_alpha_1"],
+            "s1_alpha_2": r["s1_alpha_2"],
+            "p2_k0_1": r["p2_k0_1"],
+            "p2_k0_2": r["p2_k0_2"],
+            "p2_alpha_1": r["p2_alpha_1"],
+            "p2_alpha_2": r["p2_alpha_2"],
+            "final_k0_1": r["final_k0_1"],
+            "final_k0_2": r["final_k0_2"],
+            "final_alpha_1": r["final_alpha_1"],
+            "final_alpha_2": r["final_alpha_2"],
+        }
+        baselines = _load_baselines(_BASELINES_PATH)
+        _assert_baselines(
+            current=current,
+            section="full_pipeline",
+            tolerance=1e-4,
+            baselines=baselines,
+            update_baselines=update_baselines,
+            baselines_path=_BASELINES_PATH,
+        )
+
+    def test_full_pipeline_loss_reproducible(
+        self, full_pipeline_results, update_baselines,
+    ):
+        """P2 and final loss values match baselines at rel=1e-4, abs=1e-8."""
+        r = full_pipeline_results
+        current = {
+            "p2_loss": r["p2_loss"],
+            "final_loss": r["final_loss"],
+        }
+        baselines = _load_baselines(_BASELINES_PATH)
+        _assert_baselines(
+            current=current,
+            section="full_pipeline_loss",
+            tolerance=1e-4,
+            baselines=baselines,
+            update_baselines=update_baselines,
+            baselines_path=_BASELINES_PATH,
+        )
+
+    def test_intermediate_s1_reproducible(
+        self, full_pipeline_results, update_baselines,
+    ):
+        """S1 intermediate values from subprocess match baselines at rel=1e-4.
+
+        S1 uses the surrogate only but goes through subprocess execution,
+        so CSV string formatting precision applies.  We use rel=1e-4 to
+        match the overall pipeline tolerance.
+        """
+        r = full_pipeline_results
+        current = {
+            "s1_k0_1": r["s1_k0_1"],
+            "s1_k0_2": r["s1_k0_2"],
+            "s1_alpha_1": r["s1_alpha_1"],
+            "s1_alpha_2": r["s1_alpha_2"],
+            "s1_loss": r["s1_loss"],
+        }
+        baselines = _load_baselines(_BASELINES_PATH)
+        _assert_baselines(
+            current=current,
+            section="full_pipeline_s1",
+            tolerance=1e-4,
             baselines=baselines,
             update_baselines=update_baselines,
             baselines_path=_BASELINES_PATH,

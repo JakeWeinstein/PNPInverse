@@ -27,8 +27,8 @@
 
 ### Pipeline & Reproducibility
 
-- [ ] **PIP-01**: End-to-end v13 reproducibility test: same inputs produce same outputs across runs
-- [ ] **PIP-02**: Numerical regression baselines with saved reference values to catch future breakage
+- [x] **PIP-01**: End-to-end v13 reproducibility test: same inputs produce same outputs across runs
+- [x] **PIP-02**: Numerical regression baselines with saved reference values to catch future breakage
 
 ### Report
 
@@ -82,8 +82,8 @@
 | INV-01 | Phase 4 | Complete |
 | INV-02 | Phase 4 | Complete |
 | INV-03 | Phase 4 | Complete |
-| PIP-01 | Phase 5 | Pending |
-| PIP-02 | Phase 5 | Pending |
+| PIP-01 | Phase 5 | Complete |
+| PIP-02 | Phase 5 | Complete |
 | RPT-01 | Phase 6 | Pending |
 
 **Coverage:**
