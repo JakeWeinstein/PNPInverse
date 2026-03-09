@@ -11,6 +11,26 @@ import sys
 import pytest
 import numpy as np
 
+
+# ---------------------------------------------------------------------------
+# Custom pytest command-line options
+# ---------------------------------------------------------------------------
+
+def pytest_addoption(parser):
+    """Register custom command-line options."""
+    parser.addoption(
+        "--update-baselines",
+        action="store_true",
+        default=False,
+        help="Regenerate regression baselines instead of comparing against them",
+    )
+
+
+@pytest.fixture()
+def update_baselines(request):
+    """Return True if --update-baselines was passed on the command line."""
+    return request.config.getoption("--update-baselines")
+
 # ---------------------------------------------------------------------------
 # Ensure the PNPInverse package root is importable regardless of how pytest
 # is invoked (editable install, plain ``python -m pytest``, etc.).
