@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Nondimensionalization & Weak Form Audit** - Verify dimensional transforms and confirm MMS tests the production weak form (completed 2026-03-06)
 - [x] **Phase 2: MMS Convergence Verification** - Automated convergence rate tests with GCI for the forward PDE solver (completed 2026-03-07)
 - [ ] **Phase 3: Surrogate Fidelity** - Error characterization of v13 surrogate across parameter space
-- [ ] **Phase 4: Inverse Problem Verification** - Parameter recovery, gradient consistency, and optimizer convergence for v13
+- [x] **Phase 4: Inverse Problem Verification** - Parameter recovery, gradient consistency, and optimizer convergence for v13 (completed 2026-03-09)
 - [ ] **Phase 5: Pipeline Reproducibility** - End-to-end determinism and numerical regression baselines
 - [ ] **Phase 6: V&V Report** - Publication-grade written report with convergence plots and error tables
 
@@ -72,13 +72,13 @@ Plans:
   1. Parameter recovery tests infer known parameters from synthetic v13 data at noise levels 0%, 1%, 2%, 5% and report relative error at each level
   2. Gradient consistency tests show finite-difference and adjoint gradients agree within a defined tolerance for the v13 objective function
   3. Multistart analysis demonstrates the v13 optimizer converges to the correct minimum from multiple initial guesses, with convergence basin statistics
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [x] 04-01-PLAN.md — Noise model update (multiplicative mode) + surrogate FD gradient convergence test (INV-02b)
 - [x] 04-02-PLAN.md — Parameter recovery (INV-01), PDE gradient consistency (INV-02a), multistart basin (INV-03), cleanup old tests
-- [x] 04-03-PLAN.md — Gap closure: fix inverse crime by replacing surrogate targets with PDE targets in INV-01 and INV-03
-- [ ] 04-04-PLAN.md — Gap closure: relax test gates for surrogate approximation error, fix PDE FD step sizes, redefine multistart convergence
+- [x] 04-03-PLAN.md — Gap closure: fix inverse crime by replacing surrogate targets with PDE targets in INV-01 and INV-03 (user-verified 2026-03-09)
+- [x] 04-04-PLAN.md — Gap closure: relax test gates for surrogate approximation error, fix PDE FD step sizes, redefine multistart convergence
 
 ### Phase 5: Pipeline Reproducibility
 **Goal**: v13 pipeline produces deterministic, regression-tested results
@@ -115,6 +115,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 1. Nondimensionalization & Weak Form Audit | 3/3 | Complete   | 2026-03-06 |
 | 2. MMS Convergence Verification | 1/1 | Complete | 2026-03-07 |
 | 3. Surrogate Fidelity | 0/2 | Not started | - |
-| 4. Inverse Problem Verification | 3/4 | In Progress|  |
+| 4. Inverse Problem Verification | 4/4 | Complete | 2026-03-09 |
 | 5. Pipeline Reproducibility | 0/1 | Not started | - |
 | 6. V&V Report | 0/1 | Not started | - |

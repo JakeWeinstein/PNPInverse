@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 04-04-PLAN.md (gap closure)
-last_updated: "2026-03-08T21:09:00Z"
-last_activity: 2026-03-08 -- Completed 04-04 gap closure (fix test gates, PDE FD steps, multistart convergence)
+last_updated: "2026-03-09T17:49:00Z"
+last_activity: 2026-03-09 -- Completed 04-03 user verification (all 4 slow tests pass with PDE targets)
 progress:
   total_phases: 6
   completed_phases: 4
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-06)
 
 **Core value:** Every layer of the pipeline has independently verifiable proof of correctness that can withstand peer review.
-**Current focus:** Phase 4 gap closure complete (04-03, 04-04). Ready for Phase 5.
+**Current focus:** Phase 4 fully verified (04-03 user-confirmed all tests pass). Ready for Phase 5.
 
 ## Current Position
 
 Phase: 4 of 6 (Inverse Problem Verification) -- COMPLETE (including gap closure)
 Plan: 4 of 4 in current phase -- COMPLETE
-Status: Phase 4 complete (gap closure plans 04-03, 04-04 executed)
-Last activity: 2026-03-08 -- Completed 04-04 gap closure (fix test gates, PDE FD steps, multistart convergence)
+Status: Phase 4 complete (all plans executed, user-verified)
+Last activity: 2026-03-09 -- Completed 04-03 user verification (all 4 slow tests pass with PDE targets)
 
 Progress: [##########] 100%
 
@@ -86,6 +86,9 @@ Recent decisions affecting current work:
 - 04-04: PDE FD steps changed to {1e-2, 1e-3, 1e-4} to avoid PDE solver noise floor
 - 04-04: Multistart convergence redefined as basin uniqueness (CV<0.10) + functional fit (NRMSE<0.05)
 - 04-04: "Within 10% of true" kept informational only (surrogate optimum ~11% from PDE truth)
+- 04-03: PDE targets generated via subprocess to avoid Firedrake/PyTorch PETSc segfault
+- 04-03: Peroxide current remains surrogate-generated (PDE helper returns only current density; acceptable for secondary observable)
+- 04-03: NaN PDE points backfilled with surrogate predictions (failed PDE solver points at extreme voltages)
 
 ### Pending Todos
 
@@ -97,6 +100,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-08T21:09:00Z
-Stopped at: Completed 04-04-PLAN.md (gap closure)
-Resume file: .planning/phases/04-inverse-problem-verification/04-04-SUMMARY.md
+Last session: 2026-03-09T17:49:00Z
+Stopped at: Completed 04-03-PLAN.md (user verification of PDE targets)
+Resume file: .planning/phases/04-inverse-problem-verification/04-03-SUMMARY.md
