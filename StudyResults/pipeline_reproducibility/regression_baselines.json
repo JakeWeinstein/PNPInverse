@@ -14,12 +14,37 @@
     ]
   },
   "metadata": {
-    "generated_at": "2026-03-09T19:12:06.868576+00:00",
-    "git_commit": "742c8ab37328cd8fb8ef6a748f95bb0f19a48c8f",
-    "python_version": "3.14.2",
-    "numpy_version": "2.4.1"
+    "generated_at": "2026-03-09T19:25:18.214934+00:00",
+    "git_commit": "1cfa02436157929cf89d38a097739f965b95af02",
+    "python_version": "3.12.12",
+    "numpy_version": "2.4.2"
   },
   "surrogate_only_loss": {
     "surr_best_loss": 1.0709550215549735e-15
+  },
+  "full_pipeline": {
+    "s1_k0_1": 0.005,
+    "s1_k0_2": 0.0005,
+    "s1_alpha_1": 0.311546,
+    "s1_alpha_2": 0.113425,
+    "p2_k0_1": 0.00121829382,
+    "p2_k0_2": 5.03528771e-05,
+    "p2_alpha_1": 0.637172,
+    "p2_alpha_2": 0.510743,
+    "final_k0_1": 0.00121829382,
+    "final_k0_2": 5.03528771e-05,
+    "final_alpha_1": 0.637172,
+    "final_alpha_2": 0.510743
+  },
+  "full_pipeline_loss": {
+    "p2_loss": 9.981752766558e-08,
+    "final_loss": 9.981752766558e-08
+  },
+  "full_pipeline_s1": {
+    "s1_k0_1": 0.005,
+    "s1_k0_2": 0.0005,
+    "s1_alpha_1": 0.311546,
+    "s1_alpha_2": 0.113425,
+    "s1_loss": 0.0003528077571208
   }
 }
