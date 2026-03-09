@@ -205,3 +205,151 @@ def _assert_baselines(
     table, any_fail = _format_diff_table(entries)
     if any_fail:
         pytest.fail(f"Baseline regression detected (tol={tolerance}):\n\n{table}")
+
+
+# ===================================================================
+# Ensemble and surrogate data paths
+# ===================================================================
+
+_V11_DIR = os.path.join(_ROOT, "StudyResults", "surrogate_v11")
+_ENSEMBLE_DIR = os.path.join(_V11_DIR, "nn_ensemble", "D3-deeper")
+
+
+# ===================================================================
+# Module-scoped fixtures
+# ===================================================================
+
+@pytest.fixture(scope="module")
+def nn_ensemble_repro():
+    """Load the D3-deeper NN ensemble for reproducibility tests.
+
+    Skips if the ensemble directory is not present on disk.
+    """
+    if not os.path.isdir(_ENSEMBLE_DIR):
+        pytest.skip("D3-deeper ensemble not found on disk")
+
+    from Surrogate.ensemble import load_nn_ensemble
+
+    return load_nn_ensemble(_ENSEMBLE_DIR, n_members=5, device="cpu")
+
+
+@pytest.fixture(scope="module")
+def surrogate_only_results(nn_ensemble_repro):
+    """Run surrogate-only inference (S1+S2) with fixed seeds.
+
+    Calls ``_run_surrogate_phases()`` from the v13 script with
+    ``surr_strategy="joint"`` so only S1 (alpha-only) and S2 (joint
+    4-param L-BFGS-B) are executed.  No Firedrake is imported.
+
+    Returns the result dict from ``_run_surrogate_phases()``.
+    """
+    from types import SimpleNamespace
+
+    from scripts.surrogate.Infer_BVMaster_charged_v13_ultimate import (
+        _run_surrogate_phases,
+    )
+    from scripts._bv_common import K0_HAT_R1, K0_HAT_R2, ALPHA_R1, ALPHA_R2
+
+    model = nn_ensemble_repro
+
+    # True parameters
+    true_k0_arr = np.array([K0_HAT_R1, K0_HAT_R2])
+    true_alpha_arr = np.array([ALPHA_R1, ALPHA_R2])
+
+    # Generate surrogate targets at true params
+    pred = model.predict(K0_HAT_R1, K0_HAT_R2, ALPHA_R1, ALPHA_R2)
+    target_cd = pred["current_density"]
+    target_pc = pred["peroxide_current"]
+
+    # Voltage grids (identical to v13 main())
+    eta_symmetric = np.array([
+        +5.0, +3.0, +1.0, -0.5,
+        -1.0, -2.0, -3.0, -5.0, -8.0,
+        -10.0, -15.0, -20.0,
+    ])
+    eta_shallow = np.array([
+        -1.0, -2.0, -3.0, -4.0, -5.0, -6.5, -8.0,
+        -10.0, -11.5, -13.0,
+    ])
+    all_eta = np.unique(np.concatenate([eta_symmetric, eta_shallow]))
+    all_eta = np.sort(all_eta)[::-1]
+
+    # Args namespace with joint strategy (S1+S2 only)
+    args = SimpleNamespace(surr_strategy="joint")
+
+    initial_k0_guess = [0.005, 0.0005]
+    initial_alpha_guess = [0.4, 0.3]
+
+    result = _run_surrogate_phases(
+        surrogate=model,
+        model_label="nn-ensemble",
+        args=args,
+        target_cd_surr=target_cd,
+        target_pc_surr=target_pc,
+        target_cd_full=target_cd,
+        target_pc_full=target_pc,
+        all_eta=all_eta,
+        eta_shallow=eta_shallow,
+        initial_k0_guess=initial_k0_guess,
+        initial_alpha_guess=initial_alpha_guess,
+        true_k0_arr=true_k0_arr,
+        true_alpha_arr=true_alpha_arr,
+        secondary_weight=1.0,
+    )
+
+    return result
+
+
+# ===================================================================
+# PIP-01: Surrogate reproducibility tests (fast, no Firedrake)
+# ===================================================================
+
+class TestSurrogateReproducibility:
+    """PIP-01: Surrogate-only inference produces deterministic results.
+
+    Runs S1 (alpha-only) + S2 (joint 4-param L-BFGS-B) and compares
+    inferred parameters against saved baselines at rel=1e-10.  These
+    outputs are float64 deterministic (no PDE solver involved).
+    """
+
+    def test_surrogate_parameters_reproducible(
+        self, surrogate_only_results, update_baselines,
+    ):
+        """S1 alpha and S2 best k0/alpha match saved baselines at rel=1e-10."""
+        r = surrogate_only_results
+        baselines = _load_baselines(_BASELINES_PATH)
+
+        current = {
+            "s1_alpha": list(r["s1_alpha"]),
+            "surr_best_k0": list(r["surr_best_k0"]),
+            "surr_best_alpha": list(r["surr_best_alpha"]),
+        }
+
+        _assert_baselines(
+            current=current,
+            section="surrogate_only",
+            tolerance=1e-10,
+            baselines=baselines,
+            update_baselines=update_baselines,
+            baselines_path=_BASELINES_PATH,
+        )
+
+    def test_surrogate_loss_reproducible(
+        self, surrogate_only_results, update_baselines,
+    ):
+        """S2 best loss matches saved baseline at rel=1e-10."""
+        r = surrogate_only_results
+        baselines = _load_baselines(_BASELINES_PATH)
+
+        current = {
+            "surr_best_loss": float(r["surr_best_loss"]),
+        }
+
+        _assert_baselines(
+            current=current,
+            section="surrogate_only_loss",
+            tolerance=1e-10,
+            baselines=baselines,
+            update_baselines=update_baselines,
+            baselines_path=_BASELINES_PATH,
+        )

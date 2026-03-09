@@ -1,0 +1,25 @@
+{
+  "surrogate_only": {
+    "s1_alpha": [
+      0.30751675508031334,
+      0.11075275673392039
+    ],
+    "surr_best_k0": [
+      0.001263156310820832,
+      5.2631343217966876e-05
+    ],
+    "surr_best_alpha": [
+      0.6270004863974054,
+      0.5000008663273687
+    ]
+  },
+  "metadata": {
+    "generated_at": "2026-03-09T19:12:06.868576+00:00",
+    "git_commit": "742c8ab37328cd8fb8ef6a748f95bb0f19a48c8f",
+    "python_version": "3.14.2",
+    "numpy_version": "2.4.1"
+  },
+  "surrogate_only_loss": {
+    "surr_best_loss": 1.0709550215549735e-15
+  }
+}
