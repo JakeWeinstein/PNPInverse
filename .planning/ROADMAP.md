@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: MMS Convergence Verification** - Automated convergence rate tests with GCI for the forward PDE solver (completed 2026-03-07)
 - [ ] **Phase 3: Surrogate Fidelity** - Error characterization of v13 surrogate across parameter space
 - [x] **Phase 4: Inverse Problem Verification** - Parameter recovery, gradient consistency, and optimizer convergence for v13 (completed 2026-03-09)
-- [ ] **Phase 5: Pipeline Reproducibility** - End-to-end determinism and numerical regression baselines
+- [x] **Phase 5: Pipeline Reproducibility** - End-to-end determinism and numerical regression baselines (completed 2026-03-09)
 - [ ] **Phase 6: V&V Report** - Publication-grade written report with convergence plots and error tables
 
 ## Phase Details
@@ -87,7 +87,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Running the same v13 inference inputs twice produces bitwise-identical (or within solver tolerance) outputs
   2. Saved numerical regression baselines exist and pytest automatically compares current outputs against them, failing if values drift beyond tolerance
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 05-01-PLAN.md — Conftest --update-baselines plugin + surrogate-only reproducibility test (fast, no Firedrake)
@@ -117,5 +117,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. MMS Convergence Verification | 1/1 | Complete | 2026-03-07 |
 | 3. Surrogate Fidelity | 0/2 | Not started | - |
 | 4. Inverse Problem Verification | 4/4 | Complete | 2026-03-09 |
-| 5. Pipeline Reproducibility | 0/2 | Not started | - |
+| 5. Pipeline Reproducibility | 2/2 | Complete   | 2026-03-09 |
 | 6. V&V Report | 0/1 | Not started | - |

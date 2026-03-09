@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-09T19:13:33.127Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-03-09T19:27:10.825Z"
 last_activity: 2026-03-09 -- Completed 04-03 user verification (all 4 slow tests pass with PDE targets)
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 12
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 ---
@@ -35,14 +35,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-06)
 
 **Core value:** Every layer of the pipeline has independently verifiable proof of correctness that can withstand peer review.
-**Current focus:** Phase 4 fully verified (04-03 user-confirmed all tests pass). Ready for Phase 5.
+**Current focus:** Phase 5 complete (all pipeline reproducibility tests pass). Ready for Phase 6.
 
 ## Current Position
 
-Phase: 4 of 6 (Inverse Problem Verification) -- COMPLETE (including gap closure)
-Plan: 4 of 4 in current phase -- COMPLETE
-Status: Phase 4 complete (all plans executed, user-verified)
-Last activity: 2026-03-09 -- Completed 04-03 user verification (all 4 slow tests pass with PDE targets)
+Phase: 5 of 6 (Pipeline Reproducibility) -- COMPLETE
+Plan: 2 of 2 in current phase -- COMPLETE
+Status: Phase 5 complete (surrogate-only + full pipeline reproducibility tests pass)
+Last activity: 2026-03-09 -- Completed 05-02 full pipeline reproducibility test (user-verified, all 5 tests pass)
 
 Progress: [##########] 100%
 
@@ -68,6 +68,7 @@ Progress: [##########] 100%
 
 *Updated after each plan completion*
 | Phase 05 P01 | 2min | 2 tasks | 3 files |
+| Phase 05 P02 | 7min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,7 @@ Recent decisions affecting current work:
 - 04-03: Peroxide current remains surrogate-generated (PDE helper returns only current density; acceptable for secondary observable)
 - 04-03: NaN PDE points backfilled with surrogate predictions (failed PDE solver points at extreme voltages)
 - [Phase 05]: surr_strategy=joint runs only S1+S2 for fast surrogate-only reproducibility test
+- [Phase 05]: Subprocess execution for full pipeline (avoids PETSc/PyTorch segfault in test process)
 
 ### Pending Todos
 
@@ -117,6 +119,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-09T19:13:33.126Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-03-09T19:27:10.823Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
