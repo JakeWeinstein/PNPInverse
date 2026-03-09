@@ -87,10 +87,11 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Running the same v13 inference inputs twice produces bitwise-identical (or within solver tolerance) outputs
   2. Saved numerical regression baselines exist and pytest automatically compares current outputs against them, failing if values drift beyond tolerance
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md — Conftest --update-baselines plugin + surrogate-only reproducibility test (fast, no Firedrake)
+- [ ] 05-02-PLAN.md — Full 7-phase pipeline reproducibility test (slow, subprocess, Firedrake required)
 
 ### Phase 6: V&V Report
 **Goal**: Publication-grade written evidence of pipeline correctness suitable for journal supplementary material
@@ -116,5 +117,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. MMS Convergence Verification | 1/1 | Complete | 2026-03-07 |
 | 3. Surrogate Fidelity | 0/2 | Not started | - |
 | 4. Inverse Problem Verification | 4/4 | Complete | 2026-03-09 |
-| 5. Pipeline Reproducibility | 0/1 | Not started | - |
+| 5. Pipeline Reproducibility | 0/2 | Not started | - |
 | 6. V&V Report | 0/1 | Not started | - |
