@@ -198,23 +198,27 @@ def make_parameter_recovery_figure(data):
 
     fig, ax = plt.subplots(figsize=(6.5, 4.5))
 
+    # Use evenly-spaced categorical positions so 0/1/2/5 don't distort spacing
+    x_positions = list(range(len(noise_levels)))
+    x_labels = ["0%", "1%", "2%", "5%"]
+
     # Plot markers
-    for i, (nl, me, info) in enumerate(zip(noise_levels, median_errors, informational_flags)):
+    for i, (xp, me, info) in enumerate(zip(x_positions, median_errors, informational_flags)):
         marker_style = "X" if info else "o"
         color = "gray" if info else "#1f77b4"
-        ax.plot(nl, me, marker=marker_style, markersize=10, color=color,
+        ax.plot(xp, me, marker=marker_style, markersize=10, color=color,
                 zorder=5, linestyle="none")
         if info:
-            ax.annotate("informational", (nl, me),
-                        textcoords="offset points", xytext=(10, 5),
+            ax.annotate("informational", (xp, me),
+                        textcoords="offset points", xytext=(10, -12),
                         fontsize=8, fontstyle="italic", color="gray")
 
     # Connect non-informational points with a line
-    non_info_x = [nl for nl, inf in zip(noise_levels, informational_flags) if not inf]
+    non_info_x = [xp for xp, inf in zip(x_positions, informational_flags) if not inf]
     non_info_y = [me for me, inf in zip(median_errors, informational_flags) if not inf]
     ax.plot(non_info_x, non_info_y, "-", color="#1f77b4", linewidth=1.2, alpha=0.6)
 
-    # Gate threshold lines
+    # Gate threshold lines — span only the relevant x range
     unique_gates = sorted(set(gate_thresholds))
     gate_colors = ["#2ca02c", "#ff7f0e", "#d62728", "#9467bd"]
     for j, gt in enumerate(unique_gates):
@@ -227,11 +231,12 @@ def make_parameter_recovery_figure(data):
     ax.axhline(y=bias, linestyle=":", linewidth=1.0, alpha=0.5, color="black",
                label=f"Surrogate bias floor ({bias:.1%})")
 
-    ax.set_xlabel("Noise level (%)")
+    ax.set_xlabel("Noise level")
     ax.set_ylabel("Median max relative error")
     ax.set_title("Parameter Recovery vs Noise Level")
-    ax.set_xticks(noise_levels)
-    ax.set_xticklabels(["0%", "1%", "2%", "5%"])
+    ax.set_yscale("log")
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(x_labels)
     ax.legend(fontsize=8, loc="upper left")
     ax.grid(True, alpha=0.3)
 
@@ -253,18 +258,18 @@ def make_worst_case_iv_figure(iv_rows):
     fig, ax = plt.subplots(figsize=(6.5, 4.5))
 
     ax.plot(phi, target_pri, "o-", color="#1f77b4", markersize=5, linewidth=1.5,
-            label="Primary (PDE target)")
+            label="Total Current Density (PDE target)")
     ax.plot(phi, sim_pri, "x--", color="#1f77b4", markersize=6, linewidth=1.2,
-            label="Primary (Surrogate fit)")
+            label="Total Current Density (Surrogate fit)")
     ax.plot(phi, target_sec, "o-", color="#ff7f0e", markersize=5, linewidth=1.5,
-            label="Secondary (PDE target)")
+            label="Peroxide Current Density (PDE target)")
     ax.plot(phi, sim_sec, "x--", color="#ff7f0e", markersize=6, linewidth=1.2,
-            label="Secondary (Surrogate fit)")
+            label="Peroxide Current Density (Surrogate fit)")
 
     ax.set_xlabel(r"Applied potential $\phi_{\mathrm{applied}}$ (V)")
     ax.set_ylabel(r"Current density (A/cm$^2$)")
     ax.set_title("Worst-Case I--V Overlay (P2 Full Cathodic)")
-    ax.legend(fontsize=8, loc="lower left")
+    ax.legend(fontsize=8, loc="upper left")
     ax.grid(True, alpha=0.3)
 
     fig.tight_layout()
