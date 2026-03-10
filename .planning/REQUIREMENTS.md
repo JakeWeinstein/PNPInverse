@@ -11,7 +11,7 @@ Requirements for pipeline redesign milestone. Each maps to roadmap phases.
 
 - [x] **DIAG-01**: Run v13 pipeline across 10+ noise seeds at 2% noise, report per-parameter median/worst-case relative error
 - [ ] **DIAG-02**: Profile likelihood analysis for each of k0_1, k0_2, alpha_1, alpha_2 to determine practical identifiability
-- [ ] **DIAG-03**: Extended voltage sweep visualization of total and peroxide current across parameter values for visual sensitivity analysis
+- [x] **DIAG-03**: Extended voltage sweep visualization of total and peroxide current across parameter values for visual sensitivity analysis
 
 ### Audit
 
@@ -77,7 +77,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | DIAG-01 | Phase 7 | Complete |
 | DIAG-02 | Phase 7 | Pending |
-| DIAG-03 | Phase 7 | Pending |
+| DIAG-03 | Phase 7 | Complete |
 | AUDT-01 | Phase 8 | Pending |
 | AUDT-02 | Phase 8 | Pending |
 | AUDT-03 | Phase 8 | Pending |
