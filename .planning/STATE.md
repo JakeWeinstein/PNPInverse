@@ -1,6 +1,21 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
+milestone_name: PNP-BV V&V Framework
+status: milestone_complete
+stopped_at: v1.0 milestone shipped
+last_updated: "2026-03-10"
+last_activity: 2026-03-10 -- v1.0 milestone completed and archived
+progress:
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 14
+  completed_plans: 14
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 06-02-PLAN.md
@@ -47,10 +62,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-06)
+See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Every layer of the pipeline has independently verifiable proof of correctness that can withstand peer review.
-**Current focus:** Phase 6 complete (all V&V report figures, tables, and LaTeX document generated). Milestone v1.0 complete.
+**Current focus:** v1.0 milestone shipped. Planning next milestone.
 
 ## Current Position
 
