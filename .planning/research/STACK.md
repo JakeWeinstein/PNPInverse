@@ -1,133 +1,155 @@
-# Stack Research
+# Technology Stack
 
-**Domain:** PDE Verification & Validation for Electrochemical Inference Pipeline
-**Researched:** 2026-03-06
-**Confidence:** MEDIUM-HIGH
+**Project:** PNP-BV v14 Pipeline Redesign -- Robust Surrogate-Assisted Inverse Parameter Recovery
+**Researched:** 2026-03-09
+**Scope:** NEW capabilities only. Existing validated stack (Firedrake, numpy, scipy, torch, pytest, matplotlib) is out of scope.
 
-## Recommended Stack
+## What Already Exists (DO NOT CHANGE)
 
-### Core Technologies (Already In Place -- Keep)
+These are validated, working, and should not be upgraded or replaced:
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| Firedrake | latest (pip-independent) | FEM solver, `errornorm`, MMS source term via UFL autodiff | Already the project's FEM engine. `errornorm` computes L2/H1 norms directly. UFL symbolic differentiation generates MMS source terms automatically -- this is the correct approach, already used in `mms_bv_convergence.py`. No alternative needed. |
-| NumPy | >=2.0 | Error norm arrays, convergence rate computation, log-log regression | Universal dependency; already used everywhere. |
-| SciPy | >=1.12 | `scipy.stats.linregress` for convergence rate fitting, `scipy.optimize` for parameter recovery | Already a core dependency. `linregress` on log-log data gives observed convergence order with R-squared confidence. |
-| pytest | >=8.0 | Test runner for V&V test suite | Already configured in `pyproject.toml`. Markers (`@pytest.mark.slow`) already separate fast/slow tests. |
-| matplotlib | >=3.8 | Convergence plots, error tables, publication figures | Already used for I-V curves and MMS convergence plots. |
+| Technology | Current Use | Status |
+|------------|-------------|--------|
+| Firedrake | PDE forward solver (PNP + Butler-Volmer) | MMS-verified, keep as-is |
+| NumPy | Array operations throughout | Core dependency, keep |
+| SciPy (`optimize.minimize`, `stats.qmc.LatinHypercube`) | L-BFGS-B optimization, LHS sampling | Working in multistart/cascade, keep |
+| PyTorch | NN surrogate model training and inference | Validated, keep |
+| matplotlib | Plotting | Keep |
+| pytest + pytest-cov | Testing | Keep |
+| h5py | Data storage | Keep |
 
-### New V&V-Specific Libraries
+## Recommended Stack Additions
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| pytest-regressions | 2.10.0 | Numerical regression testing -- saves baseline data (NumPy arrays, dicts) and compares future runs against them with configurable atol/rtol | **Use for:** reproducibility tests (same inputs produce same outputs), baseline convergence rates, surrogate prediction baselines. Saves `.npz` or `.json` files alongside tests. Install: `pip install pytest-regressions==2.10.0` |
-| pytest-benchmark | 5.2.3 | Performance regression tracking -- measures and tracks execution time of PDE solves across code changes | **Use for:** detecting solver performance regressions (e.g., a code change doubles MMS solve time). Stores JSON history. Less critical than correctness testing but useful for catching unintended slowdowns. Install: `pip install pytest-benchmark==5.2.3` |
-| pytest-cov | (already installed) | Coverage reporting | Already a dev dependency. Use `--cov=Forward --cov=Surrogate --cov=Nondim` flags to track V&V coverage of production code. |
+### 1. Sensitivity Analysis
 
-### Development Tools
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| SALib | >=1.5.1 | Sobol and Morris sensitivity analysis on surrogate objectives | SALib is the standard Python library for global sensitivity analysis. Sobol indices quantify which parameters (k0_1, k0_2, alpha_1, alpha_2) most influence the objective, informing whether all 4 parameters are identifiable from I-V data at 2% noise. Morris screening is cheaper for initial factor prioritization. Both methods are well-cited in the inverse problems literature. |
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| `scipy.stats.linregress` | Compute observed convergence order from log-log error data | No new dependency needed. `slope, _, r_value, _, _ = linregress(log_h, log_err)`. R-squared > 0.99 indicates clean asymptotic regime. |
-| `numpy.polyfit` | Alternative convergence rate fitting | `p = np.polyfit(np.log(h), np.log(err), 1); rate = p[0]`. Equivalent to linregress but less diagnostic output. |
-| Firedrake `errornorm` | L2, H1, Linf error norms between exact and computed solutions | Already used correctly in `mms_bv_convergence.py`. Handles function space projection internally. |
+**Integration:** SALib works directly with numpy arrays. The surrogate `predict_batch` function already returns numpy arrays, so the SALib workflow is: (1) `SALib.sample.sobol.sample()` generates parameter samples, (2) evaluate each via existing `BVSurrogateModel.predict_batch()`, (3) `SALib.analyze.sobol.analyze()` computes first-order and total-effect Sobol indices. No adapter code needed beyond a thin wrapper.
 
-## Installation
+**Confidence:** HIGH -- SALib is the de facto standard (2000+ citations), actively maintained (v1.5.2 released Oct 2025), pure Python with numpy/scipy dependencies only.
+
+### 2. Statistical Comparison of Pipeline Variants
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `scipy.stats` (already installed) | >=1.12 | Wilcoxon signed-rank test, bootstrap CIs for paired pipeline comparisons | Already available. `scipy.stats.wilcoxon` tests whether pipeline A beats pipeline B across noise seeds (paired, non-parametric). `scipy.stats.bootstrap` (added in scipy 1.7) computes BCa confidence intervals on median relative error. No new dependency needed. |
+| pandas | >=2.1 | Tabular comparison of pipeline variants across seeds, parameters, and metrics | The project already uses CSV files for results (see `StudyResults/master_inference_v13/`). pandas provides groupby aggregation (median/IQR by parameter, by seed), pivot tables for variant comparison, and clean CSV I/O. The alternative is raw numpy, which becomes unwieldy for multi-factor comparisons. |
+
+**Why not statsmodels:** Overkill. The comparisons needed are simple paired non-parametric tests across seeds (Wilcoxon, bootstrap CI). statsmodels adds a large dependency for features that won't be used.
+
+**Why not a dedicated experiment tracking framework (MLflow, Weights & Biases):** Out of scope. The number of pipeline variants is small (10-20 configurations), all local. CSV + pandas is sufficient and keeps the stack simple.
+
+**Confidence:** HIGH -- scipy.stats is already installed; pandas is the universal Python data wrangling tool.
+
+### 3. Robust Optimization Alternatives
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `scipy.optimize.differential_evolution` (already installed) | >=1.12 | Global optimizer as alternative to multistart L-BFGS-B | Already available in scipy. Differential evolution is gradient-free, handles bounds natively, and is well-suited to 4D surrogate optimization where the objective is cheap to evaluate (surrogate calls are sub-millisecond). Worth benchmarking against the current LHS + L-BFGS-B approach for robustness across noise seeds. |
+| `scipy.optimize.least_squares` (already installed) | >=1.12 | Gauss-Newton / Trust Region Reflective for residual-based objectives | Already partially used in `FluxCurve/bv_run/optimization.py`. The residual formulation (minimize sum of squared residuals per voltage point) gives natural Jacobian structure. SciPy 1.16 added a `callback` argument for trf/dogbox methods, useful for convergence tracking. |
+| `scipy.optimize.dual_annealing` (already installed) | >=1.12 | Simulated annealing variant as additional global optimizer candidate | Available in scipy. Combines classical simulated annealing with local search. Potentially more robust than DE for low-dimensional problems with narrow basins. Worth benchmarking but likely inferior to multistart L-BFGS-B for this problem. |
+
+**Why not pymoo/pysamoo:** These are multi-objective optimization frameworks. The inverse problem is single-objective (weighted sum of CD + PC residuals). Adding pymoo introduces framework overhead with no benefit over scipy.optimize.
+
+**Why not Optuna/hyperopt:** These are hyperparameter tuning frameworks designed for ML model selection, not scientific optimization. They add unnecessary abstraction over what scipy.optimize already does.
+
+**Why not nlopt:** Redundant with scipy.optimize for this problem size (4 parameters). nlopt's advantage is in high-dimensional problems or when specific algorithms (COBYLA variants, MMA) are needed.
+
+**Confidence:** HIGH -- all recommendations are already in scipy, no new dependencies.
+
+### 4. Profile Likelihood and Identifiability
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| lmfit | >=1.3.0 | Profile likelihood confidence intervals, parameter identifiability analysis | lmfit wraps scipy.optimize with a Parameter class that supports bounds, fixing, and constraints. Its `conf_interval()` function computes profile likelihood CIs using the F-test, which is exactly what `Infer_BVProfileLikelihood_charged.py` does manually. Using lmfit would standardize this and add covariance matrix CIs for free. |
+
+**Integration:** lmfit's `minimize()` accepts a residual function returning an array (like scipy least_squares). The existing surrogate objective can be wrapped: define lmfit `Parameters` with bounds matching the current `[(lb, ub)]` tuples, write a residual function calling `surrogate.predict()`, and lmfit handles the rest. Profile likelihood plots come from `ci_report()` and `plot_ci()`.
+
+**Alternative considered -- ci-rvm:** The Venzon-Moolgavkar algorithm (ci-rvm package) computes profile likelihood CIs more efficiently than grid search, but it is a niche package with limited maintenance. lmfit is battle-tested (15+ years, 3000+ citations) and does the same thing.
+
+**Whether to add this:** OPTIONAL. The existing hand-rolled profile likelihood script works. lmfit is worth adding only if profile likelihood analysis becomes a routine part of the pipeline comparison workflow (e.g., checking identifiability for every pipeline variant). If it is a one-off analysis, keep the existing script.
+
+**Confidence:** MEDIUM -- lmfit is well-established, but the existing manual implementation may be sufficient.
+
+### 5. Experiment Orchestration
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| (none -- use scripts) | -- | Running pipeline variant comparisons | The v14 work involves running ~10-20 pipeline configurations across ~10-20 noise seeds. This is 100-400 runs, each taking seconds (surrogate) to minutes (PDE). A simple Python script with nested loops and CSV output is appropriate. No experiment framework needed. |
+
+**Why not Hydra/Sacred/DVC:** Massive overkill for 100-400 runs. These frameworks solve configuration management and reproducibility for ML experiments with thousands of runs. A dataclass-based config + CSV results file is simpler and sufficient.
+
+## Recommended Stack (Summary)
+
+### Required Additions
 
 ```bash
-# V&V-specific additions (within Firedrake venv)
-pip install pytest-regressions==2.10.0
-pip install pytest-benchmark==5.2.3
-
-# Already installed (verify versions)
-pip install --upgrade pytest>=8.0 pytest-cov
+# Within Firedrake venv
+pip install SALib>=1.5.1
+pip install pandas>=2.1
 ```
 
-## What You Already Have and Should Keep
+### Optional Addition
 
-The existing codebase already implements the hardest parts of V&V correctly:
+```bash
+# Only if profile likelihood becomes routine
+pip install lmfit>=1.3.0
+```
 
-1. **MMS with UFL autodiff** (`scripts/verification/mms_bv_convergence.py`): Source terms computed symbolically via `fd.div(fd.grad(...))`. Boundary corrections computed correctly. Three test cases covering neutral, multi-species, and charged+Poisson coupling. This is publication-grade MMS implementation.
+### Already Available (No Install Needed)
 
-2. **Convergence rate computation** (`compute_rates` function): Log-ratio convergence rates. Results show clean O(h^2) L2 and O(h) H1 rates for CG1, matching theory.
+- `scipy.optimize.differential_evolution` -- benchmark as global optimizer alternative
+- `scipy.optimize.least_squares` -- benchmark residual-based formulation
+- `scipy.optimize.dual_annealing` -- benchmark as SA-based global optimizer
+- `scipy.stats.wilcoxon` -- paired non-parametric test for pipeline comparison
+- `scipy.stats.bootstrap` -- confidence intervals on comparison metrics
+- `scipy.stats.qmc.LatinHypercube` -- already used for multistart
 
-3. **Parameter recovery tests** (`tests/test_v13_verification.py`): Zero-noise identity recovery, gradient verification via FD step comparison, sensitivity monotonicity, multistart convergence basin, surrogate-vs-PDE consistency. This is a thorough verification suite.
-
-4. **Nondimensionalization tests** (`tests/test_nondim.py`): Roundtrip tests for unit transforms.
-
-## What's Missing (Stack Gaps to Fill)
-
-| Gap | What to Add | Stack Component |
-|-----|-------------|-----------------|
-| MMS tests not in pytest | Wrap `mms_bv_convergence.py` functions in pytest tests with assertions on convergence rates | pytest + existing Firedrake code |
-| No regression baselines | Use pytest-regressions to snapshot convergence rates, error norms, and surrogate predictions | pytest-regressions |
-| No GCI uncertainty | Compute Grid Convergence Index for reporting numerical uncertainty in publication | Custom utility using Richardson extrapolation formula (no library needed -- simple enough to implement in 20 lines) |
-| No surrogate error bounds | Compute max/mean/percentile error between surrogate and PDE across parameter space | NumPy (already available) |
-| No reproducibility tests | Seed-controlled runs checking bitwise or tolerance-bounded reproducibility | pytest-regressions + NumPy |
-
-## Alternatives Considered
-
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| `scipy.stats.linregress` for convergence rates | pyGCS 1.1.1 (Grid Convergence Study) | Only if you need GCI with formatted LaTeX/Markdown output. pyGCS is CFD-focused and computes GCI per Celik et al. (2008). Overkill for this project where convergence rates are the primary metric, not GCI uncertainty bands. |
-| pytest-regressions for baselines | Manual `.npz` file comparison | Only if you want full control over comparison logic. pytest-regressions handles file management, diff reporting, and tolerance configuration automatically. |
-| Custom MMS source terms via UFL | SymPy for symbolic MMS source generation | Never for this project. Firedrake's UFL already does this correctly and integrates directly with the solver. SymPy would add a translation step with no benefit. |
-| pytest-benchmark for timing | Manual `time.time()` calls | pytest-benchmark provides statistical analysis (min, median, stddev, IQR) and historical comparison. Manual timing is unreliable for regression detection. |
-
-## What NOT to Use
+## What NOT to Add
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| SymPy for MMS source terms | Firedrake UFL already computes source terms symbolically via autodiff. Adding SymPy creates a translation layer (SymPy -> UFL) that introduces bugs and adds no value. The existing `mms_bv_convergence.py` does this correctly. | UFL `fd.div(fd.grad(...))` (already in use) |
-| FEniCS/DOLFINx convergence utilities | Different FEM backend. Firedrake and FEniCS have diverged significantly. FEniCS utilities won't work with Firedrake function spaces. | Firedrake `errornorm` + custom convergence rate computation (already implemented) |
-| pyGCS for this project | Designed for CFD grid convergence with GCI reporting per ASME V&V 20. This project needs convergence ORDER verification (is the rate 2.0 for L2?), not GCI uncertainty bands. pyGCS solves the wrong problem. | `linregress(log_h, log_err)` for order estimation |
-| Hypothesis (property-based testing) | Useful for fuzzing API inputs, but MMS and convergence tests have fixed structure. Property-based testing adds complexity without catching the bugs that matter (sign errors, wrong norms, incorrect source terms). | Parameterized pytest tests with explicit MMS cases |
-| MOOSE MMS framework | C++-based. Would require reimplementing the solver. | Firedrake UFL (already working) |
+| pymoo / pysamoo | Multi-objective framework; this is a single-objective problem | `scipy.optimize` (already available) |
+| Optuna / hyperopt | ML hyperparameter tuners, wrong abstraction for scientific inverse problems | `scipy.optimize` + manual experiment scripts |
+| statsmodels | Heavy dependency for simple paired tests | `scipy.stats.wilcoxon` + `scipy.stats.bootstrap` |
+| MLflow / W&B | Experiment tracking overkill for <500 local runs | pandas DataFrame + CSV files |
+| nlopt | Redundant with scipy for 4-parameter problems | `scipy.optimize` |
+| hIPPYlib / occamypy | PDE-based inverse problem libraries assuming different solver architectures | Existing Firedrake + surrogate pipeline |
+| Hydra / Sacred / DVC | Configuration management overkill | Python dataclasses + argparse |
+| emcee / PyMC | Bayesian MCMC samplers; not needed for point estimation with noise robustness | Multistart + profile likelihood for uncertainty |
 
-## Stack Patterns by V&V Layer
+## Version Compatibility Notes
 
-**Forward Solver MMS Verification:**
-- Use Firedrake `errornorm` + `RectangleMesh` refinement sequence
-- Compute rates via `linregress(np.log(h_vals), np.log(err_vals))`
-- Assert `abs(rate - expected_rate) < tolerance` where tolerance = 0.15 for CG1 (expected L2=2.0, H1=1.0)
-- Because the existing `mms_bv_convergence.py` already shows clean rates, the main work is wrapping this in pytest
+| Package | Compatible With | Constraint |
+|---------|-----------------|------------|
+| SALib 1.5.x | numpy >=1.20, scipy >=1.7, matplotlib, pandas | SALib depends on pandas already, so adding pandas is not an extra dependency beyond what SALib brings |
+| pandas 2.x | numpy >=1.23, Python >=3.9 | Use 2.x not 3.x; pandas 3.0 (Jan 2026) requires Python >=3.11 and has breaking changes. Firedrake environments may still be on Python 3.10. |
+| lmfit 1.3.x | numpy, scipy, asteval, uncertainties | Light dependency chain. asteval is a safe expression evaluator (no security concern). |
+| scipy 1.15-1.17 | Already constrained by Firedrake environment | Do not upgrade scipy independently of Firedrake. Use whatever version Firedrake provides (likely 1.12-1.15). All recommended features exist in 1.12+. |
 
-**Surrogate Fidelity Validation:**
-- Compute error metrics: max absolute error, mean relative error, RMSE over parameter space
-- Use Latin Hypercube samples (already available via `scipy.stats.qmc.LatinHypercube`)
-- Because surrogate errors compound into inference errors, this is a critical validation layer
+## Alternatives Considered
 
-**Parameter Recovery Tests:**
-- Generate synthetic data at known parameters via PDE solver
-- Recover parameters via inference pipeline
-- Assert relative error < threshold
-- Because `test_v13_verification.py` already does most of this, extend with noise robustness
-
-**Reproducibility:**
-- Use pytest-regressions `ndarrays_regression` fixture for numerical baselines
-- Because Firedrake + PETSc have nondeterministic iteration counts in edge cases
-
-## Version Compatibility
-
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| pytest-regressions 2.10.0 | pytest >=8.0, NumPy >=1.20 | Uses NumPy for array comparison. Python >=3.10 required. |
-| pytest-benchmark 5.2.3 | pytest >=9.0 | Latest version adds pytest 9 support. |
-| Firedrake (2024/2025) | PETSc 3.20+, Python 3.10-3.12 | Firedrake manages its own PETSc. Version pinned by Firedrake installer. |
-| NumPy 2.x | scipy >=1.12, matplotlib >=3.8 | NumPy 2.0 broke some C API users. Firedrake's NumPy version is managed by its installer -- do not upgrade independently. |
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| Sensitivity analysis | SALib | Custom Sobol implementation | SALib is 50 lines to use vs 500 to reimplement. Well-tested, well-cited. |
+| Global optimization | scipy differential_evolution | CMA-ES (pycma) | DE is already in scipy; CMA-ES adds a dependency for marginal benefit in 4D. |
+| Statistical testing | scipy.stats.wilcoxon | permutation_test (scipy 1.15+) | Wilcoxon is sufficient for paired comparisons across seeds. Permutation test is an option if more power needed but requires scipy >=1.15. |
+| Data wrangling | pandas | polars | pandas is the standard, already a SALib dependency, and the data volumes are tiny (<1MB). |
+| Profile likelihood | lmfit (optional) | Keep existing manual script | Manual script works. lmfit only worth it if this becomes routine. |
 
 ## Sources
 
-- [Firedrake errornorm source code](https://www.firedrakeproject.org/_modules/firedrake/norms.html) -- verified `errornorm` API supports L2, H1, Linf norms (HIGH confidence)
-- [Firedrake solving interface docs](https://www.firedrakeproject.org/solving-interface.html) -- verified SNES Jacobian verification via `fd_jacobian` option (HIGH confidence)
-- [pytest-regressions PyPI](https://pypi.org/project/pytest-regressions/) -- v2.10.0, Feb 2026, supports NumPy array regression (HIGH confidence)
-- [pytest-benchmark PyPI](https://pypi.org/project/pytest-benchmark/) -- v5.2.3, Nov 2025 (HIGH confidence)
-- [pyGCS PyPI](https://pypi.org/project/pyGCS/) -- v1.1.1, Jul 2022, GCI computation (HIGH confidence)
-- [ASME V&V 20-2009 overview](https://www.osti.gov/servlets/purl/1368927) -- Richardson extrapolation and GCI methodology (HIGH confidence)
-- [convergence PyPI](https://pypi.org/project/convergence/0.1/) -- NASA grid convergence study port (MEDIUM confidence, older package)
-- [ORNL cfd-verify](https://github.com/ORNL/cfd-verify) -- ORNL CFD verification package (MEDIUM confidence)
-- Existing codebase analysis: `mms_bv_convergence.py`, `test_v13_verification.py`, `pyproject.toml` (HIGH confidence)
+- [SALib documentation](https://salib.readthedocs.io/) -- v1.5.2, sensitivity analysis methods (HIGH confidence)
+- [SALib GitHub releases](https://github.com/SALib/SALib/releases) -- v1.5.2 released Oct 2025 (HIGH confidence)
+- [scipy.optimize.differential_evolution docs](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.differential_evolution.html) -- SciPy v1.17.0 (HIGH confidence)
+- [scipy.stats.bootstrap docs](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html) -- BCa method, paired support (HIGH confidence)
+- [SciPy 1.16.0 release notes](https://docs.scipy.org/doc/scipy/release/1.16.0-notes.html) -- least_squares callback, L-BFGS-B hess_inv improvement (HIGH confidence)
+- [lmfit confidence intervals docs](https://lmfit.github.io/lmfit-py/confidence.html) -- profile likelihood F-test method (HIGH confidence)
+- [pandas 3.0.0 release notes](https://pandas.pydata.org/pandas-docs/stable/whatsnew/v3.0.0.html) -- breaking changes, Python >=3.11 requirement (HIGH confidence)
+- Existing codebase analysis: `Surrogate/multistart.py`, `Surrogate/cascade.py`, `FluxCurve/bv_run/optimization.py`, `Infer_BVProfileLikelihood_charged.py`, `pyproject.toml` (HIGH confidence)
 
 ---
-*Stack research for: PDE V&V Framework for PNP-BV Electrochemical Inference*
-*Researched: 2026-03-06*
+*Stack research for: PNP-BV v14 Pipeline Redesign*
+*Researched: 2026-03-09*

@@ -1,201 +1,363 @@
 # Architecture Patterns
 
-**Domain:** PDE Verification & Validation Framework for Electrochemical Inference
-**Researched:** 2026-03-06
-**Confidence:** HIGH (based on ASME V&V standards, Firedrake documentation, existing codebase analysis)
+**Domain:** Surrogate-assisted inverse parameter recovery pipeline redesign (v13 -> v14)
+**Researched:** 2026-03-09
+**Confidence:** HIGH (based on direct codebase analysis of v13 pipeline, v7 PDE-only pipeline, and all supporting modules)
 
-## Recommended Architecture
+## Current Architecture (v13)
 
-The V&V framework is a **layered verification pyramid** that mirrors the existing codebase's multi-layer architecture. Each layer is verified independently before testing cross-layer interactions.
+The v13 pipeline is a 7-phase sequential script (`Infer_BVMaster_charged_v13_ultimate.py`) that chains surrogate-only phases (S1-S5) into PDE refinement phases (P1-P2). It lives entirely in `scripts/surrogate/` as a ~1100-line monolithic script.
 
 ```
-Layer 4: End-to-End Pipeline Verification
-         (parameter recovery, reproducibility)
-              |
-Layer 3: Surrogate Fidelity Validation
-         (NN ensemble vs PDE error bounds)
-              |
-Layer 2: Forward Solver Verification (MMS)
-         (convergence rates, error norms, GCI)
-              |
-Layer 1: Foundation Verification
-         (nondimensionalization, physical constants, boundary conditions)
+S1: Alpha-only init (surrogate)          ~0.1s   -> alpha warm-start
+S2: Joint L-BFGS-B (surrogate, shallow)  ~0.5s   -> 4-param estimate
+S3: Cascade 3-pass (surrogate)           ~3-8s   -> 4-param estimate
+S4: MultiStart 20K LHS (surrogate)       ~3-8s   -> 4-param estimate
+S5: Best surrogate selection             ~0s     -> picks min-loss from S2/S3/S4
+P1: PDE joint on SHALLOW cathodic        ~80s    -> 4-param refinement
+P2: PDE joint on FULL cathodic           ~200s   -> final 4-param estimate
 ```
 
-### Component Boundaries
+### Current Component Boundaries
 
-| Component | Responsibility | Communicates With |
+| Component | Responsibility | Location |
+|-----------|---------------|----------|
+| v13 master script | Phase orchestration, CLI args, CSV output | `scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py` |
+| `Surrogate.objectives` | Objective functions: `SurrogateObjective`, `AlphaOnlySurrogateObjective`, `SubsetSurrogateObjective`, `ReactionBlockSurrogateObjective` | `Surrogate/objectives.py` |
+| `Surrogate.cascade` | Per-observable cascade (3 passes: CD-dominant, PC-dominant, polish) | `Surrogate/cascade.py` |
+| `Surrogate.multistart` | 20K LHS grid search + top-K polish | `Surrogate/multistart.py` |
+| `Surrogate.ensemble` | NN ensemble loading and prediction | `Surrogate/ensemble.py` |
+| `Surrogate.surrogate_model` | RBF surrogate model (`.predict()`, `.predict_batch()`) | `Surrogate/surrogate_model.py` |
+| `FluxCurve` | PDE-based I-V curve inference: `BVFluxCurveInferenceRequest`, parallel pool, point solve | `FluxCurve/` |
+| `FluxCurve.bv_parallel` | `BVPointSolvePool` for multiprocessing PDE solves | `FluxCurve/bv_parallel.py` |
+| `Forward` | Firedrake PDE solver, steady-state config, noise generation | `Forward/` |
+| `Nondim` | Nondimensionalization transforms and physical constants | `Nondim/` |
+| `scripts/_bv_common.py` | Shared constants (K0_HAT, ALPHA, SNES_OPTS), param builders | `scripts/_bv_common.py` |
+| `Inverse` | Firedrake-adjoint reduced functional framework (not used by v13 surrogate path) | `Inverse/` |
+
+### Current Data Flow
+
+```
+True params -> PDE solver (subprocess) -> clean I-V curves
+                                       -> add_percent_noise() -> noisy targets
+                                       -> cache to .npz
+
+Surrogate model (.pkl or nn ensemble dir) -> .predict(k0_1, k0_2, a1, a2)
+                                          -> {"current_density": [...], "peroxide_current": [...]}
+
+Objective = 0.5 * ||CD_sim - CD_target||^2 + w * 0.5 * ||PC_sim - PC_target||^2
+Gradient = central finite differences (8 surrogate evals for 4 params)
+
+scipy.optimize.minimize(L-BFGS-B) on surrogate objective -> warm-start
+FluxCurve PDE inference (L-BFGS-B) -> final estimate
+
+Results -> CSV files in StudyResults/master_inference_v13/
+```
+
+### Known Issues with v13
+
+1. **S2, S3, S4 converge to the same surrogate minimum.** Evidence: S2 loss = 2.466e-6, S3 loss = 2.466e-6, S4 loss = 2.466e-6 (identical to 4 significant figures). The multistart (S4) confirms the basin is unique but costs 9.5s for no new information beyond S2.
+
+2. **~11% surrogate bias from PDE truth.** Surrogate optimum is ~3-5% error on all params; PDE refinement reduces to ~2-4%. The surrogate bias is a fundamental accuracy limit.
+
+3. **S1 alpha-only initialization may be unnecessary.** S2 already starts from initial guesses and finds the correct basin in 0.5s. S1's value is providing a marginally better alpha warm-start, but S2 could work without it.
+
+4. **P1 (shallow PDE) may be redundant.** P1 at 73s produces nearly identical results to the surrogate optimum (errors change by <0.1%). P2 (full cathodic) does the real refinement.
+
+5. **No seed-robustness testing.** v13 runs with a single noise seed (20260226). Pipeline behavior across seeds is unknown.
+
+## Recommended Architecture for v14
+
+### Design Principles
+
+1. **Every component justified.** Literature, empirical comparison, or simplest-that-works.
+2. **Comparison experiments first, then redesign.** Baseline v13, ablate components, measure impact.
+3. **Minimal pipeline.** Remove phases that don't improve robustness. Fewer phases = fewer failure modes.
+4. **Seed-robustness is the metric.** Pipeline must achieve <10% error on all 4 params across multiple noise seeds at 2% noise.
+
+### Proposed Pipeline Structure
+
+Based on v13 analysis, the likely minimal pipeline is:
+
+```
+Phase 1: Surrogate warm-start (single strategy, ~1s)
+Phase 2: PDE refinement on full cathodic range (~200-300s)
+```
+
+But this must be validated through systematic ablation experiments before committing.
+
+### Component Architecture
+
+```
+                    ExperimentRunner
+                    /              \
+           PipelineConfig      ResultsCollector
+              /      \              |
+     SurrogatePhase  PDEPhase    ComparisonTable
+         |               |
+    SurrogateObjective   FluxCurve (existing)
+         |
+    Surrogate models (existing)
+```
+
+#### New Components
+
+| Component | Responsibility | Integration Point |
 |-----------|---------------|-------------------|
-| `tests/test_mms_convergence.py` | Automated MMS convergence tests with rate assertions | Forward solver via `mms_bv_convergence.py` functions |
-| `tests/test_nondim.py` (expanded) | Nondim roundtrip and dimensional analysis | `Nondim/` package |
-| `tests/test_surrogate_fidelity.py` | Error metrics between surrogate and PDE across parameter space | `Surrogate/ensemble.py`, `FluxCurve/bv_point_solve.py` |
-| `tests/test_v13_verification.py` (existing) | Parameter recovery, gradient consistency, sensitivity | Full pipeline |
-| `tests/test_reproducibility.py` | Bitwise/tolerance-bounded reproducibility | All layers via pytest-regressions baselines |
-| `verification/convergence_utils.py` | Shared utilities: rate computation, GCI, log-log regression | Used by all test modules |
+| `ExperimentRunner` | Run pipeline variants across seeds, collect results | Orchestrates existing surrogate/PDE modules |
+| `PipelineConfig` | Declarative pipeline definition (which phases, which objectives, which optimizer) | Replaces v13's hardcoded phase sequence |
+| `ResultsCollector` | Aggregate per-seed results into comparison tables | Writes to StudyResults/ |
+| `ComparisonTable` | Standardized metric computation (max relative error, per-param error) | Used by both experiments and tests |
 
-### Data Flow
+#### Modified Components
+
+| Component | Change | Reason |
+|-----------|--------|--------|
+| `Surrogate.objectives` | No changes needed | Already well-factored with `SurrogateObjective`, `SubsetSurrogateObjective`, etc. |
+| `Surrogate.cascade` | May be removed from pipeline | Experiment will determine if cascade adds value over joint L-BFGS-B |
+| `Surrogate.multistart` | May be simplified to diagnostic-only | 20K LHS confirms basin uniqueness but likely unnecessary every run |
+| `FluxCurve` | No changes needed | PDE inference phases work correctly |
+| `scripts/_bv_common.py` | Add noise seed iteration support | Currently hardcodes seed |
+
+#### Unchanged Components
+
+| Component | Reason |
+|-----------|--------|
+| `Forward/` | Verified correct via MMS in v1.0 |
+| `Nondim/` | Verified correct via roundtrip tests |
+| `Surrogate.surrogate_model` | Surrogate accuracy is what it is; retraining is out of scope |
+| `Surrogate.ensemble` | NN ensemble loading works fine |
+| `Inverse/` | Firedrake-adjoint path not used by BV kinetics pipeline |
+
+### Data Flow (v14)
 
 ```
-1. MMS Tests:
-   Manufactured solution (UFL) -> Firedrake solver -> errornorm(exact, computed)
-   -> error array -> convergence rate (linregress) -> assert rate ~ expected
+ExperimentRunner(config) -> for each seed in seeds:
+  1. Generate noisy targets (PDE at true params + noise)
+     - Reuse cached clean targets (existing _target_cache_path logic)
+     - Apply noise with current seed
+  2. Run pipeline variant:
+     a. Surrogate warm-start (objective + optimizer from config)
+     b. PDE refinement (voltage grid + optimizer from config)
+  3. Compute metrics:
+     - Per-param relative error
+     - Max relative error across params
+     - Objective value
+     - Runtime
+  4. Store results -> ResultsCollector
 
-2. Surrogate Fidelity:
-   LHS parameter samples -> PDE solver (each sample) -> PDE I-V curves
-                          -> NN surrogate (each sample) -> Surrogate I-V curves
-   -> per-sample error metrics -> aggregate statistics (max, mean, RMSE)
-
-3. Parameter Recovery:
-   True params -> PDE solver -> synthetic target I-V curve
-   -> inference pipeline (surrogate + PDE stages) -> recovered params
-   -> relative error vs true params -> assert error < threshold
-
-4. Reproducibility:
-   Any test -> numerical output -> pytest-regressions baseline file
-   Next run -> same test -> new output -> compare against baseline with atol/rtol
+ResultsCollector -> comparison CSV/JSON with:
+  - Per-seed breakdown
+  - Aggregate statistics (mean, median, worst-case across seeds)
+  - Pipeline variant label for comparison
 ```
 
 ## Patterns to Follow
 
-### Pattern 1: Parameterized MMS Tests
+### Pattern 1: Declarative Pipeline Configuration
 
-**What:** Use `@pytest.mark.parametrize` to run the same convergence test logic across multiple MMS cases (single species, multi-species, charged).
+**What:** Define pipeline variants as data (config dicts or dataclasses), not code.
 
-**When:** Always for MMS tests. Avoids code duplication across test cases.
+**When:** For all comparison experiments. Each experiment is a PipelineConfig, not a new script.
+
+**Why:** v13 has ~45 scripts in `scripts/inference/` because each pipeline variant became a new file. Declarative configs prevent script sprawl.
 
 **Example:**
 ```python
-@pytest.mark.slow
-@pytest.mark.parametrize("case_runner,expected_rates", [
-    (run_mms_single_species, {"c_L2": 2.0, "c_H1": 1.0, "phi_L2": 2.0, "phi_H1": 1.0}),
-    (run_mms_two_species, {"c0_L2": 2.0, "c0_H1": 1.0, "c1_L2": 2.0, "phi_L2": 2.0}),
-    (run_mms_charged, {"c0_L2": 2.0, "c0_H1": 1.0, "c1_L2": 2.0, "phi_L2": 2.0}),
-])
-def test_mms_convergence_rates(case_runner, expected_rates):
-    results = case_runner([16, 32, 64, 128])
-    for field, expected in expected_rates.items():
-        h = np.array(results["h"])
-        err = np.array(results[field])
-        slope, _, r_value, _, _ = linregress(np.log(h), np.log(err))
-        assert abs(slope - expected) < 0.15, f"{field}: rate={slope:.2f}, expected={expected}"
-        assert r_value**2 > 0.99, f"{field}: R^2={r_value**2:.4f}, not in asymptotic regime"
+@dataclass(frozen=True)
+class PipelineConfig:
+    """Declarative definition of an inference pipeline variant."""
+    name: str
+    surrogate_strategy: str  # "joint", "cascade", "multistart", "none"
+    surrogate_model_type: str  # "nn-ensemble", "rbf", etc.
+    pde_phases: list[PDEPhaseConfig]  # empty list = surrogate-only
+    noise_seeds: list[int]
+    noise_percent: float = 2.0
+    secondary_weight: float = 1.0
+
+@dataclass(frozen=True)
+class PDEPhaseConfig:
+    """Configuration for a single PDE refinement phase."""
+    name: str
+    voltage_grid: np.ndarray
+    maxiter: int
+    gtol: float = 5e-6
+    ftol: float = 1e-8
+    secondary_weight: float = 1.0
 ```
 
-### Pattern 2: Convergence Rate Verification via Linear Regression
+### Pattern 2: Seed-Sweep Experiment Structure
 
-**What:** Fit `log(error) = slope * log(h) + intercept` using `scipy.stats.linregress`. The slope is the observed convergence order. R-squared confirms the asymptotic regime.
+**What:** Run each pipeline variant across N noise seeds, report worst-case and median.
 
-**When:** For all convergence studies (MMS, Richardson extrapolation).
+**When:** For all robustness evaluations. Single-seed results are misleading.
 
-**Why not log-ratio rates?** The existing `compute_rates` function uses consecutive log-ratios `log(e_{k-1}/e_k) / log(h_{k-1}/h_k)`. This is noisy (each rate uses only 2 data points). Linear regression uses all data points simultaneously and provides R-squared as a confidence measure.
+**Why:** v13 was optimized for seed=20260226. A pipeline that works on one seed but fails on others is not robust.
 
 **Example:**
 ```python
-from scipy.stats import linregress
-
-def assert_convergence_rate(h_vals, err_vals, expected_rate, field_name, tol=0.15):
-    """Assert that errors converge at the expected rate."""
-    log_h = np.log(np.array(h_vals))
-    log_err = np.log(np.array(err_vals))
-    slope, intercept, r_value, p_value, std_err = linregress(log_h, log_err)
-    assert abs(slope - expected_rate) < tol, (
-        f"{field_name}: observed rate {slope:.3f}, expected {expected_rate:.1f} "
-        f"(R^2={r_value**2:.4f})"
+def run_seed_sweep(config: PipelineConfig) -> SweepResult:
+    """Run pipeline across all configured seeds, collect per-seed metrics."""
+    results = []
+    for seed in config.noise_seeds:
+        targets = generate_noisy_targets(seed=seed, noise_percent=config.noise_percent)
+        result = run_single_pipeline(config, targets, seed)
+        results.append(result)
+    return SweepResult(
+        config=config,
+        per_seed=results,
+        worst_case_max_err=max(r.max_relative_error for r in results),
+        median_max_err=np.median([r.max_relative_error for r in results]),
     )
-    assert r_value**2 > 0.99, (
-        f"{field_name}: R^2={r_value**2:.4f} < 0.99, not in asymptotic regime"
-    )
-    return slope, r_value**2
 ```
 
-### Pattern 3: GCI Uncertainty Estimation
+### Pattern 3: Ablation-First Redesign
 
-**What:** Compute Grid Convergence Index from 3 mesh levels using Richardson extrapolation per ASME V&V 20.
+**What:** Before adding or removing pipeline components, run controlled ablation experiments that isolate the contribution of each component.
 
-**When:** For the written V&V report. Provides a quantified uncertainty band on the finest-mesh solution.
+**When:** During the audit phase (before implementing v14).
 
-**Example:**
-```python
-def compute_gci(f1, f2, f3, r=2.0, safety_factor=1.25):
-    """Compute GCI from 3 mesh levels (f1=finest, f3=coarsest).
+**Why:** Intuition about what matters is often wrong. S1 "seems unnecessary" but maybe it prevents failure on certain seeds. Only data settles this.
 
-    r: refinement ratio (h_coarse / h_fine)
-    safety_factor: 1.25 for 3+ grids (Roache recommendation)
-    """
-    # Observed order
-    p = np.log(abs((f3 - f2) / (f2 - f1))) / np.log(r)
-    # Richardson extrapolation
-    f_exact = f1 + (f1 - f2) / (r**p - 1)
-    # GCI on fine grid
-    e_fine = abs((f2 - f1) / f1)
-    gci_fine = safety_factor * e_fine / (r**p - 1)
-    return p, f_exact, gci_fine
+**Ablation matrix:**
+```
+Variant 0: Full v13 (baseline)
+Variant 1: Skip S1 (no alpha init)
+Variant 2: Skip S3 (no cascade)
+Variant 3: Skip S4 (no multistart)
+Variant 4: Skip S3+S4 (joint only)
+Variant 5: Skip P1 (surrogate -> P2 directly)
+Variant 6: Skip S1+S3+S4+P1 (minimal: S2 -> P2)
 ```
 
-### Pattern 4: Surrogate Error Characterization
+Each variant runs across 10+ noise seeds. The variant with the best worst-case performance wins.
 
-**What:** Compute error statistics between surrogate and PDE predictions across a Latin Hypercube sample of the parameter space.
+### Pattern 4: PDE Target Caching with Seed Separation
 
-**When:** After MMS verification passes. Before trusting surrogate-based inference results.
+**What:** Cache clean PDE targets separately from noise application. Apply noise per-seed at runtime.
 
-**Example:**
-```python
-def surrogate_fidelity_study(ensemble, pde_solver_fn, n_samples=50, seed=42):
-    """Compare surrogate vs PDE at LHS-sampled parameter points."""
-    from scipy.stats.qmc import LatinHypercube
+**When:** Always. PDE target generation costs ~70s and is deterministic given true params.
 
-    sampler = LatinHypercube(d=4, seed=seed)  # k0_1, k0_2, alpha_1, alpha_2
-    samples = sampler.random(n_samples)
-    # Scale to parameter bounds...
+**Why:** v13 already does this via `_target_cache_path` and `.npz` caching. The v14 seed sweep reuses the same clean targets with different noise realizations.
 
-    errors = []
-    for params in scaled_samples:
-        surr_pred = ensemble.predict(*params)
-        pde_pred = pde_solver_fn(*params)
-        rel_err = np.max(np.abs(surr_pred - pde_pred) / np.abs(pde_pred + 1e-30))
-        errors.append(rel_err)
-
-    return {
-        "max_relative_error": np.max(errors),
-        "mean_relative_error": np.mean(errors),
-        "p95_relative_error": np.percentile(errors, 95),
-    }
-```
+**Key detail:** Clean targets depend on: true params, voltage grid, mesh, solver config. Noise depends on: noise_percent, seed. These must be factored apart.
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Testing MMS Against the Production Solver Code Path
-**What:** Running MMS by calling the production `solve_bv` function with injected source terms.
-**Why bad:** If the production solver has a bug that the MMS test exercises the same code path, the bug cancels out and MMS "passes" spuriously. The existing `mms_bv_convergence.py` correctly builds its own weak form independently -- keep this separation.
-**Instead:** Keep MMS tests as self-contained weak form constructions that mirror but do not call the production solver. Compare the weak form structure manually to the production code.
+### Anti-Pattern 1: Optimizing for a Single Seed
+**What:** Tuning hyperparameters (secondary_weight, maxiter, voltage grid) to minimize error on one specific noise realization.
+**Why bad:** Produces a pipeline that overfits to that particular noise pattern. Different seeds may hit different local minima or convergence issues.
+**Instead:** Optimize for worst-case or median performance across 10+ seeds. Use boxplots, not point estimates.
 
-### Anti-Pattern 2: Overly Tight Convergence Rate Tolerances
-**What:** Asserting `abs(rate - 2.0) < 0.01`.
-**Why bad:** Pre-asymptotic effects, boundary layer pollution, and the nonlinearity of BV kinetics can cause rates to deviate from theory by 0.05-0.10 even when the implementation is correct. Overly tight tolerances cause false failures.
-**Instead:** Use `abs(rate - expected) < 0.15` and require R-squared > 0.99 on the log-log fit. The R-squared check is more diagnostic than a tight rate tolerance.
+### Anti-Pattern 2: Adding Phases to Fix Edge Cases
+**What:** When one seed fails, adding a new pipeline phase specifically to handle that case.
+**Why bad:** Increases pipeline complexity and runtime without addressing root cause. Each new phase is a new failure mode.
+**Instead:** Investigate why the seed fails. Is it a bad surrogate warm-start? A PDE solver convergence issue? Fix the root cause with a more robust objective or optimizer, not more phases.
 
-### Anti-Pattern 3: Testing Surrogate Fidelity at Training Points Only
-**What:** Comparing surrogate and PDE at the exact parameter values used to train the surrogate.
-**Why bad:** The surrogate trivially matches at training points (it was optimized to do so). Fidelity at interpolated/extrapolated points is what matters.
-**Instead:** Use LHS samples that span the parameter space, including points between and near the edges of the training domain.
+### Anti-Pattern 3: Comparing Losses Across Different Objectives
+**What:** Comparing S2 loss (surrogate objective) with P2 loss (PDE objective) to decide which is "better."
+**Why bad:** The objectives are fundamentally different. The surrogate objective has ~11% bias. A low surrogate loss does not mean low PDE error.
+**Instead:** Always compare parameter recovery error (relative error vs true params). Loss is useful within a single objective type for convergence monitoring, not across objective types.
 
-### Anti-Pattern 4: Ignoring the H1 Norm
-**What:** Only checking L2 convergence rates.
-**Why bad:** L2 rates can look correct even when the gradient (flux) is computed incorrectly. For PNP, the fluxes (gradients of concentration and potential) are the physically meaningful quantities. H1 convergence verifies these.
-**Instead:** Always check both L2 and H1 convergence rates. For PNP-BV, the H1 rate on concentrations directly tests flux accuracy.
+### Anti-Pattern 4: Script Sprawl for Variants
+**What:** Creating a new Python script for each pipeline variant (`Infer_BVMaster_charged_v14a.py`, `v14b.py`, `v14c.py`, ...).
+**Why bad:** v1-v13 already accumulated ~45 inference scripts. Each is slightly different, making comparison and maintenance nightmarish.
+**Instead:** Use the declarative PipelineConfig approach. One runner script, many configs.
+
+### Anti-Pattern 5: Subprocess Isolation When Not Needed
+**What:** Running surrogate inference in a subprocess to avoid Firedrake/PyTorch conflicts.
+**Why bad for surrogate-only:** The subprocess boundary exists because Firedrake and PyTorch PETSc conflict. But surrogate-only phases (S1-S5) use only NumPy/SciPy -- no Firedrake needed. The v13 script already handles this correctly with `os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")`.
+**Instead:** Keep subprocess isolation only for PDE phases. Surrogate phases run in-process.
+
+## Build Order for v14 Components
+
+The build order follows dependency chains and the principle of validating each piece before building the next.
+
+### Phase 1: Baseline and Metrics (no new components)
+
+**Build:**
+1. Seed-sweep harness (run v13 across 10 seeds, collect per-seed results)
+2. Standardized metrics module (max relative error, per-param error, timing)
+3. v13 baseline results across seeds
+
+**Rationale:** You cannot improve what you have not measured. The seed sweep reveals whether v13 is already robust or has seed-dependent failures.
+
+**Dependencies:** None new. Uses existing v13 script.
+
+**Integration:** Wraps v13 script invocation, parses output CSVs.
+
+### Phase 2: Ablation Experiments (minimal new code)
+
+**Build:**
+1. Pipeline ablation configs (skip S1, skip S3+S4, skip P1, etc.)
+2. Ablation runner that modifies v13 CLI args
+3. Comparison table generator
+
+**Rationale:** Ablation data determines which components matter. Cannot design v14 without this.
+
+**Dependencies:** Phase 1 metrics module.
+
+**Integration:** Uses v13 `--skip-p1`, `--surr-strategy` flags. May need minor v13 modifications to support all ablation variants.
+
+### Phase 3: Alternative Component Experiments
+
+**Build:**
+1. Alternative objective experiments (different secondary_weight, different loss formulations)
+2. Alternative optimizer experiments (Nelder-Mead, differential evolution, basin-hopping)
+3. Voltage grid experiments (different eta grids for PDE phase)
+
+**Rationale:** Each component (objective, optimizer, voltage grid) has alternatives worth testing. But test one at a time against the ablated baseline.
+
+**Dependencies:** Phase 2 results (know which components to keep).
+
+**Integration:** New objective classes extend `Surrogate.objectives`. New optimizer calls replace `scipy.optimize.minimize` in the relevant phase.
+
+### Phase 4: v14 Pipeline Implementation
+
+**Build:**
+1. `PipelineConfig` and `PDEPhaseConfig` dataclasses
+2. `ExperimentRunner` that executes a `PipelineConfig`
+3. `ResultsCollector` for aggregation
+4. v14 pipeline as a specific `PipelineConfig`
+
+**Rationale:** Only build the final pipeline after empirical evidence determines the optimal component set.
+
+**Dependencies:** Phase 2 + Phase 3 results.
+
+**Integration:** Uses existing `Surrogate.objectives`, `Surrogate.multistart`, `FluxCurve` modules unchanged. New orchestration code replaces the v13 monolithic script.
+
+### Phase 5: Robustness Validation
+
+**Build:**
+1. 20+ seed validation sweep
+2. Comparison of v14 vs v13 across all seeds
+3. Test for `tests/test_v14_robustness.py`
+
+**Rationale:** The pipeline is only "done" when it passes the robustness criterion (<10% error on all params across all seeds).
+
+**Dependencies:** Phase 4 pipeline.
+
+**Integration:** Automated test in pytest. Uses the same `ExperimentRunner`.
 
 ## Scalability Considerations
 
-| Concern | Current (dev) | At publication | Future |
-|---------|---------------|----------------|--------|
-| MMS solve time | ~2 min (3 cases, N=8..128) | Same (fixed mesh sequence) | Add N=256 only if rates unclear |
-| Surrogate fidelity | ~5 PDE points in test | 50-100 LHS samples | Cache PDE results to avoid re-computation |
-| Parameter recovery | 5 voltage points | 5-10 points (balance speed vs. coverage) | Full voltage grid only for final publication results |
-| Total V&V suite runtime | ~10 min | ~30-60 min | Acceptable for manual runs; CI would need parallelism |
+| Concern | Current v13 | v14 (10 seeds) | v14 (50 seeds) |
+|---------|-------------|-----------------|-----------------|
+| Surrogate warm-start | ~10s | ~100s total (10 seeds x 10s) | ~500s |
+| PDE refinement | ~260s (P1+P2) | ~2600s (if P1+P2 per seed) or ~2000s (P2-only) | ~10000-15000s |
+| Clean target generation | ~70s (cached) | ~70s (cached, reused) | ~70s (cached, reused) |
+| Noise application | <1s | <1s per seed | <1s per seed |
+| Total per pipeline variant | ~340s | ~2700s (~45 min) | ~10000s (~3 hr) |
+| Ablation matrix (7 variants x 10 seeds) | N/A | ~5 hours | N/A |
+
+**Mitigation:** Prioritize experiments that answer the highest-value questions first. Run overnight. Cache aggressively.
 
 ## Sources
 
-- [ASME V&V 20-2009 overview](https://www.osti.gov/servlets/purl/1368927) -- verification hierarchy (HIGH confidence)
-- [Firedrake norms module](https://www.firedrakeproject.org/_modules/firedrake/norms.html) -- errornorm API (HIGH confidence)
-- [Roache, P.J. "Verification and Validation in Computational Science and Engineering"](https://www.researchgate.net/publication/278408318_Code_Verification_by_the_Method_of_Manufactured_Solutions) -- MMS methodology (HIGH confidence)
-- Existing codebase: `mms_bv_convergence.py`, `test_v13_verification.py` (HIGH confidence)
+- Direct codebase analysis: `scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py` (1100+ lines, 7-phase pipeline) -- HIGH confidence
+- Direct codebase analysis: `scripts/inference/Infer_BVMaster_charged_v7.py` (3-phase PDE-only pipeline) -- HIGH confidence
+- v13 results: `StudyResults/master_inference_v13/master_comparison_v13.csv` -- HIGH confidence
+- `Surrogate/objectives.py`, `Surrogate/cascade.py`, `Surrogate/multistart.py` -- HIGH confidence
+- `FluxCurve/bv_config.py`, `FluxCurve/bv_parallel.py` -- HIGH confidence
+- `Inverse/inference_runner/recovery.py` (resilient minimizer) -- HIGH confidence
+- `.planning/PROJECT.md` (project constraints, known issues) -- HIGH confidence
