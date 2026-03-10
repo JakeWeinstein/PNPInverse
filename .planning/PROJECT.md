@@ -1,12 +1,23 @@
-# PNP-BV Verification & Validation Framework
+# PNP-BV Inverse Solver
 
 ## What This Is
 
-A publication-grade verification and validation (V&V) framework for a Poisson-Nernst-Planck + Butler-Volmer electrochemical inference pipeline. The framework provides bottom-up proof of correctness at every layer — nondimensionalization, forward PDE solver, surrogate models, and parameter inference — with automated pytest tests, numerical regression baselines, and a LaTeX V&V report suitable for journal supplementary material.
+A surrogate-accelerated inverse solver for Poisson-Nernst-Planck + Butler-Volmer electrochemical systems. The solver recovers kinetic parameters (k0_1, k0_2, alpha_1, alpha_2) from noisy I-V curve observations. Built on a V&V-verified forward solver and surrogate models, with the goal of robust parameter recovery across noise realizations.
 
 ## Core Value
 
-Every layer of the pipeline (forward solver, surrogate, inference) has independently verifiable proof of correctness that can withstand peer review.
+Robust parameter recovery (<10% relative error) at 2% noise across all seeds, with every pipeline component justified by literature, empirical comparison, or simplicity.
+
+## Current Milestone: v14 Pipeline Redesign
+
+**Goal:** Systematically audit and redesign the v13 inference pipeline for robust parameter recovery, justifying every component.
+
+**Target features:**
+- Seed-by-seed performance baseline of v13 pipeline at 2% noise
+- Stage-by-stage audit against 3 justification criteria (literature, empirical best, simplest)
+- Identification and removal of redundant stages
+- Brainstorm and prototype alternative approaches (objective, optimizer, surrogate, regularization)
+- Build redesigned pipeline that beats v13 on robustness
 
 ## Requirements
 
@@ -29,33 +40,39 @@ Every layer of the pipeline (forward solver, surrogate, inference) has independe
 
 ### Active
 
-(None yet — define in next milestone)
+- [ ] v13 performance baseline across noise seeds at 2% noise
+- [ ] Stage-by-stage audit of v13 pipeline against justification criteria
+- [ ] Empirical comparison studies for each pipeline component
+- [ ] Redesigned pipeline implementation
+- [ ] Robustness validation (<10% relative error on k0_1, k0_2, alpha_1, alpha_2 at 2% noise)
 
 ### Out of Scope
 
-- Refactoring the existing codebase (script sprawl, sys.path hacks, etc.) — this project is about verification, not cleanup
-- Adding new physics or solver capabilities — verify what exists first
-- Performance optimization — correctness before speed
-- CI/CD pipeline setup — focus on the V&V framework itself
-- Experimental data validation — this is code verification (are we solving the equations right?), not model validation against lab data
+- Refactoring the existing codebase (script sprawl, sys.path hacks, etc.) — focus is on pipeline design, not code cleanup
+- Adding new physics or solver capabilities — work with existing PDE model
+- CI/CD pipeline setup — focus on the pipeline itself
+- Experimental data validation — synthetic targets only for now
+- Noise levels beyond 2% — target 2% first, extend later
+- Performance optimization for speed — correctness and robustness first
 
 ## Context
 
-- V1.0 shipped 2026-03-10: 6 phases, 14 plans, 69 commits across 4 days
-- Codebase: 72,234 lines Python; V&V adds ~12,300 lines (tests, report pipeline, LaTeX)
-- MMS weak form audit confirmed production `bv_solver.py` is correct (no bugs found)
-- Nondimensionalization roundtrip tests confirmed all parameter transforms at 1e-12 tolerance
-- Surrogate models validated on 479 hold-out samples; CD median NRMSE 0.06-0.41%
-- Parameter recovery works at up to 5% noise with ~11% surrogate bias from PDE truth (expected)
-- Full pipeline reproducibility confirmed via subprocess-based regression tests
-- Key tech debt: sys.path manipulation in test imports (info-level), test_inverse_verification.py at 1136 lines
+- V1.0 shipped 2026-03-10: V&V framework complete (6 phases, 14 plans, 69 commits)
+- Forward solver verified correct via MMS (L2~O(h²), H1~O(h))
+- Surrogate models validated: CD median NRMSE 0.06-0.41% on 479 hold-out samples
+- v13 pipeline has 7 stages (P1-P7) with surrogate and PDE refinement phases
+- Known: ~11% surrogate bias from PDE truth at optimum
+- Known: Multiple surrogate phases (P2-P4) likely converge to same minimum — redundant
+- Known: 20K LHS multistart reliably finds global minimum — keep
+- Suspicion: P1 (shallow surrogate?) may not be necessary — needs investigation
+- Parameters of interest: k0_1, k0_2, alpha_1, alpha_2
 
 ## Constraints
 
-- **Runtime**: Firedrake is required and installed via its own installer (not pip). Tests involving PDE solves are slow (seconds per point).
-- **Environment**: macOS/Linux with Firedrake virtual environment. PyTorch optional for NN surrogate.
-- **Scope**: Verify the existing pipeline as-is. Don't change solver code unless a bug is found during verification.
-- **Standard**: Publication-grade rigor — convergence rates, error norms, reproducibility. Results must be defensible to journal reviewers.
+- **Runtime**: Firedrake PDE solves are slow (seconds per point). Surrogate evaluations are fast.
+- **Environment**: macOS/Linux with Firedrake virtual environment. PyTorch for NN surrogate.
+- **Justification standard**: Every pipeline component must be justified by (1) literature precedent, (2) empirical superiority over alternatives, or (3) simplest thing that works (rare).
+- **Standard**: Results must be defensible to journal reviewers with quantitative evidence.
 
 ## Key Decisions
 
@@ -71,4 +88,4 @@ Every layer of the pipeline (forward solver, surrogate, inference) has independe
 | Multistart as basin uniqueness (CV<0.10) | "Within 10% of true" not achievable with ~11% surrogate bias | ✓ Good — tests optimizer convergence, not surrogate accuracy |
 
 ---
-*Last updated: 2026-03-10 after v1.0 milestone*
+*Last updated: 2026-03-09 after v14 milestone start*
