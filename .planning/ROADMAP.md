@@ -24,7 +24,7 @@ See .planning/MILESTONES.md for v1.0 details.
 
 **Milestone Goal:** Systematically audit and redesign the v13 inference pipeline for robust parameter recovery (<10% relative error on k0_1, k0_2, alpha_1, alpha_2 at 2% noise across 20+ seeds), with every component justified.
 
-- [ ] **Phase 7: Baseline Diagnostics** - Establish v13 multi-seed performance baseline and parameter identifiability bounds
+- [x] **Phase 7: Baseline Diagnostics** - Establish v13 multi-seed performance baseline and parameter identifiability bounds (completed 2026-03-10)
 - [ ] **Phase 8: Ablation Audit** - Determine which v13 stages actually contribute to robustness via controlled ablation
 - [ ] **Phase 9: Objective and Component Experiments** - Redesign objective function and test surrogate bias correction
 - [ ] **Phase 10: Multi-pH Exploration** - Explore whether multi-pH experimental design breaks parameter correlations
@@ -117,7 +117,7 @@ Phases execute in numeric order: 7 -> 8 -> 9 -> 10 -> 11
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 7. Baseline Diagnostics | 2/3 | In Progress|  |
+| 7. Baseline Diagnostics | 3/3 | Complete   | 2026-03-10 |
 | 8. Ablation Audit | 0/2 | Not started | - |
 | 9. Objective and Component Experiments | 0/3 | Not started | - |
 | 10. Multi-pH Exploration | 0/2 | Not started | - |
