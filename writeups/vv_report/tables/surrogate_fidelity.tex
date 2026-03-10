@@ -1,0 +1,11 @@
+\begin{tabular}{l S S S S S}
+\toprule
+Model & {CD Median} & {CD 95th} & {CD Max} & {PC Median} & {PC 95th} \\
+\midrule
+NN Ensemble & 0.0025 & 0.0062 & 0.0385 & 0.0091 & 0.4475 \\
+RBF Baseline & 0.0006 & 0.0145 & 0.0522 & 0.0139 & 0.7095 \\
+POD-RBF (log) & 0.0041 & 0.0148 & 0.0521 & 0.0167 & 0.6878 \\
+POD-RBF (no-log) & 0.0040 & 0.0138 & 0.0521 & 0.0164 & 0.7351 \\
+\bottomrule
+\multicolumn{6}{l}{\footnotesize Note: PC NRMSE inflated by near-zero-range samples; median is the robust statistic.} \\
+\end{tabular}

@@ -1,0 +1,13 @@
+\begin{tabular}{l l l c}
+\toprule
+Layer & Test & Key Result & Status \\
+\midrule
+Forward Solver & MMS Convergence & $L^2 \sim O(h^2)$, $H^1 \sim O(h)$, $R^2 > 0.999$ & Pass \\
+Forward Solver & GCI Uncertainty & Safety factor $\sim 1.25$ at finest mesh & Pass \\
+Surrogate & Hold-out Validation & CD median NRMSE $< 0.005$ (NN Ensemble) & Pass \\
+Inverse & Parameter Recovery (0--2\% noise) & Median max error $<$ gate & Pass \\
+Inverse & Gradient Consistency & FD convergence $O(h^2)$ at +10\% & Pass \\
+Inverse & Multistart Basin & CV $< 0.002$, NRMSE $< 0.004$ & Pass \\
+Pipeline & Reproducibility & Bitwise-identical outputs & Pass \\
+\bottomrule
+\end{tabular}
