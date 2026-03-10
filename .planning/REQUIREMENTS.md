@@ -32,7 +32,7 @@
 
 ### Report
 
-- [ ] **RPT-01**: Written V&V report with convergence tables, convergence plots, and GCI uncertainty bounds suitable for journal supplementary material
+- [x] **RPT-01**: Written V&V report with convergence tables, convergence plots, and GCI uncertainty bounds suitable for journal supplementary material
 
 ## v2 Requirements
 
@@ -84,7 +84,7 @@
 | INV-03 | Phase 4 | Complete |
 | PIP-01 | Phase 5 | Complete |
 | PIP-02 | Phase 5 | Complete |
-| RPT-01 | Phase 6 | Pending |
+| RPT-01 | Phase 6 | Complete |
 
 **Coverage:**
 - v1 requirements: 14 total
