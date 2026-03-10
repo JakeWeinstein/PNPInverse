@@ -41,12 +41,12 @@ See .planning/MILESTONES.md for v1.0 details.
   2. Profile likelihood plots exist for each of k0_1, k0_2, alpha_1, alpha_2, showing whether each parameter has a well-defined minimum or a flat valley
   3. Extended voltage sweep plots show total and peroxide current sensitivity to each parameter, revealing which voltage regions carry information about which parameters
   4. Every diagnostic tool introduced in this phase has a justification entry (literature, empirical, or simplest) documented in its output
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
-- [ ] 07-03: TBD
+- [ ] 07-01-PLAN.md -- Multi-seed v13 wrapper with summary statistics and visualizations (DIAG-01, AUDT-04)
+- [ ] 07-02-PLAN.md -- PDE-only profile likelihood identifiability analysis (DIAG-02, AUDT-04)
+- [ ] 07-03-PLAN.md -- Sensitivity visualization with 1D sweeps and Jacobian heatmap (DIAG-03, AUDT-04)
 
 ### Phase 8: Ablation Audit
 **Goal**: Identify which v13 pipeline stages are necessary vs redundant, producing an empirically justified minimal pipeline specification
@@ -117,7 +117,7 @@ Phases execute in numeric order: 7 -> 8 -> 9 -> 10 -> 11
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 7. Baseline Diagnostics | 0/3 | Not started | - |
+| 7. Baseline Diagnostics | 0/3 | Planned | - |
 | 8. Ablation Audit | 0/2 | Not started | - |
 | 9. Objective and Component Experiments | 0/3 | Not started | - |
 | 10. Multi-pH Exploration | 0/2 | Not started | - |
