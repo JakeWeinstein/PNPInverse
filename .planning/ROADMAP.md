@@ -117,7 +117,7 @@ Phases execute in numeric order: 7 -> 8 -> 9 -> 10 -> 11
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 7. Baseline Diagnostics | 0/3 | Planned | - |
+| 7. Baseline Diagnostics | 2/3 | In Progress|  |
 | 8. Ablation Audit | 0/2 | Not started | - |
 | 9. Objective and Component Experiments | 0/3 | Not started | - |
 | 10. Multi-pH Exploration | 0/2 | Not started | - |

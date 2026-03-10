@@ -9,7 +9,7 @@ Requirements for pipeline redesign milestone. Each maps to roadmap phases.
 
 ### Diagnostics
 
-- [ ] **DIAG-01**: Run v13 pipeline across 10+ noise seeds at 2% noise, report per-parameter median/worst-case relative error
+- [x] **DIAG-01**: Run v13 pipeline across 10+ noise seeds at 2% noise, report per-parameter median/worst-case relative error
 - [ ] **DIAG-02**: Profile likelihood analysis for each of k0_1, k0_2, alpha_1, alpha_2 to determine practical identifiability
 - [ ] **DIAG-03**: Extended voltage sweep visualization of total and peroxide current across parameter values for visual sensitivity analysis
 
@@ -18,7 +18,7 @@ Requirements for pipeline redesign milestone. Each maps to roadmap phases.
 - [ ] **AUDT-01**: Ablation study removing S3/S4 surrogate stages, quantifying per-stage contribution across 10+ seeds
 - [ ] **AUDT-02**: Ablation study of P1 (shallow PDE), quantifying contribution vs direct S2→P2
 - [ ] **AUDT-03**: Document justification status of each v13 stage against the 3 criteria (literature, empirical best, simplest)
-- [ ] **AUDT-04**: Continuous justification audit — every new component added in later phases must pass the 3-criteria test before inclusion
+- [x] **AUDT-04**: Continuous justification audit — every new component added in later phases must pass the 3-criteria test before inclusion
 
 ### Objective Function
 
@@ -75,13 +75,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DIAG-01 | Phase 7 | Pending |
+| DIAG-01 | Phase 7 | Complete |
 | DIAG-02 | Phase 7 | Pending |
 | DIAG-03 | Phase 7 | Pending |
 | AUDT-01 | Phase 8 | Pending |
 | AUDT-02 | Phase 8 | Pending |
 | AUDT-03 | Phase 8 | Pending |
-| AUDT-04 | Phase 7, 8, 9, 10 (cross-cutting) | Pending |
+| AUDT-04 | Phase 7, 8, 9, 10 (cross-cutting) | Complete |
 | OBJF-01 | Phase 9 | Pending |
 | OBJF-02 | Phase 9 | Pending |
 | OBJF-03 | Phase 9 | Pending |
