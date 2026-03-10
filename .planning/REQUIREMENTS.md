@@ -64,7 +64,7 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Feature | Reason |
 |---------|--------|
-| More surrogate phases (S5+) | S2/S3/S4 converge to same minimum — proven redundant |
+| More surrogate phases (S5+) | S2/S3/S4 converge to same minimum -- proven redundant |
 | Global optimization on PDE objective | Too expensive (~3h per seed); surrogate multistart handles global search |
 | Deep learning surrogate replacement | NN ensemble already 0.06-0.41% NRMSE; bottleneck is bias, not accuracy |
 | Noise levels beyond 2% | Target 2% first, extend in future milestone |
@@ -75,27 +75,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DIAG-01 | — | Pending |
-| DIAG-02 | — | Pending |
-| DIAG-03 | — | Pending |
-| AUDT-01 | — | Pending |
-| AUDT-02 | — | Pending |
-| AUDT-03 | — | Pending |
-| AUDT-04 | — | Pending |
-| OBJF-01 | — | Pending |
-| OBJF-02 | — | Pending |
-| OBJF-03 | — | Pending |
-| SURR-01 | — | Pending |
-| PHEX-01 | — | Pending |
-| PHEX-02 | — | Pending |
-| PIPE-01 | — | Pending |
-| PIPE-02 | — | Pending |
+| DIAG-01 | Phase 7 | Pending |
+| DIAG-02 | Phase 7 | Pending |
+| DIAG-03 | Phase 7 | Pending |
+| AUDT-01 | Phase 8 | Pending |
+| AUDT-02 | Phase 8 | Pending |
+| AUDT-03 | Phase 8 | Pending |
+| AUDT-04 | Phase 7, 8, 9, 10 (cross-cutting) | Pending |
+| OBJF-01 | Phase 9 | Pending |
+| OBJF-02 | Phase 9 | Pending |
+| OBJF-03 | Phase 9 | Pending |
+| SURR-01 | Phase 9 | Pending |
+| PHEX-01 | Phase 10 | Pending |
+| PHEX-02 | Phase 10 | Pending |
+| PIPE-01 | Phase 11 | Pending |
+| PIPE-02 | Phase 11 | Pending |
 
 **Coverage:**
 - v14 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-10*
-*Last updated: 2026-03-10 after initial definition*
+*Last updated: 2026-03-10 after roadmap creation*
