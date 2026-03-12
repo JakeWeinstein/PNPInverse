@@ -38,14 +38,14 @@ created: 2026-03-12
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 08-01-01 | 01 | 1 | AUDT-01 | unit | `pytest tests/test_ablation_analysis.py::TestWilcoxonComparison -x` | ❌ W0 | ⬜ pending |
-| 08-01-02 | 01 | 1 | AUDT-01 | unit | `pytest tests/test_ablation_analysis.py::TestSeedAlignment -x` | ❌ W0 | ⬜ pending |
-| 08-01-03 | 01 | 1 | AUDT-02 | unit | `pytest tests/test_ablation_analysis.py::TestP1Contribution -x` | ❌ W0 | ⬜ pending |
-| 08-01-04 | 01 | 1 | AUDT-03 | unit | `pytest tests/test_ablation_analysis.py::TestJustificationTable -x` | ❌ W0 | ⬜ pending |
-| 08-01-05 | 01 | 1 | AUDT-03 | unit | `pytest tests/test_ablation_analysis.py::TestMinimalPipelineSpec -x` | ❌ W0 | ⬜ pending |
-| 08-01-06 | 01 | 1 | AUDT-04 | unit | `pytest tests/test_ablation_analysis.py::TestAudt04Metadata -x` | ❌ W0 | ⬜ pending |
-| 08-02-01 | 02 | 1 | AUDT-01 | unit | `pytest tests/test_ablation_runner.py::TestConfigDispatch -x` | ❌ W0 | ⬜ pending |
-| 08-02-02 | 02 | 1 | AUDT-01 | unit | `pytest tests/test_ablation_runner.py::TestMultiRowParser -x` | ❌ W0 | ⬜ pending |
+| 08-01-01 | 01 | 1 | AUDT-01 | unit | `pytest tests/test_ablation_runner.py::TestConfigDispatch -x` | ❌ W0 | ⬜ pending |
+| 08-01-02 | 01 | 1 | AUDT-01 | unit | `pytest tests/test_ablation_runner.py::TestMultiRowParser -x` | ❌ W0 | ⬜ pending |
+| 08-02-01 | 02 | 2 | AUDT-01 | unit | `pytest tests/test_ablation_analysis.py::TestWilcoxonComparison -x` | ❌ W0 | ⬜ pending |
+| 08-02-02 | 02 | 2 | AUDT-01 | unit | `pytest tests/test_ablation_analysis.py::TestSeedAlignment -x` | ❌ W0 | ⬜ pending |
+| 08-02-03 | 02 | 2 | AUDT-02 | unit | `pytest tests/test_ablation_analysis.py::TestP1Contribution -x` | ❌ W0 | ⬜ pending |
+| 08-02-04 | 02 | 2 | AUDT-03 | unit | `pytest tests/test_ablation_analysis.py::TestJustificationTable -x` | ❌ W0 | ⬜ pending |
+| 08-02-05 | 02 | 2 | AUDT-03 | unit | `pytest tests/test_ablation_analysis.py::TestMinimalPipelineSpec -x` | ❌ W0 | ⬜ pending |
+| 08-02-06 | 02 | 2 | AUDT-04 | unit | `pytest tests/test_ablation_analysis.py::TestAudt04Metadata -x` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
