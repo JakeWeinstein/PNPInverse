@@ -24,7 +24,7 @@ See .planning/MILESTONES.md for v1.0 details.
 
 **Milestone Goal:** Systematically audit and redesign the v13 inference pipeline for robust parameter recovery (<10% relative error on k0_1, k0_2, alpha_1, alpha_2 at 2% noise across 20+ seeds), with every component justified.
 
-- [x] **Phase 7: Baseline Diagnostics** - Establish v13 multi-seed performance baseline and parameter identifiability bounds (completed 2026-03-10)
+- [x] **Phase 7: Baseline Diagnostics** - Establish v13 multi-seed performance baseline and parameter identifiability bounds (completed 2026-03-10)
 - [ ] **Phase 8: Ablation Audit** - Determine which v13 stages actually contribute to robustness via controlled ablation
 - [ ] **Phase 9: Objective and Component Experiments** - Redesign objective function and test surrogate bias correction
 - [ ] **Phase 10: Multi-pH Exploration** - Explore whether multi-pH experimental design breaks parameter correlations
@@ -57,11 +57,11 @@ Plans:
   2. Ablation table shows P1 (shallow PDE) contribution, quantifying whether direct S2-to-P2 transition matches or improves on the S2-to-P1-to-P2 path
   3. Every v13 stage has a justification status entry (justified / unjustified / redundant) with supporting evidence
   4. A minimal pipeline specification exists listing only the stages that survived ablation, ready for Phase 9 experiments
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: TBD
-- [ ] 08-02: TBD
+- [ ] 08-01-PLAN.md -- Ablation runner: multi-seed execution of 3 ablation configs with timing extraction (AUDT-01, AUDT-02, AUDT-04)
+- [ ] 08-02-PLAN.md -- Ablation analysis: Wilcoxon tests, justification table, minimal pipeline spec (AUDT-01, AUDT-02, AUDT-03, AUDT-04)
 
 ### Phase 9: Objective and Component Experiments
 **Goal**: Improve parameter recovery by redesigning the objective function, adding regularization, and correcting surrogate bias -- each change tested individually against the ablated baseline
