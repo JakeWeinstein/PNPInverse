@@ -97,6 +97,6 @@ Phases execute in numeric order: 12 -> 13 -> 14
 | 1-6 | v1.0 | 14/14 | Complete | 2026-03-10 |
 | 7. Baseline Diagnostics | v14 | 3/3 | Complete | 2026-03-10 |
 | 8-11 | v14 | 0/9 | Deferred | - |
-| 12. Archive Old Results | 1/1 | Complete   | 2026-03-13 | - |
+| 12. Archive Old Results | 1/1 | Complete    | 2026-03-13 | - |
 | 13. Delete Dead Code | v1.1 | 0/1 | Not started | - |
 | 14. Post-Cleanup Verification | v1.1 | 0/1 | Not started | - |
