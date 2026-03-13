@@ -9,8 +9,8 @@ Requirements for repo cleanup milestone. Strip repo to v13 pipeline essentials.
 
 ### Archive
 
-- [ ] **ARCH-01**: Old StudyResults directories (~108 dirs) moved to `archive/StudyResults/`
-- [ ] **ARCH-02**: `StudyResults/v14_pde_only/` removed (bad output)
+- [x] **ARCH-01**: Old StudyResults directories (~108 dirs) moved to `archive/StudyResults/`
+- [x] **ARCH-02**: `StudyResults/v14_pde_only/` removed (bad output)
 
 ### Scripts
 
@@ -52,8 +52,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ARCH-01 | Phase 12 | Pending |
-| ARCH-02 | Phase 12 | Pending |
+| ARCH-01 | Phase 12 | Complete |
+| ARCH-02 | Phase 12 | Complete |
 | SCRP-01 | Phase 13 | Pending |
 | SCRP-02 | Phase 13 | Pending |
 | SCRP-03 | Phase 13 | Pending |
