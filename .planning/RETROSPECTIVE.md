@@ -42,6 +42,44 @@
 
 ---
 
+## Milestone: v14 — Pipeline Redesign
+
+**Closed:** 2026-03-13 (early — Phase 7 only)
+**Phases:** 1 of 5 | **Plans:** 3 | **Timeline:** 3 days
+
+### What Was Built
+- Multi-seed v13 baseline wrapper with subprocess isolation and per-parameter error statistics
+- PDE-only profile likelihood identifiability analysis with chi-squared thresholds for all 4 parameters
+- Sensitivity visualization with 1D parameter sweeps and Jacobian heatmaps across extended voltage grid
+- AUDT-04 metadata schema for justification tracking as cross-cutting standard
+
+### What Worked
+- Analysis-first approach (diagnose before redesign) produced clear identifiability and sensitivity data to inform future work
+- Reusing subprocess isolation pattern from v1.0 kept multi-seed runs stable
+- TDD approach with frozen dataclass configs kept diagnostic scripts clean and testable
+
+### What Was Inefficient
+- Milestone scope was too ambitious for the available time — only 1 of 5 phases completed before closing
+- Phase 8 was fully researched and planned but never executed — planning work was wasted
+- Phases 9-11 had TBD plans, indicating scope uncertainty that should have been resolved earlier
+
+### Patterns Established
+- Profile likelihood as standard identifiability diagnostic for inverse problems
+- AUDT-04 metadata sidecar pattern for justification tracking on every new component
+- Central FD step h=1e-5 for Jacobian computation consistent with codebase convention
+
+### Key Lessons
+1. Scope milestones more conservatively — better to ship a complete 2-phase milestone than abandon a 5-phase one
+2. Don't plan phases in detail until preceding phases are complete — Phase 8 planning was premature
+3. Diagnostic phases (measurement) are independently valuable even when redesign phases (implementation) are deferred
+
+### Cost Observations
+- Model mix: balanced profile (sonnet execution)
+- Sessions: ~3
+- Notable: Phase 7 executed quickly (3 plans, ~10min) — diagnostic scripts are fast to implement when the infrastructure exists
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -49,12 +87,14 @@
 | Milestone | Timeline | Phases | Key Change |
 |-----------|----------|--------|------------|
 | v1.0 | 4 days | 6 | Initial V&V framework established |
+| v14 | 3 days | 1 of 5 | Diagnostics complete, closed early |
 
 ### Cumulative Quality
 
 | Milestone | Plans | Files Changed | Lines Added |
 |-----------|-------|---------------|-------------|
 | v1.0 | 14 | 90 | +12,300 |
+| v14 | 3 | 30 | +6,566 |
 
 ### Top Lessons (Verified Across Milestones)
 

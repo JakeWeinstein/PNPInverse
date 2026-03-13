@@ -1,5 +1,29 @@
 # Milestones
 
+## v14 Pipeline Redesign (Closed: 2026-03-13)
+
+**Phases completed:** 1 of 5 phases (Phase 7 only), 3 plans executed
+**Timeline:** 3 days (2026-03-10 → 2026-03-12)
+**Git range:** feat(07-01) → docs(08) (24 commits, 30 files, +6,566/-436 lines)
+**Status:** Closed early — diagnostics phase complete, remaining phases deferred to next milestone
+
+**Key accomplishments:**
+- Multi-seed v13 baseline wrapper with subprocess isolation across 10+ noise seeds at 2% noise
+- PDE-only profile likelihood identifiability analysis for all 4 kinetic parameters with chi-squared threshold
+- Sensitivity visualization with 1D parameter sweeps and Jacobian heatmap across extended voltage grid
+- AUDT-04 metadata schema for justification tracking established as cross-cutting standard
+
+### Known Gaps
+
+Requirements deferred (11 of 15 incomplete):
+- AUDT-01, AUDT-02, AUDT-03: Ablation study (Phase 8 — planned but not executed)
+- OBJF-01, OBJF-02, OBJF-03: Objective function redesign (Phase 9 — not started)
+- SURR-01: Surrogate bias correction (Phase 9 — not started)
+- PHEX-01, PHEX-02: Multi-pH exploration (Phase 10 — not started)
+- PIPE-01, PIPE-02: Pipeline build and validation (Phase 11 — not started)
+
+---
+
 ## v1.0 PNP-BV V&V Framework (Shipped: 2026-03-10)
 
 **Phases completed:** 6 phases, 14 plans

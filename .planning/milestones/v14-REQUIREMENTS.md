@@ -1,3 +1,12 @@
+# Requirements Archive: v14 Pipeline Redesign
+
+**Archived:** 2026-03-13
+**Status:** SHIPPED
+
+For current requirements, see `.planning/REQUIREMENTS.md`.
+
+---
+
 # Requirements: PNP-BV Inverse Solver
 
 **Defined:** 2026-03-10

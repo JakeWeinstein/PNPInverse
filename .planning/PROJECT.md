@@ -2,22 +2,11 @@
 
 ## What This Is
 
-A surrogate-accelerated inverse solver for Poisson-Nernst-Planck + Butler-Volmer electrochemical systems. The solver recovers kinetic parameters (k0_1, k0_2, alpha_1, alpha_2) from noisy I-V curve observations. Built on a V&V-verified forward solver and surrogate models, with the goal of robust parameter recovery across noise realizations.
+A surrogate-accelerated inverse solver for Poisson-Nernst-Planck + Butler-Volmer electrochemical systems. The solver recovers kinetic parameters (k0_1, k0_2, alpha_1, alpha_2) from noisy I-V curve observations. Built on a V&V-verified forward solver and surrogate models, with diagnostic tools for identifiability and sensitivity analysis.
 
 ## Core Value
 
 Robust parameter recovery (<10% relative error) at 2% noise across all seeds, with every pipeline component justified by literature, empirical comparison, or simplicity.
-
-## Current Milestone: v14 Pipeline Redesign
-
-**Goal:** Systematically audit and redesign the v13 inference pipeline for robust parameter recovery, justifying every component.
-
-**Target features:**
-- Seed-by-seed performance baseline of v13 pipeline at 2% noise
-- Stage-by-stage audit against 3 justification criteria (literature, empirical best, simplest)
-- Identification and removal of redundant stages
-- Brainstorm and prototype alternative approaches (objective, optimizer, surrogate, regularization)
-- Build redesigned pipeline that beats v13 on robustness
 
 ## Requirements
 
@@ -37,14 +26,18 @@ Robust parameter recovery (<10% relative error) at 2% noise across all seeds, wi
 - ✓ End-to-end pipeline reproducibility with numerical regression baselines — v1.0
 - ✓ Automated V&V test suite running via pytest without manual intervention — v1.0
 - ✓ Publication-grade LaTeX V&V report with programmatic figures/tables — v1.0
+- ✓ Multi-seed v13 baseline across 10+ noise seeds at 2% noise — v14
+- ✓ Profile likelihood identifiability analysis for all 4 kinetic parameters — v14
+- ✓ Extended voltage sweep sensitivity visualization with Jacobian heatmap — v14
+- ✓ AUDT-04 justification tracking metadata schema — v14
 
 ### Active
 
-- [ ] v13 performance baseline across noise seeds at 2% noise
-- [ ] Stage-by-stage audit of v13 pipeline against justification criteria
-- [ ] Empirical comparison studies for each pipeline component
-- [ ] Redesigned pipeline implementation
-- [ ] Robustness validation (<10% relative error on k0_1, k0_2, alpha_1, alpha_2 at 2% noise)
+- [ ] Stage-by-stage ablation audit of v13 pipeline
+- [ ] Objective function redesign (weighted LS, regularization, sensitivity-weighted voltages)
+- [ ] Surrogate bias correction (space mapping)
+- [ ] Multi-pH experimental design exploration
+- [ ] Redesigned pipeline implementation with robustness validation
 
 ### Out of Scope
 
@@ -57,14 +50,16 @@ Robust parameter recovery (<10% relative error) at 2% noise across all seeds, wi
 
 ## Context
 
-- V1.0 shipped 2026-03-10: V&V framework complete (6 phases, 14 plans, 69 commits)
+- v1.0 shipped 2026-03-10: V&V framework complete (6 phases, 14 plans, 69 commits)
+- v14 closed 2026-03-13: Baseline diagnostics complete (Phase 7), remaining phases deferred
 - Forward solver verified correct via MMS (L2~O(h²), H1~O(h))
 - Surrogate models validated: CD median NRMSE 0.06-0.41% on 479 hold-out samples
 - v13 pipeline has 7 stages (P1-P7) with surrogate and PDE refinement phases
 - Known: ~11% surrogate bias from PDE truth at optimum
 - Known: Multiple surrogate phases (P2-P4) likely converge to same minimum — redundant
 - Known: 20K LHS multistart reliably finds global minimum — keep
-- Suspicion: P1 (shallow surrogate?) may not be necessary — needs investigation
+- Profile likelihood shows k0_2 identifiability at 2% noise is the highest-risk unknown
+- Sensitivity analysis reveals which voltage regions carry information about which parameters
 - Parameters of interest: k0_1, k0_2, alpha_1, alpha_2
 
 ## Constraints
@@ -86,6 +81,10 @@ Robust parameter recovery (<10% relative error) at 2% noise across all seeds, wi
 | PDE targets via subprocess | Firedrake/PyTorch PETSc segfault when both loaded in same process | ✓ Good — subprocess isolation resolved segfault |
 | Median NRMSE for surrogate gates | PC near-zero-range samples inflate mean to 50-200% | ✓ Good — median gives stable, meaningful thresholds |
 | Multistart as basin uniqueness (CV<0.10) | "Within 10% of true" not achievable with ~11% surrogate bias | ✓ Good — tests optimizer convergence, not surrogate accuracy |
+| Analysis-first approach for v14 | Diagnose before redesigning — phases 7-8 are measurement, phases 9-11 are implementation | ✓ Good — Phase 7 diagnostics revealed identifiability structure |
+| Sequential seed execution | Avoid Firedrake/PETSc process conflicts in multi-seed runs | ✓ Good — subprocess isolation maintained |
+| k0_2 6-decade grid for profile likelihood | k0_2 has higher identifiability risk than k0_1 | ✓ Good — wider grid captured identifiability landscape |
+| Close v14 early after diagnostics | Diagnostics complete; remaining phases need fresh scoping based on findings | — Pending — next milestone will carry forward |
 
 ---
-*Last updated: 2026-03-09 after v14 milestone start*
+*Last updated: 2026-03-13 after v14 milestone close*
