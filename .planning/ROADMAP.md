@@ -55,10 +55,10 @@ Phases 8-11 deferred to next milestone.
   1. ~108 old StudyResults directories exist under `archive/StudyResults/` with contents intact
   2. `StudyResults/v14_pde_only/` no longer exists in the repo
   3. Current results (v13, v14, V&V) remain in their original `StudyResults/` locations
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 12-01: TBD
+- [ ] 12-01-PLAN.md -- Delete bad outputs/tmp artifacts, archive old StudyResults
 
 ### Phase 13: Delete Dead Code
 **Goal**: Old scripts and tests from prior pipeline iterations are removed from the repo
