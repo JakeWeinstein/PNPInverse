@@ -42,7 +42,7 @@ Phases 8-11 deferred to next milestone.
 **Milestone Goal:** Strip the repo to v13 pipeline essentials -- remove clutter from earlier pipeline iterations so future work starts clean.
 
 - [x] **Phase 12: Archive Old Results** - Move old StudyResults to archive and remove bad outputs (completed 2026-03-13)
-- [ ] **Phase 13: Delete Dead Code** - Remove old scripts and tests that don't pertain to v13
+- [x] **Phase 13: Delete Dead Code** - Remove old scripts and tests that don't pertain to v13 (completed 2026-03-13)
 - [ ] **Phase 14: Post-Cleanup Verification** - Confirm v13 pipeline and test suite still work
 
 ## Phase Details
@@ -98,5 +98,5 @@ Phases execute in numeric order: 12 -> 13 -> 14
 | 7. Baseline Diagnostics | v14 | 3/3 | Complete | 2026-03-10 |
 | 8-11 | v14 | 0/9 | Deferred | - |
 | 12. Archive Old Results | v1.1 | 1/1 | Complete | 2026-03-13 |
-| 13. Delete Dead Code | v1.1 | 0/1 | Not started | - |
+| 13. Delete Dead Code | 1/1 | Complete   | 2026-03-13 | - |
 | 14. Post-Cleanup Verification | v1.1 | 0/1 | Not started | - |

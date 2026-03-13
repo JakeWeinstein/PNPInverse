@@ -14,15 +14,15 @@ Requirements for repo cleanup milestone. Strip repo to v13 pipeline essentials.
 
 ### Scripts
 
-- [ ] **SCRP-01**: Old inference scripts deleted (`scripts/inference/` -- 44 files, v1-v12 variants)
-- [ ] **SCRP-02**: Old surrogate scripts deleted (v8-v12 variants, legacy trainers, sweeps)
-- [ ] **SCRP-03**: Old study scripts deleted (benchmarks, parameter sweeps, legacy studies)
-- [ ] **SCRP-04**: Legacy BV scripts deleted (`bv_iv_curve.py`, `bv_iv_curve_symmetric.py`)
-- [ ] **SCRP-05**: `Infer_PDE_only_v14.py` deleted
+- [x] **SCRP-01**: Old inference scripts deleted (`scripts/inference/` -- 44 files, v1-v12 variants)
+- [x] **SCRP-02**: Old surrogate scripts deleted (v8-v12 variants, legacy trainers, sweeps)
+- [x] **SCRP-03**: Old study scripts deleted (benchmarks, parameter sweeps, legacy studies)
+- [x] **SCRP-04**: Legacy BV scripts deleted (`bv_iv_curve.py`, `bv_iv_curve_symmetric.py`)
+- [x] **SCRP-05**: `Infer_PDE_only_v14.py` deleted
 
 ### Tests
 
-- [ ] **TEST-01**: Old test files deleted (v11, bcd, cascade, ensemble, robustness, weight_sweep, nondim_audit)
+- [x] **TEST-01**: Old test files deleted (v11, bcd, cascade, ensemble, robustness, weight_sweep, nondim_audit)
 
 ### Verification
 
@@ -54,12 +54,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | ARCH-01 | Phase 12 | Complete |
 | ARCH-02 | Phase 12 | Complete |
-| SCRP-01 | Phase 13 | Pending |
-| SCRP-02 | Phase 13 | Pending |
-| SCRP-03 | Phase 13 | Pending |
-| SCRP-04 | Phase 13 | Pending |
-| SCRP-05 | Phase 13 | Pending |
-| TEST-01 | Phase 13 | Pending |
+| SCRP-01 | Phase 13 | Complete |
+| SCRP-02 | Phase 13 | Complete |
+| SCRP-03 | Phase 13 | Complete |
+| SCRP-04 | Phase 13 | Complete |
+| SCRP-05 | Phase 13 | Complete |
+| TEST-01 | Phase 13 | Complete |
 | VRFY-01 | Phase 14 | Pending |
 | VRFY-02 | Phase 14 | Pending |
 
