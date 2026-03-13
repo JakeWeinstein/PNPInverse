@@ -33,11 +33,20 @@ Robust parameter recovery (<10% relative error) at 2% noise across all seeds, wi
 
 ### Active
 
-- [ ] Stage-by-stage ablation audit of v13 pipeline
-- [ ] Objective function redesign (weighted LS, regularization, sensitivity-weighted voltages)
-- [ ] Surrogate bias correction (space mapping)
-- [ ] Multi-pH experimental design exploration
-- [ ] Redesigned pipeline implementation with robustness validation
+- [ ] Archive old StudyResults to `archive/` directory (keep v13/v14/V&V results in place)
+- [ ] Delete old scripts (v1–v12 inference variants, legacy surrogate trainers, old studies, benchmarks)
+- [ ] Delete old tests (v11, bcd, cascade, ensemble, robustness, weight_sweep, nondim_audit)
+- [ ] Delete bad scripts (Infer_PDE_only_v14.py) and their outputs (v14_pde_only/)
+- [ ] Verify v13 pipeline still runs after cleanup
+
+## Current Milestone: v1.1 Repo Cleanup
+
+**Goal:** Strip the repo to v13 pipeline essentials — remove clutter from earlier pipeline iterations so future work starts clean.
+
+**Target features:**
+- Archive ~108 old StudyResults directories to `archive/`
+- Delete ~80 old scripts and ~12 old tests that don't pertain to v13
+- Verify nothing breaks after cleanup
 
 ### Out of Scope
 
@@ -87,4 +96,4 @@ Robust parameter recovery (<10% relative error) at 2% noise across all seeds, wi
 | Close v14 early after diagnostics | Diagnostics complete; remaining phases need fresh scoping based on findings | — Pending — next milestone will carry forward |
 
 ---
-*Last updated: 2026-03-13 after v14 milestone close*
+*Last updated: 2026-03-12 after v1.1 milestone start*

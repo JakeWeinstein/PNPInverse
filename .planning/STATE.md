@@ -1,32 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v14
-milestone_name: Pipeline Redesign
-status: completed
-stopped_at: Milestone closed early
-last_updated: "2026-03-13"
-last_activity: 2026-03-13 -- Closed v14 milestone (Phase 7 complete, Phases 8-11 deferred)
+milestone: v1.1
+milestone_name: Repo Cleanup
+status: not_started
+stopped_at: null
+last_updated: "2026-03-12"
+last_activity: 2026-03-12 -- Milestone v1.1 started
 progress:
-  total_phases: 5
-  completed_phases: 1
-  total_plans: 5
-  completed_plans: 3
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-13)
+See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Robust parameter recovery (<10% relative error) at 2% noise across all seeds, with every pipeline component justified.
-**Current focus:** Planning next milestone
+**Current focus:** Repo cleanup — strip to v13 essentials
 
 ## Current Position
 
-Milestone: v14 closed
-Status: Between milestones
-Last activity: 2026-03-13 -- Closed v14 milestone
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-12 — Milestone v1.1 started
 
 ## Accumulated Context
 
@@ -45,5 +46,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13
-Stopped at: v14 milestone closed, ready for /gsd:new-milestone
+Last session: 2026-03-12
+Stopped at: Milestone v1.1 started, defining requirements
