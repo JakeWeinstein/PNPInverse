@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Repo Cleanup
-status: not_started
-stopped_at: null
+status: ready_to_plan
+stopped_at: roadmap created
 last_updated: "2026-03-12"
-last_activity: 2026-03-12 -- Milestone v1.1 started
+last_activity: 2026-03-12 -- Roadmap created for v1.1
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
 ---
 
@@ -20,14 +20,29 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Robust parameter recovery (<10% relative error) at 2% noise across all seeds, with every pipeline component justified.
-**Current focus:** Repo cleanup — strip to v13 essentials
+**Current focus:** Phase 12 -- Archive old StudyResults
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-12 — Milestone v1.1 started
+Phase: 12 of 14 (Archive Old Results)
+Plan: 0 of 1 in current phase
+Status: Ready to plan
+Last activity: 2026-03-12 -- Roadmap created for v1.1
+
+Progress: [..........] 0%
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 0
+- Average duration: --
+- Total execution time: 0 hours
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
 
 ## Accumulated Context
 
@@ -41,10 +56,10 @@ None.
 
 ### Blockers/Concerns
 
-- k0_2 identifiability at 2% noise remains the single highest-risk unknown — Phase 7 profile likelihood provided initial assessment
-- Surrogate bias correction (space mapping) for NN surrogates is novel in this domain
+- k0_2 identifiability at 2% noise remains the single highest-risk unknown (carried forward from v14)
+- Surrogate bias correction (space mapping) for NN surrogates is novel in this domain (carried forward from v14)
 
 ## Session Continuity
 
 Last session: 2026-03-12
-Stopped at: Milestone v1.1 started, defining requirements
+Stopped at: Roadmap created, ready to plan Phase 12

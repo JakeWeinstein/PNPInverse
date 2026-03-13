@@ -14,8 +14,8 @@ Requirements for repo cleanup milestone. Strip repo to v13 pipeline essentials.
 
 ### Scripts
 
-- [ ] **SCRP-01**: Old inference scripts deleted (`scripts/inference/` — 44 files, v1–v12 variants)
-- [ ] **SCRP-02**: Old surrogate scripts deleted (v8–v12 variants, legacy trainers, sweeps)
+- [ ] **SCRP-01**: Old inference scripts deleted (`scripts/inference/` -- 44 files, v1-v12 variants)
+- [ ] **SCRP-02**: Old surrogate scripts deleted (v8-v12 variants, legacy trainers, sweeps)
 - [ ] **SCRP-03**: Old study scripts deleted (benchmarks, parameter sweeps, legacy studies)
 - [ ] **SCRP-04**: Legacy BV scripts deleted (`bv_iv_curve.py`, `bv_iv_curve_symmetric.py`)
 - [ ] **SCRP-05**: `Infer_PDE_only_v14.py` deleted
@@ -42,7 +42,7 @@ Deferred to next milestone (v14 pipeline redesign carry-forward):
 
 | Feature | Reason |
 |---------|--------|
-| Refactoring kept source modules | Cleanup only — no code changes to production modules |
+| Refactoring kept source modules | Cleanup only -- no code changes to production modules |
 | Updating README or docs | Content stays as-is; cleanup is structural |
 | Changing pyproject.toml dependencies | No dependency changes in this milestone |
 
@@ -52,22 +52,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ARCH-01 | — | Pending |
-| ARCH-02 | — | Pending |
-| SCRP-01 | — | Pending |
-| SCRP-02 | — | Pending |
-| SCRP-03 | — | Pending |
-| SCRP-04 | — | Pending |
-| SCRP-05 | — | Pending |
-| TEST-01 | — | Pending |
-| VRFY-01 | — | Pending |
-| VRFY-02 | — | Pending |
+| ARCH-01 | Phase 12 | Pending |
+| ARCH-02 | Phase 12 | Pending |
+| SCRP-01 | Phase 13 | Pending |
+| SCRP-02 | Phase 13 | Pending |
+| SCRP-03 | Phase 13 | Pending |
+| SCRP-04 | Phase 13 | Pending |
+| SCRP-05 | Phase 13 | Pending |
+| TEST-01 | Phase 13 | Pending |
+| VRFY-01 | Phase 14 | Pending |
+| VRFY-02 | Phase 14 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10 ⚠️
+- Mapped to phases: 10
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-12*
-*Last updated: 2026-03-12 after initial definition*
+*Last updated: 2026-03-12 after roadmap creation*
