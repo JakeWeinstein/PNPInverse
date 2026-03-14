@@ -35,14 +35,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Robust parameter recovery (<10% relative error) at 2% noise across all seeds, with every pipeline component justified.
-**Current focus:** Phase 13 -- Delete dead code (COMPLETE)
+**Current focus:** Phase 14 -- Post-cleanup verification (COMPLETE)
 
 ## Current Position
 
-Phase: 13 of 14 (Delete Dead Code) -- COMPLETE
+Phase: 14 of 14 (Post-Cleanup Verification) -- COMPLETE
 Plan: 1 of 1 in current phase (done)
-Status: Phase 13 complete
-Last activity: 2026-03-13 -- Phase 13 Plan 01 executed (delete dead code)
+Status: Phase 14 complete
+Last activity: 2026-03-14 -- Phase 14 Plan 01 executed (post-cleanup verification, surrogate data relocation, test fixes)
 
 Progress: [##########] 100%
 
@@ -67,6 +67,7 @@ Progress: [##########] 100%
 - Delete-then-archive two-commit strategy per user preference
 - Flat dump into archive/StudyResults/ with no subdirectory grouping
 - [Phase 13]: Single atomic commit for all 84 file deletions (82 tracked + 2 untracked)
+- [Phase 14]: Relocated surrogate model data from archive to data/surrogate_models/; fixed test_bv_forward module collision with importlib
 
 ### Pending Todos
 
@@ -80,4 +81,4 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-14T22:12:39.126Z
-Stopped at: Phase 14 context gathered
+Stopped at: Phase 14 execution complete
