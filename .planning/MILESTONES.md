@@ -1,5 +1,20 @@
 # Milestones
 
+## v1.1 Repo Cleanup (Shipped: 2026-03-14)
+
+**Phases completed:** 3 phases, 3 plans
+**Timeline:** 2 days (2026-03-12 → 2026-03-14)
+**Git range:** chore(12-01) → docs(phase-14) (20 commits, 1,559 files, +53,554/-38,622 lines)
+
+**Key accomplishments:**
+- Archived ~108 old StudyResults directories to `archive/StudyResults/` with contents intact
+- Deleted 84 dead files: old inference scripts (v1-v12), legacy surrogate trainers, old tests
+- Relocated trained surrogate models to `data/surrogate_models/` for clean access after archival
+- Fixed test_bv_forward module naming collision (importlib explicit path loading)
+- Full test suite verified clean: 261 passed, 0 failed, 0 errors
+
+---
+
 ## v14 Pipeline Redesign (Closed: 2026-03-13)
 
 **Phases completed:** 1 of 5 phases (Phase 7 only), 3 plans executed

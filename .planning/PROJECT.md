@@ -30,23 +30,15 @@ Robust parameter recovery (<10% relative error) at 2% noise across all seeds, wi
 - ✓ Profile likelihood identifiability analysis for all 4 kinetic parameters — v14
 - ✓ Extended voltage sweep sensitivity visualization with Jacobian heatmap — v14
 - ✓ AUDT-04 justification tracking metadata schema — v14
+- ✓ Old StudyResults archived to `archive/` directory — v1.1
+- ✓ Old scripts deleted (v1-v12 inference, legacy surrogate trainers, old studies) — v1.1
+- ✓ Old tests deleted (v11, bcd, cascade, ensemble, robustness, weight_sweep, nondim_audit) — v1.1
+- ✓ Bad scripts and outputs removed (Infer_PDE_only_v14.py, v14_pde_only/) — v1.1
+- ✓ v13 pipeline verified working after cleanup (261/261 tests passing) — v1.1
 
 ### Active
 
-- [ ] Archive old StudyResults to `archive/` directory (keep v13/v14/V&V results in place)
-- [ ] Delete old scripts (v1–v12 inference variants, legacy surrogate trainers, old studies, benchmarks)
-- [ ] Delete old tests (v11, bcd, cascade, ensemble, robustness, weight_sweep, nondim_audit)
-- [ ] Delete bad scripts (Infer_PDE_only_v14.py) and their outputs (v14_pde_only/)
-- [ ] Verify v13 pipeline still runs after cleanup
-
-## Current Milestone: v1.1 Repo Cleanup
-
-**Goal:** Strip the repo to v13 pipeline essentials — remove clutter from earlier pipeline iterations so future work starts clean.
-
-**Target features:**
-- Archive ~108 old StudyResults directories to `archive/`
-- Delete ~80 old scripts and ~12 old tests that don't pertain to v13
-- Verify nothing breaks after cleanup
+(No active requirements — next milestone not yet defined)
 
 ### Out of Scope
 
@@ -61,6 +53,7 @@ Robust parameter recovery (<10% relative error) at 2% noise across all seeds, wi
 
 - v1.0 shipped 2026-03-10: V&V framework complete (6 phases, 14 plans, 69 commits)
 - v14 closed 2026-03-13: Baseline diagnostics complete (Phase 7), remaining phases deferred
+- v1.1 shipped 2026-03-14: Repo cleanup complete (3 phases, 3 plans, 20 commits). Surrogate models now in `data/surrogate_models/`
 - Forward solver verified correct via MMS (L2~O(h²), H1~O(h))
 - Surrogate models validated: CD median NRMSE 0.06-0.41% on 479 hold-out samples
 - v13 pipeline has 7 stages (P1-P7) with surrogate and PDE refinement phases
@@ -96,4 +89,4 @@ Robust parameter recovery (<10% relative error) at 2% noise across all seeds, wi
 | Close v14 early after diagnostics | Diagnostics complete; remaining phases need fresh scoping based on findings | — Pending — next milestone will carry forward |
 
 ---
-*Last updated: 2026-03-12 after v1.1 milestone start*
+*Last updated: 2026-03-14 after v1.1 milestone complete*
