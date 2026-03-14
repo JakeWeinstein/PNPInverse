@@ -66,7 +66,7 @@ class MultiSeedConfig:
     seed_start: int = 0
     v13_script_path: str = field(
         default_factory=lambda: os.path.join(
-            _THIS_DIR, "..", "surrogate",
+            _THIS_DIR, "..", "Inference",
             "Infer_BVMaster_charged_v13_ultimate.py",
         )
     )

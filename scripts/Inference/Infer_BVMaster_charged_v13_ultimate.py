@@ -17,20 +17,20 @@ Target: all 4 params < 10% error, total < 7 min.
 Usage (from PNPInverse/ directory)::
 
     # Full pipeline (~7 min)
-    python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py
+    python scripts/Inference/Infer_BVMaster_charged_v13_ultimate.py
 
     # Surrogate-only (fast, ~15s)
-    python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --no-pde
+    python scripts/Inference/Infer_BVMaster_charged_v13_ultimate.py --no-pde
 
     # Individual surrogate strategies
-    python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --no-pde --surr-strategy cascade
-    python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --no-pde --surr-strategy multistart
+    python scripts/Inference/Infer_BVMaster_charged_v13_ultimate.py --no-pde --surr-strategy cascade
+    python scripts/Inference/Infer_BVMaster_charged_v13_ultimate.py --no-pde --surr-strategy multistart
 
     # Use RBF instead of NN ensemble
-    python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --model-type rbf
+    python scripts/Inference/Infer_BVMaster_charged_v13_ultimate.py --model-type rbf
 
     # Compare ALL model types
-    python scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py --compare --no-pde
+    python scripts/Inference/Infer_BVMaster_charged_v13_ultimate.py --compare --no-pde
 """
 
 from __future__ import annotations
