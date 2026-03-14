@@ -222,8 +222,8 @@ def _assert_baselines(
 # Ensemble and surrogate data paths
 # ===================================================================
 
-_V11_DIR = os.path.join(_ROOT, "StudyResults", "surrogate_v11")
-_ENSEMBLE_DIR = os.path.join(_V11_DIR, "nn_ensemble", "D3-deeper")
+_SURROGATE_DIR = os.path.join(_ROOT, "data", "surrogate_models")
+_ENSEMBLE_DIR = os.path.join(_SURROGATE_DIR, "nn_ensemble", "D3-deeper")
 
 
 # ===================================================================

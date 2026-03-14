@@ -8,7 +8,7 @@ Usage::
 
     from Surrogate.ensemble import load_nn_ensemble
 
-    model = load_nn_ensemble("StudyResults/surrogate_v11/nn_ensemble/D3-deeper")
+    model = load_nn_ensemble("data/surrogate_models/nn_ensemble/D3-deeper")
     pred = model.predict(k0_1, k0_2, alpha_1, alpha_2)
 """
 

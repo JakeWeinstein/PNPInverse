@@ -57,7 +57,7 @@ TRUE_ALPHA = np.array([ALPHA_R1, ALPHA_R2])
 
 # Ensemble path (relative to PNPInverse root)
 _ENSEMBLE_DIR = os.path.join(
-    _ROOT, "StudyResults", "surrogate_v11", "nn_ensemble", "D3-deeper"
+    _ROOT, "data", "surrogate_models", "nn_ensemble", "D3-deeper"
 )
 
 

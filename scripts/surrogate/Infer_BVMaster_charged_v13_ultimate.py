@@ -88,11 +88,11 @@ ALPHA_TRAIN_HI_DEFAULT = 0.90
 # ---------------------------------------------------------------------------
 # Model paths relative to PNPInverse root
 # ---------------------------------------------------------------------------
-_V11_DIR = os.path.join("StudyResults", "surrogate_v11")
+_SURROGATE_DIR = os.path.join("data", "surrogate_models")
 _MODEL_PATHS = {
-    "rbf": os.path.join(_V11_DIR, "model_rbf_baseline.pkl"),
-    "pod-rbf-log": os.path.join(_V11_DIR, "model_pod_rbf_log.pkl"),
-    "pod-rbf-nolog": os.path.join(_V11_DIR, "model_pod_rbf_nolog.pkl"),
+    "rbf": os.path.join(_SURROGATE_DIR, "model_rbf_baseline.pkl"),
+    "pod-rbf-log": os.path.join(_SURROGATE_DIR, "model_pod_rbf_log.pkl"),
+    "pod-rbf-nolog": os.path.join(_SURROGATE_DIR, "model_pod_rbf_nolog.pkl"),
 }
 
 
@@ -646,7 +646,7 @@ def main() -> None:
     )
     # Surrogate model selection (from v12)
     parser.add_argument("--model", type=str,
-                        default=os.path.join(_V11_DIR, "model_rbf_baseline.pkl"),
+                        default=os.path.join(_SURROGATE_DIR, "model_rbf_baseline.pkl"),
                         help="Path to surrogate model .pkl (for rbf/nn-single)")
     parser.add_argument("--model-type", type=str, default="nn-ensemble",
                         choices=["nn-ensemble", "rbf", "pod-rbf-log", "pod-rbf-nolog", "nn-single"],
@@ -654,7 +654,7 @@ def main() -> None:
     parser.add_argument("--design", type=str, default="D3-deeper",
                         help="NN ensemble design variant (default: D3-deeper)")
     parser.add_argument("--nn-dir", type=str,
-                        default=os.path.join(_V11_DIR, "nn_ensemble"),
+                        default=os.path.join(_SURROGATE_DIR, "nn_ensemble"),
                         help="Base directory for NN ensembles")
 
     # Surrogate strategy controls (NEW)

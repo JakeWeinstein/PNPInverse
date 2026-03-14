@@ -41,9 +41,15 @@ pytestmark = [pytest.mark.slow]
 @pytest.fixture(scope="module")
 def bv_test_module():
     """Import the verification test script module on demand."""
-    # The import triggers Firedrake's module-level setup, which is why
-    # we guard it behind a fixture rather than a top-level import.
-    import test_bv_forward as mod  # type: ignore[import-untyped]
+    # Use importlib to load from the explicit path, avoiding the name
+    # collision where pytest resolves "test_bv_forward" to this file.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "bv_forward_verification",
+        os.path.join(_VERIF_DIR, "test_bv_forward.py"),
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
     return mod
 
 

@@ -39,13 +39,13 @@ from Surrogate.validation import validate_surrogate
 # Path constants
 # ---------------------------------------------------------------------------
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_V11_DIR = os.path.join(_ROOT, "StudyResults", "surrogate_v11")
+_SURROGATE_DIR = os.path.join(_ROOT, "data", "surrogate_models")
 _OUTPUT_DIR = os.path.join(_ROOT, "StudyResults", "surrogate_fidelity")
 
-_ENSEMBLE_DIR = os.path.join(_V11_DIR, "nn_ensemble", "D3-deeper")
-_RBF_BASELINE_PATH = os.path.join(_V11_DIR, "model_rbf_baseline.pkl")
-_POD_RBF_LOG_PATH = os.path.join(_V11_DIR, "model_pod_rbf_log.pkl")
-_POD_RBF_NOLOG_PATH = os.path.join(_V11_DIR, "model_pod_rbf_nolog.pkl")
+_ENSEMBLE_DIR = os.path.join(_SURROGATE_DIR, "nn_ensemble", "D3-deeper")
+_RBF_BASELINE_PATH = os.path.join(_SURROGATE_DIR, "model_rbf_baseline.pkl")
+_POD_RBF_LOG_PATH = os.path.join(_SURROGATE_DIR, "model_pod_rbf_log.pkl")
+_POD_RBF_NOLOG_PATH = os.path.join(_SURROGATE_DIR, "model_pod_rbf_nolog.pkl")
 
 MODEL_NAMES = ["nn_ensemble", "rbf_baseline", "pod_rbf_log", "pod_rbf_nolog"]
 
@@ -107,8 +107,8 @@ def _defensive_train_idx(split_data) -> np.ndarray:
 @pytest.fixture(scope="module")
 def holdout_data():
     """Load hold-out test data from training_data_merged.npz and split_indices.npz."""
-    merged_path = os.path.join(_V11_DIR, "training_data_merged.npz")
-    split_path = os.path.join(_V11_DIR, "split_indices.npz")
+    merged_path = os.path.join(_SURROGATE_DIR, "training_data_merged.npz")
+    split_path = os.path.join(_SURROGATE_DIR, "split_indices.npz")
 
     data = np.load(merged_path)
     split = np.load(split_path)

@@ -75,8 +75,8 @@ from tests.conftest import FIREDRAKE_AVAILABLE, skip_without_firedrake
 # ---------------------------------------------------------------------------
 _OUTPUT_DIR = os.path.join(_ROOT, "StudyResults", "inverse_verification")
 
-_V11_DIR = os.path.join(_ROOT, "StudyResults", "surrogate_v11")
-_ENSEMBLE_DIR = os.path.join(_V11_DIR, "nn_ensemble", "D3-deeper")
+_SURROGATE_DIR = os.path.join(_ROOT, "data", "surrogate_models")
+_ENSEMBLE_DIR = os.path.join(_SURROGATE_DIR, "nn_ensemble", "D3-deeper")
 
 # True parameter values
 TRUE_K0 = np.array([K0_HAT_R1, K0_HAT_R2])
