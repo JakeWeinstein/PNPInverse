@@ -73,7 +73,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 13-01-PLAN.md -- Delete all dead scripts and test files
+- [x] 13-01-PLAN.md -- Delete all dead scripts and test files
 
 ### Phase 14: Post-Cleanup Verification
 **Goal**: The v13 pipeline and kept test suite work correctly after all deletions
@@ -82,10 +82,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. All imports in the v13 pipeline scripts resolve without errors
   2. The kept pytest test suite passes with no failures
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 14-01: TBD
+- [ ] 14-01-PLAN.md -- Verify imports and run full pytest suite
 
 ## Progress
 
@@ -98,5 +98,5 @@ Phases execute in numeric order: 12 -> 13 -> 14
 | 7. Baseline Diagnostics | v14 | 3/3 | Complete | 2026-03-10 |
 | 8-11 | v14 | 0/9 | Deferred | - |
 | 12. Archive Old Results | v1.1 | 1/1 | Complete | 2026-03-13 |
-| 13. Delete Dead Code | 1/1 | Complete    | 2026-03-13 | - |
+| 13. Delete Dead Code | v1.1 | 1/1 | Complete | 2026-03-13 |
 | 14. Post-Cleanup Verification | v1.1 | 0/1 | Not started | - |
