@@ -1,0 +1,52 @@
+{
+  "nn_ensemble": [
+    {
+      "method": "autograd",
+      "ms_per_eval": 3.867124179378152,
+      "batch_size": 1
+    },
+    {
+      "method": "fd",
+      "ms_per_eval": 8.290829160250723,
+      "batch_size": 1
+    }
+  ],
+  "gp": [
+    {
+      "method": "autograd_gp",
+      "ms_per_eval": 2843.401623320533,
+      "batch_size": 1
+    },
+    {
+      "method": "fd",
+      "ms_per_eval": 440.75316166039556,
+      "batch_size": 1
+    }
+  ],
+  "pce": [
+    {
+      "method": "analytic",
+      "ms_per_eval": 258.2430158404168,
+      "batch_size": 1
+    },
+    {
+      "method": "fd",
+      "ms_per_eval": 312.05713666044176,
+      "batch_size": 1
+    }
+  ],
+  "pod_rbf": [
+    {
+      "method": "fd",
+      "ms_per_eval": 3.8252683193422854,
+      "batch_size": 1
+    }
+  ],
+  "rbf_baseline": [
+    {
+      "method": "fd",
+      "ms_per_eval": 0.6608500005677342,
+      "batch_size": 1
+    }
+  ]
+}

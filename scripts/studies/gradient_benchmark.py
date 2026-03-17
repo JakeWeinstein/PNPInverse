@@ -22,8 +22,15 @@ Outputs
 
 from __future__ import annotations
 
-import json
 import os
+import sys
+
+# Ensure repo root is on sys.path when run as a script
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+import json
 import pickle
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -538,7 +545,7 @@ def _get_test_points(n_held_out: int = 20, n_corners: int = 5) -> List[np.ndarra
         data = np.load("data/surrogate_models/training_data_merged.npz")
         split = np.load("data/surrogate_models/split_indices.npz")
         params = data["parameters"]  # physical space
-        test_idx = split["test_indices"]
+        test_idx = split["test_idx"]
 
         # Convert to log-space
         rng = np.random.default_rng(42)
