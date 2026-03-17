@@ -1,9 +1,11 @@
 """Surrogate fidelity validation tests.
 
-Validates all 4 v13-era surrogate models on hold-out data not used during
-training.  Computes per-sample NRMSE, saves aggregate error statistics to
-JSON and per-sample errors to CSV, and asserts a soft gate (median NRMSE < 20%)
-to catch catastrophically broken models.
+Validates all 6 surrogate models on hold-out data not used during training.
+Computes per-sample NRMSE, saves aggregate error statistics to JSON and
+per-sample errors to CSV, and asserts a soft gate (median NRMSE < 20%) to
+catch catastrophically broken models.
+
+Models: nn_ensemble, rbf_baseline, pod_rbf_log, pod_rbf_nolog, gp_fixed, pce.
 
 Note: The soft gate uses *median* NRMSE rather than mean because peroxide
 current (PC) has many near-zero-range samples where NRMSE denominators are
@@ -35,6 +37,18 @@ from Surrogate.ensemble import load_nn_ensemble
 from Surrogate.io import load_surrogate
 from Surrogate.validation import validate_surrogate
 
+try:
+    from Surrogate.gp_model import load_gp_surrogate
+    _HAS_GP = True
+except ImportError:
+    _HAS_GP = False
+
+try:
+    from Surrogate.pce_model import PCESurrogateModel
+    _HAS_PCE = True
+except ImportError:
+    _HAS_PCE = False
+
 # ---------------------------------------------------------------------------
 # Path constants
 # ---------------------------------------------------------------------------
@@ -46,8 +60,18 @@ _ENSEMBLE_DIR = os.path.join(_SURROGATE_DIR, "nn_ensemble", "D3-deeper")
 _RBF_BASELINE_PATH = os.path.join(_SURROGATE_DIR, "model_rbf_baseline.pkl")
 _POD_RBF_LOG_PATH = os.path.join(_SURROGATE_DIR, "model_pod_rbf_log.pkl")
 _POD_RBF_NOLOG_PATH = os.path.join(_SURROGATE_DIR, "model_pod_rbf_nolog.pkl")
+_GP_FIXED_DIR = os.path.join(_SURROGATE_DIR, "gp_fixed")
+_PCE_PATH = os.path.join(_SURROGATE_DIR, "pce", "pce_model.pkl")
 
+# Build MODEL_NAMES dynamically: always include the 4 core models,
+# then append GP and PCE only if their dependencies and model files exist.
 MODEL_NAMES = ["nn_ensemble", "rbf_baseline", "pod_rbf_log", "pod_rbf_nolog"]
+
+if _HAS_GP and os.path.isdir(_GP_FIXED_DIR):
+    MODEL_NAMES.append("gp_fixed")
+
+if _HAS_PCE and os.path.isfile(_PCE_PATH):
+    MODEL_NAMES.append("pce")
 
 # Soft gate threshold: median NRMSE must be below this value.
 # Median is used instead of mean because PC outputs have near-zero-range
@@ -150,7 +174,7 @@ def holdout_data():
 
 @pytest.fixture(scope="module")
 def all_models():
-    """Load all 4 surrogate models once for the module."""
+    """Load all surrogate models once for the module."""
     models = {}
     models["nn_ensemble"] = load_nn_ensemble(
         _ENSEMBLE_DIR, n_members=5, device="cpu"
@@ -161,6 +185,15 @@ def all_models():
     # Use direct pickle loading to avoid isinstance check
     models["pod_rbf_log"] = _load_pickle_model(_POD_RBF_LOG_PATH)
     models["pod_rbf_nolog"] = _load_pickle_model(_POD_RBF_NOLOG_PATH)
+
+    # GP model (requires gpytorch)
+    if "gp_fixed" in MODEL_NAMES:
+        models["gp_fixed"] = load_gp_surrogate(_GP_FIXED_DIR, device="cpu")
+
+    # PCE model (requires chaospy)
+    if "pce" in MODEL_NAMES:
+        models["pce"] = PCESurrogateModel.load(_PCE_PATH)
+
     return models
 
 
@@ -355,7 +388,7 @@ def generate_plots(all_models, all_metrics, holdout_data):
 
 @pytest.mark.slow
 class TestSurrogateFidelity:
-    """Hold-out validation tests for all 4 v13-era surrogate models."""
+    """Hold-out validation tests for all 6 surrogate models."""
 
     @pytest.mark.parametrize("model_name", MODEL_NAMES)
     def test_holdout_median_nrmse_below_threshold(self, all_metrics, model_name):
@@ -379,7 +412,7 @@ class TestSurrogateFidelity:
         )
 
     def test_error_stats_saved_to_json(self, fidelity_artifacts):
-        """JSON summary contains entries for all 4 models with all 6 stats."""
+        """JSON summary contains entries for all models with all 8 stats."""
         summary = fidelity_artifacts
         assert "models" in summary
 
@@ -462,7 +495,7 @@ class TestSurrogateFidelity:
         )
 
     def test_worst_iv_overlay_plots_generated(self, generate_plots):
-        """All 4 worst-case I-V overlay PNGs exist and have nonzero size."""
+        """All worst-case I-V overlay PNGs exist and have nonzero size."""
         for model_name in MODEL_NAMES:
             path = os.path.join(
                 _OUTPUT_DIR, f"worst_iv_overlay_{model_name}.png"
@@ -475,7 +508,7 @@ class TestSurrogateFidelity:
             )
 
     def test_error_scatter_plots_generated(self, generate_plots):
-        """All 8 error-vs-parameter scatter PNGs exist (4 models x CD/PC)."""
+        """All error-vs-parameter scatter PNGs exist (models x CD/PC)."""
         for model_name in MODEL_NAMES:
             for output_type in ("cd", "pc"):
                 path = os.path.join(
