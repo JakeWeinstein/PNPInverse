@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Repo Cleanup
-status: complete
-stopped_at: v1.1 milestone shipped
-last_updated: "2026-03-14T23:20:00.000Z"
-last_activity: 2026-03-14 -- v1.1 Repo Cleanup milestone completed and archived
+milestone: v2.0
+milestone_name: Comparative Benchmark
+status: in_progress
+stopped_at: Completed 3-01-PLAN.md
+last_updated: "2026-03-17T23:05:15.000Z"
+last_activity: 2026-03-17 -- Phase 3 Plan 01 executed (6-model fidelity benchmark)
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 3
-  completed_plans: 3
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 5
+  completed_plans: 1
 ---
 
 ---
