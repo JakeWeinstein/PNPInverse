@@ -1,0 +1,382 @@
+{
+  "metadata": {
+    "timestamp": "2026-03-18T00:13:11.771790+00:00",
+    "weights": {
+      "inverse_recovery": 0.4,
+      "prediction_accuracy": 0.25,
+      "k02_performance": 0.2,
+      "speed": 0.1,
+      "gradient_quality": 0.05
+    },
+    "go_no_go_threshold": 0.107,
+    "n_models": 6,
+    "model_keys": [
+      "nn_ensemble",
+      "rbf_baseline",
+      "pod_rbf_log",
+      "pod_rbf_nolog",
+      "gp_fixed",
+      "pce"
+    ]
+  },
+  "models": {
+    "nn_ensemble": {
+      "display_name": "NN Ensemble (D1)",
+      "prediction_accuracy": {
+        "cd_median_nrmse": 0.012059184224162835,
+        "pc_median_nrmse": 0.027998395850050477,
+        "combined": 0.020028790037106656,
+        "score_norm": 0.046029219070240275
+      },
+      "gradient_quality": {
+        "method": "autograd",
+        "mean_rel_diff": 0.01822639240900413,
+        "score_norm": 0.018226383410355085
+      },
+      "k02_performance": {
+        "worst_bin_nrmse": 0.1312914120556551,
+        "per_bin": {
+          "[1e-7,1e-6)": {
+            "cd_mean_nrmse": 0.09036348953894997,
+            "pc_mean_nrmse": 0.08168630532703205
+          },
+          "[1e-6,1e-5)": {
+            "cd_mean_nrmse": 0.03851558940928842,
+            "pc_mean_nrmse": 0.09020041564182894
+          },
+          "[1e-5,1e-4)": {
+            "cd_mean_nrmse": 0.017046392007931493,
+            "pc_mean_nrmse": 0.05420272461938461
+          },
+          "[1e-4,1e-3)": {
+            "cd_mean_nrmse": 0.017782320111221522,
+            "pc_mean_nrmse": 0.05529085925235896
+          },
+          "[1e-3,1e-2)": {
+            "cd_mean_nrmse": 0.017637616545969705,
+            "pc_mean_nrmse": 0.09347564946001706
+          },
+          "[1e-2,1e-1)": {
+            "cd_mean_nrmse": 0.03716130474639258,
+            "pc_mean_nrmse": 0.1722193345723602
+          }
+        },
+        "score_norm": 0.03269298492291666
+      },
+      "inverse_recovery": {
+        "max_rel_error_pct": 27.52211419428715,
+        "k02_median_error_pct": 27.52211419428715,
+        "n_runs": 112,
+        "score_norm": 0.2755214190017992
+      },
+      "speed": {
+        "gradient_ms": 3.867124179378152,
+        "total_ms": 5.0272614331915975,
+        "score_norm": 0.007285458286507691
+      },
+      "composite_score": 0.12989433435203163,
+      "rank": 2
+    },
+    "rbf_baseline": {
+      "display_name": "RBF Baseline",
+      "prediction_accuracy": {
+        "cd_median_nrmse": 0.012464993498988356,
+        "pc_median_nrmse": 0.022095017208303556,
+        "combined": 0.017280005353645957,
+        "score_norm": 0.011675917946330787
+      },
+      "gradient_quality": {
+        "method": "fd_only",
+        "mean_rel_diff": 0.0001051674378848793,
+        "score_norm": 0.0001051582731419987
+      },
+      "k02_performance": {
+        "worst_bin_nrmse": 0.13840900342831894,
+        "per_bin": {
+          "[1e-7,1e-6)": {
+            "cd_mean_nrmse": 0.0889505180322366,
+            "pc_mean_nrmse": 0.08165693575334228
+          },
+          "[1e-6,1e-5)": {
+            "cd_mean_nrmse": 0.03785803962417571,
+            "pc_mean_nrmse": 0.10154802710934678
+          },
+          "[1e-5,1e-4)": {
+            "cd_mean_nrmse": 0.021418378370417997,
+            "pc_mean_nrmse": 0.04537664282088895
+          },
+          "[1e-4,1e-3)": {
+            "cd_mean_nrmse": 0.02803559929818201,
+            "pc_mean_nrmse": 0.06442770220376239
+          },
+          "[1e-3,1e-2)": {
+            "cd_mean_nrmse": 0.024061523604876657,
+            "pc_mean_nrmse": 0.07736966049790191
+          },
+          "[1e-2,1e-1)": {
+            "cd_mean_nrmse": 0.0400650545962096,
+            "pc_mean_nrmse": 0.18786748882440127
+          }
+        },
+        "score_norm": 0.04861479913890235
+      },
+      "inverse_recovery": {
+        "max_rel_error_pct": 9.469025379624298,
+        "k02_median_error_pct": 5.796464687328326,
+        "n_runs": 112,
+        "score_norm": 0.0
+      },
+      "speed": {
+        "gradient_ms": 0.6608500005677342,
+        "total_ms": 0.8591050007380545,
+        "score_norm": 0.0
+      },
+      "composite_score": 0.012647197228020268,
+      "rank": 1
+    },
+    "pod_rbf_log": {
+      "display_name": "POD-RBF (log)",
+      "prediction_accuracy": {
+        "cd_median_nrmse": 0.011533576329634239,
+        "pc_median_nrmse": 0.03394805517624625,
+        "combined": 0.022740815752940246,
+        "score_norm": 0.07992312012127528
+      },
+      "gradient_quality": {
+        "method": "fd_only",
+        "mean_rel_diff": 2.5097218237338856e-05,
+        "score_norm": 2.5088052760558093e-05
+      },
+      "k02_performance": {
+        "worst_bin_nrmse": 0.15566740328400624,
+        "per_bin": {
+          "[1e-7,1e-6)": {
+            "cd_mean_nrmse": 0.08683254430384178,
+            "pc_mean_nrmse": 0.08505064088197356
+          },
+          "[1e-6,1e-5)": {
+            "cd_mean_nrmse": 0.03427115456529898,
+            "pc_mean_nrmse": 0.105744925310551
+          },
+          "[1e-5,1e-4)": {
+            "cd_mean_nrmse": 0.01826808773323549,
+            "pc_mean_nrmse": 0.062371461843721755
+          },
+          "[1e-4,1e-3)": {
+            "cd_mean_nrmse": 0.022672241719287112,
+            "pc_mean_nrmse": 0.07799165460001185
+          },
+          "[1e-3,1e-2)": {
+            "cd_mean_nrmse": 0.018828820864487325,
+            "pc_mean_nrmse": 0.11412959345342104
+          },
+          "[1e-2,1e-1)": {
+            "cd_mean_nrmse": 0.037995700415130056,
+            "pc_mean_nrmse": 0.22450226226417072
+          }
+        },
+        "score_norm": 0.08722126328951368
+      },
+      "inverse_recovery": {
+        "max_rel_error_pct": 29.345715739470165,
+        "k02_median_error_pct": 27.486110928623013,
+        "n_runs": 112,
+        "score_norm": 0.30335273864913914
+      },
+      "speed": {
+        "gradient_ms": 3.8252683193422854,
+        "total_ms": 4.972848815144971,
+        "score_norm": 0.007190351285256054
+      },
+      "composite_score": 0.15948641767904084,
+      "rank": 3
+    },
+    "pod_rbf_nolog": {
+      "display_name": "POD-RBF (nolog)",
+      "prediction_accuracy": {
+        "cd_median_nrmse": 0.011571183863451427,
+        "pc_median_nrmse": 0.03575845916263395,
+        "combined": 0.023664821513042687,
+        "score_norm": 0.09147100464930688
+      },
+      "gradient_quality": {
+        "method": "fd_only",
+        "mean_rel_diff": 2.5097218237338856e-05,
+        "score_norm": 2.5088052760558093e-05
+      },
+      "k02_performance": {
+        "worst_bin_nrmse": 0.16414973778251588,
+        "per_bin": {
+          "[1e-7,1e-6)": {
+            "cd_mean_nrmse": 0.08672116329646418,
+            "pc_mean_nrmse": 0.08698054994190825
+          },
+          "[1e-6,1e-5)": {
+            "cd_mean_nrmse": 0.03462250060796867,
+            "pc_mean_nrmse": 0.10724995276704558
+          },
+          "[1e-5,1e-4)": {
+            "cd_mean_nrmse": 0.01843589309613744,
+            "pc_mean_nrmse": 0.06440595830361863
+          },
+          "[1e-4,1e-3)": {
+            "cd_mean_nrmse": 0.022634975854293585,
+            "pc_mean_nrmse": 0.08266716657021271
+          },
+          "[1e-3,1e-2)": {
+            "cd_mean_nrmse": 0.018894642128442007,
+            "pc_mean_nrmse": 0.12224909322851553
+          },
+          "[1e-2,1e-1)": {
+            "cd_mean_nrmse": 0.03794616713205911,
+            "pc_mean_nrmse": 0.24157831226856757
+          }
+        },
+        "score_norm": 0.10619596230381952
+      },
+      "inverse_recovery": {
+        "max_rel_error_pct": 33.11741153554451,
+        "k02_median_error_pct": 28.713445150462086,
+        "n_runs": 112,
+        "score_norm": 0.36091535236283745
+      },
+      "speed": {
+        "gradient_ms": 3.8252683193422854,
+        "total_ms": 4.972848815144971,
+        "score_norm": 0.007190351285256054
+      },
+      "composite_score": 0.18919337409938924,
+      "rank": 4
+    },
+    "gp_fixed": {
+      "display_name": "GP (GPyTorch)",
+      "prediction_accuracy": {
+        "cd_median_nrmse": 0.010318321591785622,
+        "pc_median_nrmse": 0.02237318836790969,
+        "combined": 0.01634575497984766,
+        "score_norm": 0.0
+      },
+      "gradient_quality": {
+        "method": "fd_only_broken_autograd",
+        "mean_rel_diff": 1.0,
+        "score_norm": 1.0
+      },
+      "k02_performance": {
+        "worst_bin_nrmse": 0.11667653813002216,
+        "per_bin": {
+          "[1e-7,1e-6)": {
+            "cd_mean_nrmse": 0.09365685397250433,
+            "pc_mean_nrmse": 0.0757782568847343
+          },
+          "[1e-6,1e-5)": {
+            "cd_mean_nrmse": 0.034533776106570505,
+            "pc_mean_nrmse": 0.11478820137708004
+          },
+          "[1e-5,1e-4)": {
+            "cd_mean_nrmse": 0.015361848035340863,
+            "pc_mean_nrmse": 0.05039285271041089
+          },
+          "[1e-4,1e-3)": {
+            "cd_mean_nrmse": 0.017947782604294332,
+            "pc_mean_nrmse": 0.05722884872774566
+          },
+          "[1e-3,1e-2)": {
+            "cd_mean_nrmse": 0.015703780725126425,
+            "pc_mean_nrmse": 0.0875538095059979
+          },
+          "[1e-2,1e-1)": {
+            "cd_mean_nrmse": 0.03721339686754012,
+            "pc_mean_nrmse": 0.19613967939250418
+          }
+        },
+        "score_norm": 0.0
+      },
+      "inverse_recovery": {
+        "max_rel_error_pct": 49.99492283559041,
+        "k02_median_error_pct": 41.397175555052634,
+        "n_runs": 4,
+        "score_norm": 0.6184954213663583
+      },
+      "speed": {
+        "gradient_ms": 440.75316166039556,
+        "total_ms": 572.9791101585142,
+        "score_norm": 1.0
+      },
+      "composite_score": 0.3973981685465433,
+      "rank": 5
+    },
+    "pce": {
+      "display_name": "PCE (ChaosPy)",
+      "prediction_accuracy": {
+        "cd_median_nrmse": 0.03436432264014424,
+        "pc_median_nrmse": 0.1583574955304599,
+        "combined": 0.09636090908530208,
+        "score_norm": 1.0
+      },
+      "gradient_quality": {
+        "method": "analytic",
+        "mean_rel_diff": 9.165706730494703e-09,
+        "score_norm": 0.0
+      },
+      "k02_performance": {
+        "worst_bin_nrmse": 0.5637104801237496,
+        "per_bin": {
+          "[1e-7,1e-6)": {
+            "cd_mean_nrmse": 0.10272049558668195,
+            "pc_mean_nrmse": 0.1881522629777934
+          },
+          "[1e-6,1e-5)": {
+            "cd_mean_nrmse": 0.05942574966242627,
+            "pc_mean_nrmse": 0.3907986605812564
+          },
+          "[1e-5,1e-4)": {
+            "cd_mean_nrmse": 0.03489534852152799,
+            "pc_mean_nrmse": 0.2756042500478795
+          },
+          "[1e-4,1e-3)": {
+            "cd_mean_nrmse": 0.03666890521400185,
+            "pc_mean_nrmse": 0.3843214415618251
+          },
+          "[1e-3,1e-2)": {
+            "cd_mean_nrmse": 0.03605293605077929,
+            "pc_mean_nrmse": 0.7400403098998655
+          },
+          "[1e-2,1e-1)": {
+            "cd_mean_nrmse": 0.06232984689842028,
+            "pc_mean_nrmse": 1.0650911133490788
+          }
+        },
+        "score_norm": 1.0
+      },
+      "inverse_recovery": {
+        "max_rel_error_pct": 74.99238425338561,
+        "k02_median_error_pct": 74.99238425338561,
+        "n_runs": 0,
+        "score_norm": 1.0
+      },
+      "speed": {
+        "gradient_ms": 258.2430158404168,
+        "total_ms": 335.7159205925418,
+        "score_norm": 0.5852912196270059
+      },
+      "composite_score": 0.9085291219627006,
+      "rank": 6
+    }
+  },
+  "go_no_go": {
+    "passed": false,
+    "best_worst_case_99th": 0.6752228377726569,
+    "best_model": "nn_ensemble",
+    "threshold": 0.107
+  },
+  "recommendation": {
+    "primary_surrogate": "rbf_baseline",
+    "primary_display_name": "RBF Baseline",
+    "secondary_surrogate": null,
+    "secondary_display_name": null,
+    "rationale": "RBF Baseline selected as primary surrogate (composite score: 0.0126). Strengths: excellent inverse recovery, strong prediction accuracy, fast inference. Weaknesses: none critical.",
+    "secondary_rationale": null,
+    "phase4_config": "Use RBF Baseline with cascade inference for ISMO. Mean cascade time: 0.6090260126761028s.",
+    "phase5_config": "Use RBF Baseline for PDE refinement with space-mapping bias correction. k0_2 median error: 5.8%."
+  }
+}
