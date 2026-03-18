@@ -99,6 +99,13 @@ def load_worst_case_iv():
     return rows
 
 
+def load_ranking_report():
+    """Load surrogate ranking report from Phase 3 benchmark."""
+    path = STUDY / "surrogate_fidelity" / "ranking_report.json"
+    with open(path) as f:
+        return json.load(f)
+
+
 # ---------------------------------------------------------------------------
 # Figure generators
 # ---------------------------------------------------------------------------
@@ -312,14 +319,22 @@ def make_mms_rates_table(data):
 
 
 def make_surrogate_fidelity_table(data):
-    """Table 2: Surrogate fidelity NRMSE statistics."""
+    """Table 2: Surrogate fidelity NRMSE statistics (all 6 models)."""
     models = data["models"]
     name_map = {
         "nn_ensemble": "NN Ensemble",
         "rbf_baseline": "RBF Baseline",
         "pod_rbf_log": "POD-RBF (log)",
         "pod_rbf_nolog": "POD-RBF (no-log)",
+        "gp_fixed": "GP (GPyTorch)",
+        "pce": "PCE (ChaosPy)",
     }
+
+    # Ordered list of model keys to display
+    model_order = [
+        "nn_ensemble", "rbf_baseline", "pod_rbf_log",
+        "pod_rbf_nolog", "gp_fixed", "pce",
+    ]
 
     lines = [
         r"\begin{tabular}{l S S S S S}",
@@ -328,9 +343,11 @@ def make_surrogate_fidelity_table(data):
         r"\midrule",
     ]
 
-    for mkey in ["nn_ensemble", "rbf_baseline", "pod_rbf_log", "pod_rbf_nolog"]:
+    for mkey in model_order:
+        if mkey not in models:
+            continue
         m = models[mkey]
-        name = name_map[mkey]
+        name = name_map.get(mkey, mkey)
         lines.append(
             f"{name} & {m['cd_median_nrmse']:.4f} & {m['cd_95th_nrmse']:.4f} "
             f"& {m['cd_max_nrmse']:.4f} & {m['pc_median_nrmse']:.4f} "
@@ -338,8 +355,9 @@ def make_surrogate_fidelity_table(data):
         )
 
     lines.append(r"\bottomrule")
-    lines.append(r"\multicolumn{6}{l}{\footnotesize Note: PC NRMSE inflated by near-zero-range samples; median is the robust statistic.} \\")
     lines.append(r"\end{tabular}")
+    lines.append(r"\par\smallskip")
+    lines.append(r"{\footnotesize Note: PC NRMSE inflated by near-zero-range samples; median is the robust statistic.}")
 
     out = TABDIR / "surrogate_fidelity.tex"
     out.write_text("\n".join(lines) + "\n")
@@ -362,15 +380,16 @@ def make_parameter_recovery_table(data):
                                     ("2.0", "2\\%"), ("5.0", "5\\%")]:
         r = results[noise_str]
         status = "Pass" if r["pass"] else "Fail"
-        row = (
-            f"{noise_label} & {r['median_max_relative_error']:.4f} "
-            f"& {r['gate_threshold']:.2f} & {status}"
-        )
         if r.get("informational", False):
-            row = r"\textit{" + noise_label + r"}" + (
-                f" & \\textit{{{r['median_max_relative_error']:.4f}}} "
-                f"& \\textit{{{r['gate_threshold']:.2f}}} "
-                r"& \textit{Fail}\tnote{a}"
+            row = (
+                f"{noise_label}\\textsuperscript{{a}} "
+                f"& {{{r['median_max_relative_error']:.4f}}} "
+                f"& {{{r['gate_threshold']:.2f}}} & {status}"
+            )
+        else:
+            row = (
+                f"{noise_label} & {r['median_max_relative_error']:.4f} "
+                f"& {r['gate_threshold']:.2f} & {status}"
             )
         lines.append(row + r" \\")
 
@@ -379,9 +398,10 @@ def make_parameter_recovery_table(data):
         r"\multicolumn{4}{l}{\footnotesize\textsuperscript{a} "
         r"Informational --- exceeds surrogate approximation limits.} \\"
     )
+    bias_pct = bias * 100
     lines.append(
         f"\\multicolumn{{4}}{{l}}{{\\footnotesize "
-        f"Surrogate bias floor at 0\\% noise: {bias:.1%} relative error.}} \\\\"
+        f"Surrogate bias floor at 0\\% noise: {bias_pct:.1f}\\% relative error.}} \\\\"
     )
     lines.append(r"\end{tabular}")
 
@@ -403,7 +423,7 @@ def make_gradient_consistency_table(fd_data, pde_data):
 
     surr_rates = fd_data["convergence_rates"]
     for param, rate in surr_rates.items():
-        lines.append(f"& {param.replace('_', r'\\_')} & {rate:.3f} \\\\")
+        lines.append(f"& {param.replace('_', r'\_')} & {rate:.3f} \\\\")
 
     lines.append(r"\midrule")
     lines.append(r"\multicolumn{3}{l}{\textbf{PDE FD Convergence (+10\% point)}} \\")
@@ -413,7 +433,7 @@ def make_gradient_consistency_table(fd_data, pde_data):
 
     pde_plus10 = pde_data["evaluation_points"]["+10%"]["convergence_rates"]
     for param, rate in pde_plus10.items():
-        lines.append(f"& {param.replace('_', r'\\_')} & {rate:.3f} \\\\")
+        lines.append(f"& {param.replace('_', r'\_')} & {rate:.3f} \\\\")
 
     lines.append(r"\midrule")
     lines.append(
@@ -428,6 +448,122 @@ def make_gradient_consistency_table(fd_data, pde_data):
     return out
 
 
+def make_surrogate_comparison_figure(ranking_data, fidelity_data):
+    """Figure 4: Multi-panel surrogate comparison across all 6 models.
+
+    Panel A (top-left): Grouped bar chart of CD and PC median NRMSE.
+    Panel B (top-right): Grouped bar chart of 5 normalized dimension scores (top 3 models).
+    Panel C (bottom): Horizontal bar chart of composite scores, sorted best-to-worst.
+    """
+    models_data = ranking_data["models"]
+    # Sort by rank
+    ranked_keys = sorted(models_data.keys(), key=lambda m: models_data[m]["rank"])
+    display_names = [models_data[m]["display_name"] for m in ranked_keys]
+    short_names = [
+        n.replace(" (GPyTorch)", "").replace(" (ChaosPy)", "").replace(" (D1)", "")
+        for n in display_names
+    ]
+
+    # Color palette: highlight selected model(s)
+    primary = ranking_data["recommendation"]["primary_surrogate"]
+    colors = []
+    for m in ranked_keys:
+        if m == primary:
+            colors.append("#2ca02c")  # green for selected
+        else:
+            colors.append("#1f77b4")  # blue for others
+
+    fig = plt.figure(figsize=(13, 9))
+
+    # --- Panel A: CD + PC median NRMSE grouped bar ---
+    ax_a = fig.add_subplot(2, 2, 1)
+    x = np.arange(len(ranked_keys))
+    width = 0.35
+
+    cd_vals = [models_data[m]["prediction_accuracy"]["cd_median_nrmse"] for m in ranked_keys]
+    pc_vals = [models_data[m]["prediction_accuracy"]["pc_median_nrmse"] for m in ranked_keys]
+
+    bars_cd = ax_a.bar(x - width / 2, cd_vals, width, label="CD Median NRMSE",
+                       color="#1f77b4", alpha=0.8)
+    bars_pc = ax_a.bar(x + width / 2, pc_vals, width, label="PC Median NRMSE",
+                       color="#ff7f0e", alpha=0.8)
+
+    ax_a.set_yscale("log")
+    ax_a.set_xlabel("Model")
+    ax_a.set_ylabel("Median NRMSE")
+    ax_a.set_title("(A) Prediction Accuracy")
+    ax_a.set_xticks(x)
+    ax_a.set_xticklabels(short_names, rotation=30, ha="right", fontsize=8)
+    ax_a.legend(fontsize=8, loc="upper right")
+    ax_a.grid(True, alpha=0.3, axis="y")
+
+    # --- Panel B: Dimension scores for top 3 models (grouped bar) ---
+    ax_b = fig.add_subplot(2, 2, 2)
+    top3_keys = ranked_keys[:3]
+    top3_names = short_names[:3]
+    dimensions = [
+        ("Inverse\nRecovery", "inverse_recovery"),
+        ("Prediction\nAccuracy", "prediction_accuracy"),
+        ("k02\nPerformance", "k02_performance"),
+        ("Speed", "speed"),
+        ("Gradient\nQuality", "gradient_quality"),
+    ]
+
+    x_dims = np.arange(len(dimensions))
+    n_top = len(top3_keys)
+    bar_w = 0.25
+    top3_colors = ["#2ca02c", "#1f77b4", "#ff7f0e"]
+    hatches = ["", "//", ".."]
+
+    for i, mkey in enumerate(top3_keys):
+        scores = [models_data[mkey][dim_key]["score_norm"] for _, dim_key in dimensions]
+        ax_b.bar(
+            x_dims + (i - 1) * bar_w, scores, bar_w,
+            label=top3_names[i], color=top3_colors[i], alpha=0.8,
+            hatch=hatches[i], edgecolor="white", linewidth=0.5,
+        )
+
+    ax_b.set_xlabel("Dimension")
+    ax_b.set_ylabel("Normalized Score (0=best, 1=worst)")
+    ax_b.set_title("(B) Top-3 Model Profiles")
+    ax_b.set_xticks(x_dims)
+    ax_b.set_xticklabels([d[0] for d in dimensions], fontsize=8)
+    ax_b.legend(fontsize=8, loc="upper right")
+    ax_b.set_ylim(0, 1.1)
+    ax_b.grid(True, alpha=0.3, axis="y")
+
+    # --- Panel C: Composite scores horizontal bar (bottom, spanning full width) ---
+    ax_c = fig.add_subplot(2, 1, 2)
+    composite_scores = [models_data[m]["composite_score"] for m in ranked_keys]
+    # Reverse for horizontal bar (best at top)
+    y_pos = np.arange(len(ranked_keys))
+
+    bars = ax_c.barh(y_pos, composite_scores, color=colors, alpha=0.85, edgecolor="gray")
+
+    ax_c.set_yticks(y_pos)
+    ax_c.set_yticklabels(
+        [f"#{models_data[m]['rank']}  {short_names[i]}" for i, m in enumerate(ranked_keys)],
+        fontsize=9,
+    )
+    ax_c.set_xlabel("Composite Score (lower = better)")
+    ax_c.set_title("(C) Overall Ranking")
+    ax_c.grid(True, alpha=0.3, axis="x")
+    ax_c.invert_yaxis()
+
+    # Annotate bars with score values
+    for bar, score in zip(bars, composite_scores):
+        ax_c.text(
+            bar.get_width() + 0.01, bar.get_y() + bar.get_height() / 2,
+            f"{score:.3f}", va="center", fontsize=8,
+        )
+
+    fig.tight_layout()
+    out = FIGDIR / "surrogate_comparison.pdf"
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+    return out
+
+
 def make_summary_table():
     """Table 5: Synthesis summary across all V&V layers."""
     rows = [
@@ -436,7 +572,7 @@ def make_summary_table():
         ("Forward Solver", "GCI Uncertainty",
          r"Safety factor $\sim 1.25$ at finest mesh", "Pass"),
         ("Surrogate", "Hold-out Validation",
-         r"CD median NRMSE $< 0.005$ (NN Ensemble)", "Pass"),
+         r"CD median NRMSE $< 0.013$ (best of 6 models)", "Pass"),
         ("Inverse", "Parameter Recovery (0--2\\% noise)",
          "Median max error $<$ gate", "Pass"),
         ("Inverse", "Gradient Consistency",
@@ -504,6 +640,16 @@ def main():
     except Exception as e:
         errors.append(f"Worst-case IV figure: {e}")
         print(f"  [FAIL] worst_case_iv.pdf: {e}")
+
+    try:
+        ranking_data = load_ranking_report()
+        sf_data_fig = load_surrogate_fidelity()
+        p = make_surrogate_comparison_figure(ranking_data, sf_data_fig)
+        generated.append(str(p))
+        print(f"  [OK] {p.name}")
+    except Exception as e:
+        errors.append(f"Surrogate comparison figure: {e}")
+        print(f"  [FAIL] surrogate_comparison.pdf: {e}")
 
     # --- Tables ---
     try:
