@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 3-04-PLAN.md
-last_updated: "2026-03-18T00:08:06.640Z"
+stopped_at: Completed 3-05-PLAN.md
+last_updated: "2026-03-18T00:16:55.376Z"
 last_activity: "2026-03-14 - Completed quick task 1: Make scripts/Inference directory and move v13 pipeline script keeping dependencies"
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
   percent: 40
 ---
 
@@ -88,6 +88,7 @@ Next: `/gsd:new-milestone` to start next work cycle.
 | 12 | 1 | 5 min | 5 min |
 | 13 | 1 | 1 min | 1 min |
 | Phase 3 P03 | 3min | 2 tasks | 5 files |
+| Phase 3 P05 | 5min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,7 @@ Next: `/gsd:new-milestone` to start next work cycle.
 - [Phase 3]: GP UQ correlation uses nn_ensemble NRMSE as reference; worst PC errors in [1e-5,1e-4) and [1e-2,1e-1) bins
 - [Phase 3-04]: RBF baseline best for k0_2 recovery (5.80% median error) across 9 surrogate models
 - [Phase 3-04]: Used RBF-as-reference target generation to avoid inverse crime in surrogate-vs-surrogate benchmark
+- [Phase 3]: RBF Baseline selected as primary surrogate (composite 0.013) for Phases 4-5; go/no-go NO-GO on 99th pctl due to PC outliers
 
 ### Pending Todos
 
@@ -118,6 +120,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T00:08:00.009Z
+Last session: 2026-03-18T00:16:55.375Z
 Last activity: 2026-03-14 - Completed quick task 1: Make scripts/Inference directory and move v13 pipeline script keeping dependencies
-Stopped at: Completed 3-04-PLAN.md
+Stopped at: Completed 3-05-PLAN.md
