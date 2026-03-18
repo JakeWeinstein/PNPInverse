@@ -94,8 +94,7 @@ class NNTrainingConfig:
 # ---------------------------------------------------------------------------
 
 def _monotonicity_penalty(
-    model: Any,
-    X_batch: Any,
+    pred: Any,
     n_eta: int,
     phi_applied: np.ndarray,
 ) -> Any:
@@ -104,16 +103,17 @@ def _monotonicity_penalty(
     Computes a ReLU penalty on positive differences in CD along the
     voltage dimension.  Only applied to the CD portion of the output.
 
+    NOTE: This penalty assumes phi_applied (voltage grid) is in ascending order.
+    If the voltage grid is descending, the penalty direction will be inverted.
+
     Parameters
     ----------
-    model : ResNetMLP
-        The neural network.
-    X_batch : torch.Tensor (B, 4)
-        Normalized input batch.
+    pred : torch.Tensor (B, 2*n_eta)
+        Pre-computed model predictions (concatenated CD and PC).
     n_eta : int
         Number of voltage points.
     phi_applied : np.ndarray (n_eta,)
-        Voltage grid (used to determine sort order).
+        Voltage grid (must be in ascending order).
 
     Returns
     -------
@@ -121,7 +121,10 @@ def _monotonicity_penalty(
         Scalar penalty.
     """
     _check_torch()
-    pred = model(X_batch)
+    assert phi_applied[0] < phi_applied[-1], (
+        "Monotonicity penalty requires ascending phi_applied; "
+        f"got phi_applied[0]={phi_applied[0]}, phi_applied[-1]={phi_applied[-1]}"
+    )
     cd_pred = pred[:, :n_eta]  # CD portion
 
     # If voltage is ascending, CD should be decreasing (negative slope)
@@ -132,18 +135,19 @@ def _monotonicity_penalty(
 
 
 def _smoothness_penalty(
-    model: Any,
-    X_batch: Any,
+    pred: Any,
     n_eta: int,
 ) -> Any:
     """Penalise non-smooth outputs (second-order finite difference).
 
+    Splits the prediction into CD and PC halves before computing
+    finite differences, so that the boundary between the two output
+    types does not introduce a spurious penalty.
+
     Parameters
     ----------
-    model : ResNetMLP
-        The neural network.
-    X_batch : torch.Tensor (B, 4)
-        Normalized input batch.
+    pred : torch.Tensor (B, 2*n_eta)
+        Pre-computed model predictions (concatenated CD and PC).
     n_eta : int
         Number of voltage points.
 
@@ -153,10 +157,11 @@ def _smoothness_penalty(
         Scalar penalty.
     """
     _check_torch()
-    pred = model(X_batch)
-    # Second-order differences for both CD and PC
-    d2 = pred[:, 2:] - 2 * pred[:, 1:-1] + pred[:, :-2]
-    penalty = d2.pow(2).mean()
+    cd_pred = pred[:, :n_eta]
+    pc_pred = pred[:, n_eta:]
+    d2_cd = cd_pred[:, 2:] - 2 * cd_pred[:, 1:-1] + cd_pred[:, :-2]
+    d2_pc = pc_pred[:, 2:] - 2 * pc_pred[:, 1:-1] + pc_pred[:, :-2]
+    penalty = (d2_cd.pow(2).mean() + d2_pc.pow(2).mean()) / 2
     return penalty
 
 
@@ -277,6 +282,8 @@ def train_nn_surrogate(
     )
 
     # Output dir setup
+    csv_file = None
+    csv_writer = None
     if output_dir is not None:
         os.makedirs(output_dir, exist_ok=True)
         csv_path = os.path.join(output_dir, f"{model_tag}_log.csv")
@@ -286,9 +293,6 @@ def train_nn_surrogate(
             "epoch", "train_loss", "val_loss",
             "val_cd_rmse", "val_pc_rmse", "lr", "elapsed_s",
         ])
-    else:
-        csv_file = None
-        csv_writer = None
 
     batch_size = config.batch_size if config.batch_size is not None else N
     if batch_size > N:
@@ -307,120 +311,121 @@ def train_nn_surrogate(
         print(f"\n  Training {model_tag} (seed={seed}, N_train={N}, "
               f"N_val={len(val_parameters)}, n_out={n_out})", flush=True)
 
-    for epoch in range(1, config.epochs + 1):
-        # --- Train ---
-        net.train()
-        perm_t = torch.randperm(N, device=device)
-        epoch_loss = 0.0
-        n_batches = 0
+    try:
+        for epoch in range(1, config.epochs + 1):
+            # --- Train ---
+            net.train()
+            perm_t = torch.randperm(N, device=device)
+            epoch_loss = 0.0
+            n_batches = 0
 
-        for start in range(0, N, batch_size):
-            idx = perm_t[start : start + batch_size]
-            xb = X_t[idx]
-            yb = Y_t[idx]
+            for start in range(0, N, batch_size):
+                idx = perm_t[start : start + batch_size]
+                xb = X_t[idx]
+                yb = Y_t[idx]
 
-            pred = net(xb)
-            loss = torch.nn.functional.mse_loss(pred, yb)
+                pred = net(xb)
+                loss = torch.nn.functional.mse_loss(pred, yb)
 
-            # Physics regularization
-            if config.monotonicity_weight > 0:
-                loss = loss + config.monotonicity_weight * _monotonicity_penalty(
-                    net, xb, n_eta, phi_applied,
-                )
-            if config.smoothness_weight > 0:
-                loss = loss + config.smoothness_weight * _smoothness_penalty(
-                    net, xb, n_eta,
-                )
+                # Physics regularization (reuses pre-computed pred)
+                if config.monotonicity_weight > 0:
+                    loss = loss + config.monotonicity_weight * _monotonicity_penalty(
+                        pred, n_eta, phi_applied,
+                    )
+                if config.smoothness_weight > 0:
+                    loss = loss + config.smoothness_weight * _smoothness_penalty(
+                        pred, n_eta,
+                    )
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            epoch_loss += loss.item()
-            n_batches += 1
+                epoch_loss += loss.item()
+                n_batches += 1
 
-        scheduler.step()
-        train_loss = epoch_loss / n_batches
+            scheduler.step()
+            train_loss = epoch_loss / n_batches
 
-        # --- Validate ---
-        net.eval()
-        with torch.no_grad():
-            val_pred_norm = net(X_val_t).cpu().numpy()
-            val_loss_t = torch.nn.functional.mse_loss(
-                torch.tensor(val_pred_norm), Y_val_t.cpu(),
-            ).item()
+            # --- Validate ---
+            net.eval()
+            with torch.no_grad():
+                val_pred_norm = net(X_val_t).cpu().numpy()
+                val_loss_t = torch.nn.functional.mse_loss(
+                    torch.tensor(val_pred_norm), Y_val_t.cpu(),
+                ).item()
 
-        # Inverse-transform for physical-space RMSE
-        val_pred_phys = output_norm.inverse_transform(val_pred_norm)
-        val_cd_pred = val_pred_phys[:, :n_eta]
-        val_pc_pred = val_pred_phys[:, n_eta:]
-        val_cd_rmse = float(np.sqrt(np.mean((val_cd_pred - val_cd) ** 2)))
-        val_pc_rmse = float(np.sqrt(np.mean((val_pc_pred - val_pc) ** 2)))
+            # Inverse-transform for physical-space RMSE
+            val_pred_phys = output_norm.inverse_transform(val_pred_norm)
+            val_cd_pred = val_pred_phys[:, :n_eta]
+            val_pc_pred = val_pred_phys[:, n_eta:]
+            val_cd_rmse = float(np.sqrt(np.mean((val_cd_pred - val_cd) ** 2)))
+            val_pc_rmse = float(np.sqrt(np.mean((val_pc_pred - val_pc) ** 2)))
 
-        current_lr = optimizer.param_groups[0]["lr"]
-        elapsed = time.time() - t_start
+            current_lr = optimizer.param_groups[0]["lr"]
+            elapsed = time.time() - t_start
 
-        # Log
-        history["epoch"].append(epoch)
-        history["train_loss"].append(train_loss)
-        history["val_loss"].append(val_loss_t)
-        history["val_cd_rmse"].append(val_cd_rmse)
-        history["val_pc_rmse"].append(val_pc_rmse)
-        history["lr"].append(current_lr)
+            # Log
+            history["epoch"].append(epoch)
+            history["train_loss"].append(train_loss)
+            history["val_loss"].append(val_loss_t)
+            history["val_cd_rmse"].append(val_cd_rmse)
+            history["val_pc_rmse"].append(val_pc_rmse)
+            history["lr"].append(current_lr)
 
-        if csv_writer is not None:
-            csv_writer.writerow([
-                epoch, f"{train_loss:.8e}", f"{val_loss_t:.8e}",
-                f"{val_cd_rmse:.8e}", f"{val_pc_rmse:.8e}",
-                f"{current_lr:.6e}", f"{elapsed:.1f}",
-            ])
+            if csv_writer is not None:
+                csv_writer.writerow([
+                    epoch, f"{train_loss:.8e}", f"{val_loss_t:.8e}",
+                    f"{val_cd_rmse:.8e}", f"{val_pc_rmse:.8e}",
+                    f"{current_lr:.6e}", f"{elapsed:.1f}",
+                ])
 
-        # Early stopping
-        if val_loss_t < best_val_loss:
-            best_val_loss = val_loss_t
-            best_state = {k: v.cpu().clone() for k, v in net.state_dict().items()}
-            epochs_no_improve = 0
-        else:
-            epochs_no_improve += 1
+            # Early stopping
+            if val_loss_t < best_val_loss:
+                best_val_loss = val_loss_t
+                best_state = {k: v.cpu().clone() for k, v in net.state_dict().items()}
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
 
-        # Checkpointing
-        if output_dir is not None and epoch % config.checkpoint_interval == 0:
-            ckpt_path = os.path.join(output_dir, f"{model_tag}_epoch{epoch}.pt")
-            torch.save(net.state_dict(), ckpt_path)
-            # Plot loss curves
-            _plot_loss_curves(history, output_dir, model_tag, epoch)
+            # Checkpointing
+            if output_dir is not None and epoch % config.checkpoint_interval == 0:
+                ckpt_path = os.path.join(output_dir, f"{model_tag}_epoch{epoch}.pt")
+                torch.save(net.state_dict(), ckpt_path)
+                # Plot loss curves
+                _plot_loss_curves(history, output_dir, model_tag, epoch)
 
-        if verbose and (epoch % 500 == 0 or epoch == 1):
-            print(
-                f"  [{model_tag}] Epoch {epoch:>5d}/{config.epochs}  "
-                f"train={train_loss:.6e}  val={val_loss_t:.6e}  "
-                f"cd_rmse={val_cd_rmse:.4e}  pc_rmse={val_pc_rmse:.4e}  "
-                f"lr={current_lr:.2e}  dt={elapsed:.0f}s",
-                flush=True,
-            )
-
-        if epochs_no_improve >= config.patience:
-            if verbose:
+            if verbose and (epoch % 500 == 0 or epoch == 1):
                 print(
-                    f"  [{model_tag}] Early stopping at epoch {epoch} "
-                    f"(patience={config.patience})",
+                    f"  [{model_tag}] Epoch {epoch:>5d}/{config.epochs}  "
+                    f"train={train_loss:.6e}  val={val_loss_t:.6e}  "
+                    f"cd_rmse={val_cd_rmse:.4e}  pc_rmse={val_pc_rmse:.4e}  "
+                    f"lr={current_lr:.2e}  dt={elapsed:.0f}s",
                     flush=True,
                 )
-            break
 
-    # Restore best
-    if best_state is not None:
-        net.load_state_dict(best_state)
-    net.eval()
+            if epochs_no_improve >= config.patience:
+                if verbose:
+                    print(
+                        f"  [{model_tag}] Early stopping at epoch {epoch} "
+                        f"(patience={config.patience})",
+                        flush=True,
+                    )
+                break
 
-    # Save best model
-    if output_dir is not None:
-        best_path = os.path.join(output_dir, f"{model_tag}_best.pt")
-        torch.save(net.state_dict(), best_path)
-        _plot_loss_curves(history, output_dir, model_tag, epoch)
+        # Restore best
+        if best_state is not None:
+            net.load_state_dict(best_state)
+        net.eval()
 
-    if csv_file is not None:
-        csv_file.close()
+        # Save best model
+        if output_dir is not None:
+            best_path = os.path.join(output_dir, f"{model_tag}_best.pt")
+            torch.save(net.state_dict(), best_path)
+            _plot_loss_curves(history, output_dir, model_tag, epoch)
+    finally:
+        if csv_file is not None:
+            csv_file.close()
 
     # Build NNSurrogateModel wrapper
     surrogate = NNSurrogateModel(

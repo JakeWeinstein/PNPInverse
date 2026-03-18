@@ -368,7 +368,7 @@ def run_cascade_for_target(
     ]
     init_alpha = [
         0.5 * (BOUNDS.alpha_1_range[0] + BOUNDS.alpha_1_range[1]),
-        0.5 * (BOUNDS.alpha_1_range[0] + BOUNDS.alpha_1_range[1]),
+        0.5 * (BOUNDS.alpha_2_range[0] + BOUNDS.alpha_2_range[1]),
     ]
 
     config = CascadeConfig(

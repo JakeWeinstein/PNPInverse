@@ -116,7 +116,7 @@ class ForwardSolverAdapter:
         cls,
         module_path: str,
         solve_function_name: Optional[str] = None,
-        solve_candidates: Sequence[str] = ("forsolve", "forsolve_robin"),
+        solve_candidates: Sequence[str] = ("forsolve", "forsolve_robin", "forsolve_bv"),
     ) -> "ForwardSolverAdapter":
         """Construct an adapter by importing a compatible forward solver module.
 

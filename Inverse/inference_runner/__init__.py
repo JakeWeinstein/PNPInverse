@@ -93,7 +93,11 @@ def run_inverse_inference(request: InferenceRequest) -> InferenceResult:
     )
 
     estimate = request.target.estimate_from_controls(optimized_controls)
-    objective_value = float(rf(optimized_controls))
+    try:
+        objective_value = float(rf(optimized_controls))
+    except Exception as e:
+        print(f"[warn] Post-optimization re-evaluation failed ({e}); using last known objective.")
+        objective_value = float('nan')
 
     return InferenceResult(
         target_key=request.target.key,

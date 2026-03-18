@@ -2,7 +2,9 @@
 
 Provides drop-in replacements for PDE-based objectives that use the
 RBF surrogate model instead.  Gradients are computed via central finite
-differences (8 surrogate evaluations for 4 parameters).
+differences (8 surrogate evaluations for 4 parameters) or, when the
+surrogate supports ``predict_torch()``, via PyTorch autograd (single
+forward + backward pass).
 
 Classes
 -------
@@ -13,6 +15,8 @@ AlphaOnlySurrogateObjective
 ReactionBlockSurrogateObjective
     2-parameter objective for a single reaction's (k0, alpha) pair,
     used by Block Coordinate Descent.
+SubsetSurrogateObjective
+    Full 4-parameter objective on a voltage subset.
 """
 
 from __future__ import annotations
@@ -23,6 +27,24 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 from Surrogate.surrogate_model import BVSurrogateModel
+
+
+# ---------------------------------------------------------------------------
+# Autograd detection helper
+# ---------------------------------------------------------------------------
+
+def _has_autograd(surrogate) -> bool:
+    """Return True if the surrogate supports NN-style autograd gradients.
+
+    The surrogate must have a callable ``predict_torch`` **and** must not
+    explicitly opt out via ``supports_autograd = False`` (e.g. GP models
+    whose ``predict_torch`` uses Z-score I/O rather than the log-space-in /
+    physical-out convention the autograd objective path expects).
+    """
+    if not (hasattr(surrogate, "predict_torch") and callable(surrogate.predict_torch)):
+        return False
+    # Allow models to explicitly declare incompatibility
+    return getattr(surrogate, "supports_autograd", True)
 
 
 class SurrogateObjective:
@@ -38,6 +60,9 @@ class SurrogateObjective:
     The control vector x layout is (by default)::
 
         x = [log10(k0_1), log10(k0_2), alpha_1, alpha_2]
+
+    When the surrogate supports ``predict_torch()`` (NN/ensemble models),
+    gradients are computed via PyTorch autograd instead of finite differences.
 
     Parameters
     ----------
@@ -78,6 +103,7 @@ class SurrogateObjective:
         self.log_space_k0 = log_space_k0
         self.bounds = bounds
         self._n_evals = 0
+        self._use_autograd = _has_autograd(surrogate)
 
     def _x_to_params(self, x: np.ndarray) -> Tuple[float, float, float, float]:
         """Convert optimizer x-vector to (k0_1, k0_2, alpha_1, alpha_2)."""
@@ -107,7 +133,65 @@ class SurrogateObjective:
         J_cd = 0.5 * np.sum(cd_diff ** 2)
         J_pc = 0.5 * np.sum(pc_diff ** 2)
 
-        return float(J_cd + self.secondary_weight * J_pc)
+        J = float(J_cd + self.secondary_weight * J_pc)
+        if not np.isfinite(J):
+            return np.inf
+        return J
+
+    # -----------------------------------------------------------------
+    # Autograd gradient path
+    # -----------------------------------------------------------------
+
+    def _autograd_objective_and_gradient(
+        self, x: np.ndarray,
+    ) -> Tuple[float, np.ndarray]:
+        """Compute J and dJ/dx via PyTorch autograd (single forward + backward)."""
+        import torch
+
+        x_t = torch.tensor(
+            np.asarray(x, dtype=np.float64), dtype=torch.float64, requires_grad=True,
+        )
+
+        # Forward through surrogate (x_t is already in log-space for k0)
+        y = self.surrogate.predict_torch(x_t)  # shape (2*n_eta,)
+        n_eta = len(y) // 2
+        cd_sim = y[:n_eta]
+        pc_sim = y[n_eta:]
+
+        # Cache target tensors on first call
+        if not hasattr(self, "_target_cd_t"):
+            self._target_cd_t = torch.tensor(
+                self.target_cd[self._valid_cd], dtype=torch.float64,
+            )
+            self._target_pc_t = torch.tensor(
+                self.target_pc[self._valid_pc], dtype=torch.float64,
+            )
+            self._valid_cd_idx = torch.tensor(
+                np.where(self._valid_cd)[0], dtype=torch.long,
+            )
+            self._valid_pc_idx = torch.tensor(
+                np.where(self._valid_pc)[0], dtype=torch.long,
+            )
+
+        cd_diff = cd_sim[self._valid_cd_idx] - self._target_cd_t
+        pc_diff = pc_sim[self._valid_pc_idx] - self._target_pc_t
+
+        J = (
+            0.5 * torch.sum(cd_diff ** 2)
+            + self.secondary_weight * 0.5 * torch.sum(pc_diff ** 2)
+        )
+
+        J.backward()
+
+        J_val = float(J.detach())
+        grad_val = x_t.grad.numpy().copy()
+
+        self._n_evals += 1
+        return J_val, grad_val
+
+    # -----------------------------------------------------------------
+    # Public API
+    # -----------------------------------------------------------------
 
     def objective(self, x: np.ndarray) -> float:
         """Evaluate objective J(x).
@@ -127,7 +211,7 @@ class SurrogateObjective:
         return self._compute_objective_at_params(k0_1, k0_2, alpha_1, alpha_2)
 
     def gradient(self, x: np.ndarray) -> np.ndarray:
-        """Compute gradient via central finite differences.
+        """Compute gradient via autograd (if available) or central FD.
 
         Parameters
         ----------
@@ -139,6 +223,10 @@ class SurrogateObjective:
         np.ndarray of shape (4,)
             Gradient dJ/dx.
         """
+        if self._use_autograd:
+            _, g = self._autograd_objective_and_gradient(x)
+            return g
+
         x = np.asarray(x, dtype=float)
         n = len(x)
         grad = np.zeros(n, dtype=float)
@@ -168,6 +256,8 @@ class SurrogateObjective:
         (float, np.ndarray of shape (4,))
             (J, dJ/dx).
         """
+        if self._use_autograd:
+            return self._autograd_objective_and_gradient(x)
         J = self.objective(x)
         g = self.gradient(x)
         return J, g
@@ -217,6 +307,71 @@ class AlphaOnlySurrogateObjective:
         self.secondary_weight = secondary_weight
         self.fd_step = fd_step
         self._n_evals = 0
+        self._use_autograd = _has_autograd(surrogate)
+
+    # -----------------------------------------------------------------
+    # Autograd gradient path
+    # -----------------------------------------------------------------
+
+    def _autograd_objective_and_gradient(
+        self, x: np.ndarray,
+    ) -> Tuple[float, np.ndarray]:
+        """Compute J and dJ/dx via PyTorch autograd for alpha-only optimization."""
+        import torch
+
+        x_t = torch.tensor(
+            np.asarray(x, dtype=np.float64), dtype=torch.float64, requires_grad=True,
+        )
+
+        # Build full 4D input: [log10(k0_1), log10(k0_2), alpha_1, alpha_2]
+        # k0 values are fixed constants (detached, no gradient)
+        log_k0_1 = torch.tensor(
+            np.log10(max(self.fixed_k0[0], 1e-30)), dtype=torch.float64,
+        )
+        log_k0_2 = torch.tensor(
+            np.log10(max(self.fixed_k0[1], 1e-30)), dtype=torch.float64,
+        )
+        x_full = torch.cat([log_k0_1.unsqueeze(0), log_k0_2.unsqueeze(0), x_t])
+
+        y = self.surrogate.predict_torch(x_full)
+        n_eta = len(y) // 2
+        cd_sim = y[:n_eta]
+        pc_sim = y[n_eta:]
+
+        # Cache target tensors on first call
+        if not hasattr(self, "_target_cd_t"):
+            self._target_cd_t = torch.tensor(
+                self.target_cd[self._valid_cd], dtype=torch.float64,
+            )
+            self._target_pc_t = torch.tensor(
+                self.target_pc[self._valid_pc], dtype=torch.float64,
+            )
+            self._valid_cd_idx = torch.tensor(
+                np.where(self._valid_cd)[0], dtype=torch.long,
+            )
+            self._valid_pc_idx = torch.tensor(
+                np.where(self._valid_pc)[0], dtype=torch.long,
+            )
+
+        cd_diff = cd_sim[self._valid_cd_idx] - self._target_cd_t
+        pc_diff = pc_sim[self._valid_pc_idx] - self._target_pc_t
+
+        J = (
+            0.5 * torch.sum(cd_diff ** 2)
+            + self.secondary_weight * 0.5 * torch.sum(pc_diff ** 2)
+        )
+
+        J.backward()
+
+        J_val = float(J.detach())
+        grad_val = x_t.grad.numpy().copy()
+
+        self._n_evals += 1
+        return J_val, grad_val
+
+    # -----------------------------------------------------------------
+    # Public API
+    # -----------------------------------------------------------------
 
     def objective(self, x: np.ndarray) -> float:
         """Evaluate objective J(alpha_1, alpha_2) with k0 fixed."""
@@ -239,7 +394,11 @@ class AlphaOnlySurrogateObjective:
         return float(J_cd + self.secondary_weight * J_pc)
 
     def gradient(self, x: np.ndarray) -> np.ndarray:
-        """Central FD gradient w.r.t. [alpha_1, alpha_2]."""
+        """Central FD gradient w.r.t. [alpha_1, alpha_2], or autograd."""
+        if self._use_autograd:
+            _, g = self._autograd_objective_and_gradient(x)
+            return g
+
         x = np.asarray(x, dtype=float)
         n = len(x)
         grad = np.zeros(n, dtype=float)
@@ -258,6 +417,8 @@ class AlphaOnlySurrogateObjective:
 
     def objective_and_gradient(self, x: np.ndarray) -> Tuple[float, np.ndarray]:
         """Compute objective and gradient."""
+        if self._use_autograd:
+            return self._autograd_objective_and_gradient(x)
         J = self.objective(x)
         g = self.gradient(x)
         return J, g
@@ -322,6 +483,7 @@ class ReactionBlockSurrogateObjective:
         self.secondary_weight = secondary_weight
         self.fd_step = fd_step
         self._n_evals = 0
+        self._use_autograd = _has_autograd(surrogate)
 
     def _x_to_full_params(
         self, x: np.ndarray,
@@ -334,6 +496,77 @@ class ReactionBlockSurrogateObjective:
             return k0_r, self.fixed_k0_other, alpha_r, self.fixed_alpha_other
         else:
             return self.fixed_k0_other, k0_r, self.fixed_alpha_other, alpha_r
+
+    # -----------------------------------------------------------------
+    # Autograd gradient path
+    # -----------------------------------------------------------------
+
+    def _autograd_objective_and_gradient(
+        self, x: np.ndarray,
+    ) -> Tuple[float, np.ndarray]:
+        """Compute J and dJ/dx via PyTorch autograd for block optimization."""
+        import torch
+
+        x_t = torch.tensor(
+            np.asarray(x, dtype=np.float64), dtype=torch.float64, requires_grad=True,
+        )
+
+        # Build full 4D input from 2D control vector + fixed constants
+        log_k0_other = torch.tensor(
+            np.log10(max(self.fixed_k0_other, 1e-30)), dtype=torch.float64,
+        )
+        alpha_other = torch.tensor(self.fixed_alpha_other, dtype=torch.float64)
+
+        if self.reaction_index == 0:
+            # x_t = [log10(k0_1), alpha_1], fixed = k0_2, alpha_2
+            x_full = torch.stack([
+                x_t[0], log_k0_other, x_t[1], alpha_other,
+            ])
+        else:
+            # x_t = [log10(k0_2), alpha_2], fixed = k0_1, alpha_1
+            x_full = torch.stack([
+                log_k0_other, x_t[0], alpha_other, x_t[1],
+            ])
+
+        y = self.surrogate.predict_torch(x_full)
+        n_eta = len(y) // 2
+        cd_sim = y[:n_eta]
+        pc_sim = y[n_eta:]
+
+        # Cache target tensors on first call
+        if not hasattr(self, "_target_cd_t"):
+            self._target_cd_t = torch.tensor(
+                self.target_cd[self._valid_cd], dtype=torch.float64,
+            )
+            self._target_pc_t = torch.tensor(
+                self.target_pc[self._valid_pc], dtype=torch.float64,
+            )
+            self._valid_cd_idx = torch.tensor(
+                np.where(self._valid_cd)[0], dtype=torch.long,
+            )
+            self._valid_pc_idx = torch.tensor(
+                np.where(self._valid_pc)[0], dtype=torch.long,
+            )
+
+        cd_diff = cd_sim[self._valid_cd_idx] - self._target_cd_t
+        pc_diff = pc_sim[self._valid_pc_idx] - self._target_pc_t
+
+        J = (
+            0.5 * torch.sum(cd_diff ** 2)
+            + self.secondary_weight * 0.5 * torch.sum(pc_diff ** 2)
+        )
+
+        J.backward()
+
+        J_val = float(J.detach())
+        grad_val = x_t.grad.numpy().copy()
+
+        self._n_evals += 1
+        return J_val, grad_val
+
+    # -----------------------------------------------------------------
+    # Public API
+    # -----------------------------------------------------------------
 
     def objective(self, x: np.ndarray) -> float:
         """Evaluate objective J(x) for the free reaction block.
@@ -363,7 +596,7 @@ class ReactionBlockSurrogateObjective:
         return float(j_cd + self.secondary_weight * j_pc)
 
     def gradient(self, x: np.ndarray) -> np.ndarray:
-        """Central finite-difference gradient w.r.t. [log10(k0_r), alpha_r].
+        """Central FD gradient w.r.t. [log10(k0_r), alpha_r], or autograd.
 
         Parameters
         ----------
@@ -375,6 +608,10 @@ class ReactionBlockSurrogateObjective:
         np.ndarray of shape (2,)
             Gradient dJ/dx.
         """
+        if self._use_autograd:
+            _, g = self._autograd_objective_and_gradient(x)
+            return g
+
         x = np.asarray(x, dtype=float)
         n = len(x)
         grad = np.zeros(n, dtype=float)
@@ -406,6 +643,8 @@ class ReactionBlockSurrogateObjective:
         (float, np.ndarray of shape (2,))
             (J, dJ/dx).
         """
+        if self._use_autograd:
+            return self._autograd_objective_and_gradient(x)
         j = self.objective(x)
         g = self.gradient(x)
         return j, g
@@ -472,6 +711,7 @@ class SubsetSurrogateObjective:
         self.fd_step = fd_step
         self.log_space_k0 = log_space_k0
         self._n_evals = 0
+        self._use_autograd = _has_autograd(surrogate)
 
     def _x_to_params(self, x: np.ndarray) -> Tuple[float, float, float, float]:
         """Convert optimizer x-vector to (k0_1, k0_2, alpha_1, alpha_2)."""
@@ -483,6 +723,63 @@ class SubsetSurrogateObjective:
             k0_1 = x[0]
             k0_2 = x[1]
         return k0_1, k0_2, float(x[2]), float(x[3])
+
+    # -----------------------------------------------------------------
+    # Autograd gradient path
+    # -----------------------------------------------------------------
+
+    def _autograd_objective_and_gradient(
+        self, x: np.ndarray,
+    ) -> Tuple[float, np.ndarray]:
+        """Compute J and dJ/dx via PyTorch autograd on the voltage subset."""
+        import torch
+
+        x_t = torch.tensor(
+            np.asarray(x, dtype=np.float64), dtype=torch.float64, requires_grad=True,
+        )
+
+        y = self.surrogate.predict_torch(x_t)  # shape (2*n_eta,)
+        n_eta = len(y) // 2
+
+        # Index into full output at subset positions (torch indexing supports grad)
+        subset_idx_t = torch.tensor(self.subset_idx, dtype=torch.long)
+        cd_sim = y[subset_idx_t]
+        pc_sim = y[n_eta + subset_idx_t]
+
+        # Cache target tensors on first call
+        if not hasattr(self, "_target_cd_t"):
+            self._target_cd_t = torch.tensor(
+                self.target_cd[self._valid_cd], dtype=torch.float64,
+            )
+            self._target_pc_t = torch.tensor(
+                self.target_pc[self._valid_pc], dtype=torch.float64,
+            )
+            self._valid_cd_idx = torch.tensor(
+                np.where(self._valid_cd)[0], dtype=torch.long,
+            )
+            self._valid_pc_idx = torch.tensor(
+                np.where(self._valid_pc)[0], dtype=torch.long,
+            )
+
+        cd_diff = cd_sim[self._valid_cd_idx] - self._target_cd_t
+        pc_diff = pc_sim[self._valid_pc_idx] - self._target_pc_t
+
+        J = (
+            0.5 * torch.sum(cd_diff ** 2)
+            + self.secondary_weight * 0.5 * torch.sum(pc_diff ** 2)
+        )
+
+        J.backward()
+
+        J_val = float(J.detach())
+        grad_val = x_t.grad.numpy().copy()
+
+        self._n_evals += 1
+        return J_val, grad_val
+
+    # -----------------------------------------------------------------
+    # Public API
+    # -----------------------------------------------------------------
 
     def objective(self, x: np.ndarray) -> float:
         """Evaluate objective on the subset of voltage points.
@@ -511,7 +808,7 @@ class SubsetSurrogateObjective:
         return float(j_cd + self.secondary_weight * j_pc)
 
     def gradient(self, x: np.ndarray) -> np.ndarray:
-        """Central finite-difference gradient.
+        """Central FD gradient, or autograd if available.
 
         Parameters
         ----------
@@ -521,6 +818,10 @@ class SubsetSurrogateObjective:
         -------
         np.ndarray of shape (4,)
         """
+        if self._use_autograd:
+            _, g = self._autograd_objective_and_gradient(x)
+            return g
+
         x = np.asarray(x, dtype=float)
         n = len(x)
         grad = np.zeros(n, dtype=float)
@@ -535,6 +836,8 @@ class SubsetSurrogateObjective:
 
     def objective_and_gradient(self, x: np.ndarray) -> Tuple[float, np.ndarray]:
         """Compute objective and gradient in one call."""
+        if self._use_autograd:
+            return self._autograd_objective_and_gradient(x)
         j = self.objective(x)
         g = self.gradient(x)
         return j, g

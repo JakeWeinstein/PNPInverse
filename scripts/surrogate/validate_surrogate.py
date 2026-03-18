@@ -39,6 +39,9 @@ def main():
                         help="Output directory for validation results")
     parser.add_argument("--n-samples", type=int, default=0,
                         help="Number of test samples to use (0=all)")
+    parser.add_argument("--split-indices", type=str, default=None,
+                        help="Path to split_indices.npz. When provided, only "
+                        "the test split is used for validation.")
     args = parser.parse_args()
 
     print(f"\n{'#'*60}")
@@ -52,6 +55,15 @@ def main():
     cd = data["current_density"]
     pc = data["peroxide_current"]
     phi_applied = data["phi_applied"]
+
+    # Restrict to test split when split indices are provided
+    if args.split_indices is not None:
+        splits = np.load(args.split_indices, allow_pickle=True)
+        test_idx = splits["test_idx"]
+        print(f"  Using test split ({len(test_idx)} samples) from {args.split_indices}")
+        parameters = parameters[test_idx]
+        cd = cd[test_idx]
+        pc = pc[test_idx]
 
     N = parameters.shape[0]
     if args.n_samples > 0 and args.n_samples < N:

@@ -28,6 +28,7 @@ from scipy.optimize import minimize
 from scipy.stats.qmc import LatinHypercube
 
 from Surrogate.surrogate_model import BVSurrogateModel
+from Surrogate.objectives import _has_autograd
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +249,12 @@ def _evaluate_grid_objectives(
     cd_diff = cd_pred[:, valid_cd] - target_cd[valid_cd]
     pc_diff = pc_pred[:, valid_pc] - target_pc[valid_pc]
 
-    # Handle NaN predictions gracefully
+    # Detect rows with NaN in valid columns BEFORE zeroing residuals,
+    # so that bad candidates are properly penalised.
+    has_nan_cd = np.any(np.isnan(cd_diff), axis=1)
+    has_nan_pc = np.any(np.isnan(pc_diff), axis=1)
+
+    # Zero NaN residuals for safe arithmetic (sum/square)
     cd_diff = np.where(np.isnan(cd_diff), 0.0, cd_diff)
     pc_diff = np.where(np.isnan(pc_diff), 0.0, pc_diff)
 
@@ -257,9 +263,7 @@ def _evaluate_grid_objectives(
 
     objectives = j_cd + secondary_weight * j_pc
 
-    # Mark points with any NaN prediction as infinite
-    has_nan_cd = np.any(np.isnan(cd_pred), axis=1)
-    has_nan_pc = np.any(np.isnan(pc_pred), axis=1)
+    # Mark points with any NaN prediction (in valid columns) as infinite
     objectives = np.where(has_nan_cd | has_nan_pc, np.inf, objectives)
 
     return objectives
@@ -313,35 +317,102 @@ def _polish_candidate(
 
     n_evals = 0
 
-    def _objective(x: np.ndarray) -> float:
-        nonlocal n_evals
-        k0_1, k0_2 = 10.0 ** x[0], 10.0 ** x[1]
-        alpha_1, alpha_2 = x[2], x[3]
+    # ----- Autograd path (NN / ensemble surrogates) -----
+    if _has_autograd(surrogate):
+        import torch
 
-        pred = surrogate.predict(k0_1, k0_2, alpha_1, alpha_2)
-        cd_sim = pred["current_density"]
-        pc_sim = pred["peroxide_current"]
+        _target_cd_t = torch.tensor(_tgt_cd[_valid_cd], dtype=torch.float64)
+        _target_pc_t = torch.tensor(_tgt_pc[_valid_pc], dtype=torch.float64)
+        _valid_cd_idx_t = torch.tensor(
+            np.where(_valid_cd)[0], dtype=torch.long,
+        )
+        _valid_pc_idx_t = torch.tensor(
+            np.where(_valid_pc)[0], dtype=torch.long,
+        )
+        _subset_idx_t = (
+            torch.tensor(subset_idx, dtype=torch.long)
+            if subset_idx is not None
+            else None
+        )
 
-        if subset_idx is not None:
-            cd_sim = cd_sim[subset_idx]
-            pc_sim = pc_sim[subset_idx]
+        # Cache the last (x, J, grad) to avoid recomputation when L-BFGS-B
+        # calls _objective and _gradient at the same point sequentially.
+        _cache: dict = {"x_bytes": None, "J": None, "grad": None}
 
-        cd_diff = cd_sim[_valid_cd] - _tgt_cd[_valid_cd]
-        pc_diff = pc_sim[_valid_pc] - _tgt_pc[_valid_pc]
+        def _autograd_obj_and_grad(x: np.ndarray):
+            nonlocal n_evals
+            x_bytes = np.asarray(x, dtype=np.float64).tobytes()
+            if _cache["x_bytes"] == x_bytes:
+                return _cache["J"], _cache["grad"]
+            x_t = torch.tensor(
+                np.asarray(x, dtype=np.float64),
+                dtype=torch.float64,
+                requires_grad=True,
+            )
+            y = surrogate.predict_torch(x_t)
+            n_eta = len(y) // 2
 
-        j = 0.5 * np.sum(cd_diff ** 2) + config.secondary_weight * 0.5 * np.sum(pc_diff ** 2)
-        n_evals += 1
-        return float(j)
+            if _subset_idx_t is not None:
+                cd_sim = y[_subset_idx_t]
+                pc_sim = y[n_eta + _subset_idx_t]
+            else:
+                cd_sim = y[:n_eta]
+                pc_sim = y[n_eta:]
 
-    def _gradient(x: np.ndarray) -> np.ndarray:
-        h = config.fd_step
-        grad = np.zeros(4, dtype=float)
-        for i in range(4):
-            xp, xm = x.copy(), x.copy()
-            xp[i] += h
-            xm[i] -= h
-            grad[i] = (_objective(xp) - _objective(xm)) / (2 * h)
-        return grad
+            cd_diff = cd_sim[_valid_cd_idx_t] - _target_cd_t
+            pc_diff = pc_sim[_valid_pc_idx_t] - _target_pc_t
+            J = (
+                0.5 * torch.sum(cd_diff ** 2)
+                + config.secondary_weight * 0.5 * torch.sum(pc_diff ** 2)
+            )
+            J.backward()
+            n_evals += 1
+            J_val = float(J.detach())
+            grad_val = x_t.grad.numpy().copy()
+            _cache["x_bytes"] = x_bytes
+            _cache["J"] = J_val
+            _cache["grad"] = grad_val
+            return J_val, grad_val
+
+        def _objective(x: np.ndarray) -> float:
+            val, _ = _autograd_obj_and_grad(x)
+            return val
+
+        def _gradient(x: np.ndarray) -> np.ndarray:
+            _, g = _autograd_obj_and_grad(x)
+            return g
+
+    else:
+        # ----- Finite-difference path (RBF / POD surrogates) -----
+        def _objective(x: np.ndarray) -> float:
+            nonlocal n_evals
+            k0_1, k0_2 = 10.0 ** x[0], 10.0 ** x[1]
+            alpha_1, alpha_2 = x[2], x[3]
+
+            pred = surrogate.predict(k0_1, k0_2, alpha_1, alpha_2)
+            cd_sim = pred["current_density"]
+            pc_sim = pred["peroxide_current"]
+
+            if subset_idx is not None:
+                cd_sim = cd_sim[subset_idx]
+                pc_sim = pc_sim[subset_idx]
+
+            cd_diff = cd_sim[_valid_cd] - _tgt_cd[_valid_cd]
+            pc_diff = pc_sim[_valid_pc] - _tgt_pc[_valid_pc]
+
+            j = 0.5 * np.sum(cd_diff ** 2) + config.secondary_weight * 0.5 * np.sum(pc_diff ** 2)
+            n_evals += 1
+            return float(j)
+
+        def _gradient(x: np.ndarray) -> np.ndarray:
+            h = config.fd_step
+            grad = np.zeros(4, dtype=float)
+            for i in range(4):
+                xp, xm = x.copy(), x.copy()
+                xp[i] += h
+                xm[i] -= h
+                grad[i] = (_objective(xp) - _objective(xm)) / (2 * h)
+            return grad
 
     # Convert initial point to optimizer space
     x0 = np.array([

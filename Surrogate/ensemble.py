@@ -97,9 +97,9 @@ class EnsembleMeanWrapper:
         pc_stack = np.stack(pc_preds, axis=0)
         return (
             cd_stack.mean(axis=0),
-            cd_stack.std(axis=0, ddof=1),
+            cd_stack.std(axis=0, ddof=0),
             pc_stack.mean(axis=0),
-            pc_stack.std(axis=0, ddof=1),
+            pc_stack.std(axis=0, ddof=0),
         )
 
     def predict_batch(self, parameters: np.ndarray) -> Dict[str, np.ndarray]:
@@ -145,6 +145,36 @@ class EnsembleMeanWrapper:
             "current_density_std": cd_std[0],
             "peroxide_current_std": pc_std[0],
         }
+
+    def predict_torch(self, x_logspace: "torch.Tensor") -> "torch.Tensor":
+        """Ensemble mean prediction as a differentiable torch tensor.
+
+        Averages the output of all members. Gradient is the mean of
+        per-member gradients (equivalent to gradient of the mean, by
+        linearity of differentiation).
+
+        Parameters
+        ----------
+        x_logspace : torch.Tensor of shape (4,), requires_grad=True
+            [log10(k0_1), log10(k0_2), alpha_1, alpha_2] in log-space.
+
+        Returns
+        -------
+        torch.Tensor of shape (2*n_eta,)
+            Ensemble mean prediction with autograd graph intact.
+        """
+        if not hasattr(self.models[0], "predict_torch"):
+            raise AttributeError(
+                "Ensemble members do not have predict_torch(). "
+                "Autograd gradients require NNSurrogateModel members."
+            )
+
+        import torch
+
+        preds = torch.stack(
+            [m.predict_torch(x_logspace) for m in self.models]
+        )
+        return preds.mean(dim=0)
 
     @property
     def phi_applied(self) -> np.ndarray:

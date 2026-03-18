@@ -11,8 +11,10 @@ from .forms import build_context, build_forms, set_initial_conditions
 
 
 def _clone_params_with_phi(solver_params, *, phi_applied: float):
-    """Return a new SolverParams-like list with phi_applied replaced."""
-    lst = list(solver_params)   # works for both list and SolverParams
+    """Return a new SolverParams-like object with phi_applied replaced."""
+    if hasattr(solver_params, 'with_phi_applied'):
+        return solver_params.with_phi_applied(float(phi_applied))
+    lst = list(solver_params)
     lst[7] = float(phi_applied)
     return lst
 
@@ -146,12 +148,16 @@ def solve_bv_with_continuation(
     eta_current = 0.0
     max_sub = 6   # maximum recursive bisection depth per target step
 
+    # Pre-allocate checkpoint functions once to avoid leaking PETSc Vecs.
+    U_ckpt = fd.Function(ctx["U"])
+    U_prev_ckpt = fd.Function(ctx["U_prev"])
+
     for i_cont, eta_target_step in enumerate(path):
         print(f"[continuation] step {i_cont+1}/{len(path)}  eta_hat → {eta_target_step:.4f}")
 
         # Checkpoint the last known-good state before attempting this step.
-        U_ckpt = fd.Function(ctx["U"])
-        U_prev_ckpt = fd.Function(ctx["U_prev"])
+        U_ckpt.assign(ctx["U"])
+        U_prev_ckpt.assign(ctx["U_prev"])
 
         # Try the full step directly.
         if _try_timestep(eta_target_step):
@@ -312,6 +318,7 @@ def solve_bv_with_ptc(
     path = np.linspace(0.0, eta_target, eta_steps + 1)[1:]
 
     U_scratch = ctx["U"].copy(deepcopy=True)
+    original_dt = float(ctx["dt_const"])
 
     for i_cont, eta_step in enumerate(path):
         ctx["phi_applied_func"].assign(float(eta_step))
@@ -329,6 +336,7 @@ def solve_bv_with_ptc(
         # To truly vary dt_ptc, we would need a mutable fd.Constant for dt.
         # For now, we use the adaptive stopping criterion on the existing dt.
 
+        ctx["dt_const"].assign(dt_initial)
         prev_res_norm = None
         dt_ptc = dt_initial  # Tracks the PTC "pseudo-dt" (for adaptation logic)
 
@@ -338,9 +346,9 @@ def solve_bv_with_ptc(
             try:
                 solver.solve()
             except fd.ConvergenceError:
-                # PTC recovery: restore and try with the existing dt (one more chance)
+                # PTC recovery: restore both U and U_prev to keep them consistent
                 ctx["U"].assign(U_scratch)
-                # If even one step fails, just keep the current state and move on
+                ctx["U_prev"].assign(U_scratch)
                 print(f"  [PTC] Newton failed at eta={eta_step:.4f}, ptc_step={k}")
                 break
 
@@ -358,6 +366,10 @@ def solve_bv_with_ptc(
                 dt_ptc = dt_ptc * ratio * growth
                 dt_ptc = min(dt_ptc, max_dt)
 
+            # Push the adapted pseudo-timestep into the weak form so the
+            # next Newton solve actually uses it.
+            ctx["dt_const"].assign(dt_ptc)
+
             prev_res_norm = delta_norm
 
             # Check steady-state convergence.
@@ -368,6 +380,7 @@ def solve_bv_with_ptc(
             if dt_ptc >= max_dt:
                 break
 
+    ctx["dt_const"].assign(original_dt)
     return ctx["U"]
 
 
@@ -478,7 +491,14 @@ def solve_bv_with_charge_continuation(
     z_consts = ctx["z_consts"]  # list of fd.Constant objects
     z_path = np.linspace(0.0, 1.0, charge_steps + 1)[1:]  # skip 0 (already neutral)
 
+    # Pre-allocate checkpoint function once to avoid leaking PETSc Vecs.
+    U_z_ckpt = fd.Function(ctx["U"])
+
+    achieved_z_factor = 0.0
     for i_z, z_factor in enumerate(z_path):
+        # Checkpoint before attempting this z_factor
+        U_z_ckpt.assign(ctx["U"])
+
         # Update all charge valences: z_i = z_nominal_i * z_factor.
         for i in range(n_s):
             z_consts[i].assign(float(z_nominal[i]) * float(z_factor))
@@ -491,11 +511,11 @@ def solve_bv_with_charge_continuation(
             for _ in range(num_steps):
                 solver.solve()
                 ctx["U_prev"].assign(ctx["U"])
+            achieved_z_factor = z_factor
         except fd.ConvergenceError:
+            ctx["U"].assign(U_z_ckpt)
             print(f"  [charge-cont] Failed at z_factor={z_factor:.3f}")
-            # Restore last good state.
-            ctx["U"].assign(ctx["U_prev"])
             break
 
-    print(f"[charge-cont] Phase 2 complete: z_factor={float(z_path[-1]):.3f}")
+    print(f"[charge-cont] Phase 2 complete: z_factor={achieved_z_factor:.3f}")
     return ctx["U"]

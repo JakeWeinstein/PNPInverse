@@ -56,12 +56,43 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SURROGATE_DIR = os.path.join(_ROOT, "data", "surrogate_models")
 _OUTPUT_DIR = os.path.join(_ROOT, "StudyResults", "surrogate_fidelity")
 
+_MERGED_DATA_PATH = os.path.join(_SURROGATE_DIR, "training_data_merged.npz")
+_SPLIT_IDX_PATH = os.path.join(_SURROGATE_DIR, "split_indices.npz")
 _ENSEMBLE_DIR = os.path.join(_SURROGATE_DIR, "nn_ensemble", "D3-deeper")
 _RBF_BASELINE_PATH = os.path.join(_SURROGATE_DIR, "model_rbf_baseline.pkl")
 _POD_RBF_LOG_PATH = os.path.join(_SURROGATE_DIR, "model_pod_rbf_log.pkl")
 _POD_RBF_NOLOG_PATH = os.path.join(_SURROGATE_DIR, "model_pod_rbf_nolog.pkl")
 _GP_FIXED_DIR = os.path.join(_SURROGATE_DIR, "gp_fixed")
 _PCE_PATH = os.path.join(_SURROGATE_DIR, "pce", "pce_model.pkl")
+
+# Skip guards: required data and model files
+_REQUIRED_FILES_PRESENT = (
+    os.path.isfile(_MERGED_DATA_PATH)
+    and os.path.isfile(_SPLIT_IDX_PATH)
+    and os.path.isdir(_ENSEMBLE_DIR)
+    and os.path.isfile(_RBF_BASELINE_PATH)
+    and os.path.isfile(_POD_RBF_LOG_PATH)
+    and os.path.isfile(_POD_RBF_NOLOG_PATH)
+)
+
+_skip_missing_models = pytest.mark.skipif(
+    not _REQUIRED_FILES_PRESENT,
+    reason=(
+        "SKIPPING V&V TESTS: Required surrogate model files or training data not found on disk. "
+        "Need: training_data_merged.npz, split_indices.npz, D3-deeper ensemble, "
+        "and rbf_baseline/pod_rbf_log/pod_rbf_nolog pickle files. "
+        "Run training pipeline first to generate required test artifacts."
+    ),
+)
+
+
+def test_data_availability_warning():
+    """Warn if surrogate model data is not available for V&V tests."""
+    if not _ENSEMBLE_DIR or not os.path.isdir(_ENSEMBLE_DIR):
+        pytest.skip(
+            f"SKIPPING V&V TESTS: Surrogate model data not found at {_ENSEMBLE_DIR}. "
+            "Run training pipeline first to generate required test artifacts."
+        )
 
 # Build MODEL_NAMES dynamically: always include the 4 core models,
 # then append GP and PCE only if their dependencies and model files exist.
@@ -387,6 +418,7 @@ def generate_plots(all_models, all_metrics, holdout_data):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.slow
+@_skip_missing_models
 class TestSurrogateFidelity:
     """Hold-out validation tests for all 6 surrogate models."""
 

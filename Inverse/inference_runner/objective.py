@@ -22,7 +22,7 @@ def build_reduced_functional(
     target: ParameterTarget,
     solver_params: Sequence[Any],
     concentration_targets: Sequence[Sequence[float]],
-    phi_target: Sequence[float],
+    phi_target: Optional[Sequence[float]],
     blob_initial_condition: bool = True,
     print_interval: int = 100,
     extra_eval_cb_pre: Optional[Any] = None,
@@ -47,7 +47,11 @@ def build_reduced_functional(
         _vector_to_function(ctx, c_vec, space_key="V_scalar")
         for c_vec in concentration_targets
     ]
-    phi_target_f = _vector_to_function(ctx, phi_target, space_key="V_scalar")
+    phi_target_f = (
+        _vector_to_function(ctx, phi_target, space_key="V_scalar")
+        if phi_target is not None
+        else None
+    )
 
     tape = adj.get_working_tape()
     tape.clear_tape()
@@ -63,6 +67,10 @@ def build_reduced_functional(
             objective_terms.append(fd.inner(diff_i, diff_i))
 
     if "phi" in target.objective_fields:
+        if phi_target_f is None:
+            raise ValueError(
+                f"Target '{target.key}' requests 'phi' objective field but phi_target is None."
+            )
         phi_diff = U_final.sub(n_species) - phi_target_f
         objective_terms.append(fd.inner(phi_diff, phi_diff))
 
@@ -122,7 +130,9 @@ class _AttemptMonitor:
         """Observe successful objective evaluations from the reduced functional."""
         try:
             estimate = copy.deepcopy(self.target.estimate_from_controls(m))
-        except Exception:
+        except Exception as exc:
+            import warnings
+            warnings.warn(f"AttemptMonitor failed: {exc}")
             return
 
         self.last_estimate = estimate

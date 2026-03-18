@@ -20,9 +20,14 @@ from __future__ import annotations
 import numpy as np
 
 import firedrake as fd
-import firedrake.adjoint as adj
 
-from Nondim.constants import FARADAY_CONSTANT, GAS_CONSTANT, DEFAULT_TEMPERATURE_K
+from Nondim.constants import (
+    FARADAY_CONSTANT,
+    GAS_CONSTANT,
+    DEFAULT_TEMPERATURE_K,
+    VACUUM_PERMITTIVITY_F_PER_M,
+    DEFAULT_RELATIVE_PERMITTIVITY_WATER,
+)
 
 
 def _as_species_list(values, n_species: int, name: str):
@@ -115,7 +120,7 @@ def build_forms(ctx: dict, solver_params) -> dict:
         m[i].assign(np.log(float(D_vals[i])))
     D = [fd.exp(m[i]) for i in range(n)]
 
-    z = [fd.Constant(int(z_vals[i])) for i in range(n)]
+    z = [fd.Constant(float(z_vals[i])) for i in range(n)]
 
     U = ctx["U"]
     U_prev = ctx["U_prev"]
@@ -152,8 +157,11 @@ def build_forms(ctx: dict, solver_params) -> dict:
             Jflux = D[i] * (fd.grad(c) + c * fd.grad(drift))
         F_res += ((c - c_old) / dt) * v * fd.dx + fd.dot(Jflux, fd.grad(v)) * fd.dx
 
-    # Poisson with eps=1 (model-space / natural units).
-    F_res += fd.Constant(1.0) * fd.dot(fd.grad(phi), fd.grad(w)) * fd.dx
+    # Poisson: ε · Δφ = F · Σᵢ zᵢ cᵢ  (SI dimensional form).
+    # See Nondim/transform.py module docstring lines 44-50 for background on
+    # why eps=1.0 was incorrect here.
+    permittivity_f_m = VACUUM_PERMITTIVITY_F_PER_M * DEFAULT_RELATIVE_PERMITTIVITY_WATER
+    F_res += fd.Constant(permittivity_f_m) * fd.dot(fd.grad(phi), fd.grad(w)) * fd.dx
     F_res -= sum(z[i] * FARADAY_CONSTANT * ci[i] * w for i in range(n)) * fd.dx
 
     phi0_func = fd.Function(R_space, name="phi0")
@@ -229,7 +237,7 @@ def forsolve(ctx: dict, solver_params, print_interval: int = 100):
     F_res = ctx["F_res"]
     bcs = ctx["bcs"]
 
-    num_steps = int(t_end / dt)
+    num_steps = max(1, int(round(t_end / dt)))
     J = fd.derivative(F_res, U)
     problem = fd.NonlinearVariationalProblem(F_res, U, bcs=bcs, J=J)
     solver = fd.NonlinearVariationalSolver(problem, solver_parameters=params)

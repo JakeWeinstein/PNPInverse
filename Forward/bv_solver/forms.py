@@ -186,6 +186,11 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
     E_eq_model = fd.Constant(float(scaling["bv_E_eq_model"]))
     bv_exp_scale = fd.Constant(float(scaling["bv_exponent_scale"]))
 
+    # NOTE: All reactions currently share a single E_eq. For systems with
+    # different equilibrium potentials per reaction (e.g., O2/H2O2 vs H2O2/H2O),
+    # set E_eq_v=0 and absorb equilibrium potential differences into k0 values,
+    # or implement per-reaction E_eq in a future refactor.
+
     # Build the η̂ expression used in BV exponent.
     if conv_cfg["use_eta_in_bv"]:
         eta_hat_raw = phi_applied_func - E_eq_model
@@ -228,13 +233,21 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
     #      For c_i >> eps_c: softplus ~ c_i.  For c_i << 0: softplus ~ eps_c * exp(c_i/eps_c) ~ 0.
     #      At c_i = 0: softplus = eps_c * ln(2) ~ 0.693 * eps_c.
     use_softplus = conv_cfg.get("softplus_regularization", False)
+    if use_softplus and not conv_cfg["regularize_concentration"]:
+        import warnings
+        warnings.warn(
+            "softplus_regularization=True has no effect when regularize_concentration=False"
+        )
     if conv_cfg["regularize_concentration"]:
         eps_c = fd.Constant(float(conv_cfg["conc_floor"]))
         if use_softplus:
             # Softplus regularization: smooth approximation to max(c_i, eps_c).
             # Avoids the non-differentiable kink of max_value, improving
             # Newton convergence for the Jacobian near c_i ~ 0.
-            c_surf = [eps_c * fd.ln(fd.Constant(1.0) + fd.exp(ci[i] / eps_c))
+            # Stable softplus: clamp ci/eps_c to at least -30 to prevent
+            # exp() underflow for large negative concentrations, and add a
+            # final floor of eps_c.
+            c_surf = [fd.max_value(eps_c * fd.ln(fd.Constant(1.0) + fd.exp(fd.max_value(ci[i], fd.Constant(-30.0)) / eps_c)), eps_c)
                       for i in range(n)]
         else:
             c_surf = [fd.max_value(ci[i], eps_c) for i in range(n)]
@@ -276,23 +289,30 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
             alpha_j = fd.Function(R_space, name=f"bv_alpha_rxn{j}")
             alpha_j.assign(float(rxn["alpha"]))
             bv_alpha_funcs.append(alpha_j)
+            n_e_j = fd.Constant(float(rxn["n_electrons"]))
             cat_idx = rxn["cathodic_species"]
 
-            # Cathodic term: k0 * c_cat * exp(-alpha * eta)
-            cathodic = k0_j * c_surf[cat_idx] * fd.exp(-alpha_j * eta_clipped)
+            # Cathodic term: k0 * c_cat * exp(-alpha * n_e * eta)
+            cathodic = k0_j * c_surf[cat_idx] * fd.exp(-alpha_j * n_e_j * eta_clipped)
 
             # Apply optional cathodic concentration factors: e.g. (c_H+/c_ref)^power
             for factor in rxn.get("cathodic_conc_factors", []):
                 sp_idx = factor["species"]
                 power = factor["power"]
-                c_ref_f = fd.Constant(float(factor["c_ref_nondim"]))
+                c_ref_f = fd.Constant(max(float(factor["c_ref_nondim"]), 1e-12))
                 cathodic = cathodic * (c_surf[sp_idx] / c_ref_f) ** power
 
             # Anodic term (if reversible)
             if rxn["reversible"] and rxn["anodic_species"] is not None:
+                anod_idx = rxn["anodic_species"]
+                anodic = k0_j * c_surf[anod_idx] * fd.exp(
+                    (fd.Constant(1.0) - alpha_j) * n_e_j * eta_clipped
+                )
+            elif rxn["reversible"]:
+                # Fallback: no anodic_species specified, use constant c_ref
                 c_ref_j = fd.Constant(float(rxn["c_ref_model"]))
                 anodic = k0_j * c_ref_j * fd.exp(
-                    (fd.Constant(1.0) - alpha_j) * eta_clipped
+                    (fd.Constant(1.0) - alpha_j) * n_e_j * eta_clipped
                 )
             else:
                 anodic = fd.Constant(0.0)
@@ -308,6 +328,9 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
 
     else:
         # ---- Legacy per-species path ----
+        # NOTE: n_electrons is not available in the legacy _get_bv_cfg config,
+        # so the exponent here implicitly assumes n_electrons=1.  Use the
+        # multi-reaction path (bv_bc.reactions) for multi-electron BV kinetics.
         bv_rate_exprs = []
         for i in range(n):
             alpha_i = fd.Function(R_space, name=f"bv_alpha_sp{i}")
@@ -328,6 +351,10 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
             F_res -= fd.Constant(float(stoi_i)) * bv_flux_i * v_list[i] * ds(electrode_marker)
 
     # Poisson equation.
+    # suppress_poisson_source: Debug-only flag. When True, removes the charge
+    # source term from the Poisson equation, decoupling it from species transport.
+    # WARNING: This produces physically wrong results for charged species.
+    # Only use for debugging neutral-species-only problems.
     suppress_poisson_source = _bool(nondim_cfg.get("suppress_poisson_source", False))
     eps_coeff = fd.Constant(float(scaling["poisson_coefficient"]))
     charge_rhs = fd.Constant(float(scaling["charge_rhs_prefactor"]))

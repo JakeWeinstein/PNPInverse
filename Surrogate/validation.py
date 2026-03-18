@@ -69,15 +69,21 @@ def validate_surrogate(
     pc_max_abs = float(np.max(np.abs(pc_diff)))
 
     # Mean relative error (NRMSE: per-sample RMSE / range of true values)
+    # Use a robust denominator: max(ptp, global_ptp * 0.01) to avoid
+    # division by near-zero for flat curves (especially PC at certain
+    # parameter combinations where peroxide current is negligible).
+    cd_global_range = float(np.ptp(test_cd))
+    pc_global_range = float(np.ptp(test_pc))
+    cd_range_floor = max(cd_global_range * 0.01, 1e-12)
+    pc_range_floor = max(pc_global_range * 0.01, 1e-12)
+
     cd_nrmse_per_sample = np.zeros(N_test, dtype=float)
     pc_nrmse_per_sample = np.zeros(N_test, dtype=float)
     for i in range(N_test):
-        cd_range = np.ptp(test_cd[i])
-        pc_range = np.ptp(test_pc[i])
-        if cd_range > 1e-12:
-            cd_nrmse_per_sample[i] = cd_per_sample_rmse[i] / cd_range
-        if pc_range > 1e-12:
-            pc_nrmse_per_sample[i] = pc_per_sample_rmse[i] / pc_range
+        cd_range = max(np.ptp(test_cd[i]), cd_range_floor)
+        pc_range = max(np.ptp(test_pc[i]), pc_range_floor)
+        cd_nrmse_per_sample[i] = cd_per_sample_rmse[i] / cd_range
+        pc_nrmse_per_sample[i] = pc_per_sample_rmse[i] / pc_range
 
     cd_mean_rel = float(np.mean(cd_nrmse_per_sample))
     pc_mean_rel = float(np.mean(pc_nrmse_per_sample))

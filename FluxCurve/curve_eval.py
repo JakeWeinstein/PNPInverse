@@ -22,6 +22,8 @@ def evaluate_curve_objective_and_gradient(
     point_executor: Optional[_PointSolveExecutor] = None,
 ) -> CurveAdjointResult:
     """Evaluate curve objective + gradient, with anisotropy recovery fallback."""
+    if len(phi_applied_values) == 0:
+        raise ValueError("phi_applied_values must be non-empty")
     n_species = int(request.base_solver_params.n_species) if hasattr(request.base_solver_params, 'n_species') else int(request.base_solver_params[0])
 
     def _evaluate_once(kappa_eval: np.ndarray) -> CurveAdjointResult:
@@ -61,9 +63,8 @@ def evaluate_curve_objective_and_gradient(
         for i, point in enumerate(points):
             simulated_flux[i] = point.simulated_flux
             total_objective += float(point.objective)
-            if point.converged:
-                total_gradient += point.gradient
-            else:
+            total_gradient += point.gradient
+            if not point.converged:
                 n_failed += 1
 
         return CurveAdjointResult(
@@ -124,8 +125,27 @@ def evaluate_curve_loss_forward(
     blob_initial_condition: bool,
     fail_penalty: float,
     observable_scale: float,
+    observable_mode: str = "total_species",
+    observable_species_index: int | None = None,
 ) -> Tuple[float, np.ndarray, int]:
-    """Evaluate scalar curve loss (no derivatives), used by line search."""
+    """Evaluate scalar curve loss (no derivatives), used by line search.
+
+    Parameters
+    ----------
+    observable_mode : str
+        Observable mode forwarded to ``steady.flux_observable`` before the
+        sweep.  Defaults to ``"total_species"`` for backward compatibility.
+    observable_species_index : int or None
+        Species index forwarded to ``steady.species_index`` when
+        ``observable_mode="species"``.
+    """
+    if len(phi_applied_values) == 0:
+        raise ValueError("phi_applied_values must be non-empty")
+    import copy as _copy
+    steady = _copy.copy(steady)
+    steady.flux_observable = observable_mode
+    if observable_species_index is not None:
+        steady.species_index = observable_species_index
     results = sweep_phi_applied_steady_flux(
         base_solver_params,
         phi_applied_values=phi_applied_values.tolist(),
@@ -139,6 +159,8 @@ def evaluate_curve_loss_forward(
     if n_failed > 0 or np.any(~np.isfinite(simulated_flux)):
         return float(fail_penalty * max(1, n_failed)), simulated_flux, int(n_failed)
 
-    residual = simulated_flux - target_flux
+    # Mask out NaN targets so they contribute zero to the loss
+    valid_mask = np.isfinite(target_flux)
+    residual = np.where(valid_mask, simulated_flux - target_flux, 0.0)
     loss = 0.5 * float(np.sum(residual * residual))
     return float(loss), simulated_flux, 0

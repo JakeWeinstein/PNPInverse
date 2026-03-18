@@ -15,7 +15,6 @@ from FluxCurve.results import PointAdjointResult, _point_result_to_payload, _poi
 from FluxCurve.recovery import _attempt_phase_state, _relax_solver_options_for_attempt
 from FluxCurve.observables import (
     _build_observable_form,
-    _build_scalar_target_in_control_space,
     _gradient_controls_to_array,
 )
 from Forward.steady_state import SteadyStateConfig, configure_robin_solver_params
@@ -189,6 +188,20 @@ def solve_point_objective_and_gradient(
     observable_scale: float,
 ) -> PointAdjointResult:
     """Solve one phi_applied point and extract dJ_i/dkappa with firedrake-adjoint."""
+    n_species_early = int(base_solver_params.n_species) if hasattr(base_solver_params, 'n_species') else int(base_solver_params[0])
+    if np.isnan(target_flux):
+        # Skip this point with zero contribution, matching BV fast-path behavior
+        return PointAdjointResult(
+            phi_applied=float(phi_applied),
+            target_flux=float('nan'),
+            simulated_flux=float('nan'),
+            objective=0.0,
+            gradient=np.zeros(n_species_early),
+            converged=False,
+            steps_taken=0,
+            reason="NaN target flux; skipped",
+        )
+
     import firedrake as fd
     import firedrake.adjoint as adj
 
@@ -272,7 +285,8 @@ def solve_point_objective_and_gradient(
                 last_reason = f"{type(exc).__name__}: {exc}"
                 break
 
-            U_prev.assign(U)
+            with adj.stop_annotating():
+                U_prev.assign(U)
 
             # Non-annotated assembly for convergence check itself.
             with adj.stop_annotating():
@@ -291,12 +305,7 @@ def solve_point_objective_and_gradient(
             prev_flux = simulated_flux
             if steady_count >= required_steady:
                 # Point objective in annotated mode: 0.5*(flux-target)^2.
-                target_flux_control = _build_scalar_target_in_control_space(
-                    ctx, target_flux, name="target_flux_value"
-                )
-                target_flux_scalar = fd.assemble(
-                    target_flux_control * fd.dx(domain=ctx["mesh"])
-                )
+                target_flux_scalar = fd.Constant(float(target_flux))
                 simulated_flux_scalar = fd.assemble(observable_form)
                 point_objective = 0.5 * (simulated_flux_scalar - target_flux_scalar) ** 2
 
@@ -325,12 +334,18 @@ def solve_point_objective_and_gradient(
         if not failed_by_exception:
             last_reason = "steady-state criterion not satisfied before max_steps"
 
+    # Provide a nonzero gradient that nudges the optimizer toward reducing
+    # kappa magnitude (away from the failure region) instead of a zero
+    # gradient that gives the optimizer no information.
+    kappa_arr = np.asarray(kappa_list, dtype=float)
+    fail_gradient = fail_penalty * np.sign(kappa_arr) * 0.01
+
     return PointAdjointResult(
         phi_applied=float(phi_applied),
         target_flux=float(target_flux),
         simulated_flux=last_flux,
         objective=float(fail_penalty),
-        gradient=np.zeros(n_species, dtype=float),
+        gradient=fail_gradient,
         converged=False,
         steps_taken=int(last_steps),
         reason=last_reason,

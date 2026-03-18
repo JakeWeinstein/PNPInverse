@@ -19,7 +19,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 try:
     import imageio
-except Exception:
+except ImportError:
     imageio = None
 
 # Save all render outputs under PNPInverse/Renders/

@@ -155,7 +155,6 @@ def _bv_worker_adjoint_tape_pass(
     )
     from FluxCurve.bv_observables import (
         _build_bv_observable_form,
-        _build_bv_scalar_target_in_control_space,
         _bv_gradient_controls_to_array,
     )
 
@@ -238,11 +237,7 @@ def _bv_worker_adjoint_tape_pass(
     )
 
     # Compute adjoint gradient
-    target_ctrl = _build_bv_scalar_target_in_control_space(
-        ctx, target_flux, name="target_flux_value",
-        control_mode=cfg.control_mode,
-    )
-    target_scalar = fd.assemble(target_ctrl * fd.dx(domain=ctx["mesh"]))
+    target_scalar = fd.Constant(float(target_flux))
     sim_scalar = fd.assemble(obs_form)
     point_objective = 0.5 * (sim_scalar - target_scalar) ** 2
 
@@ -337,7 +332,6 @@ def _bv_worker_solve_point(
     from Forward.steady_state import configure_bv_solver_params
     from FluxCurve.bv_observables import (
         _build_bv_observable_form,
-        _build_bv_scalar_target_in_control_space,
         _bv_gradient_controls_to_array,
     )
 
@@ -595,11 +589,7 @@ def _bv_worker_solve_point(
 
     # ---- Single-observable mode (original path) ----
     # Compute adjoint gradient
-    target_ctrl = _build_bv_scalar_target_in_control_space(
-        ctx, target_flux, name="target_flux_value",
-        control_mode=cfg.control_mode,
-    )
-    target_scalar = fd.assemble(target_ctrl * fd.dx(domain=ctx["mesh"]))
+    target_scalar = fd.Constant(float(target_flux))
     sim_scalar = fd.assemble(observable_form)
     point_objective = 0.5 * (sim_scalar - target_scalar) ** 2
 

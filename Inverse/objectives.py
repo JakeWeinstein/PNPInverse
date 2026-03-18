@@ -42,14 +42,15 @@ def make_diffusion_objective_and_grad(
 
     if not c_targets:
         raise ValueError("c_targets must include at least one concentration vector.")
-    phi_placeholder = c_targets[0]
+
+    phi_target = None if "phi" not in target.objective_fields else c_targets[0]
 
     return build_reduced_functional(
         adapter=adapter,
         target=target,
         solver_params=solver_params,
         concentration_targets=c_targets,
-        phi_target=phi_placeholder,
+        phi_target=phi_target,
         blob_initial_condition=blob_ic,
     )
 

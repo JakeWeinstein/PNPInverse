@@ -316,7 +316,7 @@ def evaluate_iv_curve(
             forward_recovery=recovery,
             observable_mode="current_density",
             observable_reaction_index=None,
-            observable_scale=float(deps["I_SCALE"]),
+            observable_scale=float(-deps["I_SCALE"]),
             control_mode="joint",
         )
 
@@ -338,7 +338,7 @@ def evaluate_iv_curve(
             forward_recovery=recovery,
             observable_mode="current_density",
             observable_reaction_index=1,
-            observable_scale=float(deps["I_SCALE"]),
+            observable_scale=float(-deps["I_SCALE"]),
             control_mode="joint",
         )
         peroxide_flux = np.array([
@@ -407,31 +407,32 @@ def compute_full_jacobian(
 
     jacobian = np.zeros((2 * n_voltages, n_params))
 
+    h_rel = h  # treat configured step as a relative perturbation fraction
+
     for j, pname in enumerate(param_names):
         if config.verbose:
             print(f"  [jacobian] Computing d/d({pname}) ...")
 
-        # +h perturbation
-        params_plus = build_perturbed_params(
-            pname, 1.0 + h / true_params[pname], true_params
-        ) if true_params[pname] != 0 else build_perturbed_params(pname, 1.0, true_params)
-        # For Jacobian, we perturb additively: param + h
-        params_plus_add = dict(true_params)
-        params_plus_add[pname] = true_params[pname] + h
+        # Use relative perturbation so small parameters aren't swamped
+        p_val = true_params[pname]
+        h_abs = h_rel * abs(p_val) if abs(p_val) > 1e-15 else h_rel
 
-        params_minus_add = dict(true_params)
-        params_minus_add[pname] = true_params[pname] - h
+        params_plus = dict(true_params)
+        params_plus[pname] = p_val + h_abs
+
+        params_minus = dict(true_params)
+        params_minus[pname] = p_val - h_abs
 
         total_plus, peroxide_plus = evaluate_iv_curve(
-            params_plus_add, voltage_grid, config, deps
+            params_plus, voltage_grid, config, deps
         )
         total_minus, peroxide_minus = evaluate_iv_curve(
-            params_minus_add, voltage_grid, config, deps
+            params_minus, voltage_grid, config, deps
         )
 
         # Central FD
-        jacobian[:n_voltages, j] = (total_plus - total_minus) / (2.0 * h)
-        jacobian[n_voltages:, j] = (peroxide_plus - peroxide_minus) / (2.0 * h)
+        jacobian[:n_voltages, j] = (total_plus - total_minus) / (2.0 * h_abs)
+        jacobian[n_voltages:, j] = (peroxide_plus - peroxide_minus) / (2.0 * h_abs)
 
     return jacobian
 

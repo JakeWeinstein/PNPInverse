@@ -127,6 +127,11 @@ def _build_diffusion_target() -> ParameterTarget:
 
         return eval_cb_post
 
+    def default_bounds_factory(n_species: int):
+        # Bounds are in log-space since the optimizer works with logD controls
+        # log(1e-12) ≈ -27.6, log(1e-6) ≈ -13.8 covers typical diffusivities
+        return [(-30.0, 0.0) for _ in range(n_species)]
+
     return ParameterTarget(
         key="diffusion",
         description="Infer per-species diffusion coefficients D in log-parameter space.",
@@ -134,7 +139,7 @@ def _build_diffusion_target() -> ParameterTarget:
         apply_value_inplace=apply_value_inplace,
         controls_from_context=controls_from_context,
         estimate_from_controls=estimate_from_controls,
-        default_bounds_factory=None,
+        default_bounds_factory=default_bounds_factory,
         eval_cb_pre_factory=None,
         eval_cb_post_factory=eval_cb_post_factory,
     )
@@ -206,7 +211,7 @@ def _build_robin_kappa_target() -> ParameterTarget:
         return [float(ctrl.dat.data[0]) for ctrl in control_list]
 
     def default_bounds_factory(n_species: int):
-        return [[1e-8 for _ in range(n_species)], [None for _ in range(n_species)]]
+        return [(1e-8, None) for _ in range(n_species)]
 
     def eval_cb_post_factory(_ctx: Dict[str, Any]) -> Callable[[float, Any], None]:
         def eval_cb_post(j: float, m: Any) -> None:

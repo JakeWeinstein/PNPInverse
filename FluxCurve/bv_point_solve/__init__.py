@@ -53,6 +53,8 @@ from .cache import (
     _cross_eval_cache,
     _all_points_cache,
     _cache_populated,
+    _cache_mesh_dof_count,
+    _validate_cache_mesh,
     _parallel_pool,
     _SER_GROWTH_CAP,
     _SER_SHRINK,
@@ -254,6 +256,9 @@ def solve_bv_curve_points_with_warmstart(
     # n_species.  These are reused for every point.
     shared_mesh = base_ctx["mesh"]
     shared_W = base_ctx["W"]
+
+    # Invalidate caches if the mesh has changed (e.g. coarse -> fine).
+    _cache_mod._validate_cache_mesh(shared_W.dim())
 
     # P7: Checkpoint-restart fast path.
     # If we have cached solutions for all points from a previous full sweep,
@@ -603,7 +608,8 @@ def solve_bv_curve_points_with_warmstart(
                     last_reason = f"{type(exc).__name__}: {exc}"
                     break
 
-                U_prev.assign(U)
+                with adj.stop_annotating():
+                    U_prev.assign(U)
 
                 # Non-annotated assembly for convergence check
                 with adj.stop_annotating():
@@ -746,12 +752,28 @@ def solve_bv_curve_points_with_warmstart(
                 last_reason = "steady-state criterion not satisfied before max_steps"
 
         if point_result is None:
+            # Build a nonzero gradient pointing toward reducing control
+            # magnitude so the optimizer has a direction to escape the
+            # failure region instead of getting a zero gradient.
+            _ctrl_parts = []
+            if control_mode in ("k0", "joint", "full"):
+                _ctrl_parts.extend(k0_list)
+            if control_mode in ("alpha", "joint", "full"):
+                _ctrl_parts.extend(alpha_list)
+            if control_mode in ("steric", "full"):
+                _ctrl_parts.extend(a_list if a_list is not None else [])
+            _ctrl_arr = np.asarray(
+                _ctrl_parts if _ctrl_parts else [0.0] * n_controls,
+                dtype=float,
+            )
+            _fail_grad = fail_penalty * np.sign(_ctrl_arr) * 0.01
+
             point_result = PointAdjointResult(
                 phi_applied=phi_applied_i,
                 target_flux=target_i,
                 simulated_flux=simulated_flux,
                 objective=float(fail_penalty),
-                gradient=np.zeros(n_controls, dtype=float),
+                gradient=_fail_grad,
                 converged=False,
                 steps_taken=steps_taken,
                 reason=last_reason if 'last_reason' in dir() else "all attempts failed",

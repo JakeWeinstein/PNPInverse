@@ -20,7 +20,6 @@ from FluxCurve.config import ForwardRecoveryConfig
 from FluxCurve.results import PointAdjointResult
 from FluxCurve.bv_observables import (
     _build_bv_observable_form,
-    _build_bv_scalar_target_in_control_space,
     _bv_gradient_controls_to_array,
 )
 
@@ -233,10 +232,11 @@ def _solve_cached_fast_path(
             steps_taken = step
             try:
                 solver.solve()
-            except Exception:
+            except fd.ConvergenceError:
                 failed = True
                 break
-            U_prev.assign(U)
+            with adj.stop_annotating():
+                U_prev.assign(U)
 
             with adj.stop_annotating():
                 simulated_flux = float(fd.assemble(observable_form))
@@ -273,11 +273,7 @@ def _solve_cached_fast_path(
             return None
 
         # Compute adjoint gradient
-        target_ctrl = _build_bv_scalar_target_in_control_space(
-            ctx, target_i, name="target_flux_value",
-            control_mode=control_mode,
-        )
-        target_scalar = fd.assemble(target_ctrl * fd.dx(domain=ctx["mesh"]))
+        target_scalar = fd.Constant(float(target_i))
         sim_scalar = fd.assemble(observable_form)
         point_objective = 0.5 * (sim_scalar - target_scalar) ** 2
 
@@ -287,8 +283,10 @@ def _solve_cached_fast_path(
             point_gradient = _bv_gradient_controls_to_array(
                 rf.derivative(), n_controls
             )
-        except Exception:
-            return None  # adjoint failed, fall back
+        except Exception as exc:
+            import warnings
+            warnings.warn(f"Adjoint gradient computation failed: {exc}")
+            return None
 
         # Update cache with new solution
         carry_U_data = tuple(d.data_ro.copy() for d in U.dat)

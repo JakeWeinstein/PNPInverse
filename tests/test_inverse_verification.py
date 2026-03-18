@@ -42,8 +42,6 @@ import os
 import sys
 from datetime import datetime, timezone
 
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_THIS_DIR)
 if _ROOT not in sys.path:
@@ -195,10 +193,19 @@ def pde_targets(nn_ensemble):
     cache_path = os.path.join(_OUTPUT_DIR, "pde_targets_cache.npz")
 
     def _fill_nan(target_cd, phi, mdl):
-        """Fill NaN values with surrogate predictions (failed PDE points)."""
+        """Fill NaN values with surrogate predictions (failed PDE points).
+
+        Raises AssertionError if more than 10% of points are NaN to prevent
+        an inverse crime (surrogate predictions masquerading as PDE targets).
+        """
         nan_mask = np.isnan(target_cd)
         n_nan = int(np.sum(nan_mask))
         if n_nan > 0:
+            nan_frac = nan_mask.sum() / len(nan_mask)
+            assert nan_frac <= 0.10, (
+                f"Too many PDE target points failed ({nan_mask.sum()}/{len(nan_mask)}={nan_frac:.1%}). "
+                f"Surrogate fallback would create an inverse crime."
+            )
             surr_pred = mdl.predict(K0_HAT_R1, K0_HAT_R2, ALPHA_R1, ALPHA_R2)
             target_cd[nan_mask] = surr_pred["current_density"][nan_mask]
             print(f"  [pde_targets] Filled {n_nan} NaN point(s) "
@@ -318,6 +325,15 @@ print("PDE_TARGETS_GENERATED_OK")
 # Fixtures (module-scoped -- expensive NN loading runs once)
 # ---------------------------------------------------------------------------
 
+def test_data_availability_warning():
+    """Warn if surrogate model data is not available for V&V tests."""
+    if not os.path.isdir(_ENSEMBLE_DIR):
+        pytest.skip(
+            f"SKIPPING V&V TESTS: Surrogate model data not found at {_ENSEMBLE_DIR}. "
+            "Run training pipeline first to generate required test artifacts."
+        )
+
+
 @pytest.fixture(scope="module")
 def nn_ensemble():
     """Load the NN ensemble surrogate and build a SurrogateObjective at true params.
@@ -326,7 +342,10 @@ def nn_ensemble():
     target curves so tests can reuse them without re-loading.
     """
     if not os.path.isdir(_ENSEMBLE_DIR):
-        pytest.skip("D3-deeper ensemble not found on disk")
+        pytest.skip(
+            f"SKIPPING V&V TESTS: D3-deeper ensemble not found at {_ENSEMBLE_DIR}. "
+            "Run training pipeline first to generate required test artifacts."
+        )
 
     model = load_nn_ensemble(_ENSEMBLE_DIR, n_members=5, device="cpu")
 

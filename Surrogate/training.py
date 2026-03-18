@@ -51,6 +51,7 @@ def generate_training_data_single(
     fail_penalty: float = 1e9,
     initial_solutions: Optional[Dict[int, tuple]] = None,
     return_solutions: bool = False,
+    forward_recovery: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Run one I-V curve at the given (k0, alpha) parameters.
 
@@ -83,6 +84,9 @@ def generate_training_data_single(
     return_solutions : bool
         If True, extract converged U_data from the cache and include it in
         the return dict as ``'converged_solutions'``.
+    forward_recovery : ForwardRecoveryConfig or None
+        Override the default recovery config.  If None, uses a standard
+        config with 4 attempts.
 
     Returns
     -------
@@ -100,11 +104,14 @@ def generate_training_data_single(
     from FluxCurve.bv_point_solve import cache as _cache_mod
     from FluxCurve.config import ForwardRecoveryConfig
 
-    recovery = ForwardRecoveryConfig(
-        max_attempts=4, max_it_only_attempts=2,
-        anisotropy_only_attempts=0, tolerance_relax_attempts=1,
-        max_it_growth=1.5, max_it_cap=500,
-    )
+    if forward_recovery is not None:
+        recovery = forward_recovery
+    else:
+        recovery = ForwardRecoveryConfig(
+            max_attempts=4, max_it_only_attempts=2,
+            anisotropy_only_attempts=0, tolerance_relax_attempts=1,
+            max_it_growth=1.5, max_it_cap=500,
+        )
 
     n_eta = len(phi_applied_values)
     dummy_target = np.zeros(n_eta, dtype=float)
@@ -206,14 +213,20 @@ def _interpolate_failed_points(
     if n_good < 2 or n_good == len(flux):
         return result
 
-    # Use numpy interp for 1D interpolation
+    # Use numpy interp for 1D interpolation.
+    # np.interp requires xp to be monotonically increasing, but phi_applied
+    # may be descending (e.g. sorted voltage grid).  Sort the good points.
     good_idx = np.where(good)[0]
     bad_idx = np.where(~good)[0]
 
+    xp = phi_applied[good_idx]
+    fp = flux[good_idx]
+    sort_order = np.argsort(xp)
+
     result[bad_idx] = np.interp(
         phi_applied[bad_idx],
-        phi_applied[good_idx],
-        flux[good_idx],
+        xp[sort_order],
+        fp[sort_order],
     )
     return result
 
@@ -486,10 +499,11 @@ def _save_checkpoint(
     phi_applied: np.ndarray,
     n_completed: int,
 ) -> None:
-    """Save a checkpoint .npz file."""
+    """Save a checkpoint .npz file atomically."""
     ckpt_path = output_path + ".checkpoint.npz"
+    tmp_path = ckpt_path + ".tmp"
     np.savez_compressed(
-        ckpt_path,
+        tmp_path,
         parameters=parameters,
         current_density=cd,
         peroxide_current=pc,
@@ -498,6 +512,7 @@ def _save_checkpoint(
         phi_applied=phi_applied,
         n_completed=n_completed,
     )
+    os.replace(tmp_path, ckpt_path)  # atomic on POSIX
 
 
 # ======================================================================

@@ -69,7 +69,7 @@ All flags live in ``solver_params[10]["nondim"]``:
 
 from __future__ import annotations
 
-import copy
+import warnings
 from typing import Any, List, Mapping, Optional, Sequence
 
 import numpy as np
@@ -113,8 +113,14 @@ def _bool(value: Any) -> bool:
         norm = value.strip().lower()
         if norm in {"1", "true", "yes", "on"}:
             return True
-        if norm in {"0", "false", "no", "off"}:
+        if norm in {"0", "false", "no", "off", ""}:
             return False
+        raise ValueError(
+            f"Cannot interpret {value!r} as bool. "
+            f"Use true/false, yes/no, on/off, or 1/0."
+        )
+    if value is None:
+        raise ValueError("Cannot interpret None as bool; provide an explicit value.")
     return bool(value)
 
 
@@ -329,6 +335,35 @@ def build_model_scaling(
         "nondim.kappa_scale_m_s",
     )
 
+    # Warn when inputs are marked dimensionless but no explicit scale was provided,
+    # because auto-computed scales derived from already-dimensionless values are
+    # unlikely to be meaningful.
+    if d_inputs_dimless and "diffusivity_scale_m2_s" not in nondim_cfg:
+        warnings.warn(
+            "diffusivity_inputs_are_dimensionless=True but no explicit "
+            "diffusivity_scale_m2_s provided; auto-computed scale may be meaningless."
+        )
+    if c_inputs_dimless and "concentration_scale_mol_m3" not in nondim_cfg:
+        warnings.warn(
+            "concentration_inputs_are_dimensionless=True but no explicit "
+            "concentration_scale_mol_m3 provided; auto-computed scale may be meaningless."
+        )
+    if phi_inputs_dimless and "potential_scale_v" not in nondim_cfg:
+        warnings.warn(
+            "potential_inputs_are_dimensionless=True but no explicit "
+            "potential_scale_v provided; auto-computed scale may be meaningless."
+        )
+    if time_inputs_dimless and "time_scale_s" not in nondim_cfg:
+        warnings.warn(
+            "time_inputs_are_dimensionless=True but no explicit "
+            "time_scale_s provided; auto-computed scale may be meaningless."
+        )
+    if kappa_inputs_dimless and "kappa_scale_m_s" not in nondim_cfg:
+        warnings.warn(
+            "kappa_inputs_are_dimensionless=True but no explicit "
+            "kappa_scale_m_s provided; auto-computed scale may be meaningless."
+        )
+
     # Apply scaling to each input type
     D_model = D_raw if d_inputs_dimless else [v / diffusivity_scale for v in D_raw]
     if any(v <= 0.0 for v in D_model):
@@ -373,6 +408,8 @@ def build_model_scaling(
         )
     )
 
+    # NOTE: This is the single-electron current density scale. For multi-electron
+    # reactions, callers must multiply by n_electrons (e.g., n_e * current_density_scale).
     flux_scale = diffusivity_scale * concentration_scale / length_scale
     current_density_scale = FARADAY_CONSTANT * flux_scale
 

@@ -16,6 +16,7 @@ _cross_eval_cache: Dict[int, tuple] = {}
 # independently using its cached IC (no sequential sweep needed).
 _all_points_cache: Dict[int, tuple] = {}
 _cache_populated: bool = False
+_cache_mesh_dof_count: int = -1
 
 # P8: Module-level parallel pool for fast-path point solves.
 # Set by set_parallel_pool() / cleared by close_parallel_pool().
@@ -45,10 +46,24 @@ def _clear_caches() -> None:
     Call between multi-fidelity phases (coarse -> fine) to prevent stale
     solutions from a different mesh being reused.
     """
-    global _cache_populated
+    global _cache_populated, _cache_mesh_dof_count
     _cross_eval_cache.clear()
     _all_points_cache.clear()
     _cache_populated = False
+    _cache_mesh_dof_count = -1
+
+
+def _validate_cache_mesh(mesh_dof_count: int) -> None:
+    """Invalidate caches if the mesh DOF count has changed.
+
+    Must be called before using cached solutions.  If the current mesh
+    has a different DOF count than the mesh that populated the cache,
+    the cached solutions are stale and must be discarded.
+    """
+    global _cache_mesh_dof_count
+    if _cache_mesh_dof_count != -1 and _cache_mesh_dof_count != mesh_dof_count:
+        _clear_caches()
+    _cache_mesh_dof_count = mesh_dof_count
 
 
 def set_parallel_pool(pool: Any) -> None:
@@ -63,6 +78,7 @@ def close_parallel_pool() -> None:
     if _parallel_pool is not None:
         try:
             _parallel_pool.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            import warnings
+            warnings.warn(f"Parallel pool shutdown failed: {exc}")
         _parallel_pool = None

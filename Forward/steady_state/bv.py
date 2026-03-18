@@ -44,12 +44,15 @@ def configure_bv_solver_params(
     if isinstance(params, _SP):
         opts = _copy.deepcopy(params.solver_options)
 
+        # Hoist bv_cfg so both k0 and alpha blocks mutate the same dict
+        # that lives inside opts (setdefault ensures it persists).
+        bv_cfg = opts.setdefault("bv_bc", {})
+        if not isinstance(bv_cfg, dict):
+            raise ValueError("solver_options['bv_bc'] must be a dict.")
+
         if k0_values is not None:
             if not isinstance(opts, dict):
                 raise ValueError("solver_options must be a dict when setting BV k0.")
-            bv_cfg = opts.get("bv_bc", {})
-            if not isinstance(bv_cfg, dict):
-                raise ValueError("solver_options['bv_bc'] must be a dict when setting BV k0.")
             k0_list = [float(v) for v in k0_values]
             reactions = bv_cfg.get("reactions")
             if reactions is not None and isinstance(reactions, list):
@@ -64,9 +67,6 @@ def configure_bv_solver_params(
         if alpha_values is not None:
             if not isinstance(opts, dict):
                 raise ValueError("solver_options must be a dict when setting BV alpha.")
-            bv_cfg = opts.get("bv_bc", {})
-            if not isinstance(bv_cfg, dict):
-                raise ValueError("solver_options['bv_bc'] must be a dict when setting BV alpha.")
             alpha_list = [float(v) for v in alpha_values]
             reactions = bv_cfg.get("reactions")
             if reactions is not None and isinstance(reactions, list):
@@ -326,6 +326,8 @@ def sweep_phi_applied_steady_bv_flux(
     as IC for the next point.  This is essential for BV convergence at
     large overpotentials.
     """
+    if len(phi_applied_values) == 0:
+        raise ValueError("phi_applied_values must be non-empty")
     from Forward.bv_solver import (
         build_context as bv_build_context,
         build_forms as bv_build_forms,

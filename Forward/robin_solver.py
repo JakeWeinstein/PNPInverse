@@ -127,7 +127,7 @@ def build_forms(ctx: dict, solver_params) -> dict:
     for i in range(n):
         kappa_funcs[i].assign(float(robin_model["kappa_vals"][i]))
 
-    z = [fd.Constant(int(z_vals[i])) for i in range(n)]
+    z = [fd.Constant(float(z_vals[i])) for i in range(n)]
 
     U = ctx["U"]
     U_prev = ctx["U_prev"]
@@ -276,7 +276,7 @@ def forsolve(ctx: dict, solver_params, print_interval: int = 100):
 
     dt_model = float(scaling.get("dt_model", dt))
     t_end_model = float(scaling.get("t_end_model", t_end))
-    num_steps = int(t_end_model / dt_model)
+    num_steps = max(1, int(round(t_end_model / dt_model)))
 
     J = fd.derivative(F_res, U)
     problem = fd.NonlinearVariationalProblem(F_res, U, bcs=bcs, J=J)

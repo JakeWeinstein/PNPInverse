@@ -25,7 +25,7 @@ from Nondim.constants import FARADAY_CONSTANT
 
 try:
     import firedrake.adjoint as adj
-except Exception:
+except ImportError:
     adj = None
 
 
@@ -103,6 +103,13 @@ def observed_flux_from_species_flux(
 
     if mode == "total_species":
         return float(np.sum(f))
+
+    if mode in ("total_charge", "charge_proxy_no_f") and all(z == 0 for z in z_vals):
+        import warnings
+        warnings.warn(
+            f"Observable mode '{mode}' with all-neutral species (z=0) produces zero flux. "
+            f"Consider using 'total_species' or 'species' mode instead."
+        )
 
     if mode == "total_charge":
         z = np.asarray([float(v) for v in z_vals], dtype=float)

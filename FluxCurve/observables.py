@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
+import warnings
+
 import numpy as np
 
 from Nondim.constants import FARADAY_CONSTANT
@@ -119,6 +121,12 @@ def _gradient_controls_to_array(raw_gradient: object, n_species: int) -> np.ndar
         grads = list(raw_gradient)
     else:
         grads = [raw_gradient]
+
+    if len(grads) != n_species:
+        raise ValueError(
+            f"_gradient_controls_to_array: expected {n_species} gradient components "
+            f"but got {len(grads)}. This indicates a control/adjoint tape mismatch."
+        )
 
     out = np.zeros(n_species, dtype=float)
     for i in range(min(n_species, len(grads))):

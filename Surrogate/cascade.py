@@ -34,6 +34,7 @@ import numpy as np
 from scipy.optimize import minimize
 
 from Surrogate.surrogate_model import BVSurrogateModel
+from Surrogate.objectives import _has_autograd
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +161,9 @@ def _make_subset_objective_fn(
     Returns (objective_fn, gradient_fn, eval_counter_dict) where
     eval_counter_dict["n"] tracks the number of surrogate evaluations.
     The control vector is [log10(k0_1), log10(k0_2), alpha_1, alpha_2].
+
+    When the surrogate supports ``predict_torch()``, gradients are computed
+    via PyTorch autograd instead of finite differences.
     """
     if subset_idx is not None:
         tgt_cd = target_cd[subset_idx]
@@ -172,6 +176,68 @@ def _make_subset_objective_fn(
     valid_pc = ~np.isnan(tgt_pc)
     counter = {"n": 0}
 
+    # ----- Autograd path (NN / ensemble surrogates) -----
+    if _has_autograd(surrogate):
+        import torch
+
+        # Cache target tensors
+        _target_cd_t = torch.tensor(tgt_cd[valid_cd], dtype=torch.float64)
+        _target_pc_t = torch.tensor(tgt_pc[valid_pc], dtype=torch.float64)
+        _valid_cd_idx = torch.tensor(np.where(valid_cd)[0], dtype=torch.long)
+        _valid_pc_idx = torch.tensor(np.where(valid_pc)[0], dtype=torch.long)
+        _subset_idx_t = (
+            torch.tensor(subset_idx, dtype=torch.long)
+            if subset_idx is not None
+            else None
+        )
+
+        def _autograd_obj_and_grad(x: np.ndarray):
+            x_t = torch.tensor(
+                np.asarray(x, dtype=np.float64),
+                dtype=torch.float64,
+                requires_grad=True,
+            )
+            y = surrogate.predict_torch(x_t)
+            n_eta = len(y) // 2
+
+            if _subset_idx_t is not None:
+                cd_sim = y[_subset_idx_t]
+                pc_sim = y[n_eta + _subset_idx_t]
+            else:
+                cd_sim = y[:n_eta]
+                pc_sim = y[n_eta:]
+
+            cd_diff = cd_sim[_valid_cd_idx] - _target_cd_t
+            pc_diff = pc_sim[_valid_pc_idx] - _target_pc_t
+            J = (
+                0.5 * torch.sum(cd_diff ** 2)
+                + secondary_weight * 0.5 * torch.sum(pc_diff ** 2)
+            )
+            J.backward()
+            counter["n"] += 1
+            return float(J.detach()), x_t.grad.numpy().copy()
+
+        _cache = {}
+
+        def _objective(x: np.ndarray) -> float:
+            key = x.tobytes()
+            if key not in _cache:
+                J, g = _autograd_obj_and_grad(x)
+                _cache.clear()
+                _cache[key] = (J, g)
+            return _cache[key][0]
+
+        def _gradient(x: np.ndarray, fd_step: float = 1e-5) -> np.ndarray:
+            key = x.tobytes()
+            if key not in _cache:
+                J, g = _autograd_obj_and_grad(x)
+                _cache.clear()
+                _cache[key] = (J, g)
+            return _cache[key][1]
+
+        return _objective, _gradient, counter
+
+    # ----- Finite-difference path (RBF / POD surrogates) -----
     def _objective(x: np.ndarray) -> float:
         k0_1, k0_2 = 10.0 ** x[0], 10.0 ** x[1]
         alpha_1, alpha_2 = float(x[2]), float(x[3])
@@ -214,6 +280,9 @@ def _make_subset_block_objective_fn(
 
     The control vector is [log10(k0_r), alpha_r] for the free reaction.
     Returns (objective_fn, gradient_fn, eval_counter_dict).
+
+    When the surrogate supports ``predict_torch()``, gradients are computed
+    via PyTorch autograd instead of finite differences.
     """
     if subset_idx is not None:
         tgt_cd = target_cd[subset_idx]
@@ -226,6 +295,81 @@ def _make_subset_block_objective_fn(
     valid_pc = ~np.isnan(tgt_pc)
     counter = {"n": 0}
 
+    # ----- Autograd path (NN / ensemble surrogates) -----
+    if _has_autograd(surrogate):
+        import torch
+
+        _target_cd_t = torch.tensor(tgt_cd[valid_cd], dtype=torch.float64)
+        _target_pc_t = torch.tensor(tgt_pc[valid_pc], dtype=torch.float64)
+        _valid_cd_idx = torch.tensor(np.where(valid_cd)[0], dtype=torch.long)
+        _valid_pc_idx = torch.tensor(np.where(valid_pc)[0], dtype=torch.long)
+        _subset_idx_t = (
+            torch.tensor(subset_idx, dtype=torch.long)
+            if subset_idx is not None
+            else None
+        )
+        _log_k0_other = torch.tensor(
+            np.log10(max(fixed_k0_other, 1e-30)), dtype=torch.float64,
+        )
+        _alpha_other = torch.tensor(fixed_alpha_other, dtype=torch.float64)
+
+        def _autograd_obj_and_grad(x: np.ndarray):
+            x_t = torch.tensor(
+                np.asarray(x, dtype=np.float64),
+                dtype=torch.float64,
+                requires_grad=True,
+            )
+            # Build full 4D input
+            if reaction_index == 0:
+                x_full = torch.stack([
+                    x_t[0], _log_k0_other, x_t[1], _alpha_other,
+                ])
+            else:
+                x_full = torch.stack([
+                    _log_k0_other, x_t[0], _alpha_other, x_t[1],
+                ])
+
+            y = surrogate.predict_torch(x_full)
+            n_eta = len(y) // 2
+
+            if _subset_idx_t is not None:
+                cd_sim = y[_subset_idx_t]
+                pc_sim = y[n_eta + _subset_idx_t]
+            else:
+                cd_sim = y[:n_eta]
+                pc_sim = y[n_eta:]
+
+            cd_diff = cd_sim[_valid_cd_idx] - _target_cd_t
+            pc_diff = pc_sim[_valid_pc_idx] - _target_pc_t
+            J = (
+                0.5 * torch.sum(cd_diff ** 2)
+                + secondary_weight * 0.5 * torch.sum(pc_diff ** 2)
+            )
+            J.backward()
+            counter["n"] += 1
+            return float(J.detach()), x_t.grad.numpy().copy()
+
+        _cache = {}
+
+        def _objective(x: np.ndarray) -> float:
+            key = x.tobytes()
+            if key not in _cache:
+                J, g = _autograd_obj_and_grad(x)
+                _cache.clear()
+                _cache[key] = (J, g)
+            return _cache[key][0]
+
+        def _gradient(x: np.ndarray, fd_step: float = 1e-5) -> np.ndarray:
+            key = x.tobytes()
+            if key not in _cache:
+                J, g = _autograd_obj_and_grad(x)
+                _cache.clear()
+                _cache[key] = (J, g)
+            return _cache[key][1]
+
+        return _objective, _gradient, counter
+
+    # ----- Finite-difference path (RBF / POD surrogates) -----
     def _to_full(x: np.ndarray) -> tuple:
         k0_r = 10.0 ** x[0]
         alpha_r = float(x[1])
@@ -527,8 +671,8 @@ def run_cascade_inference(
         surrogate, target_cd, target_pc,
         fixed_k0_1=p1.k0_1,
         fixed_alpha_1=p1.alpha_1,
-        initial_k0_2=initial_k0[1],
-        initial_alpha_2=initial_alpha[1],
+        initial_k0_2=p1.k0_2,
+        initial_alpha_2=p1.alpha_2,
         bounds_log_k0_2=bounds_log_k0_2,
         bounds_alpha=bounds_alpha,
         config=config,

@@ -255,6 +255,7 @@ class NNSurrogateModel:
         val_cd: np.ndarray | None = None,
         val_pc: np.ndarray | None = None,
         verbose: bool = True,
+        warm_start_state_dict: dict | None = None,
     ) -> "NNSurrogateModel":
         """Fit the ResNet-MLP from training data.
 
@@ -282,6 +283,10 @@ class NNSurrogateModel:
             Validation data. If None, 15% of training data is split off.
         verbose : bool
             Print training progress.
+        warm_start_state_dict : dict or None
+            If provided, load this state dict into the model after
+            construction, overwriting random initialization. Used for
+            ISMO warm-start retraining with analytically corrected weights.
 
         Returns
         -------
@@ -294,9 +299,12 @@ class NNSurrogateModel:
         self._phi_applied = phi_applied.copy()
         n_out = 2 * self._n_eta
 
-        assert parameters.shape == (N, 4), f"Expected (N,4), got {parameters.shape}"
-        assert current_density.shape == (N, self._n_eta)
-        assert peroxide_current.shape == (N, self._n_eta)
+        if parameters.shape[1] != 4:
+            raise ValueError(f"Expected parameters with 4 columns, got shape {parameters.shape}")
+        if current_density.shape != (parameters.shape[0], self._n_eta):
+            raise ValueError(f"current_density shape mismatch: expected ({parameters.shape[0]}, {self._n_eta}), got {current_density.shape}")
+        if peroxide_current.shape != (parameters.shape[0], self._n_eta):
+            raise ValueError(f"peroxide_current shape mismatch: expected ({parameters.shape[0]}, {self._n_eta}), got {peroxide_current.shape}")
 
         # Store training bounds
         self.training_bounds = {
@@ -357,6 +365,9 @@ class NNSurrogateModel:
             n_in=4, n_out=n_out,
             hidden=self._hidden, n_blocks=self._n_blocks,
         ).to(device)
+
+        if warm_start_state_dict is not None:
+            self._model.load_state_dict(warm_start_state_dict)
 
         optimizer = torch.optim.AdamW(
             self._model.parameters(), lr=lr, weight_decay=weight_decay,
@@ -513,6 +524,75 @@ class NNSurrogateModel:
             "peroxide_current": pc,
             "phi_applied": self._phi_applied.copy(),
         }
+
+    # -----------------------------------------------------------------
+    # predict_torch() — differentiable forward pass for autograd
+    # -----------------------------------------------------------------
+
+    def predict_torch(self, x_logspace: "torch.Tensor") -> "torch.Tensor":
+        """Forward pass returning a differentiable torch tensor.
+
+        Parameters
+        ----------
+        x_logspace : torch.Tensor of shape (4,), requires_grad=True
+            [log10(k0_1), log10(k0_2), alpha_1, alpha_2] in log-space.
+            Note: k0 values are ALREADY in log10 space (matching optimizer space).
+
+        Returns
+        -------
+        torch.Tensor of shape (2*n_eta,)
+            Concatenated [current_density(n_eta), peroxide_current(n_eta)]
+            in physical units, with autograd graph intact.
+        """
+        if not self._is_fitted:
+            raise RuntimeError("Model has not been fitted yet. Call fit() first.")
+
+        _check_torch()
+
+        # Cache z-score normalizer tensors on first call.
+        # Store both float32 (for normal inference) and float64 (for autograd)
+        # to avoid repeated casting.
+        if not hasattr(self, "_input_mean_t"):
+            self._input_mean_t = torch.tensor(
+                self._input_normalizer.mean, dtype=torch.float32,
+            )
+            self._input_std_t = torch.tensor(
+                self._input_normalizer.std, dtype=torch.float32,
+            )
+            self._out_mean_t = torch.tensor(
+                self._output_normalizer.mean, dtype=torch.float32,
+            )
+            self._out_std_t = torch.tensor(
+                self._output_normalizer.std, dtype=torch.float32,
+            )
+            self._input_mean_t64 = torch.tensor(
+                self._input_normalizer.mean, dtype=torch.float64,
+            )
+            self._input_std_t64 = torch.tensor(
+                self._input_normalizer.std, dtype=torch.float64,
+            )
+            self._out_mean_t64 = torch.tensor(
+                self._output_normalizer.mean, dtype=torch.float64,
+            )
+            self._out_std_t64 = torch.tensor(
+                self._output_normalizer.std, dtype=torch.float64,
+            )
+
+        if x_logspace.requires_grad:
+            # Stay in float64 throughout to preserve gradient accuracy
+            z = (x_logspace - self._input_mean_t64) / self._input_std_t64
+            y_norm = self._model.double()(z.unsqueeze(0)).squeeze(0)
+            y = y_norm * self._out_std_t64 + self._out_mean_t64
+            # Restore model back to float32 for normal inference
+            self._model.float()
+            return y
+        else:
+            # Normal inference path: use float32
+            x_f32 = x_logspace.float()
+            z = (x_f32 - self._input_mean_t) / self._input_std_t
+            y_norm = self._model(z.unsqueeze(0)).squeeze(0)
+            y = y_norm * self._out_std_t + self._out_mean_t
+            return y.double()
 
     # -----------------------------------------------------------------
     # Properties (API-compatible with BVSurrogateModel)

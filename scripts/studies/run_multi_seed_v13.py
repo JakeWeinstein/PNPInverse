@@ -29,6 +29,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -179,6 +180,7 @@ def run_single_seed(seed: int, config: MultiSeedConfig) -> dict | None:
     ]
     _log("SEED", f"Running seed {seed}: {' '.join(cmd)}")
 
+    start_time = time.time()
     try:
         result = subprocess.run(
             cmd,
@@ -197,9 +199,23 @@ def run_single_seed(seed: int, config: MultiSeedConfig) -> dict | None:
         return None
 
     # Parse the output CSV
+    # NOTE: Each seed invocation writes to the same CSV path. Seeds are run
+    # sequentially, so this is safe in the current single-threaded design.
+    # Do NOT parallelize seed runs without per-seed output directories.
     csv_path = os.path.join(
         _ROOT, "StudyResults", "master_inference_v13", "master_comparison_v13.csv"
     )
+
+    # Verify the CSV was actually written by *this* subprocess run,
+    # not left over from a previous invocation.
+    if os.path.isfile(csv_path):
+        csv_mtime = os.path.getmtime(csv_path)
+        if csv_mtime < start_time:
+            raise RuntimeError(
+                f"CSV {csv_path} was not updated by the subprocess "
+                f"(stale from previous run)"
+            )
+
     p2_result = parse_v13_csv(csv_path)
     if p2_result is not None:
         p2_result["seed"] = seed

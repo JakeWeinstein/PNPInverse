@@ -13,6 +13,17 @@ import numpy as np
 
 
 # ---------------------------------------------------------------------------
+# KMP_DUPLICATE_LIB_OK — set once at session start so individual test
+# modules do not need to set it at import time.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True, scope="session")
+def _set_kmp_env():
+    """Prevent KMP_DUPLICATE_LIB_OK from being set scattered across test files."""
+    os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
+
+# ---------------------------------------------------------------------------
 # Custom pytest command-line options
 # ---------------------------------------------------------------------------
 

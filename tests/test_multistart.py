@@ -329,14 +329,15 @@ class TestRunMultistartInference:
         # ambiguity: changing k0 while adjusting alpha can produce similar curves.
         # The loss is the reliable metric -- it should be near-zero for noiseless
         # data even if individual parameters are not perfectly recovered.
-        assert result.best_loss < 1e-2, (
+        assert result.best_loss < 1e-4, (
             f"Loss {result.best_loss:.4e} too large for noiseless data"
         )
 
-        # At least some parameters should be reasonably well recovered
+        # With noiseless surrogate-on-surrogate data, parameters should be
+        # tightly recovered.  The old 100% threshold was meaningless.
         max_err = max(k0_1_err, k0_2_err, alpha_1_err, alpha_2_err)
-        assert max_err < 1.0, (
-            f"Max parameter error {max_err*100:.1f}% exceeds 100% -- "
+        assert max_err < 0.15, (
+            f"Max parameter error {max_err*100:.1f}% exceeds 15% -- "
             f"k0_1={k0_1_err*100:.1f}%, k0_2={k0_2_err*100:.1f}%, "
             f"a1={alpha_1_err*100:.1f}%, a2={alpha_2_err*100:.1f}%"
         )

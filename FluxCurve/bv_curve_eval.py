@@ -29,6 +29,8 @@ def evaluate_bv_curve_objective_and_gradient(
     Calls :func:`solve_bv_curve_points_with_warmstart` to get all point
     results (already solved sequentially with warm-start), then aggregates.
     """
+    if len(phi_applied_values) == 0:
+        raise ValueError("phi_applied_values must be non-empty")
     if control_mode == "k0":
         n_controls = int(k0_values.size)
     elif control_mode == "alpha":
@@ -76,6 +78,7 @@ def evaluate_bv_curve_objective_and_gradient(
                 total_gradient += point.gradient
             else:
                 n_failed += 1
+                total_gradient += point.gradient  # Include fail-penalty gradient
 
         return CurveAdjointResult(
             objective=float(total_objective),
@@ -289,6 +292,7 @@ def evaluate_bv_multi_observable_objective_and_gradient(
                         total_grad_primary += pt.gradient
                     else:
                         n_failed_primary += 1
+                        total_grad_primary += pt.gradient  # Include fail-penalty gradient
                 else:
                     n_failed_primary += 1
 
@@ -315,6 +319,7 @@ def evaluate_bv_multi_observable_objective_and_gradient(
                         total_grad_secondary += pt.gradient
                     else:
                         n_failed_secondary += 1
+                        total_grad_secondary += pt.gradient  # Include fail-penalty gradient
                 else:
                     n_failed_secondary += 1
 
@@ -452,7 +457,12 @@ def evaluate_bv_multi_ph_objective_and_gradient(
         counterion_idx = cond.get("counterion_species_index", None)
         if counterion_idx is not None:
             bulk_concs[int(counterion_idx)] = c_hp_hat
-        cond_request.base_solver_params[8] = bulk_concs
+        _bsp = cond_request.base_solver_params
+        if hasattr(_bsp, 'with_c0_vals'):
+            cond_request.base_solver_params = _bsp.with_c0_vals(bulk_concs)
+            _bsp = cond_request.base_solver_params
+        else:
+            _bsp[8] = bulk_concs
         # Also update the bv_bc cathodic_conc_factors c_ref_nondim for H+
         _opts = _bsp.solver_options if hasattr(_bsp, 'solver_options') else _bsp[10]
         bv_cfg = _opts.get("bv_bc", {})

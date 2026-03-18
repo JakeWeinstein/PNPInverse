@@ -20,12 +20,15 @@ Implements the same public API as BVSurrogateModel:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import pickle
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 try:
     import chaospy as cp
@@ -357,15 +360,12 @@ class PCESurrogateModel:
         self._n_eta = phi_applied.shape[0]
         self._phi_applied = phi_applied.copy()
 
-        assert parameters.shape == (N, 4), (
-            f"Expected (N,4), got {parameters.shape}"
-        )
-        assert current_density.shape == (N, self._n_eta), (
-            f"Expected ({N},{self._n_eta}), got {current_density.shape}"
-        )
-        assert peroxide_current.shape == (N, self._n_eta), (
-            f"Expected ({N},{self._n_eta}), got {peroxide_current.shape}"
-        )
+        if parameters.shape[1] != 4:
+            raise ValueError(f"Expected parameters with 4 columns, got shape {parameters.shape}")
+        if current_density.shape != (N, self._n_eta):
+            raise ValueError(f"current_density shape mismatch: expected ({N}, {self._n_eta}), got {current_density.shape}")
+        if peroxide_current.shape != (N, self._n_eta):
+            raise ValueError(f"peroxide_current shape mismatch: expected ({N}, {self._n_eta}), got {peroxide_current.shape}")
 
         # Store training bounds (physical space)
         self.training_bounds = {
@@ -628,8 +628,12 @@ class PCESurrogateModel:
                 cd_total[:, j] = cp.Sens_t(self._pce_cd[j], self._joint_dist)
                 cd_second[:, :, j] = cp.Sens_m2(self._pce_cd[j], self._joint_dist)
             except Exception:
-                # If Sobol computation fails for a voltage point, leave as zeros
-                pass
+                logger.warning(
+                    "Sobol computation failed for CD at voltage index %d, "
+                    "leaving as zeros",
+                    j,
+                    exc_info=True,
+                )
 
             # Peroxide current
             try:
@@ -637,7 +641,12 @@ class PCESurrogateModel:
                 pc_total[:, j] = cp.Sens_t(self._pce_pc[j], self._joint_dist)
                 pc_second[:, :, j] = cp.Sens_m2(self._pce_pc[j], self._joint_dist)
             except Exception:
-                pass
+                logger.warning(
+                    "Sobol computation failed for PC at voltage index %d, "
+                    "leaving as zeros",
+                    j,
+                    exc_info=True,
+                )
 
         # Mean indices (averaged over voltages)
         cd_mean_first = cd_first.mean(axis=1)
