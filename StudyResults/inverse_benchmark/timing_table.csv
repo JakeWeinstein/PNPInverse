@@ -1,0 +1,19 @@
+model_name,method,mean_time_s,std_time_s,n_runs
+GP,cascade,52.03,3.94,2
+GP,multistart,394.26,33.04,2
+NN D1-default,cascade,0.67,0.17,56
+NN D1-default,multistart,5.34,1.62,56
+NN D2-wider,cascade,1.09,0.26,56
+NN D2-wider,multistart,9.22,1.87,56
+NN D3-deeper,cascade,0.80,0.16,56
+NN D3-deeper,multistart,6.28,1.02,56
+NN D4-no-physics,cascade,0.57,0.09,56
+NN D4-no-physics,multistart,4.52,0.79,56
+NN D5-strong-physics,cascade,0.59,0.13,56
+NN D5-strong-physics,multistart,4.53,0.82,56
+POD-RBF log,cascade,0.25,0.05,56
+POD-RBF log,multistart,6.88,0.42,56
+POD-RBF nolog,cascade,0.23,0.04,56
+POD-RBF nolog,multistart,6.36,0.37,56
+RBF baseline,cascade,0.05,0.01,56
+RBF baseline,multistart,1.17,0.04,56
