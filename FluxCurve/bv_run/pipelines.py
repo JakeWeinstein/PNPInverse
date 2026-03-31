@@ -1279,6 +1279,8 @@ def run_bv_full_flux_curve_inference(
 
 def run_bv_multi_observable_flux_curve_inference(
     request: BVFluxCurveInferenceRequest,
+    *,
+    precomputed_targets: Optional[Dict[str, np.ndarray]] = None,
 ) -> Dict[str, Any]:
     """Run joint (k0, alpha) inference fitting TWO observables simultaneously.
 
@@ -1293,6 +1295,16 @@ def run_bv_multi_observable_flux_curve_inference(
     Target data is generated separately for each observable at the true
     parameter values, ensuring the target for each observable is physically
     consistent.
+
+    Parameters
+    ----------
+    request : BVFluxCurveInferenceRequest
+        Inference configuration.
+    precomputed_targets : dict, optional
+        When provided, skip internal target generation and use these arrays
+        instead.  Expected keys: ``"primary"`` and ``"secondary"``, each a
+        1-D ``np.ndarray`` of length ``len(request.phi_applied_values)``.
+        The arrays are still written to the target CSV paths for traceability.
     """
     from scipy.optimize import minimize
     from Forward.bv_solver import make_graded_rectangle_mesh
@@ -1328,49 +1340,85 @@ def run_bv_multi_observable_flux_curve_inference(
         else None
     )
 
-    # Generate primary target (e.g. total current density)
-    primary_target_csv = request_runtime.target_csv_path
-    target_data_primary = ensure_bv_target_curve(
-        target_csv_path=primary_target_csv,
-        base_solver_params=request_runtime.base_solver_params,
-        steady=request_runtime.steady,
-        phi_applied_values=phi_applied_values,
-        true_k0=request_runtime.true_k0,
-        current_density_scale=float(request_runtime.current_density_scale),
-        noise_percent=float(request_runtime.target_noise_percent),
-        seed=int(request_runtime.target_seed),
-        force_regenerate=bool(request_runtime.regenerate_target),
-        blob_initial_condition=False,
-        mesh=mesh,
-        alpha_values=_true_alpha,
-    )
-    target_flux_primary = np.asarray(target_data_primary["flux"], dtype=float)
-    phi_applied_values = np.asarray(target_data_primary["phi_applied"], dtype=float)
+    # Generate or reuse pre-computed targets
+    if precomputed_targets is not None:
+        # Use caller-supplied targets (already PDE-generated at matching voltages)
+        target_flux_primary = np.asarray(precomputed_targets["primary"], dtype=float)
+        target_flux_secondary = np.asarray(precomputed_targets["secondary"], dtype=float)
+        if target_flux_primary.shape != phi_applied_values.shape:
+            raise ValueError(
+                f"precomputed_targets['primary'] length {target_flux_primary.size} "
+                f"does not match phi_applied_values length {phi_applied_values.size}"
+            )
+        if target_flux_secondary.shape != phi_applied_values.shape:
+            raise ValueError(
+                f"precomputed_targets['secondary'] length {target_flux_secondary.size} "
+                f"does not match phi_applied_values length {phi_applied_values.size}"
+            )
+        # Write CSVs for traceability / downstream artifact inspection
+        primary_target_csv = request_runtime.target_csv_path
+        os.makedirs(os.path.dirname(primary_target_csv) or ".", exist_ok=True)
+        with open(primary_target_csv, "w", encoding="utf-8") as f:
+            f.write("phi_applied,flux_noisy\n")
+            for p, v in zip(phi_applied_values.tolist(), target_flux_primary.tolist()):
+                f.write(f"{p:.16g},{v:.16g}\n")
+        secondary_target_csv = request_runtime.secondary_target_csv_path
+        if secondary_target_csv is None:
+            secondary_target_csv = os.path.join(
+                request_runtime.output_dir,
+                f"target_{secondary_mode}.csv",
+            )
+        os.makedirs(os.path.dirname(secondary_target_csv) or ".", exist_ok=True)
+        with open(secondary_target_csv, "w", encoding="utf-8") as f:
+            f.write("phi_applied,flux_noisy\n")
+            for p, v in zip(phi_applied_values.tolist(), target_flux_secondary.tolist()):
+                f.write(f"{p:.16g},{v:.16g}\n")
+        print(f"  Using pre-computed targets (primary: {target_flux_primary.size} pts, "
+              f"secondary: {target_flux_secondary.size} pts)")
+    else:
+        # Generate primary target (e.g. total current density)
+        primary_target_csv = request_runtime.target_csv_path
+        target_data_primary = ensure_bv_target_curve(
+            target_csv_path=primary_target_csv,
+            base_solver_params=request_runtime.base_solver_params,
+            steady=request_runtime.steady,
+            phi_applied_values=phi_applied_values,
+            true_k0=request_runtime.true_k0,
+            current_density_scale=float(request_runtime.current_density_scale),
+            noise_percent=float(request_runtime.target_noise_percent),
+            seed=int(request_runtime.target_seed),
+            force_regenerate=bool(request_runtime.regenerate_target),
+            blob_initial_condition=False,
+            mesh=mesh,
+            alpha_values=_true_alpha,
+        )
+        target_flux_primary = np.asarray(target_data_primary["flux"], dtype=float)
+        phi_applied_values = np.asarray(target_data_primary["phi_applied"], dtype=float)
 
-    # Generate secondary target (e.g. peroxide current)
-    secondary_target_csv = request_runtime.secondary_target_csv_path
-    if secondary_target_csv is None:
-        secondary_target_csv = os.path.join(
-            request_runtime.output_dir,
-            f"target_{secondary_mode}.csv",
+        # Generate secondary target (e.g. peroxide current)
+        secondary_target_csv = request_runtime.secondary_target_csv_path
+        if secondary_target_csv is None:
+            secondary_target_csv = os.path.join(
+                request_runtime.output_dir,
+                f"target_{secondary_mode}.csv",
+            )
+
+        target_flux_secondary = _generate_observable_target(
+            base_solver_params=request_runtime.base_solver_params,
+            steady=request_runtime.steady,
+            phi_applied_values=phi_applied_values,
+            true_k0=request_runtime.true_k0,
+            observable_mode=secondary_mode,
+            observable_scale=secondary_scale,
+            noise_percent=float(request_runtime.target_noise_percent),
+            seed=int(request_runtime.target_seed) + 1,  # different seed for independence
+            mesh=mesh,
+            target_csv_path=secondary_target_csv,
+            force_regenerate=bool(request_runtime.regenerate_target),
+            alpha_values=_true_alpha,
         )
 
-    target_flux_secondary = _generate_observable_target(
-        base_solver_params=request_runtime.base_solver_params,
-        steady=request_runtime.steady,
-        phi_applied_values=phi_applied_values,
-        true_k0=request_runtime.true_k0,
-        observable_mode=secondary_mode,
-        observable_scale=secondary_scale,
-        noise_percent=float(request_runtime.target_noise_percent),
-        seed=int(request_runtime.target_seed) + 1,  # different seed for independence
-        mesh=mesh,
-        target_csv_path=secondary_target_csv,
-        force_regenerate=bool(request_runtime.regenerate_target),
-        alpha_values=_true_alpha,
-    )
-
-    _clear_caches()
+        _clear_caches()
 
     # Setup optimizer
     initial_k0 = np.asarray(request_runtime.initial_guess, dtype=float)

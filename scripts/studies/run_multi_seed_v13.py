@@ -211,10 +211,8 @@ def run_single_seed(seed: int, config: MultiSeedConfig) -> dict | None:
     if os.path.isfile(csv_path):
         csv_mtime = os.path.getmtime(csv_path)
         if csv_mtime < start_time:
-            raise RuntimeError(
-                f"CSV {csv_path} was not updated by the subprocess "
-                f"(stale from previous run)"
-            )
+            _log("SEED", f"CSV {csv_path} was not updated by the subprocess (stale from previous run)")
+            return None
 
     p2_result = parse_v13_csv(csv_path)
     if p2_result is not None:

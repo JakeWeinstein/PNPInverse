@@ -39,8 +39,6 @@ import subprocess as sp
 import sys
 from datetime import datetime, timezone
 
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_THIS_DIR)
 if _ROOT not in sys.path:
@@ -256,7 +254,7 @@ def surrogate_only_results(nn_ensemble_repro):
     """
     from types import SimpleNamespace
 
-    from scripts.surrogate.Infer_BVMaster_charged_v13_ultimate import (
+    from scripts.Inference.Infer_BVMaster_charged_v13_ultimate import (
         _run_surrogate_phases,
     )
     from scripts._bv_common import K0_HAT_R1, K0_HAT_R2, ALPHA_R1, ALPHA_R2
@@ -282,7 +280,12 @@ def surrogate_only_results(nn_ensemble_repro):
         -1.0, -2.0, -3.0, -4.0, -5.0, -6.5, -8.0,
         -10.0, -11.5, -13.0,
     ])
-    all_eta = np.unique(np.concatenate([eta_symmetric, eta_shallow]))
+    eta_cathodic = np.array([
+        -1.0, -2.0, -3.0, -4.0, -5.0, -6.5, -8.0,
+        -10.0, -13.0, -17.0, -22.0, -28.0,
+        -35.0, -41.0, -46.5,
+    ])
+    all_eta = np.unique(np.concatenate([eta_symmetric, eta_shallow, eta_cathodic]))
     all_eta = np.sort(all_eta)[::-1]
 
     # Args namespace with joint strategy (S1+S2 only)
@@ -383,7 +386,7 @@ def full_pipeline_results():
     """
     cmd = [
         sys.executable,
-        "scripts/surrogate/Infer_BVMaster_charged_v13_ultimate.py",
+        "scripts/Inference/Infer_BVMaster_charged_v13_ultimate.py",
         "--noise-percent", "0",
         "--noise-seed", "42",
     ]

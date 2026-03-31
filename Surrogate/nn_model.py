@@ -580,12 +580,15 @@ class NNSurrogateModel:
 
         if x_logspace.requires_grad:
             # Stay in float64 throughout to preserve gradient accuracy
-            z = (x_logspace - self._input_mean_t64) / self._input_std_t64
-            y_norm = self._model.double()(z.unsqueeze(0)).squeeze(0)
-            y = y_norm * self._out_std_t64 + self._out_mean_t64
-            # Restore model back to float32 for normal inference
-            self._model.float()
-            return y
+            self._model.double()
+            try:
+                z = (x_logspace - self._input_mean_t64) / self._input_std_t64
+                y_norm = self._model(z.unsqueeze(0)).squeeze(0)
+                y = y_norm * self._out_std_t64 + self._out_mean_t64
+                return y
+            finally:
+                # Restore model back to float32 for normal inference
+                self._model.float()
         else:
             # Normal inference path: use float32
             x_f32 = x_logspace.float()

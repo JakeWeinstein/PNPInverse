@@ -258,7 +258,10 @@ class SurrogateObjective:
         """
         if self._use_autograd:
             return self._autograd_objective_and_gradient(x)
-        J = self.objective(x)
+        # Compute objective value without incrementing _n_evals, since
+        # gradient() will call self.objective() internally for FD stencil.
+        k0_1, k0_2, alpha_1, alpha_2 = self._x_to_params(x)
+        J = self._compute_objective_at_params(k0_1, k0_2, alpha_1, alpha_2)
         g = self.gradient(x)
         return J, g
 
@@ -419,7 +422,15 @@ class AlphaOnlySurrogateObjective:
         """Compute objective and gradient."""
         if self._use_autograd:
             return self._autograd_objective_and_gradient(x)
-        J = self.objective(x)
+        # Compute objective value without incrementing _n_evals, since
+        # gradient() will call self.objective() internally for FD stencil.
+        x = np.asarray(x, dtype=float)
+        alpha_1, alpha_2 = float(x[0]), float(x[1])
+        k0_1, k0_2 = self.fixed_k0
+        pred = self.surrogate.predict(k0_1, k0_2, alpha_1, alpha_2)
+        cd_diff = pred["current_density"][self._valid_cd] - self.target_cd[self._valid_cd]
+        pc_diff = pred["peroxide_current"][self._valid_pc] - self.target_pc[self._valid_pc]
+        J = float(0.5 * np.sum(cd_diff ** 2) + self.secondary_weight * 0.5 * np.sum(pc_diff ** 2))
         g = self.gradient(x)
         return J, g
 
@@ -645,8 +656,13 @@ class ReactionBlockSurrogateObjective:
         """
         if self._use_autograd:
             return self._autograd_objective_and_gradient(x)
-        j = self.objective(x)
         g = self.gradient(x)
+        # Compute objective without incrementing _n_evals (gradient already counted)
+        k0_1, k0_2, alpha_1, alpha_2 = self._x_to_full_params(x)
+        pred = self.surrogate.predict(k0_1, k0_2, alpha_1, alpha_2)
+        cd_diff = pred["current_density"][self._valid_cd] - self.target_cd[self._valid_cd]
+        pc_diff = pred["peroxide_current"][self._valid_pc] - self.target_pc[self._valid_pc]
+        j = float(0.5 * np.sum(cd_diff ** 2) + self.secondary_weight * 0.5 * np.sum(pc_diff ** 2))
         return j, g
 
     @property
@@ -838,8 +854,15 @@ class SubsetSurrogateObjective:
         """Compute objective and gradient in one call."""
         if self._use_autograd:
             return self._autograd_objective_and_gradient(x)
-        j = self.objective(x)
         g = self.gradient(x)
+        # Compute objective without incrementing _n_evals (gradient already counted)
+        k0_1, k0_2, a1, a2 = self._x_to_params(x)
+        pred = self.surrogate.predict(k0_1, k0_2, a1, a2)
+        cd_sim = pred["current_density"][self.subset_idx]
+        pc_sim = pred["peroxide_current"][self.subset_idx]
+        cd_diff = cd_sim[self._valid_cd] - self.target_cd[self._valid_cd]
+        pc_diff = pc_sim[self._valid_pc] - self.target_pc[self._valid_pc]
+        j = float(0.5 * np.sum(cd_diff ** 2) + self.secondary_weight * 0.5 * np.sum(pc_diff ** 2))
         return j, g
 
     @property

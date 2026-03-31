@@ -448,6 +448,7 @@ def solve_bv_curve_points_with_warmstart(
         # 2..max_attempts+1 = recovery attempts (cold start with relaxed params).
         # This ensures we try simple warm-start before cold start.
         total_attempts = max_attempts + (1 if is_warmstart else 0)
+        last_reason = "all attempts failed"
 
         for attempt_raw in range(total_attempts):
             # Map attempt_raw to the recovery attempt index:
@@ -656,13 +657,7 @@ def solve_bv_curve_points_with_warmstart(
 
             if not failed_by_exception and steady_count >= required_steady:
                 # Converged -- compute adjoint gradient
-                target_ctrl = _build_bv_scalar_target_in_control_space(
-                    ctx, target_i, name="target_flux_value",
-                    control_mode=control_mode,
-                )
-                target_scalar = fd.assemble(
-                    target_ctrl * fd.dx(domain=ctx["mesh"])
-                )
+                target_scalar = fd.Constant(float(target_i))
                 sim_scalar = fd.assemble(observable_form)
                 point_objective = 0.5 * (sim_scalar - target_scalar) ** 2
 
@@ -766,7 +761,7 @@ def solve_bv_curve_points_with_warmstart(
                 _ctrl_parts if _ctrl_parts else [0.0] * n_controls,
                 dtype=float,
             )
-            _fail_grad = fail_penalty * np.sign(_ctrl_arr) * 0.01
+            _fail_grad = np.sign(_ctrl_arr) * 1.0
 
             point_result = PointAdjointResult(
                 phi_applied=phi_applied_i,
@@ -776,7 +771,7 @@ def solve_bv_curve_points_with_warmstart(
                 gradient=_fail_grad,
                 converged=False,
                 steps_taken=steps_taken,
-                reason=last_reason if 'last_reason' in dir() else "all attempts failed",
+                reason=last_reason,
                 final_relative_change=None,
                 final_absolute_change=None,
                 diagnostics_valid=False,

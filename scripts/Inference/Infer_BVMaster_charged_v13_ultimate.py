@@ -853,6 +853,11 @@ def main() -> None:
     print(f"    k0   = {surr_best_k0.tolist()}")
     print(f"    alpha= {surr_best_alpha.tolist()}")
 
+    # Record surrogate time BEFORE comparison block
+    if not args.pde_cold_start:
+        t_surrogate_end = time.time()
+        surrogate_time = t_surrogate_end - t_total_start - t_target_elapsed
+
     # ===================================================================
     # COMPARISON MODE: re-run surrogate phases with alternative models
     # ===================================================================
@@ -916,10 +921,8 @@ def main() -> None:
                 ])
         print(f"\n  Comparison CSV saved -> {comp_csv_path}")
 
-    # Compute surrogate time AFTER comparison block (M5 fix: excludes PDE time)
-    if not args.pde_cold_start:
-        t_surrogate_end = time.time()
-        surrogate_time = t_surrogate_end - t_total_start - t_target_elapsed
+    # Comparison block done; record comparison end time
+    t_comparison_end = time.time()
 
     # ===================================================================
     # PDE PHASES P1-P2 (warm-started by best surrogate result)
@@ -982,6 +985,14 @@ def main() -> None:
         set_parallel_pool(shared_pool)
         print(f"\n  [v13] Shared parallel pool: {n_pde_workers} workers")
 
+        # --- Extract PDE target subsets for P1/P2 from pre-generated targets ---
+        p1_target_cd, p1_target_pc = _subset_targets(
+            target_cd_full, target_pc_full, all_eta, eta_shallow,
+        )
+        p2_target_cd, p2_target_pc = _subset_targets(
+            target_cd_full, target_pc_full, all_eta, eta_cathodic,
+        )
+
         # --- P1: PDE shallow cathodic (skippable) ---
         if args.skip_p1:
             print(f"\n  [v13] --skip-p1: skipping P1, P2 warm-starts from surrogate best")
@@ -1042,7 +1053,13 @@ def main() -> None:
                 parallel_workers=n_pde_workers,
             )
 
-            result_p1 = run_bv_multi_observable_flux_curve_inference(request_p1)
+            result_p1 = run_bv_multi_observable_flux_curve_inference(
+                request_p1,
+                precomputed_targets={
+                    "primary": p1_target_cd,
+                    "secondary": p1_target_pc,
+                },
+            )
             p1_k0 = np.asarray(result_p1["best_k0"])
             p1_alpha = np.asarray(result_p1["best_alpha"])
             p1_loss = float(result_p1["best_loss"])
@@ -1112,7 +1129,13 @@ def main() -> None:
             parallel_workers=n_pde_workers,
         )
 
-        result_p2 = run_bv_multi_observable_flux_curve_inference(request_p2)
+        result_p2 = run_bv_multi_observable_flux_curve_inference(
+            request_p2,
+            precomputed_targets={
+                "primary": p2_target_cd,
+                "secondary": p2_target_pc,
+            },
+        )
         p2_k0 = np.asarray(result_p2["best_k0"])
         p2_alpha = np.asarray(result_p2["best_alpha"])
         p2_loss = float(result_p2["best_loss"])
@@ -1157,7 +1180,7 @@ def main() -> None:
         best_source = surr_best_source
 
     total_time = time.time() - t_total_start
-    pde_time = total_time - t_target_elapsed - surrogate_time
+    pde_time = (total_time - t_target_elapsed - surrogate_time) if not args.no_pde else 0.0
 
     # ===================================================================
     # FINAL SUMMARY

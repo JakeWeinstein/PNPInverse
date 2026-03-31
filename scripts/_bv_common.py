@@ -73,12 +73,15 @@ def setup_firedrake_env() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Physical constants
+# Physical constants (single source of truth: Nondim.constants)
 # ---------------------------------------------------------------------------
 
-F_CONST = 96485.3329        # Faraday constant, C/mol
-R_GAS = 8.31446             # Gas constant, J/(mol·K)
-T_REF = 298.15              # Reference temperature, K
+from Nondim.constants import (
+    FARADAY_CONSTANT as F_CONST,
+    GAS_CONSTANT as R_GAS,
+    DEFAULT_TEMPERATURE_K as T_REF,
+)
+
 V_T = R_GAS * T_REF / F_CONST  # Thermal voltage at 25 °C, ~0.025693 V
 N_ELECTRONS = 2             # Electrons transferred per BV reaction
 
@@ -96,7 +99,7 @@ D_CLO4 = 1.792e-9   # ClO₄⁻
 # Bulk concentrations (mol/m³)
 C_O2 = 0.5
 C_H2O2 = 0.0        # product, initially absent
-C_HP = 0.1           # pH 4 → 10⁻¹ M
+C_HP = 0.1           # pH 4 → 1e-4 mol/L = 0.1 mol/m³
 C_CLO4 = 0.1         # electroneutrality partner
 
 # BV kinetics
@@ -280,6 +283,8 @@ def _make_nondim_cfg() -> Dict[str, Any]:
         "concentration_scale_mol_m3": C_SCALE,
         "length_scale_m": L_REF,
         "potential_scale_v": V_T,
+        "kappa_scale_m_s": K_SCALE,
+        "time_scale_s": L_REF**2 / D_REF,
         "kappa_inputs_are_dimensionless": True,
         "diffusivity_inputs_are_dimensionless": True,
         "concentration_inputs_are_dimensionless": True,
