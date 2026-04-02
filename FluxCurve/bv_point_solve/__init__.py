@@ -50,6 +50,8 @@ from .cache import (
     _clear_caches,
     set_parallel_pool,
     close_parallel_pool,
+    populate_cache_entry,
+    mark_cache_populated_if_complete,
     _cross_eval_cache,
     _all_points_cache,
     _cache_populated,
@@ -84,6 +86,8 @@ __all__ = [
     "_clear_caches",
     "set_parallel_pool",
     "close_parallel_pool",
+    "populate_cache_entry",
+    "mark_cache_populated_if_complete",
     # Cache state (module-level globals)
     "_cross_eval_cache",
     "_all_points_cache",
@@ -513,6 +517,7 @@ def solve_bv_curve_points_with_warmstart(
                     _apply_predictor(
                         phi_applied_i, ctx["U"], carry_U_data,
                         predictor_prev, predictor_curr, predictor_prev2,
+                        n_species=int(ctx["n_species"]),
                     )
                 else:
                     # Simple warm-start: direct copy without predictor
@@ -656,8 +661,19 @@ def solve_bv_curve_points_with_warmstart(
             t_adj_start = _time.perf_counter()
 
             if not failed_by_exception and steady_count >= required_steady:
-                # Converged -- compute adjoint gradient
-                target_scalar = fd.Constant(float(target_i))
+                # Converged -- compute adjoint gradient.
+                # Build target as an R-space Function so that fd.assemble
+                # returns an adjoint-tracked AdjFloat (required by
+                # ReducedFunctional).  Using fd.Constant directly causes
+                # fd.assemble to return numpy.float64 which is not an
+                # OverloadedType.
+                target_ctrl = _build_bv_scalar_target_in_control_space(
+                    ctx, target_i, name="target_flux_value",
+                    control_mode=control_mode,
+                )
+                target_scalar = fd.assemble(
+                    target_ctrl * fd.dx(domain=ctx["mesh"])
+                )
                 sim_scalar = fd.assemble(observable_form)
                 point_objective = 0.5 * (sim_scalar - target_scalar) ** 2
 

@@ -155,6 +155,7 @@ def _bv_worker_adjoint_tape_pass(
     )
     from FluxCurve.bv_observables import (
         _build_bv_observable_form,
+        _build_bv_scalar_target_in_control_space,
         _bv_gradient_controls_to_array,
     )
 
@@ -237,7 +238,11 @@ def _bv_worker_adjoint_tape_pass(
     )
 
     # Compute adjoint gradient
-    target_scalar = fd.Constant(float(target_flux))
+    target_ctrl = _build_bv_scalar_target_in_control_space(
+        ctx, target_flux, name="target_flux_value",
+        control_mode=cfg.control_mode,
+    )
+    target_scalar = fd.assemble(target_ctrl * fd.dx(domain=ctx["mesh"]))
     sim_scalar = fd.assemble(obs_form)
     point_objective = 0.5 * (sim_scalar - target_scalar) ** 2
 
@@ -332,6 +337,7 @@ def _bv_worker_solve_point(
     from Forward.steady_state import configure_bv_solver_params
     from FluxCurve.bv_observables import (
         _build_bv_observable_form,
+        _build_bv_scalar_target_in_control_space,
         _bv_gradient_controls_to_array,
     )
 
@@ -435,7 +441,11 @@ def _bv_worker_solve_point(
         except Exception:
             failed = True
             break
-        U_prev.assign(U)
+        # Match the sequential path (bv_point_solve/__init__.py:611-612):
+        # wrap U_prev.assign in stop_annotating so the adjoint tape only
+        # sees the final converged state, not intermediate timestep updates.
+        with adj.stop_annotating():
+            U_prev.assign(U)
 
         with adj.stop_annotating():
             simulated_flux = float(fd.assemble(observable_form))
@@ -589,7 +599,11 @@ def _bv_worker_solve_point(
 
     # ---- Single-observable mode (original path) ----
     # Compute adjoint gradient
-    target_scalar = fd.Constant(float(target_flux))
+    target_ctrl = _build_bv_scalar_target_in_control_space(
+        ctx, target_flux, name="target_flux_value",
+        control_mode=cfg.control_mode,
+    )
+    target_scalar = fd.assemble(target_ctrl * fd.dx(domain=ctx["mesh"]))
     sim_scalar = fd.assemble(observable_form)
     point_objective = 0.5 * (sim_scalar - target_scalar) ** 2
 
@@ -716,13 +730,13 @@ class BVPointSolvePool:
 
         try:
             future_map = {}
-            for task in tasks:
+            for submission_pos, task in enumerate(tasks):
                 point_index = int(task[0])
                 future = self._executor.submit(_bv_worker_solve_point, task)
-                future_map[future] = point_index
+                future_map[future] = (submission_pos, point_index)
 
             for future in as_completed(future_map):
-                expected_idx = future_map[future]
+                submission_pos, expected_idx = future_map[future]
                 result = future.result()
                 actual_idx = int(result["point_index"])
                 if actual_idx != expected_idx:
@@ -730,7 +744,7 @@ class BVPointSolvePool:
                         f"Worker returned mismatched index "
                         f"(expected {expected_idx}, got {actual_idx})"
                     )
-                results[expected_idx] = result
+                results[submission_pos] = result
 
         except Exception as exc:
             print(

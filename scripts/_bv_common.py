@@ -331,7 +331,7 @@ def _make_bv_bc_cfg(
     if species.n_species >= 4:
         h_factor = [{"species": 2, "power": 2, "c_ref_nondim": c_hp_hat}]
         reaction_1["cathodic_conc_factors"] = h_factor
-        reaction_2["cathodic_conc_factors"] = list(h_factor)
+        reaction_2["cathodic_conc_factors"] = [dict(f) for f in h_factor]
 
     return {
         "reactions": [reaction_1, reaction_2],

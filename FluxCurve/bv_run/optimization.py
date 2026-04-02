@@ -100,13 +100,19 @@ def run_scipy_bv_adjoint_optimization(
     n_k0 = int(initial_k0.size)
     n_alpha = int(initial_alpha.size) if initial_alpha is not None else 0
 
+    if upper_bounds is not None and np.any(np.asarray(upper_bounds) <= 0):
+        raise ValueError(
+            f"All upper_bounds must be positive for log-space transform, "
+            f"got upper_bounds={upper_bounds}"
+        )
+
     if control_mode == "k0":
         if use_log_space:
             x0_lin = clip_kappa(np.asarray(initial_k0, dtype=float), lower_bounds, upper_bounds)
             x0 = np.log10(x0_lin)
             bounds = [
                 (float(np.log10(max(lower_bounds[i], 1e-30))),
-                 float(np.log10(upper_bounds[i])))
+                 float(np.log10(max(upper_bounds[i], 1e-30))))
                 for i in range(n_controls)
             ]
             print(f"[log-space] x0 = {x0.tolist()}, bounds = {bounds}")
@@ -126,7 +132,7 @@ def run_scipy_bv_adjoint_optimization(
             x0_k0_x = np.log10(x0_k0)
             k0_bounds = [
                 (float(np.log10(max(lower_bounds[i], 1e-30))),
-                 float(np.log10(upper_bounds[i])))
+                 float(np.log10(max(upper_bounds[i], 1e-30))))
                 for i in range(n_k0)
             ]
         else:
@@ -151,7 +157,7 @@ def run_scipy_bv_adjoint_optimization(
             x0_k0_x = np.log10(x0_k0)
             k0_bounds = [
                 (float(np.log10(max(lower_bounds[i], 1e-30))),
-                 float(np.log10(upper_bounds[i])))
+                 float(np.log10(max(upper_bounds[i], 1e-30))))
                 for i in range(n_k0)
             ]
         else:
@@ -624,6 +630,13 @@ def run_scipy_bv_least_squares_optimization(
     n_k0 = int(initial_k0.size)
     n_alpha = int(initial_alpha.size) if initial_alpha is not None else 0
 
+    # Validate upper bounds (same as run_scipy_bv_adjoint_optimization)
+    if np.any(upper_bounds <= 0):
+        raise ValueError(
+            f"upper_bounds must be positive for log-space optimization, "
+            f"got: {upper_bounds.tolist()}"
+        )
+
     # Determine control vector layout (same as run_scipy_bv_adjoint_optimization)
     if control_mode == "k0":
         n_controls = n_k0
@@ -648,7 +661,7 @@ def run_scipy_bv_least_squares_optimization(
         if use_log_space:
             x0 = np.log10(clip_kappa(initial_k0.copy(), lower_bounds, upper_bounds))
             lb = np.array([np.log10(max(lower_bounds[i], 1e-30)) for i in range(n_controls)])
-            ub = np.array([np.log10(upper_bounds[i]) for i in range(n_controls)])
+            ub = np.array([np.log10(max(upper_bounds[i], 1e-30)) for i in range(n_controls)])
         else:
             x0 = clip_kappa(initial_k0.copy(), lower_bounds, upper_bounds)
             lb = lower_bounds.copy()
@@ -665,7 +678,7 @@ def run_scipy_bv_least_squares_optimization(
         if k0_log:
             x0_k0_x = np.log10(x0_k0)
             k0_lb = np.array([np.log10(max(lower_bounds[i], 1e-30)) for i in range(n_k0)])
-            k0_ub = np.array([np.log10(upper_bounds[i]) for i in range(n_k0)])
+            k0_ub = np.array([np.log10(max(upper_bounds[i], 1e-30)) for i in range(n_k0)])
         else:
             x0_k0_x = x0_k0
             k0_lb = lower_bounds[:n_k0].copy()
@@ -688,7 +701,7 @@ def run_scipy_bv_least_squares_optimization(
         if k0_log:
             x0_k0_x = np.log10(x0_k0)
             k0_lb = np.array([np.log10(max(lower_bounds[i], 1e-30)) for i in range(n_k0)])
-            k0_ub = np.array([np.log10(upper_bounds[i]) for i in range(n_k0)])
+            k0_ub = np.array([np.log10(max(upper_bounds[i], 1e-30)) for i in range(n_k0)])
         else:
             x0_k0_x = x0_k0
             k0_lb = lower_bounds[:n_k0].copy()

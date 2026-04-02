@@ -22,6 +22,7 @@ def _apply_predictor(
     predictor_prev: Optional[tuple],
     predictor_curr: Optional[tuple],
     predictor_prev2: Optional[tuple],
+    n_species: int = 0,
 ):
     """Apply quadratic/linear hybrid predictor to initial guess.
 
@@ -74,8 +75,10 @@ def _apply_predictor(
                     ):
                         dst.data[:] = L_a * u_a + L_b * u_b + L_c * u_c
                     # Clamp concentrations to prevent negative values
-                    for d in ctx_U.dat:
-                        d.data[:] = np.maximum(d.data, 1e-10)
+                    # (skip the last component — electrical potential — which can be negative)
+                    for i, d in enumerate(ctx_U.dat):
+                        if i < n_species:
+                            d.data[:] = np.maximum(d.data, 1e-10)
                     _validate_and_maybe_revert()
                     return
                 # Fall through to linear if denominators are degenerate
@@ -89,8 +92,10 @@ def _apply_predictor(
             ):
                 dst.data[:] = u_curr_arr + slope * (u_curr_arr - u_prev_arr)
             # Clamp concentrations to prevent negative values
-            for d in ctx_U.dat:
-                d.data[:] = np.maximum(d.data, 1e-10)
+            # (skip the last component — electrical potential — which can be negative)
+            for i, d in enumerate(ctx_U.dat):
+                if i < n_species:
+                    d.data[:] = np.maximum(d.data, 1e-10)
             _validate_and_maybe_revert()
             return
 

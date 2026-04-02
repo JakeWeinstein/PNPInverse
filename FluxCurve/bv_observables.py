@@ -106,15 +106,12 @@ def _bv_gradient_controls_to_array(
         grads = [raw_gradient]
 
     if len(grads) != n_controls:
-        import warnings
-        warnings.warn(
-            f"Expected {n_controls} control gradients but got {len(grads)}; "
-            f"truncating/padding to match",
-            stacklevel=2,
+        raise ValueError(
+            f"Expected {n_controls} gradient components but got {len(grads)}"
         )
 
     out = np.zeros(n_controls, dtype=float)
-    for i in range(min(n_controls, len(grads))):
+    for i in range(n_controls):
         gi = grads[i]
         if hasattr(gi, "dat"):
             out[i] = float(gi.dat.data_ro[0])

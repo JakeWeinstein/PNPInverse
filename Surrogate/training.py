@@ -181,7 +181,10 @@ def generate_training_data_single(
     # Extract solutions for cross-sample warm-start chain
     converged_solutions = None
     if return_solutions:
-        converged_solutions = dict(_cache_mod._cross_eval_cache)
+        converged_solutions = {
+            k: v for k, v in _cache_mod._cross_eval_cache.items()
+            if k < len(converged_mask) and converged_mask[k]
+        }
 
     _clear_caches()
 
@@ -303,18 +306,39 @@ def generate_training_dataset(
             print(f"RESUME: Loading checkpoint: {resume_from}", flush=True)
         ckpt = np.load(resume_from, allow_pickle=True)
         n_done = int(ckpt["n_completed"])
-        # Restore completed samples
-        all_cd[:n_done] = ckpt["current_density"][:n_done]
-        all_pc[:n_done] = ckpt["peroxide_current"][:n_done]
-        all_converged[:n_done] = ckpt["converged"][:n_done]
-        if "timings" in ckpt:
-            all_timings[:n_done] = ckpt["timings"][:n_done]
-        start_idx = n_done
-        if verbose:
-            n_valid_so_far = int(all_converged[:n_done].sum())
-            print(f"RESUME: Restored {n_done}/{N} samples "
-                  f"({n_valid_so_far} valid, {n_done - n_valid_so_far} failed)",
-                  flush=True)
+
+        # Validate checkpoint compatibility before restoring
+        ckpt_valid = True
+        if n_done > N:
+            print(f"WARNING: Checkpoint n_completed ({n_done}) > current N ({N}). "
+                  f"Skipping checkpoint, re-running from scratch.", flush=True)
+            ckpt_valid = False
+        elif ckpt["current_density"].shape[1] != n_eta:
+            print(f"WARNING: Checkpoint column count ({ckpt['current_density'].shape[1]}) "
+                  f"!= current n_eta ({n_eta}). "
+                  f"Skipping checkpoint, re-running from scratch.", flush=True)
+            ckpt_valid = False
+        elif "phi_applied" in ckpt and not np.allclose(ckpt["phi_applied"], phi_applied_values):
+            print(f"WARNING: Checkpoint phi_applied values do not match current values. "
+                  f"Skipping checkpoint, re-running from scratch.", flush=True)
+            ckpt_valid = False
+        elif "parameters" in ckpt and not np.allclose(ckpt["parameters"][:n_done], parameter_samples[:n_done]):
+            print(f"  WARNING: checkpoint parameter samples differ from current, skipping checkpoint", flush=True)
+            ckpt_valid = False
+
+        if ckpt_valid:
+            # Restore completed samples
+            all_cd[:n_done] = ckpt["current_density"][:n_done]
+            all_pc[:n_done] = ckpt["peroxide_current"][:n_done]
+            all_converged[:n_done] = ckpt["converged"][:n_done]
+            if "timings" in ckpt:
+                all_timings[:n_done] = ckpt["timings"][:n_done]
+            start_idx = n_done
+            if verbose:
+                n_valid_so_far = int(all_converged[:n_done].sum())
+                print(f"RESUME: Restored {n_done}/{N} samples "
+                      f"({n_valid_so_far} valid, {n_done - n_valid_so_far} failed)",
+                      flush=True)
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
@@ -795,6 +819,8 @@ def generate_training_dataset_parallel(
         ]
         groups.append(group_tasks)
 
+    n_completed = len(completed_indices)
+
     if not groups:
         if verbose:
             print("All groups already completed!", flush=True)
@@ -859,6 +885,10 @@ def generate_training_dataset_parallel(
 
                     for r in group_results:
                         idx = r["index"]
+                        # n_completed counts all *processed* samples (attempts),
+                        # not just successes.  n_valid tracks converged samples.
+                        # The final save includes all_converged so consumers can
+                        # derive n_valid = all_converged.sum().
                         n_completed += 1
                         elapsed = r.get("elapsed", 0.0)
                         all_timings[idx] = elapsed
@@ -938,7 +968,7 @@ def generate_training_dataset_parallel(
         all_peroxide_current=all_pc,
         all_converged=all_converged,
         all_timings=all_timings,
-        n_completed=N,
+        n_completed=n_completed,
     )
 
     return {

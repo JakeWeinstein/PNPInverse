@@ -20,6 +20,7 @@ from FluxCurve.config import ForwardRecoveryConfig
 from FluxCurve.results import PointAdjointResult
 from FluxCurve.bv_observables import (
     _build_bv_observable_form,
+    _build_bv_scalar_target_in_control_space,
     _bv_gradient_controls_to_array,
 )
 
@@ -235,8 +236,7 @@ def _solve_cached_fast_path(
             except fd.ConvergenceError:
                 failed = True
                 break
-            with adj.stop_annotating():
-                U_prev.assign(U)
+            U_prev.assign(U)
 
             with adj.stop_annotating():
                 simulated_flux = float(fd.assemble(observable_form))
@@ -272,8 +272,16 @@ def _solve_cached_fast_path(
             # This point failed with cached IC; fall back to full sweep
             return None
 
-        # Compute adjoint gradient
-        target_scalar = fd.Constant(float(target_i))
+        # Compute adjoint gradient.
+        # Build target via R-space Function so fd.assemble returns an
+        # adjoint-tracked AdjFloat (ReducedFunctional requires OverloadedType).
+        target_ctrl = _build_bv_scalar_target_in_control_space(
+            ctx, target_i, name="target_flux_value",
+            control_mode=control_mode,
+        )
+        target_scalar = fd.assemble(
+            target_ctrl * fd.dx(domain=ctx["mesh"])
+        )
         sim_scalar = fd.assemble(observable_form)
         point_objective = 0.5 * (sim_scalar - target_scalar) ** 2
 
