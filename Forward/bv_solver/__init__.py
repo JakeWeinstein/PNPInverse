@@ -67,3 +67,8 @@ from Forward.bv_solver.config import _get_bv_cfg, _get_bv_convergence_cfg, _get_
 from Forward.bv_solver.nondim import _add_bv_scaling_to_transform, _add_bv_reactions_scaling_to_transform
 from Forward.bv_solver.forms import build_context, build_forms, set_initial_conditions
 from Forward.bv_solver.solvers import forsolve_bv, solve_bv_with_continuation, solve_bv_with_ptc, solve_bv_with_charge_continuation
+from Forward.bv_solver.grid_charge_continuation import (
+    solve_grid_with_charge_continuation,
+    GridChargeContinuationResult,
+    GridPointResult,
+)
