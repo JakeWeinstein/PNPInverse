@@ -16,7 +16,7 @@ import numpy as np
 class ParameterBounds:
     """Bounds for BV kinetics parameters.
 
-    k0 ranges are in physical (linear) space.  When ``log_space_k0=True``
+    k0 ranges are in dimensionless (k0_hat) space.  When ``log_space_k0=True``
     is passed to :func:`generate_lhs_samples`, k0 values are sampled
     uniformly in log10 space and then exponentiated.
 
