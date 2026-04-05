@@ -66,6 +66,33 @@ def _validate_cache_mesh(mesh_dof_count: int) -> None:
     _cache_mesh_dof_count = mesh_dof_count
 
 
+def populate_cache_entry(orig_idx: int, U_data: tuple, mesh_dof_count: int) -> None:
+    """Add a single point's converged U data to _all_points_cache.
+
+    On the first call, sets _cache_mesh_dof_count.  On subsequent calls,
+    validates that the mesh DOF count matches.
+    """
+    global _cache_mesh_dof_count
+    if _cache_mesh_dof_count == -1:
+        _cache_mesh_dof_count = mesh_dof_count
+    elif _cache_mesh_dof_count != mesh_dof_count:
+        raise ValueError(
+            f"Mesh DOF mismatch in populate_cache_entry: "
+            f"expected {_cache_mesh_dof_count}, got {mesh_dof_count}"
+        )
+    _all_points_cache[orig_idx] = U_data
+
+
+def mark_cache_populated_if_complete(n_points: int) -> bool:
+    """Set _cache_populated=True if cache has entries for indices 0..n_points-1."""
+    global _cache_populated
+    for i in range(n_points):
+        if i not in _all_points_cache:
+            return False
+    _cache_populated = True
+    return True
+
+
 def set_parallel_pool(pool: Any) -> None:
     """Set the module-level parallel pool for fast-path point solves."""
     global _parallel_pool

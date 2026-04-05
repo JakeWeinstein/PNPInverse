@@ -65,8 +65,21 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
         J_i · n  =  s_i · k̂₀_i · [max(ĉ_i, ε) · exp(−α_i · clip(η̂ − Ê_eq, ±50))
                                    − ĉ_ref_i     · exp((1−α_i) · clip(η̂ − Ê_eq, ±50))]
 
-    The overpotential η̂ is taken from ``phi_applied_func`` (the Dirichlet BC value),
-    not from the interior φ field — this keeps the Newton Jacobian well-conditioned.
+    Overpotential models
+    --------------------
+    **Default** (no Stern layer, ``stern_capacitance_f_m2`` not set):
+      η = φ_applied − E_eq.  The overpotential is taken from ``phi_applied_func``
+      (the Dirichlet BC value), not from the interior φ field — this keeps the
+      Newton Jacobian well-conditioned.  This is standard for models that don't
+      resolve the compact (Stern) layer.
+
+    **Frumkin correction** (``stern_capacitance_f_m2 > 0`` in ``bv_bc``):
+      η = φ_m − φ_s − E_eq  (matches the LaTeX formulation, eq. 92).
+      Here φ_m = ``phi_applied`` (the metal potential) and φ_s is the solution-
+      phase potential at the electrode surface, which is now a free variable
+      determined by a Robin BC on the Poisson equation:
+        ε · ∇φ · n = C_stern · (φ_m − φ_s)
+      The Dirichlet BC for φ at the electrode is removed.
 
     Parameters
     ----------
@@ -139,6 +152,25 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
             concentration_inputs_dimless=concentration_inputs_dimless,
             E_eq_v=E_eq_v,
         )
+        # Propagate Stern layer capacitance from bv_cfg to scaling dict
+        # (reactions path doesn't handle it internally).
+        # Uses the same nondim formula as _add_bv_scaling_to_transform:
+        #   stern_model = C_stern * V_T / (F * c_ref * L)  [nondim mode]
+        stern_raw = bv_cfg.get("stern_capacitance_f_m2")
+        if stern_raw is not None and float(stern_raw) > 0:
+            if not nondim_enabled:
+                scaling["bv_stern_capacitance_model"] = float(stern_raw)
+            else:
+                from Nondim.constants import FARADAY_CONSTANT as _F
+                length_scale = scaling.get("length_scale_m", 1.0)
+                potential_scale_v = scaling.get("potential_scale_v", 1.0)
+                concentration_scale = scaling.get("concentration_scale_mol_m3", 1.0)
+                scaling["bv_stern_capacitance_model"] = (
+                    float(stern_raw) * potential_scale_v
+                    / (_F * concentration_scale * length_scale)
+                )
+        else:
+            scaling.setdefault("bv_stern_capacitance_model", None)
     else:
         scaling = _add_bv_scaling_to_transform(
             base_scaling, bv_cfg,
@@ -191,8 +223,23 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
     # set E_eq_v=0 and absorb equilibrium potential differences into k0 values,
     # or implement per-reaction E_eq in a future refactor.
 
+    # Stern layer (Frumkin correction) flag.
+    # When active, the overpotential matches the LaTeX formulation:
+    #   eta = phi_m - phi_s - E_eq
+    # where phi_m = phi_applied (metal potential) and phi_s = phi (solution
+    # potential at electrode, now a free variable via Robin BC).
+    # When inactive (default), the simplified model is used:
+    #   eta = phi_applied - E_eq  (standard for diffuse-layer-only models)
+    stern_capacitance_model = scaling.get("bv_stern_capacitance_model")
+    use_stern = stern_capacitance_model is not None and float(stern_capacitance_model) > 0
+
     # Build the η̂ expression used in BV exponent.
-    if conv_cfg["use_eta_in_bv"]:
+    if use_stern:
+        # Full three-term overpotential (matches LaTeX eq. 92):
+        #   eta = phi_m - phi_s - E_eq
+        # phi_applied_func = phi_m, phi = phi_s (solution field at electrode)
+        eta_hat_raw = phi_applied_func - phi - E_eq_model
+    elif conv_cfg["use_eta_in_bv"]:
         eta_hat_raw = phi_applied_func - E_eq_model
     else:
         eta_hat_raw = phi - E_eq_model
@@ -362,8 +409,33 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
     if not suppress_poisson_source:
         F_res -= charge_rhs * sum(z[i] * ci[i] * w for i in range(n)) * dx
 
+    # Stern layer Robin BC for the Poisson equation (Frumkin correction).
+    # Replaces the Dirichlet BC phi = phi_applied at the electrode with:
+    #   epsilon * grad(phi) . n = C_stern * (phi_m - phi)
+    # This allows the solution potential phi_s at the electrode surface to
+    # differ from the metal potential phi_m, enabling the full overpotential
+    # eta = phi_m - phi_s - E_eq as in the LaTeX formulation.
+    # In the weak form (after IBP), the boundary integral from the electrode is:
+    #   int(eps * grad(phi).n * w * ds) = int(C_stern * (phi_m - phi) * w * ds)
+    # We subtract the LHS (which came from IBP) and add the RHS:
+    #   F_res -= C_stern * (phi_m - phi) * w * ds(electrode)
+    if use_stern:
+        # The IBP boundary integral from the Poisson term is:
+        #   eps_coeff * grad(phi).n * w * ds
+        # The physical Stern BC: epsilon * grad(phi).n = C_stern * (phi_m - phi)
+        # So the replacement is: C_stern * (phi_m - phi) * w * ds
+        #
+        # In dimensional mode: stern_capacitance_model = C_stern [F/m^2], correct.
+        # In nondim mode: stern_capacitance_model is pre-computed in nondim.py as
+        #   C_stern * potential_scale * L / epsilon = C_stern * V_T / (F * c_ref * L)
+        # which equals eps_coeff * C_stern * L / epsilon, absorbing the eps_coeff
+        # factor. This is the correct coefficient for direct use in the weak form.
+        stern_coeff = fd.Constant(float(stern_capacitance_model))
+        F_res -= stern_coeff * (phi_applied_func - phi) * w * ds(electrode_marker)
+
     # Dirichlet BCs.
-    bc_phi_electrode = fd.DirichletBC(W.sub(n), phi_applied_func, electrode_marker)
+    # When Stern layer is active, phi at the electrode is NOT constrained by a
+    # Dirichlet BC — it is determined by the Robin condition above.
     bc_phi_ground = fd.DirichletBC(W.sub(n), fd.Constant(0.0), ground_marker)
     bc_ci = [
         fd.DirichletBC(
@@ -373,7 +445,12 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
         )
         for i in range(n)
     ]
-    bcs = bc_ci + [bc_phi_electrode, bc_phi_ground]
+    if use_stern:
+        # No Dirichlet BC for phi at electrode — Stern Robin BC determines phi_s.
+        bcs = bc_ci + [bc_phi_ground]
+    else:
+        bc_phi_electrode = fd.DirichletBC(W.sub(n), phi_applied_func, electrode_marker)
+        bcs = bc_ci + [bc_phi_electrode, bc_phi_ground]
 
     J_form = fd.derivative(F_res, U)
 
@@ -394,6 +471,7 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
         "bv_alpha_funcs": bv_alpha_funcs,
         "steric_a_funcs": steric_a_funcs,
         "nondim": scaling,
+        "use_stern": use_stern,
     })
     return ctx
 

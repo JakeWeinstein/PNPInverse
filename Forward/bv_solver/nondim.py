@@ -59,6 +59,37 @@ def _add_bv_scaling_to_transform(
         # E_eq in thermal voltage units
         E_eq_model = E_eq_raw / potential_scale
 
+    # Stern layer capacitance nondimensionalization.
+    # Physical BC: epsilon * grad(phi).n = C_stern * (phi_m - phi)
+    #
+    # In the weak form, the IBP boundary integral is eps_coeff * grad(phi_hat).n.
+    # The Stern BC replaces this, so the weak-form coefficient must satisfy:
+    #   stern_model * (phi_m_hat - phi_hat) = eps_coeff * grad(phi_hat).n
+    #   = eps_coeff * (C_stern * L / epsilon) * (phi_m_hat - phi_hat)
+    #
+    # In dimensional mode:
+    #   eps_coeff = permittivity, boundary integral = permittivity * grad(phi).n
+    #   Physical BC: permittivity * grad(phi).n = C_stern * (phi_m - phi)
+    #   stern_model = C_stern  (direct physical value, used without eps_coeff)
+    #
+    # In nondim mode:
+    #   eps_coeff = epsilon * V_T / (F * c_ref * L^2)
+    #   stern_model = eps_coeff * C_stern * L / epsilon
+    #              = C_stern * V_T / (F * c_ref * L)  [dimensionless]
+    stern_raw = bv_cfg.get("stern_capacitance_f_m2")
+    if stern_raw is not None and float(stern_raw) > 0:
+        if not nondim_enabled:
+            stern_model = float(stern_raw)
+        else:
+            length_scale = scaling.get("length_scale_m", 1.0)
+            concentration_scale = scaling.get("concentration_scale_mol_m3", 1.0)
+            stern_model = (
+                float(stern_raw) * potential_scale
+                / (FARADAY_CONSTANT * concentration_scale * length_scale)
+            )
+    else:
+        stern_model = None
+
     out = dict(scaling)
     out["bv_k0_model_vals"] = k0_model
     out["bv_c_ref_model_vals"] = c_ref_model
@@ -66,6 +97,7 @@ def _add_bv_scaling_to_transform(
     out["bv_E_eq_model"] = E_eq_model
     out["bv_alpha_vals"] = bv_cfg["alpha_vals"]
     out["bv_stoichiometry"] = bv_cfg["stoichiometry"]
+    out["bv_stern_capacitance_model"] = stern_model
     return out
 
 
@@ -122,8 +154,13 @@ def _add_bv_reactions_scaling_to_transform(
 
         scaled_reactions.append(srxn)
 
+    # Stern layer capacitance is not set via the reactions path directly;
+    # it comes from the bv_cfg which is handled by build_forms.  Store None
+    # so downstream code can check uniformly.
     out = dict(scaling)
     out["bv_reactions"] = scaled_reactions
     out["bv_exponent_scale"] = bv_exponent_scale
     out["bv_E_eq_model"] = E_eq_model
+    if "bv_stern_capacitance_model" not in out:
+        out["bv_stern_capacitance_model"] = None
     return out

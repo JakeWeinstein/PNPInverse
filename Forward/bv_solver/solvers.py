@@ -57,7 +57,11 @@ def forsolve_bv(
 
     J = fd.derivative(F_res, U)
     problem = fd.NonlinearVariationalProblem(F_res, U, bcs=bcs, J=J)
-    solver = fd.NonlinearVariationalSolver(problem, solver_parameters=params)
+    # Ensure Newton convergence is enforced -- without this flag, PETSc SNES
+    # silently accepts non-converged iterates when max iterations are reached.
+    solve_opts = dict(params) if isinstance(params, dict) else {}
+    solve_opts.setdefault("snes_error_if_not_converged", True)
+    solver = fd.NonlinearVariationalSolver(problem, solver_parameters=solve_opts)
 
     for step in range(num_steps):
         if step % print_interval == 0:
@@ -123,7 +127,10 @@ def solve_bv_with_continuation(
     scaling = ctx["nondim"]
     J = fd.derivative(ctx["F_res"], ctx["U"])
     problem = fd.NonlinearVariationalProblem(ctx["F_res"], ctx["U"], bcs=ctx["bcs"], J=J)
-    solver = fd.NonlinearVariationalSolver(problem, solver_parameters=params)
+    # Enforce convergence so _try_timestep can catch ConvergenceError for bisection.
+    solve_opts_cont = dict(params) if isinstance(params, dict) else {}
+    solve_opts_cont.setdefault("snes_error_if_not_converged", True)
+    solver = fd.NonlinearVariationalSolver(problem, solver_parameters=solve_opts_cont)
 
     dt_model = float(scaling.get("dt_model", dt))
     t_end_model = float(scaling.get("t_end_model", t_end))
@@ -310,8 +317,11 @@ def solve_bv_with_ptc(
     problem = fd.NonlinearVariationalProblem(
         ctx["F_res"], ctx["U"], bcs=ctx["bcs"], J=J
     )
+    # Enforce convergence so the PTC inner loop can catch ConvergenceError.
+    solve_opts_ptc = dict(params) if isinstance(params, dict) else {}
+    solve_opts_ptc.setdefault("snes_error_if_not_converged", True)
     solver = fd.NonlinearVariationalSolver(
-        problem, solver_parameters=params
+        problem, solver_parameters=solve_opts_ptc
     )
 
     # Voltage continuation path from 0 to eta_target.
@@ -392,6 +402,8 @@ def solve_bv_with_charge_continuation(
     charge_steps: int = 10,
     print_interval: int = 20,
     mesh: Any = None,
+    return_ctx: bool = False,
+    min_delta_z: float = 0.005,
 ) -> Any:
     """Solve BV problem using charge continuation (z-ramping).
 
@@ -468,8 +480,11 @@ def solve_bv_with_charge_continuation(
     problem = fd.NonlinearVariationalProblem(
         ctx["F_res"], ctx["U"], bcs=ctx["bcs"], J=J
     )
+    # Ensure Newton convergence is enforced in Phase 1.
+    solve_opts_ph1 = dict(params) if isinstance(params, dict) else {}
+    solve_opts_ph1.setdefault("snes_error_if_not_converged", True)
     solver = fd.NonlinearVariationalSolver(
-        problem, solver_parameters=params
+        problem, solver_parameters=solve_opts_ph1
     )
 
     # Voltage continuation from 0 to eta_target (neutral).
@@ -486,36 +501,68 @@ def solve_bv_with_charge_continuation(
     print(f"[charge-cont] Phase 1 complete: neutral solution at eta={eta_target:.4f}")
 
     # ---------- Phase 2: Charge ramping at target eta ----------
-    # Gradually turn on z_factor from 0 to 1.
+    # Gradually turn on z_factor from 0 to 1 with adaptive subdivision.
     # z_consts are fd.Constant objects that can be .assign()-ed.
+    from collections import deque
+
     z_consts = ctx["z_consts"]  # list of fd.Constant objects
-    z_path = np.linspace(0.0, 1.0, charge_steps + 1)[1:]  # skip 0 (already neutral)
+    z_targets = deque(np.linspace(0.0, 1.0, charge_steps + 1)[1:])  # skip 0
 
     # Pre-allocate checkpoint function once to avoid leaking PETSc Vecs.
     U_z_ckpt = fd.Function(ctx["U"])
 
     achieved_z_factor = 0.0
-    for i_z, z_factor in enumerate(z_path):
-        # Checkpoint before attempting this z_factor
-        U_z_ckpt.assign(ctx["U"])
+    step_count = 0
 
-        # Update all charge valences: z_i = z_nominal_i * z_factor.
+    def _try_z_step(z_val: float) -> bool:
+        """Attempt time-stepping at z_val. Returns True on success."""
         for i in range(n_s):
-            z_consts[i].assign(float(z_nominal[i]) * float(z_factor))
-
-        print(f"[charge-cont] Phase 2 (z-ramp): "
-              f"step {i_z+1}/{len(z_path)}  z_factor={z_factor:.3f}")
-
-        # Run time stepping to find steady state at this z_factor.
+            z_consts[i].assign(float(z_nominal[i]) * float(z_val))
         try:
             for _ in range(num_steps):
                 solver.solve()
                 ctx["U_prev"].assign(ctx["U"])
-            achieved_z_factor = z_factor
-        except fd.ConvergenceError:
-            ctx["U"].assign(U_z_ckpt)
-            print(f"  [charge-cont] Failed at z_factor={z_factor:.3f}")
-            break
+            return True
+        except (fd.ConvergenceError, Exception) as exc:
+            if not isinstance(exc, fd.ConvergenceError):
+                import petsc4py.PETSc as PETSc
+                if not isinstance(exc, PETSc.Error):
+                    raise
+            return False
 
-    print(f"[charge-cont] Phase 2 complete: z_factor={achieved_z_factor:.3f}")
+    while z_targets:
+        z_next = z_targets[0]
+        step_count += 1
+
+        # Checkpoint before attempting
+        U_z_ckpt.assign(ctx["U"])
+
+        print(f"[charge-cont] Phase 2 (z-ramp): "
+              f"step {step_count}  z_factor={z_next:.4f} "
+              f"(from {achieved_z_factor:.4f})")
+
+        if _try_z_step(z_next):
+            achieved_z_factor = z_next
+            z_targets.popleft()
+        else:
+            # Restore checkpoint
+            ctx["U"].assign(U_z_ckpt)
+            ctx["U_prev"].assign(U_z_ckpt)
+
+            midpoint = (achieved_z_factor + z_next) / 2.0
+            gap = z_next - achieved_z_factor
+            if gap < min_delta_z:
+                print(f"  [charge-cont] Cannot subdivide further "
+                      f"(gap={gap:.4f} < min_delta_z={min_delta_z}), "
+                      f"stopping at z={achieved_z_factor:.4f}")
+                break
+
+            print(f"  [charge-cont] Phase 2: retrying z={midpoint:.4f} "
+                  f"(halved from {z_next:.4f})")
+            z_targets.appendleft(midpoint)
+
+    print(f"[charge-cont] Phase 2 complete: z_factor={achieved_z_factor:.4f}")
+    ctx["achieved_z_factor"] = achieved_z_factor
+    if return_ctx:
+        return ctx
     return ctx["U"]

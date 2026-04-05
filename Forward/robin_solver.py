@@ -280,7 +280,11 @@ def forsolve(ctx: dict, solver_params, print_interval: int = 100):
 
     J = fd.derivative(F_res, U)
     problem = fd.NonlinearVariationalProblem(F_res, U, bcs=bcs, J=J)
-    solver = fd.NonlinearVariationalSolver(problem, solver_parameters=params)
+    # Ensure Newton convergence is enforced -- without this flag, PETSc SNES
+    # silently accepts non-converged iterates when max iterations are reached.
+    solve_opts = dict(params) if isinstance(params, dict) else {}
+    solve_opts.setdefault("snes_error_if_not_converged", True)
+    solver = fd.NonlinearVariationalSolver(problem, solver_parameters=solve_opts)
 
     for step in range(num_steps):
         if step % print_interval == 0:

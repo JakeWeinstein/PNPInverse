@@ -508,6 +508,7 @@ class NNSurrogateModel:
         device = torch.device(self._device)
         X_t = torch.tensor(X, dtype=torch.float32, device=device)
 
+        self._model.float()
         self._model.eval()
         with torch.no_grad():
             Y_norm = self._model(X_t).cpu().numpy()
@@ -579,18 +580,18 @@ class NNSurrogateModel:
             )
 
         if x_logspace.requires_grad:
-            # Stay in float64 throughout to preserve gradient accuracy
+            # Stay in float64 throughout to preserve gradient accuracy.
+            # Do NOT restore to float32 here — backward() runs after this
+            # returns, so the model must remain float64 until then.
             self._model.double()
-            try:
-                z = (x_logspace - self._input_mean_t64) / self._input_std_t64
-                y_norm = self._model(z.unsqueeze(0)).squeeze(0)
-                y = y_norm * self._out_std_t64 + self._out_mean_t64
-                return y
-            finally:
-                # Restore model back to float32 for normal inference
-                self._model.float()
+            z = (x_logspace - self._input_mean_t64) / self._input_std_t64
+            y_norm = self._model(z.unsqueeze(0)).squeeze(0)
+            y = y_norm * self._out_std_t64 + self._out_mean_t64
+            return y
         else:
-            # Normal inference path: use float32
+            # Normal inference path: use float32.
+            # Restore to float32 in case a prior autograd call left it in float64.
+            self._model.float()
             x_f32 = x_logspace.float()
             z = (x_f32 - self._input_mean_t) / self._input_std_t
             y_norm = self._model(z.unsqueeze(0)).squeeze(0)

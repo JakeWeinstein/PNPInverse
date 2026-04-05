@@ -32,6 +32,22 @@ def _get_bv_cfg(params: Any, n_species: int) -> dict:
     electrode_marker = int(raw.get("electrode_marker", 3))
     concentration_marker = int(raw.get("concentration_marker", 4))
     ground_marker = int(raw.get("ground_marker", 4))
+    # Stern layer capacitance [F/m²].  When set (> 0), enables the Frumkin-
+    # corrected overpotential model:
+    #   eta = phi_m - phi_s - E_eq     (matches LaTeX formulation)
+    # where phi_m = phi_applied (metal potential) and phi_s = solution potential
+    # at the electrode surface (free to float, determined by the Poisson
+    # equation + Stern layer Robin BC).  The Dirichlet BC for phi at the
+    # electrode is replaced with:
+    #   epsilon * grad(phi) . n = C_stern * (phi_m - phi)
+    # When None or 0 (default), the classical model is used:
+    #   eta = phi_applied - E_eq       (phi_s = phi_applied via Dirichlet BC)
+    stern_raw = raw.get("stern_capacitance_f_m2", None)
+    stern_capacitance = float(stern_raw) if stern_raw is not None else None
+    if stern_capacitance is not None and stern_capacitance < 0:
+        raise ValueError(
+            f"stern_capacitance_f_m2 must be non-negative; got {stern_capacitance}"
+        )
 
     return {
         "k0_vals":            _as_list(k0, n_species, "bv_bc.k0"),
@@ -42,6 +58,7 @@ def _get_bv_cfg(params: Any, n_species: int) -> dict:
         "electrode_marker":   electrode_marker,
         "concentration_marker": concentration_marker,
         "ground_marker":      ground_marker,
+        "stern_capacitance_f_m2": stern_capacitance,
     }
 
 
