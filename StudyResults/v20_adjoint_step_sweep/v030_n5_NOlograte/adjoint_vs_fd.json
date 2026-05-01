@@ -1,0 +1,97 @@
+{
+  "config": {
+    "V_TEST": [
+      0.3
+    ],
+    "PARAMS": [
+      "log_k0_1",
+      "log_k0_2",
+      "alpha_1",
+      "alpha_2"
+    ],
+    "FD_steps": [
+      0.001,
+      0.001,
+      0.0001,
+      0.0001
+    ],
+    "log_rate": false,
+    "annotate_steps": 5,
+    "ss_rel_tol": 0.0001,
+    "ss_abs_tol": 1e-08
+  },
+  "results": [
+    {
+      "V_RHE": 0.3,
+      "observable": "cd",
+      "param": "log_k0_1",
+      "adjoint": -3.7627550368903415e-06,
+      "fd": -1.881591662607367e-06,
+      "rel_err": 0.9997723797713904,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "cd",
+      "param": "log_k0_2",
+      "adjoint": -5.288898968019095e-13,
+      "fd": -1.7319217561607796e-05,
+      "rel_err": 0.9999999694622523,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "cd",
+      "param": "alpha_1",
+      "adjoint": -0.00011130427341031143,
+      "fd": -5.5658543095003446e-05,
+      "rel_err": 0.9997697967107477,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "cd",
+      "param": "alpha_2",
+      "adjoint": -5.288898954780416e-11,
+      "fd": 2.8619904890962852e-08,
+      "rel_err": 1.0018479792210806,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "pc",
+      "param": "log_k0_1",
+      "adjoint": -1.2367081128101986e-12,
+      "fd": -1.881591662607367e-06,
+      "rel_err": 0.9999993427329971,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "pc",
+      "param": "log_k0_2",
+      "adjoint": 5.270614607344379e-13,
+      "fd": 1.7319217561607796e-05,
+      "rel_err": 0.999999969567825,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "pc",
+      "param": "alpha_1",
+      "adjoint": -3.658247655638526e-11,
+      "fd": -5.5658543095020387e-05,
+      "rel_err": 0.999999342733846,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "pc",
+      "param": "alpha_2",
+      "adjoint": 5.2706146125941986e-11,
+      "fd": -2.8620076516778625e-08,
+      "rel_err": 1.0018415794973519,
+      "verdict": "FAIL"
+    }
+  ]
+}

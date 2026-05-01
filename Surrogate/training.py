@@ -178,6 +178,18 @@ def generate_training_data_single(
     # Combined convergence mask
     converged_mask = cd_converged & pc_converged
 
+    # Physics validation: reject non-physical (cd, pc) pairs
+    from Forward.bv_solver.validation import validate_observables, compute_i_lim_from_params
+    _i_lim = compute_i_lim_from_params(base_solver_params)
+    for i in range(len(cd_flux)):
+        if converged_mask[i]:
+            vr = validate_observables(
+                cd_flux[i], pc_flux[i],
+                I_lim=_i_lim, phi_applied=float(phi_applied_values[i]), V_T=1.0,
+            )
+            if not vr.valid:
+                converged_mask[i] = False
+
     # Extract solutions for cross-sample warm-start chain
     converged_solutions = None
     if return_solutions:
@@ -203,11 +215,16 @@ def _interpolate_failed_points(
     flux: np.ndarray,
     converged: np.ndarray,
     phi_applied: np.ndarray,
+    *,
+    i_lim: Optional[float] = None,
 ) -> np.ndarray:
     """Linearly interpolate failed (non-converged) points from neighbors.
 
     Only interpolates if enough points converged (>50%).  Returns a copy
     with failed points filled in.
+
+    If ``i_lim`` is provided, interpolated values with magnitude exceeding
+    ``i_lim * 1.05`` are set to NaN (F2 diffusion-limit check).
     """
     result = flux.copy()
     good = converged.astype(bool)
@@ -231,6 +248,15 @@ def _interpolate_failed_points(
         xp[sort_order],
         fp[sort_order],
     )
+
+    # Re-validate interpolated values (F2 only -- cross-observable F3/F7
+    # need the paired observable which is not available here).
+    if i_lim is not None:
+        threshold = abs(i_lim) * 1.05
+        for i in bad_idx:
+            if abs(result[i]) > threshold:
+                result[i] = np.nan
+
     return result
 
 
@@ -406,15 +432,19 @@ def generate_training_dataset(
 
             if frac >= min_converged_fraction:
                 # Interpolate any failed points
+                from Forward.bv_solver.validation import compute_i_lim_from_params
+                _i_lim = compute_i_lim_from_params(base_solver_params)
                 cd = _interpolate_failed_points(
                     result["current_density"],
                     result["converged_mask"],
                     phi_applied_values,
+                    i_lim=_i_lim,
                 )
                 pc = _interpolate_failed_points(
                     result["peroxide_current"],
                     result["converged_mask"],
                     phi_applied_values,
+                    i_lim=_i_lim,
                 )
                 all_cd[i] = cd
                 all_pc[i] = pc
@@ -903,10 +933,12 @@ def generate_training_dataset_parallel(
                         frac = sum(conv_mask) / n_eta
 
                         if frac >= min_converged_fraction:
+                            from Forward.bv_solver.validation import compute_i_lim_from_params
+                            _i_lim = compute_i_lim_from_params(base_solver_params)
                             all_cd[idx] = _interpolate_failed_points(
-                                cd, conv_mask, phi_applied_values)
+                                cd, conv_mask, phi_applied_values, i_lim=_i_lim)
                             all_pc[idx] = _interpolate_failed_points(
-                                pc, conv_mask, phi_applied_values)
+                                pc, conv_mask, phi_applied_values, i_lim=_i_lim)
                             all_converged[idx] = True
                             n_valid += 1
                         else:

@@ -214,14 +214,14 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
     phi0_func = fd.Function(R_space, name="phi0")
     phi0_func.assign(float(scaling["phi0_model"]))
 
-    # E_eq offset in model space.
-    E_eq_model = fd.Constant(float(scaling["bv_E_eq_model"]))
+    # Global E_eq (fallback for legacy path and backward compat).
+    E_eq_model_global = fd.Constant(float(scaling["bv_E_eq_model"]))
     bv_exp_scale = fd.Constant(float(scaling["bv_exponent_scale"]))
 
-    # NOTE: All reactions currently share a single E_eq. For systems with
-    # different equilibrium potentials per reaction (e.g., O2/H2O2 vs H2O2/H2O),
-    # set E_eq_v=0 and absorb equilibrium potential differences into k0 values,
-    # or implement per-reaction E_eq in a future refactor.
+    # Per-reaction E_eq is now supported: each reaction dict may contain
+    # "E_eq_model" (scaled in nondim.py).  The global E_eq_model is used
+    # as fallback for the legacy per-species path or when reactions lack
+    # an individual E_eq.
 
     # Stern layer (Frumkin correction) flag.
     # When active, the overpotential matches the LaTeX formulation:
@@ -233,25 +233,27 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
     stern_capacitance_model = scaling.get("bv_stern_capacitance_model")
     use_stern = stern_capacitance_model is not None and float(stern_capacitance_model) > 0
 
-    # Build the η̂ expression used in BV exponent.
-    if use_stern:
-        # Full three-term overpotential (matches LaTeX eq. 92):
-        #   eta = phi_m - phi_s - E_eq
-        # phi_applied_func = phi_m, phi = phi_s (solution field at electrode)
-        eta_hat_raw = phi_applied_func - phi - E_eq_model
-    elif conv_cfg["use_eta_in_bv"]:
-        eta_hat_raw = phi_applied_func - E_eq_model
-    else:
-        eta_hat_raw = phi - E_eq_model
+    def _build_eta_clipped(E_eq_const):
+        """Build clipped overpotential expression for a given E_eq."""
+        if use_stern:
+            eta_raw = phi_applied_func - phi - E_eq_const
+        elif conv_cfg["use_eta_in_bv"]:
+            eta_raw = phi_applied_func - E_eq_const
+        else:
+            eta_raw = phi - E_eq_const
+        eta_scaled = bv_exp_scale * eta_raw
+        if conv_cfg["clip_exponent"]:
+            clip_val = fd.Constant(float(conv_cfg["exponent_clip"]))
+            return fd.min_value(fd.max_value(eta_scaled, -clip_val), clip_val)
+        return eta_scaled
 
-    eta_hat_scaled = bv_exp_scale * eta_hat_raw
+    # Global eta_clipped (used by legacy path and as default).
+    eta_clipped = _build_eta_clipped(E_eq_model_global)
 
-    # Exponent clipping to prevent float overflow.
-    if conv_cfg["clip_exponent"]:
-        clip_val = fd.Constant(float(conv_cfg["exponent_clip"]))
-        eta_clipped = fd.min_value(fd.max_value(eta_hat_scaled, -clip_val), clip_val)
-    else:
-        eta_clipped = eta_hat_scaled
+    # Diagnostic metadata for downstream validation (e.g. W1 clip-saturation check).
+    ctx["_diag_bv_exp_scale"] = float(bv_exp_scale)
+    ctx["_diag_exponent_clip"] = float(conv_cfg["exponent_clip"])
+    ctx["_diag_eps_c"] = float(conv_cfg["conc_floor"])
 
     # Steric chemical potential (Bikerman model): mu_steric = ln(1 - sum_j a_j c_j)
     # Using fd.Function(R_space) instead of fd.Constant so steric `a` values
@@ -339,8 +341,16 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
             n_e_j = fd.Constant(float(rxn["n_electrons"]))
             cat_idx = rxn["cathodic_species"]
 
+            # Per-reaction overpotential: use reaction-specific E_eq if present.
+            E_eq_j_val = rxn.get("E_eq_model", None)
+            if E_eq_j_val is not None and E_eq_j_val != 0.0:
+                E_eq_j = fd.Constant(float(E_eq_j_val))
+                eta_j = _build_eta_clipped(E_eq_j)
+            else:
+                eta_j = eta_clipped
+
             # Cathodic term: k0 * c_cat * exp(-alpha * n_e * eta)
-            cathodic = k0_j * c_surf[cat_idx] * fd.exp(-alpha_j * n_e_j * eta_clipped)
+            cathodic = k0_j * c_surf[cat_idx] * fd.exp(-alpha_j * n_e_j * eta_j)
 
             # Apply optional cathodic concentration factors: e.g. (c_H+/c_ref)^power
             for factor in rxn.get("cathodic_conc_factors", []):
@@ -353,13 +363,13 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
             if rxn["reversible"] and rxn["anodic_species"] is not None:
                 anod_idx = rxn["anodic_species"]
                 anodic = k0_j * c_surf[anod_idx] * fd.exp(
-                    (fd.Constant(1.0) - alpha_j) * n_e_j * eta_clipped
+                    (fd.Constant(1.0) - alpha_j) * n_e_j * eta_j
                 )
             elif rxn["reversible"]:
                 # Fallback: no anodic_species specified, use constant c_ref
                 c_ref_j = fd.Constant(float(rxn["c_ref_model"]))
                 anodic = k0_j * c_ref_j * fd.exp(
-                    (fd.Constant(1.0) - alpha_j) * n_e_j * eta_clipped
+                    (fd.Constant(1.0) - alpha_j) * n_e_j * eta_j
                 )
             else:
                 anodic = fd.Constant(0.0)
@@ -372,6 +382,11 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
             for i in range(n):
                 if stoi[i] != 0:
                     F_res -= fd.Constant(float(stoi[i])) * R_j * v_list[i] * ds(electrode_marker)
+
+        # Per-reaction diagnostic metadata for downstream validation.
+        ctx["_diag_E_eq_per_reaction"] = [float(rxn["E_eq_v"]) for rxn in rxns_scaled]
+        ctx["_diag_alpha_per_reaction"] = [float(rxn["alpha"]) for rxn in rxns_scaled]
+        ctx["_diag_n_e_per_reaction"] = [int(rxn["n_electrons"]) for rxn in rxns_scaled]
 
     else:
         # ---- Legacy per-species path ----

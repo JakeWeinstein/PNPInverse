@@ -1,0 +1,626 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,siunitx,hyperref,microtype,xcolor}
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=*,topsep=2pt,itemsep=2pt}
+
+\title{PNP--BV Forward Solver Evolution\\
+       From 4-Species PNP to 3-Species + Boltzmann + Log-c + Log-Rate BV}
+\author{Jake Weinstein}
+\date{Week of April~27, 2026}
+
+\newcommand{\true}{\mathrm{TRUE}}
+\newcommand{\Eeq}{E_{\mathrm{eq}}}
+\newcommand{\VRHE}{V_{\mathrm{RHE}}}
+\newcommand{\VT}{V_{T}}
+
+\begin{document}
+\maketitle
+
+%% ============================================================
+\section{Summary}
+%% ============================================================
+The forward solver supporting the 4-parameter inverse problem
+($\log k_{0,1}, \log k_{0,2}, \alpha_1, \alpha_2$) was rebuilt over the past
+two weeks. Three independent changes, each motivated by a distinct numerical
+failure of the original 4-species PNP solver, are now stacked in the active
+configuration:
+\begin{enumerate}
+  \item \textbf{4-species $\to$ 3-species PNP + analytic Boltzmann counterion}
+        --- removes the inert supporting-electrolyte counterion as a dynamic
+        Nernst--Planck unknown while retaining its contribution to Poisson's
+        equation.
+  \item \textbf{Concentration $c_i \to$ log-concentration $u_i = \ln c_i$}
+        --- enforces positivity of the dynamic species and avoids the negative
+        concentration iterates that previously triggered floor/clip
+        regularizations.
+  \item \textbf{Standard Butler--Volmer $\to$ log-rate Butler--Volmer}
+        --- removes a phantom $\mathrm{R}_2$ sink at high anodic overpotential
+        caused by clipping the surface concentration before evaluating the
+        boundary reaction rate.
+\end{enumerate}
+The combined effect is that the usable voltage grid expands from roughly
+$\VRHE \le \SI{+0.20}{\volt}$ to $\VRHE \le \SI{+0.60}{\volt}$. In the local
+Fisher analysis at TRUE parameter values, the old nearly singular
+$\log k_{0,2}$ direction is removed: $\mathrm{cond}(F)$ improves from about
+$2\times 10^{11}$ to about $1.79\times 10^{7}$, and the canonical-ridge cosine
+drops from $1.000$ to $0.031$. This is a major improvement, but it should not
+be read as a complete solution of the inverse problem. Clean-data inverse runs
+still show multiple basins: $\alpha_1$ and $\alpha_2$ are recovered to
+$\le 2\%$ in 2/4 standard initializations and to $\le 16\%$ in 3/4, while no
+single initialization recovers all four parameters jointly.
+
+%% ============================================================
+\section{Original 4-Species Solver}
+%% ============================================================
+The original forward model was a coupled Poisson--Nernst--Planck (PNP)
+system on a graded 2D rectangular mesh with four species:
+$\mathrm{O}_2$, $\mathrm{H}_2\mathrm{O}_2$, $\mathrm{H}^{+}$, and the
+supporting-electrolyte counterion $\mathrm{ClO}_4^{-}$. In dimensional form,
+the bulk equations for each species $i$ are
+\begin{equation}
+  \frac{\partial c_i}{\partial t}
+  \;=\;
+  -\,\nabla\!\cdot J_i,
+  \qquad
+  J_i = -D_i\left(\nabla c_i + \frac{z_i F}{RT}c_i\nabla\varphi\right),
+  \qquad
+  -\,\varepsilon\,\nabla^{2}\varphi \;=\; F\sum_i z_i c_i,
+  \label{eq:pnp-orig}
+\end{equation}
+with Butler--Volmer (BV) flux boundary conditions at the electrode for the
+two reactions
+\begin{align}
+  \mathrm{R}_1\!&: \;\mathrm{O}_2 + 2\mathrm{H}^{+} + 2e^{-}
+                       \to \mathrm{H}_2\mathrm{O}_2,
+  \qquad &\Eeq^{(1)} = \SI{0.68}{\volt}, \\
+  \mathrm{R}_2\!&: \;\mathrm{H}_2\mathrm{O}_2 + 2\mathrm{H}^{+} + 2e^{-}
+                       \to 2\mathrm{H}_2\mathrm{O},
+  \qquad &\Eeq^{(2)} = \SI{1.78}{\volt}.
+\end{align}
+The implementation uses the corresponding nondimensional form, where voltage
+is scaled by $\VT = RT/F$.
+
+\paragraph{Where it failed.}
+\begin{itemize}
+  \item \textbf{Voltage ceiling near $\VRHE \approx \SI{+0.20}{\volt}$.} At
+        higher anodic potentials the $\mathrm{H}_2\mathrm{O}_2$ surface
+        concentration can drop by many orders of magnitude. Newton iterates in
+        the concentration formulation could become non-positive, triggering
+        floor regularizations whose Jacobian contributions stalled the SNES
+        solve.
+  \item \textbf{Nearly singular FIM at TRUE.} Restricted to
+        $\VRHE \le 0.20$\,V, the CD+PC Fisher information had condition number
+        $\approx 2\times 10^{11}$ with weak eigenvector almost pure
+        $\log k_{0,2}$. In that voltage window, $k_{0,2}$ was practically
+        unidentifiable.
+  \item \textbf{$\mathrm{ClO}_4^{-}$ added cost without chemistry.} The
+        counterion is inert in this model and exists to provide charge balance.
+        Solving for it as a fourth dynamic NP variable increased assembly and
+        nonlinear-solve cost while not adding an electrode reaction or an
+        independent inverse observable.
+\end{itemize}
+
+%% ============================================================
+\section{Change~1: 3-Species PNP + Analytic Boltzmann Counterion}
+%% ============================================================
+\paragraph{Motivation.}
+$\mathrm{ClO}_4^{-}$ is inert and present as supporting electrolyte. Rather
+than solving a fourth dynamic Nernst--Planck equation for this nonreactive
+counterion, the reduced model assumes it remains in local electrochemical
+equilibrium with the electrostatic potential. Under that assumption its
+profile is represented analytically by a Boltzmann factor,
+\(
+  c_{\mathrm{ClO}_4}(x) = c_{\mathrm{bulk}}\exp\!\bigl(-z_{\mathrm{ClO}_4}\varphi(x)/\VT\bigr)
+\),
+with the sign following the code's potential convention. This is a modeling
+reduction for an inert supporting electrolyte, not a new physical mechanism.
+
+\paragraph{Implementation.}
+Drop $\mathrm{ClO}_4^{-}$ as a primary unknown. The Poisson equation keeps its
+analytic contribution to the charge density:
+\begin{equation}
+  -\,\varepsilon\nabla^{2}\varphi
+   \;=\; F\!\!\sum_{i\in\{\mathrm{O}_2,\,\mathrm{H}_2\mathrm{O}_2,\,\mathrm{H}^{+}\}} z_i c_i
+   \;-
+   F\,c_{\mathrm{ClO}_4,\mathrm{bulk}}\,\exp(-\varphi/\VT),
+\end{equation}
+where the exponential sign should be interpreted consistently with the
+nondimensional potential convention used in the code. The three remaining
+species have charges $z = [0,0,+1]$ and retain the full NP coupling.
+Operationally this is implemented through the Boltzmann contribution to the
+Poisson residual; see \texttt{add\_boltzmann()} in the current study scripts.
+
+\paragraph{Result.}
+The reduced model removes one dynamic species and produced a measurable speedup
+in the forward studies. To quantify how closely the reduced solver tracks
+the full 4-species PNP, the current production 3-species $+$ Boltzmann log-c
+forward solver (the build path used by \texttt{v18\_logc\_lsq\_inverse.py},
+the most recent inverse) was run head-to-head against the 4-species standard
+solver via \texttt{solve\_grid\_with\_charge\_continuation} on a shared mesh,
+shared TRUE kinetic parameters, and shared $E_{\mathrm{eq}}$. The 4-species
+charge-continuation pipeline reaches $z=1$ across the documented window
+$\VRHE \in [-0.50, +0.10]$\,V, but the 3-species log-c solver only
+cold-starts in $\VRHE \gtrsim -0.20$\,V. To grow the overlap set we add a
+voltage-continuation strategy on the 3-species side: cold-start where
+possible, then warm-start at full charge from the nearest converged
+neighbour and march the applied potential outward in $\Delta V$ substeps
+with bisection fallback. With four substeps per
+$\SI{0.10}{\volt}$ jump, this fills the entire $\VRHE \in [-0.50, +0.10]$\,V
+grid. Across the resulting eight-voltage overlap set, both observables
+agree well within the F2 diffusion-limit tolerance ($5\%$ of
+$\max|\text{obs}|$) that the inverse-study validation framework uses
+elsewhere (\texttt{Forward/bv\_solver/validation.py}):
+\begin{center}
+  \begin{tabular}{lcc}
+    \toprule
+                                       & \textbf{max} & \textbf{mean} \\
+    \midrule
+    $|\Delta \mathrm{CD}| / \max|\mathrm{CD}|$ & $0.269\%$ & $0.201\%$ \\
+    $|\Delta \mathrm{PC}| / \max|\mathrm{PC}|$ & $0.104\%$ & $0.033\%$ \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+All eight overlap points pass the $5\%$ F2 threshold on both observables.
+At anodic voltages where peroxide current is small ($\VRHE \ge -0.10$\,V),
+PC differences appear as a sign flip on values four to seven orders of
+magnitude below $\max|\mathrm{PC}|\approx 1.8\times 10^{-1}$ --- a numerical
+artefact of evaluating a near-zero quantity in two different formulations,
+not a physics disagreement. The important claim is therefore not that the
+two formulations are algebraically identical, but that this controlled
+reduction preserves the ORR observables to better than half a percent of
+the diffusion-limit scale across the entire window where the 4-species
+solver itself converges --- well inside the accuracy needed for the current
+inverse-study comparisons. Raw data, CSV, plot, and summary are saved under
+\path{StudyResults/v24_3sp_logc_vs_4sp_validation/}; the comparison script
+(including the warm-start continuation strategy) is
+\path{scripts/studies/v24_3sp_logc_vs_4sp_validation.py}.
+
+%% ============================================================
+\section{Change~2: Log-Concentration Formulation}
+%% ============================================================
+\paragraph{Motivation.}
+Concentrations near a reactive electrode can span many orders of magnitude. In
+the diffuse layer, $c_i(x)$ varies approximately as
+$c_{\mathrm{bulk}}\exp(-z_i\varphi/\VT)$. When $c$ is the primary unknown, the
+SNES line search can overshoot near small concentrations and produce
+non-positive iterates. Those iterates then require floors or clips, and the
+regularization can contaminate the Jacobian and stall continuation.
+
+\paragraph{Implementation.}
+Switch to $u_i = \ln c_i$ as the primary unknown. The Nernst--Planck weak form
+becomes
+\begin{equation}
+  \int_\Omega
+    \frac{e^{u_i} - e^{u_i^{\mathrm{old}}}}{\Delta t}\,v\;\mathrm{d}x
+  \;+\;
+  \int_\Omega
+    D_i\,e^{u_i}\bigl(\nabla u_i + z_i \nabla\phi\bigr)\!\cdot\!\nabla v\;\mathrm{d}x
+  \;=\;
+  \text{(BV boundary terms)},
+\end{equation}
+and Poisson's right-hand side replaces $c_i$ by $\exp(u_i)$. See
+\texttt{Forward/bv\_solver/forms\_logc.py}.
+
+\paragraph{Why it helps.}
+\begin{itemize}
+  \item $c_i = \exp(u_i) > 0$ by construction, so the dynamic species remain
+        positive in the bulk formulation.
+  \item The Debye-layer behavior becomes approximately linear in $u_i$:
+        $u_i(x) \approx \ln c_{\mathrm{bulk}} - z_i\varphi/\VT$, which is more
+        naturally represented on the existing graded mesh.
+  \item Remaining numerical guards/clamps should be understood as overflow
+        protection rather than concentration floors in the physical variable;
+        later clamp sweeps checked that these guards did not drive the reported
+        Fisher results.
+\end{itemize}
+
+%% ============================================================
+\section{Change~3: Log-Rate Butler--Volmer}
+%% ============================================================
+\paragraph{Starting point.}
+The reference for our group's canonical BV expression is the standard
+two-branch form for an $n$-electron redox couple
+$\mathrm{O} + n e^{-} \rightleftharpoons \mathrm{R}$%
+\footnote{See the internal document \texttt{docs/PNP Equation
+Formulations.tex} for the group's full derivation, weak forms, and
+flux-boundary mapping. The form below is its
+$R_{\mathrm{BV}}$ expression.}:
+\begin{equation}
+  \label{eq:bv-canonical}
+  R_{\mathrm{BV}}
+  \;=\;
+  k_0
+  \!\left[\,
+  c_{\mathrm{O}}\,\exp\!\Bigl(-\alpha\,\tfrac{n F \eta}{RT}\Bigr)
+  \;-\;
+  c_{\mathrm{R}}\,\exp\!\Bigl((1-\alpha)\,\tfrac{n F \eta}{RT}\Bigr)
+  \,\right],
+\end{equation}
+where $c_{\mathrm{O}}, c_{\mathrm{R}}$ are the surface concentrations on the
+electrode reaction plane and $\eta = \phi_m - \phi_s - \Eeq$ is the
+overpotential. In the nondimensional code, $RT/F$ is replaced by $\VT$ and
+$n F \eta / RT$ becomes $n\eta/\VT$. Equation~\eqref{eq:bv-canonical} is
+the algebraic object both formulations evaluate; the two formulations
+disagree only on \emph{how} the surface contribution is combined with the
+voltage exponential.
+
+\paragraph{Two ways to evaluate it in a log-c solver.}
+With $u_i = \ln c_i$ as the primary unknown, $c_{\mathrm{O}} = \exp(u_{\mathrm{O}})$
+exactly. The two evaluations differ only at the boundary, in how $u_i$ is
+turned back into a rate. Showing the cathodic branch only for clarity:
+\begin{center}
+\renewcommand{\arraystretch}{1.6}
+\begin{tabular}{@{}p{0.46\textwidth}@{\hspace{0.04\textwidth}}p{0.46\textwidth}@{}}
+\toprule
+\textbf{Old: clip-then-multiply} & \textbf{New: log-rate} \\
+\midrule
+\(c_{\mathrm{surf},i} = \exp\!\bigl(\mathrm{clip}(u_i,\pm 30)\bigr)\)
+&
+(no surface clip)
+\\
+\(r_j \;=\; k_{0,j}\;
+            c_{\mathrm{surf},\mathrm{cat}(j)}\;
+            \exp(-\alpha_j\,n_e\,\eta_j/\VT)\)
+&
+\(\log r_j \;=\;
+   \ln k_{0,j} \;+\; u_{\mathrm{cat}(j)}
+                  \;-\; \alpha_j\,n_e\,\eta_j/\VT\)
+\\
+&
+\(r_j \;=\; \exp(\log r_j)\)
+\\
+\midrule
+exponentiate $u$, clip, multiply
+&
+add $u$ inside the exponent, exponentiate once
+\\
+\bottomrule
+\end{tabular}
+\end{center}
+The anodic branch is analogous: replace $u_{\mathrm{cat}(j)}$ by
+$u_{\mathrm{anod}(j)}$ and the sign of the $\eta$ term, then subtract the
+two exponentials. The full implementation also adds the
+$\sum_f \nu_f (u_{\mathrm{sp}(f)} - \ln c_{\mathrm{ref},f})$ contribution
+from cathodic concentration factors (e.g.\ the H$^+$ stoichiometric power
+in our R$_1$/R$_2$ reactions); under the new form those terms also enter
+additively inside the exponent.
+
+\paragraph{Why the old form fails at high $\eta$.}
+The two formulations agree algebraically when $|u_i|$ stays modest. They
+disagree when $u_i$ runs to large negative values --- exactly the regime
+this work was trying to access. In the old form, $u_{\mathrm{H}_2\mathrm{O}_2}$
+should tend to a very negative number at high anodic $\VRHE$, but the
+$\pm 30$ clip pins $c_{\mathrm{surf,H_2O_2}}$ at a finite floor. Multiplying
+that floor by the large $\mathrm{R}_2$ exponential produces a phantom
+cathodic sink. In the new form, the same large-negative $u_i$ is added
+\emph{inside} the exponent, so $\log r_j \to -\infty$ and $r_j \to 0$
+smoothly, which is the physically correct behavior. This was a major source
+of Newton failures in the $\VRHE \in [+0.30,+0.60]$\,V range; the
+log-rate form removes them. The toggle is
+\texttt{bv\_log\_rate=True} in the BV convergence configuration; see
+\texttt{forms\_logc.py:294--360}.
+
+\paragraph{Result.}
+The extended voltage grid
+$\VRHE \in \{-0.10, +0.10, +0.20, +0.30, +0.40, +0.50, +0.60\}$\,V now
+converges under the current cold-ramp/charge-continuation pipeline. Some
+points require the continuation machinery rather than a single direct Newton
+solve, so the safe statement is ``converges under the current pipeline,'' not
+``converges trivially from every cold start.''
+
+%% ============================================================
+\section{Combined Results}
+%% ============================================================
+
+\subsection*{Voltage window}
+Pre-rebuild, the usable synthetic voltage window was roughly
+$\VRHE \le \SI{+0.20}{\volt}$. Post-rebuild, the current pipeline reaches the
+extended grid through $\VRHE = \SI{+0.60}{\volt}$. This matters because
+$\mathrm{R}_2$ begins to unclip at approximately
+\(
+  \VRHE > \Eeq^{(2)} - 50\VT \approx \SI{+0.495}{\volt},
+\)
+under the code's $\eta_{\mathrm{scaled}}$ clipping convention. The inverse
+problem now has access to voltage-shape information from a regime that was
+previously unreachable.
+
+\subsection*{Fisher information}
+At TRUE parameter values, with current density (CD) and peroxide current (PC)
+as observables and a global-max $2\%$ noise model:
+\begin{center}
+  \begin{tabular}{lcc}
+    \toprule
+                                       & \textbf{old grid}    & \textbf{new grid} \\
+                                       & ($\le \SI{+0.20}{V}$) & ($\le \SI{+0.60}{V}$) \\
+    \midrule
+    $\sigma_{\min}(S_{\mathrm{white}})$ & $2.35\times 10^{-2}$ & $2.51$ \\
+    $\mathrm{cond}(F)$                 & $2.0\times 10^{11}$  & $1.79\times 10^{7}$ \\
+    canonical-ridge $|\cos|$           & $1.000$              & $0.031$ \\
+    weak eigenvector                   & nearly pure $\log k_{0,2}$  & almost pure $\log k_{0,1}$ \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+The historic ``$\log k_{0,2}$ unidentifiable'' local Fisher result is gone.
+A new weak direction in $\log k_{0,1}$ remains. Thus the local FIM is much
+better conditioned than before, but it is still not perfectly conditioned, and
+it does not by itself guarantee global recovery from arbitrary initializations.
+
+\subsection*{Adjoint validity}
+At three of the previously inaccessible voltages ($\VRHE \in
+\{0.30,\,0.40,\,0.50\}$), an initial adjoint-vs-FD check appeared to fail by
+exactly a factor of two. Detailed sweeps over annotated SNES iteration count,
+steady-state tolerance, FD step size, and cold-ramp versus warm-start FD showed
+that the discrepancy came from the warm-start FD calculation, not from the
+adjoint. With cold-ramp finite differences, the relevant nonzero sensitivity
+components agree with the adjoint to about six significant figures.
+
+\subsection*{Inverse-problem implications}
+With the new forward solver, the four-parameter trust-region inverse with
+clean data and four standard initializations produces:
+\begin{itemize}
+  \item $\alpha_1, \alpha_2$ recovered to $\le 2\%$ in 2/4 initializations and
+        to $\le 16\%$ in 3/4 initializations;
+  \item each individual $k_{0,j}$ recovered to $\le 5\%$ from at least one
+        initialization;
+  \item but no single initialization recovers all four parameters jointly.
+\end{itemize}
+The $(k_0,\alpha)$ Tafel-ridge structure is no longer a single-direction local
+singularity dominated by $\log k_{0,2}$. The remaining problem is a multi-basin
+global cost surface: the data constrain some kinetic combinations strongly,
+but the optimizer can still land in different Tafel-like basins depending on
+initialization.
+
+%% ============================================================
+\section{What This Does and Does Not Solve}
+%% ============================================================
+\paragraph{Solved or substantially improved.}
+\begin{itemize}
+  \item Forward simulation now reaches the extended synthetic voltage grid
+        through $\SI{+0.60}{\volt}$ under the current continuation pipeline.
+  \item The old local Fisher weak direction dominated by $\log k_{0,2}$ is
+        removed once log-rate BV and the extended grid are used.
+  \item $\alpha_1$ and $\alpha_2$ are substantially more robustly determined
+        than in the earlier single-experiment formulation, although recovery is
+        still initialization-dependent.
+\end{itemize}
+
+\paragraph{Not solved.}
+\begin{itemize}
+  \item $\mathrm{cond}(F) \approx 1.79\times 10^7$ is a major improvement over
+        the previous $\approx 2\times 10^{11}$, but it is not numerically
+        ``perfectly conditioned.''
+  \item The global cost surface for the four-parameter joint inverse contains
+        multiple Tafel-ridge basins; the optimizer's landing basin depends on
+        initialization.
+  \item Soft priors at literature-defensible strength
+        ($\sigma_{\log k_0} = \ln 3$ or $\ln 10$) shift within-basin position
+        but do not bridge the inter-basin barriers observed in the current
+        clean-data studies.
+\end{itemize}
+For the current inverse project, the forward solver is no longer the obvious
+primary bottleneck. The next-step plan is therefore to close out the
+single-experiment route with restart diagnostics and anchored Tafel-coordinate
+optimization, then move to multi-experiment Fisher-information design, starting
+with bulk-$\mathrm{O}_2$ variation.
+
+%% ============================================================
+\section{Relation to Prior Work}
+%% ============================================================
+None of the three changes is methodologically novel in isolation; the
+contribution here is the engineering combination and its quantitative effect
+on Fisher conditioning for the ORR inverse problem. The relevant precedents,
+to the extent the literature was surveyed:
+
+\paragraph{Log-concentration / log-density formulations (Change~2).}
+The substitution $u_i = \ln c_i$ has a long history in adjacent fields. In
+semiconductor drift--diffusion, the closely related \emph{Slotboom} (or
+quasi-Fermi-level) variables have been standard since the late 1960s, and
+the Scharfetter--Gummel finite-volume discretization built around them
+remains a default in device simulation~\cite{ScharfetterGummel1969}. For the
+Poisson--Nernst--Planck system specifically, Metti, Xu, and Liu introduced
+what they explicitly named the ``log-density formulation'' as a means of
+constructing positivity-preserving and energetically stable
+schemes~\cite{MettiXuLiu2016}. Recent extensions push this idea to high-order
+space--time finite element methods with arbitrary order positivity and
+unconditional energy stability~\cite{LiuMaxianShenZitelliWaltzMonteiro2022}.
+Our usage applies this established idea inside a Firedrake-based ORR
+PNP--BV solver; we do not claim novelty in the substitution itself.
+
+\paragraph{Reduced supporting-electrolyte models (Change~1).}
+Replacing the inert supporting electrolyte by an analytic Boltzmann profile
+in the Poisson equation while keeping the reactive species as full
+Nernst--Planck unknowns is a known model reduction commonly called the
+\emph{Poisson--Boltzmann--Nernst--Planck} (PBNP) hybrid
+model~\cite{ZhengChenWei2011}. It is used extensively for ion-channel and
+biomolecular simulations, where most ionic species are passive bath and only
+a few are chemically active. Our 3sp-plus-Boltzmann setup adapts that
+reduction to a two-step ORR system; the modeling assumption (inert,
+locally-equilibrated supporting electrolyte) is the same.
+
+\paragraph{Log-form rate evaluation (Change~3).}
+Carrying chemical or electrochemical rates in log space to avoid floating
+overflow or underflow is standard in stiff combustion and plasma chemistry
+codes, where Arrhenius rates routinely span tens of orders of magnitude. In
+the electrochemistry literature, the well-known logarithmic form of the
+Butler--Volmer relation is the \emph{Tafel} approximation~\cite{Tafel1905},
+which drops one of the two BV branches in the high-overpotential limit and
+is therefore mathematically distinct from the substitution used here. The
+present writeup retains both anodic and cathodic branches, but evaluates
+each branch as $r_j = \exp(\log r_j)$ inside the boundary residual so that
+the unclamped log-concentrations enter additively. We did not locate a
+specific cited precedent for that exact construction in the BV
+electrochemistry literature; it may be a small local numerical novelty,
+although the underlying log-form-rate idea is not.
+
+\paragraph{Tafel approximation versus log-rate BV.}
+To make the distinction precise: the Tafel form is a \emph{physical
+approximation} valid only at large $|\eta|$, obtained by dropping the
+exponentially smaller BV branch; the log-rate BV evaluation is an
+\emph{algebraic identity} that keeps both branches at every $\eta$,
+including the cross-over regime $\eta \to 0$ where Tafel is invalid. Both
+forms incidentally avoid the boundary-level surface-concentration clip at
+high $|\eta|$---Tafel because only one exponential remains, log-rate BV
+because the relevant $u_i$ enters additively before exponentiation---but
+the two are not interchangeable. A forward PNP--BV solver that must run
+across a voltage grid containing $\eta \approx 0$ transitions needs the
+identity, not the asymptote. Conversely, when fitting a Tafel slope from
+experimental log-current data, the Tafel approximation is the appropriate
+construction; log-rate BV would be the wrong layer of the modeling
+stack.
+
+%% ============================================================
+\section*{Code Pointers}
+%% ============================================================
+\begingroup
+\small
+\sloppy
+\begin{itemize}
+  \item Log-c PNP weak forms: \path{Forward/bv_solver/forms_logc.py}. Key
+        functions include \texttt{build\_context\_logc},
+        \texttt{build\_forms\_logc}, and
+        \texttt{set\_initial\_conditions\_logc}.
+  \item Log-rate BV toggle: \texttt{bv\_log\_rate} in
+        \path{Forward/bv_solver/config.py}; consumed in
+        \path{forms_logc.py}, around lines 294--360.
+  \item Boltzmann counterion residual: \texttt{add\_boltzmann()} in the
+        top-level study scripts, including
+        \path{scripts/studies/v18_logc_lsq_inverse.py}.
+  \item Charge-continuation pipeline:
+        \path{Forward/bv_solver/grid_charge_continuation.py}.
+\end{itemize}
+\endgroup
+
+%% ============================================================
+\appendix
+\section{Per-voltage 4sp vs 3sp+Boltzmann log-c overlap data}
+%% ============================================================
+Per-voltage observable values from
+\path{StudyResults/v24_3sp_logc_vs_4sp_validation/comparison.csv}, generated
+by \path{scripts/studies/v24_3sp_logc_vs_4sp_validation.py}. Both solvers
+share the same graded mesh (Nx$=8$, Ny$=200$, $\beta=3$), the same TRUE
+kinetic parameters ($\hat{k}_{0,1} = 1.263158\times 10^{-3}$,
+$\hat{k}_{0,2} = 5.263158\times 10^{-5}$, $\alpha_1 = 0.627$,
+$\alpha_2 = 0.5$), the same equilibrium potentials ($E_{\mathrm{eq}}^{(1)} =
+\SI{0.68}{\volt}$, $E_{\mathrm{eq}}^{(2)} = \SI{1.78}{\volt}$ vs RHE), and
+the same $I_{\mathrm{SCALE}}$. The 4-species side runs through
+\texttt{solve\_grid\_with\_charge\_continuation}; the 3-species log-c side
+runs the production build path from \texttt{v18\_logc\_lsq\_inverse.py},
+cold-starting where possible and warm-starting (with paf substepping plus
+bisection) from the nearest converged neighbour everywhere else. Errors
+are reported relative to $\max|\mathrm{obs}|$ on the eight-voltage grid:
+$\max|\mathrm{CD}| \approx 1.84\times 10^{-1}$,
+$\max|\mathrm{PC}| \approx 1.81\times 10^{-1}$ (in nondimensional flux units;
+both solvers convert to mA/cm$^{2}$ via $-I_{\mathrm{SCALE}}$).
+
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.05}
+\begin{center}
+\begin{tabular}{r r r r r r r l c}
+\toprule
+$\VRHE$ (V) & $\mathrm{CD}_{\mathrm{4sp}}$ & $\mathrm{CD}_{\mathrm{3sp}}$
+            & $|\Delta \mathrm{CD}|/\mathrm{CD}_{\max}\,\%$
+            & $\mathrm{PC}_{\mathrm{4sp}}$ & $\mathrm{PC}_{\mathrm{3sp}}$
+            & $|\Delta \mathrm{PC}|/\mathrm{PC}_{\max}\,\%$
+            & 3sp method & verdict \\
+\midrule
+$-0.500$ & $-1.8390\mathrm{e}{-1}$ & $-1.8410\mathrm{e}{-1}$ & $0.108$
+         & $-1.8112\mathrm{e}{-1}$ & $-1.8131\mathrm{e}{-1}$ & $0.104$
+         & warm$\leftarrow{-0.40}$ & PASS \\
+$-0.400$ & $-1.8283\mathrm{e}{-1}$ & $-1.8305\mathrm{e}{-1}$ & $0.122$
+         & $-1.6374\mathrm{e}{-1}$ & $-1.6391\mathrm{e}{-1}$ & $0.094$
+         & warm$\leftarrow{-0.30}$ & PASS \\
+$-0.300$ & $-1.8133\mathrm{e}{-1}$ & $-1.8172\mathrm{e}{-1}$ & $0.212$
+         & $-6.4999\mathrm{e}{-2}$ & $-6.5039\mathrm{e}{-2}$ & $0.022$
+         & warm$\leftarrow{-0.20}$ & PASS \\
+$-0.200$ & $-1.7968\mathrm{e}{-1}$ & $-1.8017\mathrm{e}{-1}$ & $0.268$
+         & $-1.5838\mathrm{e}{-3}$ & $-1.5678\mathrm{e}{-3}$ & $0.009$
+         & cold & PASS \\
+$-0.100$ & $-1.7753\mathrm{e}{-1}$ & $-1.7802\mathrm{e}{-1}$ & $0.266$
+         & $-1.2483\mathrm{e}{-5}$ & $+2.9058\mathrm{e}{-6}$ & $0.008$
+         & cold & PASS \\
+$+0.000$ & $-1.7330\mathrm{e}{-1}$ & $-1.7379\mathrm{e}{-1}$ & $0.266$
+         & $-9.6937\mathrm{e}{-8}$ & $+1.5288\mathrm{e}{-5}$ & $0.008$
+         & cold & PASS \\
+$+0.050$ & $-1.6936\mathrm{e}{-1}$ & $-1.6985\mathrm{e}{-1}$ & $0.269$
+         & $-8.6209\mathrm{e}{-9}$ & $+1.5378\mathrm{e}{-5}$ & $0.008$
+         & cold & PASS \\
+$+0.100$ & $-1.6289\mathrm{e}{-1}$ & $-1.6307\mathrm{e}{-1}$ & $0.100$
+         & $-7.7618\mathrm{e}{-10}$ & $+1.5388\mathrm{e}{-5}$ & $0.008$
+         & cold & PASS \\
+\midrule
+\multicolumn{3}{r}{\textbf{aggregate}} & $\mathbf{0.269}$ (max)
+         & & & $\mathbf{0.104}$ (max) & & 8/8 PASS \\
+\multicolumn{3}{r}{} & $0.201$ (mean) & & & $0.033$ (mean) & & \\
+\bottomrule
+\end{tabular}
+\end{center}
+\endgroup
+
+\noindent\textbf{Reading the table.} CD agreement stays under $0.27\%$ of
+$\mathrm{CD}_{\max}$ across the full eight-voltage grid, including the
+three cathodic points reached only by warm-start continuation. PC
+agreement stays under $0.11\%$ of $\mathrm{PC}_{\max}$ everywhere. The
+sign flips on PC at $\VRHE \ge -0.10$\,V correspond to PC values four to
+seven orders of magnitude below $\mathrm{PC}_{\max}$ --- a numerical
+artefact of evaluating a near-zero quantity in two different formulations,
+not a physics disagreement. Wall time on this run was 17.8\,s for the
+4-species sweep and 74.3\,s for the 3-species cold/warm pipeline.
+
+%% ============================================================
+\begin{thebibliography}{9}
+%% ============================================================
+
+\bibitem{ScharfetterGummel1969}
+Scharfetter, D.\,L., and Gummel, H.\,K.,
+\emph{Large-signal analysis of a silicon Read diode oscillator},
+IEEE Trans.\ Electron Devices, \textbf{16}(1), 64--77 (1969).
+The original drift-diffusion finite-volume discretization built around
+Slotboom-type variables; widely cited as the canonical positivity-preserving
+scheme for charge-transport problems mathematically equivalent to PNP.
+
+\bibitem{Tafel1905}
+Tafel, J.,
+\emph{\"Uber die Polarisation bei kathodischer Wasserstoffentwicklung},
+Z.\ Phys.\ Chem.\ \textbf{50}, 641--712 (1905).
+Original derivation of the high-overpotential logarithmic relation between
+overpotential and current that bears Tafel's name; mathematically distinct
+from the log-rate BV evaluation used here, but the historical antecedent for
+``log-form'' relations in electrochemistry.
+
+\bibitem{ZhengChenWei2011}
+Zheng, Q., Chen, D., and Wei, G.\,W.,
+\emph{Second-order Poisson--Nernst--Planck solver for ion transport},
+J.\ Comput.\ Phys.\ \textbf{230}(13), 5239--5262 (2011);
+and the closely related ``Poisson--Boltzmann--Nernst--Planck model,''
+J.\ Chem.\ Phys.\ \textbf{134}, 194101 (2011),
+\href{https://doi.org/10.1063/1.3581031}{doi:10.1063/1.3581031}.
+Establishes the PBNP hybrid: dynamic NP for chemically active species,
+Boltzmann factor for passive supporting electrolyte.
+
+\bibitem{MettiXuLiu2016}
+Metti, M.\,S., Xu, J., and Liu, C.,
+\emph{Energetically stable discretizations for charge transport and
+electrokinetic models},
+J.\ Comput.\ Phys.\ \textbf{306}, 1--18 (2016),
+\href{https://doi.org/10.1016/j.jcp.2015.10.053}{doi:10.1016/j.jcp.2015.10.053}.
+Introduces the substitution $u_i = \ln c_i$ for PNP under the explicit name
+\emph{log-density formulation}, with positivity preservation and
+free-energy dissipation as the headline numerical properties.
+
+\bibitem{LiuMaxianShenZitelliWaltzMonteiro2022}
+Liu, H., Maxian, O., Shen, J., Zitelli, J., Waltz, R.\,A., and Monteiro, P.\,B.,
+\emph{High-order space--time finite element methods for the
+Poisson--Nernst--Planck equations: Positivity and unconditional energy
+stability},
+Comput.\ Methods Appl.\ Mech.\ Engrg.\ \textbf{396}, 115070 (2022);
+arXiv:2105.01163.
+Extends the Metti et al.\ entropy/log-density formulation to arbitrary-order
+space--time FEM with positivity preservation and unconditional energy
+stability.
+
+\end{thebibliography}
+
+\end{document}

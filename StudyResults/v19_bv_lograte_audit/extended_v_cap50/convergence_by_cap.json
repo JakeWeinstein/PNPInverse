@@ -1,0 +1,44 @@
+{
+  "50": {
+    "status": "ok",
+    "n_used": 6,
+    "per_v": [
+      {
+        "V_RHE": -0.1,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 14.25
+      },
+      {
+        "V_RHE": 0.0,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 12.12
+      },
+      {
+        "V_RHE": 0.1,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 12.1
+      },
+      {
+        "V_RHE": 0.2,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 14.08
+      },
+      {
+        "V_RHE": 0.3,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 14.33
+      },
+      {
+        "V_RHE": 0.4,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 14.21
+      }
+    ]
+  }
+}

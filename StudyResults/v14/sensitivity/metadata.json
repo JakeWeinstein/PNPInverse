@@ -1,0 +1,9 @@
+{
+  "tool_name": "Parameter Sensitivity Visualization (Sweeps + Jacobian)",
+  "requirement": "DIAG-03",
+  "justification_type": "empirical",
+  "reference": "Sensitivity analysis via parameter perturbation and Jacobian evaluation is standard practice for identifying informative experimental conditions",
+  "rationale": "1D sweeps show observable response to parameter changes; Jacobian heatmap quantifies which voltage regions carry most information about each parameter, informing voltage selection for Phase 9",
+  "created": "2026-03-10T17:35:21Z",
+  "script": "scripts/studies/sensitivity_visualization.py"
+}

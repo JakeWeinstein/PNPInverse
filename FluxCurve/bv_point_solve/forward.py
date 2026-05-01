@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import time as _time
+import warnings as _warnings
 from typing import Any, List, Optional, Sequence
 
 import numpy as np
+
+from Forward.bv_solver.validation import validate_solution_state
 
 from .cache import (
     _SER_DT_MAX_RATIO,
@@ -296,9 +299,39 @@ def _solve_cached_fast_path(
             warnings.warn(f"Adjoint gradient computation failed: {exc}")
             return None
 
-        # Update cache with new solution
-        carry_U_data = tuple(d.data_ro.copy() for d in U.dat)
-        _all_points_cache[orig_idx] = carry_U_data
+        # Physics validation before cache update
+        _n_sp_v = int(ctx["n_species"])
+        _scaling_v = ctx.get("nondim", {})
+        _c_bulk_v = _scaling_v.get("c0_model_vals", [1.0] * _n_sp_v)
+        _z_vals_v = [float(zc) for zc in ctx["z_consts"]]
+        _conv_cfg_v = ctx.get("bv_convergence", {})
+        _eps_c_v = float(_conv_cfg_v.get("conc_floor", 1e-8))
+        _exp_clip_v = float(_conv_cfg_v.get("exponent_clip", 50.0))
+        _sol_vr = validate_solution_state(
+            U,
+            n_species=_n_sp_v,
+            c_bulk=_c_bulk_v,
+            phi_applied=phi_applied_i,
+            z_vals=_z_vals_v,
+            eps_c=_eps_c_v,
+            exponent_clip=_exp_clip_v,
+        )
+        for _w in _sol_vr.warnings:
+            _warnings.warn(
+                f"[cached-fast-path] phi={phi_applied_i:.4f}: {_w}",
+                stacklevel=1,
+            )
+        if _sol_vr.valid:
+            # Update cache with new solution (only if physics checks pass)
+            carry_U_data = tuple(d.data_ro.copy() for d in U.dat)
+            _all_points_cache[orig_idx] = carry_U_data
+        else:
+            # Bad solution -- skip cache update to avoid propagating bad ICs
+            _warnings.warn(
+                f"[cached-fast-path] phi={phi_applied_i:.4f} solution state "
+                f"validation failed, skipping cache update: {_sol_vr.failures}",
+                stacklevel=1,
+            )
 
         t_elapsed = _time.perf_counter() - t_start
         print(

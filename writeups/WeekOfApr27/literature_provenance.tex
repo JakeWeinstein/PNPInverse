@@ -1,0 +1,1367 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,siunitx,hyperref,microtype,xcolor}
+\usepackage{enumitem}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{fancyvrb}
+\setlist[itemize]{leftmargin=*,topsep=2pt,itemsep=2pt}
+\setlist[enumerate]{leftmargin=*,topsep=2pt,itemsep=2pt}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=blue!60!black,
+  pdftitle={Literature Provenance: PNP-BV ORR Forward Solver},
+  pdfauthor={Jake Weinstein}
+}
+
+\lstdefinestyle{bibstyle}{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  breakatwhitespace=true,
+  columns=fullflexible,
+  frame=single,
+  framesep=4pt,
+  xleftmargin=4pt,
+  xrightmargin=4pt
+}
+
+\newcommand{\true}{\mathrm{TRUE}}
+\newcommand{\Eeq}{E_{\mathrm{eq}}}
+\newcommand{\VRHE}{V_{\mathrm{RHE}}}
+\newcommand{\VT}{V_{T}}
+\newcommand{\Hpe}{\mathrm{H}^{+}}
+\newcommand{\HtwoOtwo}{\mathrm{H}_2\mathrm{O}_2}
+\newcommand{\ClOf}{\mathrm{ClO}_4^{-}}
+
+\title{Literature Provenance: PNP--BV ORR Forward Solver\\
+       Three Numerical Changes, Cited Precedents, and Genuine-Novelty Assessment}
+\author{Jake Weinstein}
+\date{Week of April~27, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document audits the bibliographic foundations of the PNP--BV ORR forward
+solver rebuild summarized in \texttt{PNP Inverse Solver Revised.tex}. For each
+of the three stacked numerical changes ((1)~3-species PNP $+$ analytic
+Boltzmann counterion, (2)~log-concentration $u_i=\ln c_i$ primary unknown,
+(3)~log-rate Butler--Volmer evaluation) we identify the canonical literature
+precedents, distinguish reuse from genuine novelty, flag and correct three
+factually wrong citations in the existing bibliography (one of which is
+fabricated), and recommend additions. Surrounding methods (ORR mechanism,
+Tafel-ridge identifiability, charge/voltage continuation, adjoint sensitivity)
+are also covered for reader background. All citations have been verified at
+DOI/abstract level except those explicitly marked.
+\end{abstract}
+
+%% ============================================================
+\section{Executive Summary}
+%% ============================================================
+
+\subsection*{Verdict table}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{@{}p{0.16\textwidth} p{0.30\textwidth} p{0.27\textwidth} p{0.21\textwidth}@{}}
+\toprule
+\textbf{Change} & \textbf{Canonical precedent} & \textbf{Where the implementation deviates} & \textbf{Novelty assessment} \\
+\midrule
+\#1 PBNP hybrid &
+Zheng \& Wei, \emph{J.~Chem.~Phys.}\ \textbf{134}, 194101 (2011),
+\href{https://doi.org/10.1063/1.3581031}{doi:10.1063/1.3581031}; deeper
+Gouy--Chapman--Stern (1910/1913/1924) and the Eisenberg--Coalson--Kurnikova--Lu
+ion-channel PNP lineage. &
+Transplanted into a PEMFC-style ORR solver in \SI{0.1}{\mole\per\liter}
+$\mathrm{HClO}_4$ with spectator $\ClOf$ as the analytic-Boltzmann species.
+No surveyed ORR/RDE/fuel-cell paper does this. &
+\textbf{Modest.} Construction reused; \emph{application} to ORR with explicit
+Boltzmann-$\ClOf$ inside a PNP--BV solver appears new in the surveyed
+electrochemistry literature. \\
+\midrule
+\#2 log-density $u=\ln c$ &
+Metti, Xu, Liu, \emph{J.~Comput.~Phys.}\ \textbf{306}, 1--18 (2016),
+\href{https://doi.org/10.1016/j.jcp.2015.10.053}{doi:10.1016/j.jcp.2015.10.053};
+high-order extension Fu \& Xu, \emph{CMAME} \textbf{395}, 115031 (2022),
+\href{https://doi.org/10.1016/j.cma.2022.115031}{doi:10.1016/j.cma.2022.115031};
+semiconductor ancestry through Slotboom 1969 and Brezzi--Marini--Pietra 1989. &
+Pushes log-density into a \emph{full PNP--BV ORR solver}, with the same CG
+order on $u_i$ and $\varphi$, monolithic Newton, backward Euler --- and
+propagates $u_i$ through the BV boundary condition (Change~\#3), not just bulk
+transport. &
+\textbf{Genuine domain transfer.} No peer-reviewed ORR/RDE/fuel-cell PNP--BV
+solver in the surveyed literature uses $\ln c$ as a primary Galerkin
+unknown. \\
+\midrule
+\#3 log-rate BV &
+Tafel 1905, \emph{Z.~Phys.~Chem.}\ \textbf{50U}, 641--712,
+\href{https://doi.org/10.1515/zpch-1905-5043}{doi:10.1515/zpch-1905-5043}
+(high-$\eta$ physical \emph{approximation}, drops a branch);
+Fattal \& Kupferman, \emph{J.~Non-Newtonian Fluid Mech.}\ \textbf{123},
+281--285 (2004),
+\href{https://doi.org/10.1016/j.jnnfm.2004.08.008}{doi:10.1016/j.jnnfm.2004.08.008}
+(closest \emph{structural} cousin: log-conformation tensor at high Weissenberg
+number); analogous CHEMKIN PLOG / log-sum-exp / softmax patterns. &
+The exact construction
+$r=\exp(\ln k_0+u_{\mathrm{cat}}+\sum_f\nu_f(u_{\mathrm{sp}(f)}-\ln c_{\mathrm{ref},f})-\alpha n_e\eta/\VT)$,
+with the cathodic stoichiometric-power loop \emph{inside} the log, evaluated
+then exponentiated once, does not appear in any electrochemistry paper
+located. The log-rate path also bypasses the symmetric \texttt{\_U\_CLAMP}
+underflow protection. &
+\textbf{Small local numerical novelty (defensible).} Algebraically trivial;
+conceptually parallel to Fattal--Kupferman 2004 and CHEMKIN PLOG;
+\emph{not documented} as a numerical strategy in any PNP--BV / ORR / RDE
+paper located. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Three corrections the existing LaTeX bibliography must make}
+
+\begin{enumerate}
+\item \textbf{The ``Liu, Maxian, Shen, Zitelli, Waltz, Monteiro 2022, CMAME 396,
+      115070, arXiv:2105.01163'' citation is fabricated.}\ \ The arXiv ID
+      resolves to \textbf{Fu \& Xu, \emph{CMAME} \textbf{395}, 115031 (2022),
+      doi:10.1016/j.cma.2022.115031} (two authors, not six; vol.~395 not 396;
+      article 115031 not 115070). Replace.
+\item \textbf{The Slotboom citation as printed is a chimera} --- wrong year for
+      the title given, wrong title for the year given. The canonical
+      Slotboom-variables reference is \textbf{Slotboom 1969, \emph{Electronics
+      Letters} \textbf{5}(26), 677--678, doi:10.1049/el:19690510}. The
+      ``PN-product'' paper, if cited, is Slotboom 1977, \emph{Solid-State
+      Electron.}\ \textbf{20}(4), 279--283. Slotboom variables
+      ($u=c\exp(-z\psi/\VT)$) and log-density ($u=\ln c$) are \emph{related}
+      but \emph{distinct} substitutions; the writeup should not equate them.
+\item \textbf{The ``Zheng-Chen-Wei JCP 230 (2011)'' cited as the PBNP source is
+      the full-PNP second-order solver paper, not the PBNP paper.} The
+      canonical PBNP paper is \textbf{Zheng \& Wei, \emph{J.~Chem.~Phys.}\
+      \textbf{134}, 194101 (2011), doi:10.1063/1.3581031}. Both can be cited;
+      only the second supports the PBNP-hybrid claim.
+\end{enumerate}
+
+\subsection*{Strongest novelty claims the writeup can defensibly make}
+
+In order of strength:
+\begin{enumerate}
+\item \textbf{Application of PNP log-density ($u=\ln c$) into ORR--BV
+      electrocatalysis.} No ORR/RDE/fuel-cell PNP--BV solver in the surveyed
+      peer-reviewed literature uses $\ln c$ as primary Galerkin unknown.
+\item \textbf{The log-rate BV construction itself, in a published PNP--BV
+      solver.} The closest \emph{published} analogs are in different domains
+      (viscoelastic fluids --- Fattal--Kupferman 2004; combustion --- CHEMKIN
+      PLOG; ML --- log-sum-exp).
+\item \textbf{PBNP applied specifically to ORR with Boltzmann-$\ClOf$} ---
+      modest but unobjected.
+\end{enumerate}
+The first two are the load-bearing novelty claims; the third is a comfortable
+``reuse in new setting.''
+
+%% ============================================================
+\section{Per-Change Literature Provenance}
+%% ============================================================
+
+\subsection{Change~\#1 --- PBNP Hybrid (3-species $+$ analytic Boltzmann counterion)}
+
+\paragraph{Canonical PBNP paper.}
+Zheng \& Wei (2011), \emph{J.~Chem.~Phys.}\ \textbf{134}(19), 194101,
+\href{https://doi.org/10.1063/1.3581031}{doi:10.1063/1.3581031}, PMID~21599038,
+PMC PMC3122111. Verified abstract: ``We propose an alternative model to reduce
+number of Nernst--Planck equations to be solved \dots\ by substituting
+Nernst--Planck equations with Boltzmann distributions of ion concentrations.''
+This is exactly the writeup's split (3 active dynamic $+$ 1 analytic
+Boltzmann).
+
+\paragraph{Companion paper often confused with the above.}
+Zheng, Chen, Wei (2011), \emph{J.~Comput.~Phys.}\ \textbf{230}(13),
+5239--5262, \href{https://doi.org/10.1016/j.jcp.2011.03.020}{doi:10.1016/j.jcp.2011.03.020},
+PMC PMC3087981. Full-PNP numerical-methods paper using
+matched-interface-and-boundary methods --- \emph{not} PBNP. Cite as a high-order
+full-PNP numerical reference; do not cite as a PBNP source.
+
+\paragraph{Deeper conceptual ancestry.}
+\begin{itemize}
+\item Gouy 1910, \emph{J.~Phys.~Theor.~Appl.}\ \textbf{9}, 457--468 ---
+      diffuse-layer model with Boltzmann ion statistics.
+\item Chapman 1913, \emph{Phil.~Mag.}\ \textbf{25}, 475--481 --- closed-form
+      Gouy--Chapman result.
+\item Stern 1924, \emph{Z.~Elektrochem.}\ \textbf{30}, 508--516 --- combines
+      Helmholtz $+$ Gouy--Chapman.
+\end{itemize}
+PBNP reduces to GCS as the active set vanishes and to full PNP as it expands.
+
+\paragraph{Active-species-via-NP lineage (ion-channel biophysics).}
+\begin{itemize}
+\item Chen, Barcilon, Eisenberg 1992, \emph{Biophys.~J.}\ \textbf{61},
+      1372--1393.
+\item Chen, Eisenberg 1993, \emph{Biophys.~J.}\ \textbf{64}, 1405--1421,
+      PMID~7686784.
+\item Kurnikova, Coalson, Graf, Nitzan 1999, \emph{Biophys.~J.}\ \textbf{76},
+      642--656.
+\item Cardenas, Coalson, Kurnikova 2000, \emph{Biophys.~J.}\ \textbf{79},
+      80--93, PMC1300917.
+\item Lu, Holst, McCammon, Zhou 2010, \emph{J.~Comput.~Phys.}\ \textbf{229},
+      6979--6994,
+      \href{https://doi.org/10.1016/j.jcp.2010.05.035}{doi:10.1016/j.jcp.2010.05.035},
+      PMC2922884 --- the most direct FEM-PNP predecessor that Wei's group
+      built on.
+\end{itemize}
+
+\paragraph{Competitor reduction (worth knowing).}
+Newman electroneutrality (Newman \& Thomas-Alyea, \emph{Electrochemical
+Systems}, 3rd~ed., Wiley 2004; 4th~ed.\ with Balsara, 2019; Newman 1975,
+\emph{AIChE J.}\ \textbf{21}, 25--41). Drops Poisson, enforces
+$\sum_i z_i c_i=0$. Universal in fuel-cell engineering. Distinct from PBNP.
+
+\paragraph{ORR-specific context.}
+\begin{itemize}
+\item Shinozaki et al.\ 2015, \emph{J.~Electrochem.~Soc.}\ \textbf{162},
+      F1144--F1158,
+      \href{https://doi.org/10.1149/2.1071509jes}{doi:10.1149/2.1071509jes}.
+      Documents that $\ClOf$ is non-adsorbing/weakly adsorbing on Pt ---
+      physical justification for treating it as Boltzmann-equilibrated.
+\item Generalized modified PNP for PEMFC (\emph{Electrochim.~Acta} 2025,
+      S0013468625004335): ongoing PNP-EDL modeling for fuel cells, but uses
+      \emph{full} PNP, not PBNP.
+\end{itemize}
+
+\paragraph{Where the implementation aligns.}
+Realizes Zheng--Wei's PBNP nearly exactly: 3 species
+($\mathrm{O}_2,\HtwoOtwo,\Hpe$) with full Nernst--Planck transport plus a
+Boltzmann analytic factor
+$c_{\mathrm{ClO}_4}=c_{\mathrm{bulk}}\exp(-z_{\mathrm{ClO}_4}\varphi/\VT)$
+with $z_{\mathrm{ClO}_4}=-1$, contributing to the Poisson residual. Confirmed
+at \texttt{scripts/studies/v24\_3sp\_logc\_vs\_4sp\_validation.py:250-262}
+and \texttt{scripts/studies/v18\_test\_3species\_boltzmann.py:109-147}.
+
+%% ------------------------------------------------------------
+\subsection{Change~\#2 --- Log-Concentration $u_i=\ln c_i$}
+
+Three relevant lineages.
+
+\paragraph{Lineage A --- Direct log-density / entropy-variable primary
+(the writeup's path).}
+\begin{itemize}
+\item \textbf{Metti, Xu, Liu (2016)}, \emph{J.~Comput.~Phys.}\ \textbf{306},
+      1--18,
+      \href{https://doi.org/10.1016/j.jcp.2015.10.053}{doi:10.1016/j.jcp.2015.10.053}.
+      Performs a logarithmic transformation of charge-carrier densities in FEM,
+      proves a discrete energy estimate matching the continuous PNP energy
+      law, enforces positivity. Canonical PNP log-density FEM paper. The phrase
+      ``log-density formulation'' appears coined retroactively by Fu--Xu and
+      successors; the technique is in the paper, the exact phrase may not be
+      in the abstract.
+\item \textbf{Fu \& Xu (2022)}, \emph{CMAME} \textbf{395}, 115031,
+      \href{https://doi.org/10.1016/j.cma.2022.115031}{doi:10.1016/j.cma.2022.115031},
+      arXiv:2105.01163. Discretizes the entropy variable
+      $u_i=U'(c_i)=\log c_i$ directly with FEM in space $+$ DG in time;
+      positivity by construction ($c_i=\exp(u_i)>0$); unconditional energy
+      stability at arbitrary order. \textbf{This is the paper currently
+      mis-cited as ``Liu, Maxian, Shen, Zitelli, Waltz, Monteiro 2022, CMAME
+      396, 115070.''} That citation is fabricated.
+\end{itemize}
+
+\paragraph{Lineage B --- Slotboom variables / excess-chemical-potential flux
+(semiconductor).}
+\begin{itemize}
+\item \textbf{Slotboom 1969}, \emph{Electronics Letters} \textbf{5}(26),
+      677--678,
+      \href{https://doi.org/10.1049/el:19690510}{doi:10.1049/el:19690510}.
+      Canonical ``Slotboom variables'' reference: $\Phi_n=n\exp(-\psi/\VT)$.
+\item \textbf{Slotboom 1973}, \emph{IEEE TED} \textbf{ED-20}, 669--679.
+      Standard ``1973 Slotboom'' reference (bipolar transistor analysis).
+\item \textbf{Slotboom 1977}, \emph{Solid-State Electron.}\ \textbf{20}(4),
+      279--283. The actual ``PN-product in silicon'' paper ---
+      band-gap-narrowing, \textbf{not} about log-density.
+\item \textbf{Scharfetter \& Gummel 1969}, \emph{IEEE TED} \textbf{ED-16}(1),
+      64--77. Exponential-fitting / upwind FV on $c$-primary; Bernoulli-function
+      edge fluxes. \textbf{Not} a log-density substitution.
+\item \textbf{Brezzi, Marini, Pietra 1989}, \emph{SIAM J.~Numer.~Anal.}\
+      \textbf{26}(6), 1342--1355. Mixed-FE generalization of SG.
+\item \textbf{Markowich 1986}, \emph{The Stationary Semiconductor Device
+      Equations}, Springer,
+      \href{https://doi.org/10.1007/978-3-7091-3678-2}{doi:10.1007/978-3-7091-3678-2}.
+\item \textbf{Markowich, Ringhofer, Schmeiser 1990}, \emph{Semiconductor
+      Equations}, Springer.
+\item \textbf{Selberherr 1984}, \emph{Analysis and Simulation of Semiconductor
+      Devices}, Springer.
+\end{itemize}
+
+\paragraph{Mapping between Slotboom and log-density.}
+$\ln(\Phi_n)=\ln n - \psi/\VT$, so log-density and Slotboom differ only by an
+affine map \emph{as continuous variables}. Galerkin discretizations on
+$(\Phi_n,\psi)$ versus $(\ln n,\psi)$ yield different stiffness matrices.
+The writeup must not equate them.
+
+\paragraph{Lineage C --- Modern energy-stable / SAV / IEQ schemes for PNP.}
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.42\textwidth} p{0.52\textwidth}@{}}
+\toprule
+\textbf{Citation} & \textbf{What it does} \\
+\midrule
+H.~Liu \& Maimaitiyiming 2021, \emph{J.~Sci.~Comput.}\ \textbf{87}(3), 92 &
+FD $c$-primary positivity $+$ energy stability for multi-D PNP \\
+C.~Liu, Wang, Wise, Yue, Zhou, arXiv:2009.08076 (later \emph{Math.~Comp.}\ 2022) &
+$H^{-1}$ gradient flow with singular log potential treated implicitly \\
+Huang \& Shen 2021, \emph{SIAM J.~Sci.~Comput.}\ \textbf{43}(3), B746--B759,
+doi:10.1137/20M1365417 &
+SAV scheme; $c$-primary; bound-preservation via auxiliary variable \\
+Canc\`es, Chainais-Hillairet, Gaudeul, Fuhrmann 2022,
+\emph{Numer.~Math.}\ \textbf{151}, 949--986, doi:10.1007/s00211-022-01279-y &
+Entropy-FV with size exclusion; modern bridge to electrochemistry \\
+Farrell, Rotundo, Doan, Kantner, Fuhrmann, Koprucki book chapter (2017) &
+Surveys flux discretizations including Slotboom and excess-chemical-potential \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Conceptual map.}
+PNP free energy
+$E[c,\psi]=\sum_i\!\int c_i(\ln c_i-1)\,\mathrm{d}x+\tfrac12\varepsilon\!\int|\nabla\psi|^2\,\mathrm{d}x-\sum_i z_i\!\int c_i\psi\,\mathrm{d}x$.
+Three discretization strategies:
+\begin{itemize}
+\item[(A)] \textbf{Direct log-density / entropy-variable primary}
+      (Metti--Xu--Liu $\to$ Fu--Xu).
+\item[(B)] \textbf{Excess-chemical-potential flux} (Slotboom $\to$
+      Brezzi--Marini--Pietra $\to$ Canc\`es).
+\item[(C)] \textbf{SAV / IEQ} (Shen--Xu--Yang $\to$ Huang--Shen).
+\end{itemize}
+The writeup uses~(A).
+
+\paragraph{Why electrochemistry diverged from semiconductor practice.}
+Per Selberherr 1984 ch.~5 and Markowich--Ringhofer--Schmeiser 1990 ch.~3,
+Slotboom variables work poorly under degenerate Fermi--Dirac statistics;
+modern semiconductor codes prefer quasi-Fermi or excess-chemical-potential.
+Electrochemistry rarely needs degeneracy correction so could use Slotboom,
+but the field never adopted it --- codes descended from Newman's
+CONDUC/DUALFOIL $c$-primary FD lineage rather than semiconductor TCAD.
+
+\paragraph{Where the implementation aligns.}
+\texttt{forms\_logc.py:55-56} constructs
+\texttt{MixedFunctionSpace([V\_scalar]*(n+1))} with $u_i,\varphi$ all in
+CG-order on the same space; \texttt{forms\_logc.py:177-178} confirms
+$u_i=\ln c_i$ is the primary unknown and $c_i$ is a derived expression
+$c_i=\exp(u_i)$ (with symmetric \texttt{\_U\_CLAMP=$\pm$30} overflow
+protection --- \texttt{forms\_logc.py:185-198}). Flux uses the log-transform
+identity $\nabla c=c\nabla u$ directly (\texttt{forms\_logc.py:281}). Time
+stepping is backward Euler (\texttt{forms\_logc.py:283-285}), single past
+state (\emph{not} BDF2).
+
+%% ------------------------------------------------------------
+\subsection{Change~\#3 --- Log-Rate Butler--Volmer}
+
+The construction: rewrite
+$r=k_0\,c_i\exp(-\alpha n_e\eta/\VT)$
+as
+$r=\exp(\ln k_0+u_i-\alpha n_e\eta/\VT)$ with $u_i=\ln c_i$, evaluated as one
+exponentiation at the end. The cathodic branch folds in stoichiometric power
+\emph{inside} the log:
+\[
+\ln r_{\mathrm{cat}}
+\;=\; \ln k_0 + u_{\mathrm{cat}}
+       + \sum_f \nu_f\bigl(u_{\mathrm{sp}(f)} - \ln c_{\mathrm{ref},f}\bigr)
+       - \alpha\, n_e\,\eta/\VT.
+\]
+
+\paragraph{Tafel 1905 --- historical anchor, conceptually different.}
+J.~Tafel, \emph{Z.~Phys.~Chem.}\ \textbf{50U}(1), 641--712,
+\href{https://doi.org/10.1515/zpch-1905-5043}{doi:10.1515/zpch-1905-5043}.
+Verified via De Gruyter, ESTIR Historic Papers in Electrochemistry, Russian
+Mendeleev archive.
+
+\paragraph{Critical conceptual distinction (must not conflate).}
+\begin{itemize}
+\item \textbf{Tafel 1905} $=$ high-overpotential physical \emph{approximation}
+      that \textbf{drops one branch}: $\log|i|\approx \mathrm{const} + (\alpha
+      nF/RT)\eta$.
+\item \textbf{Log-rate BV} $=$ exact algebraic identity that \textbf{drops
+      nothing}: $r=\exp(\ln k_0 + \ln c_i - \alpha n_e\eta/\VT)$.
+\end{itemize}
+
+\paragraph{Frumkin 1933 --- physical correction, also distinct.}
+A.~N.~Frumkin, \emph{Z.~Phys.~Chem.~A} \textbf{164}, 121--133. Modifies the BV
+potential drop: $\eta_{\mathrm{eff}}=\eta-\varphi_d$. Different correction
+(interfacial physics), not numerical.
+
+\paragraph{Bazant generalized BV and the gFBV$+$PNP framework --- physical
+generalizations.}
+\begin{itemize}
+\item Bazant 2013, \emph{Acc.~Chem.~Res.}\ \textbf{46}, 1144--1160,
+      \href{https://doi.org/10.1021/ar300145c}{doi:10.1021/ar300145c},
+      PMID~23520980, arXiv:1208.1587. Generalizes BV via nonequilibrium
+      thermodynamics; physical not numerical.
+\item Bazant, Thornton, Ajdari 2004, \emph{Phys.~Rev.~E} \textbf{70}, 021506,
+      \href{https://doi.org/10.1103/PhysRevE.70.021506}{doi:10.1103/PhysRevE.70.021506},
+      PMID~15447495. PNP coupled to gFBV. \textbf{Standard exponential BV form
+      throughout, no log-form rate evaluation.}
+\item Bazant, Kilic, Storey, Ajdari 2009, \emph{Adv.~Colloid Interface Sci.}\
+      \textbf{152}, 48--88,
+      \href{https://doi.org/10.1016/j.cis.2009.10.001}{doi:10.1016/j.cis.2009.10.001}.
+\item van Soestbergen, Biesheuvel, Bazant 2010, \emph{Phys.~Rev.~E}
+      \textbf{81}, 021503.
+\item van Soestbergen 2012, \emph{Russ.~J.~Electrochem.}\ \textbf{48},
+      570--579,
+      \href{https://doi.org/10.1134/S1023193512060110}{doi:10.1134/S1023193512060110}.
+\end{itemize}
+These represent the state of the art in PNP--BV. None address the
+\emph{numerical evaluation} of BV as a stiff exponential.
+
+\paragraph{Algebraic / inversion-direction reformulations (related but distinct
+problem).}
+\begin{itemize}
+\item Khalili et al.\ 2016, ASME \emph{J.~Electrochem.~En.~Conv.~Stor.}\
+      \textbf{13}(2), 021003. Algebraic reformulation to \emph{invert} BV for
+      $\eta$.
+\item Nasser \& Mantegazza 2022, \emph{J.~Phys.~Chem.~C},
+      doi:10.1021/acs.jpcc.1c09620. Deformed exponentials for fitting.
+\item COMSOL battery/electrochemistry: re-references overpotential against
+      fixed activity reference; re-parametrization, not log-form.
+\end{itemize}
+
+\paragraph{The closest published structural cousin --- Fattal--Kupferman 2004.}
+\begin{itemize}
+\item \textbf{Fattal \& Kupferman 2004}, \emph{J.~Non-Newtonian Fluid Mech.}\
+      \textbf{123}(2--3), 281--285,
+      \href{https://doi.org/10.1016/j.jnnfm.2004.08.008}{doi:10.1016/j.jnnfm.2004.08.008}.
+      Verified via Hebrew~U.\ CRIS and ScienceDirect. Citation count
+      $\approx 484$. Key idea: ``transform a large class of differential
+      constitutive models into an equation for the matrix logarithm of the
+      conformation tensor''; high-Weissenberg numerical instability is
+      ``the failure of polynomial-based approximations to properly represent
+      exponential profiles.''
+\item Companion: Fattal \& Kupferman 2005, \emph{J.~Non-Newtonian Fluid
+      Mech.}\ \textbf{126}, 23--37,
+      \href{https://doi.org/10.1016/j.jnnfm.2004.12.003}{doi:10.1016/j.jnnfm.2004.12.003}.
+\end{itemize}
+
+\paragraph{Exact mapping.}
+\begin{itemize}
+\item Fattal--Kupferman: $\Psi=\log(\mathrm{Conformation})$; discretize
+      $\Psi$; $\exp(\Psi)$ only when needed.
+\item Writeup: $\ln r=\ln k_0+u_i-\alpha n_e\eta/\VT$; assemble $\ln r$;
+      $r=\exp(\ln r)$ once.
+\end{itemize}
+
+\paragraph{Stiff combustion / chemistry.}
+CHEMKIN-II/III (Kee, Rupley, Miller, SAND-89-8009; SAND96-8216) --- PLOG
+(pressure-dependent logarithmic interpolation) reactions. Lu \& Law 2009,
+\emph{Prog.~Energy Combust.~Sci.}\ \textbf{35}, 192--215. Pope 1997,
+\emph{Combust.~Theory Model.}\ \textbf{1}, 41--63. Higham et al.\ 2021,
+\emph{IMA J.~Numer.~Anal.}\ \textbf{41}, 2311--2330,
+\href{https://doi.org/10.1093/imanum/draa038}{doi:10.1093/imanum/draa038}
+(log-sum-exp / softmax formal analysis).
+
+The ``compute log of the rate, then exponentiate once'' pattern is well
+known in CHEMKIN-style stiff chemistry codes and the closely related
+log-sum-exp idiom in machine learning. \textbf{What is missing is the
+explicit transplantation into electrochemistry / Butler--Volmer evaluation
+as a published numerical strategy in a PNP--BV solver paper.}
+
+\paragraph{Where the implementation aligns.}
+Exact algebra at \texttt{Forward/bv\_solver/forms\_logc.py:324-356} (cathodic
+324--339; anodic 340--356). The writeup's existing pointer ``see
+\texttt{forms\_logc.py:294-360}'' undershoots; the full \texttt{if/else} block
+runs lines 299--389. \textbf{Recommend pointer
+\texttt{forms\_logc.py:294-388}.} Clamp-bypass argument documented at
+\texttt{forms\_logc.py:294-298} and
+\texttt{docs/CHATGPT\_HANDOFF\_6\_LOGRATE\_BREAKTHROUGH.md:107-118}.
+
+%% ============================================================
+\section{Per-Change Deviation Analysis}
+%% ============================================================
+
+\subsection{Change~\#1 --- Deviations from cited PBNP literature}
+
+\paragraph{Reused (non-novel).}
+The Boltzmann-passive $+$ NP-active reduction; sign convention
+$z_{\mathrm{ClO}_4}=-1$; clamping $\varphi$ at $\pm 50$ dimensionless units
+($\approx \pm\SI{1.28}{\volt}$) before exponentiation; non-dimensional
+\texttt{charge\_rhs} prefactor.
+
+\paragraph{In implementation but not in cited literature.}
+\begin{enumerate}
+\item \textbf{Application to ORR / \SI{0.1}{\mole\per\liter} $\mathrm{HClO}_4$.}
+      No surveyed peer-reviewed paper Boltzmann-distributes $\ClOf$ (or any
+      non-adsorbing anion) inside a PNP--BV ORR forward solver. The PEMFC
+      PNP literature (Bessler, Eikerling, Weber--Newman) uses either full PNP
+      or Newman electroneutrality. The construction is Zheng--Wei 2011; the
+      application is the contribution.
+\item \textbf{Architectural fragility --- \texttt{add\_boltzmann()}
+      monkey-patch.} The Boltzmann contribution is \emph{not} in
+      \texttt{Forward/bv\_solver/forms\_logc.py}. It is duplicated as a
+      closure in 7 study scripts (\texttt{v18\_logc\_lsq\_inverse.py:234},
+      \texttt{v24\_3sp\_logc\_vs\_4sp\_validation.py:250},
+      \texttt{v18\_logc\_diagnostics.py:117},
+      \texttt{v18\_logc\_noise\_sensitivity.py:85},
+      \texttt{v19\_lograte\_extended\_adjoint\_check.py:166},
+      \texttt{plot\_iv\_curves\_3sp\_true.py:108},
+      \texttt{v18\_test\_3species\_boltzmann.py:109}). The bare
+      \texttt{forms\_logc.py} Poisson residual contains only the
+      three-explicit-species sum at line~418. Tightening recommendation, not
+      literature finding.
+\end{enumerate}
+
+\paragraph{Genuine novelty assessment.}
+Modest. Construction fully reused; only the application domain (ORR PNP--BV
+with Boltzmann $\ClOf$) appears undocumented.
+
+\subsection{Change~\#2 --- Deviations from cited log-density literature}
+
+\paragraph{Reused (non-novel).}
+\begin{enumerate}
+\item The substitution $u_i=\ln c_i$, recovery $c_i=\exp(u_i)$, flux identity
+      $\nabla c=c\,\nabla u$ --- directly from Metti--Xu--Liu 2016 and Fu--Xu
+      2022.
+\item Energy-stable interpretation: $c_i=\exp(u_i)>0$ $\Rightarrow$ positivity
+      by construction; discrete entropy / energy stability arguments transfer.
+\item Monolithic Newton over Gummel splitting --- standard in modern
+      energy-stable PNP literature.
+\item Same CG order on $u_i$ and $\varphi$ --- standard in Metti--Xu--Liu and
+      FEM-PNP electrochemistry generally.
+\end{enumerate}
+
+\paragraph{In implementation but not in cited literature.}
+\begin{enumerate}
+\item \textbf{PNP--BV ORR application} (load-bearing novelty). After targeted
+      search, no peer-reviewed electrochemistry-side ORR / RDE / fuel-cell /
+      battery PNP--BV solver paper uses $\ln c$ as a primary Galerkin unknown.
+      Standard practice in that community is $c$-primary with adaptive
+      meshing. The closest electrochemistry-side log-density work is in Li-ion
+      concentrated-solution theory (Newman group, Doyle--Fuller--Newman
+      1993$+$), where chemical potential $\mu=\mu_0+RT\ln(\gamma c)$ appears
+      in fluxes --- but they still discretize $c$, not $\ln c$.
+\item \textbf{Propagation of $u_i$ into the BV boundary condition}
+      (Change~\#3). Metti--Xu--Liu and Fu--Xu handle bulk PNP transport only.
+\item \textbf{Symmetric \texttt{\_U\_CLAMP=$\pm$30} as overflow protection
+      rather than concentration floor} (\texttt{forms\_logc.py:185-198}).
+      Comment: ``$\exp(\pm 30)$ covers $[9.4\!\times\!10^{-14},\,1.07\!\times\!10^{13}]$,
+      adequate for typical EDL profiles.'' Bypassed in the log-rate boundary
+      path. Small construction choice, not in any specific cited paper,
+      consistent with general floating-point hygiene.
+\item \textbf{\texttt{\_C\_FLOOR=1e-20} Dirichlet-BC value for product
+      species} (\texttt{forms\_logc.py:431-437}) to avoid $\ln 0$ for $\HtwoOtwo$
+      initial concentration. Small local construction.
+\end{enumerate}
+
+\paragraph{Genuine novelty assessment.}
+Genuine --- but as a \emph{domain transfer}, not a new substitution. The
+substitution itself is old (semiconductor 1969, mathematical PNP 2016). No
+surveyed ORR--BV PNP solver uses it. Confidence medium-high (proving a
+negative is impossible, but targeted search returned nothing).
+
+\subsection{Change~\#3 --- Deviations from cited / surveyed BV literature}
+
+\paragraph{Reused (non-novel).}
+\begin{enumerate}
+\item Standard BV cathodic kinetic expression
+      $r=k_0 c_i \exp(-\alpha n_e\eta/\VT)$ --- textbook Bockris--Reddy /
+      Bard--Faulkner.
+\item Stoichiometric-power loop in cathodic branch ---
+      $\prod_f c_{\mathrm{sp}(f)}^{\nu_f}$ --- textbook mass-action.
+\item The algebraic identity itself ---
+      $r=k_0 c_i \exp(\dots)\Leftrightarrow\exp(\ln k_0+\ln c_i+\dots)$ --- is
+      trivial. Any electrochemist could derive it in two lines.
+\item ``Evaluate inside the log to avoid overflow at extreme rates'' pattern
+      --- well established in stiff combustion (CHEMKIN PLOG), viscoelastic
+      flow (Fattal--Kupferman), and ML (log-sum-exp). Standard machinery.
+\end{enumerate}
+
+\paragraph{In implementation but not in surveyed literature.}
+\begin{enumerate}
+\item \textbf{The literal log-rate BV identity used as a numerical strategy in
+      a PNP--BV / ORR solver.} No electrochemistry paper located that
+      publishes this construction in a PNP--BV solver context. The closest
+      published cousin is Fattal--Kupferman 2004 in viscoelastic fluid
+      mechanics --- structurally identical, domain different. The ``small
+      local numerical novelty'' hedge is defensible.
+\item \textbf{Clamp-bypass as the primary motivation.} The implementation's
+      reason is specifically: ``evaluating BV against \texttt{\_U\_CLAMP}-bounded
+      $c_{\mathrm{surf}}$ produces a phantom $\mathrm{R}_2$ cathodic sink at
+      low surface $\HtwoOtwo$.'' Mechanism per
+      \texttt{docs/CHATGPT\_HANDOFF\_6\_LOGRATE\_BREAKTHROUGH.md:107-118}:
+      when Newton needs $c_{\HtwoOtwo}$ below $\exp(-30)\approx 9.4\!\times\!10^{-14}$,
+      the symmetric clamp pins it; combined with a saturated $\exp(50)$ in
+      $\mathrm{R}_2$'s BV exponent, the floor times the huge exponential
+      gives a spurious $\mathrm{R}_2$ sink that nothing else can balance.
+      Log-rate evaluates
+      $\exp(\ln k_0+u_{\HtwoOtwo}+2(u_\mathrm{H}-\ln c_{\mathrm{ref}})-\alpha n_e\eta)$
+      so $u_{\HtwoOtwo}$ enters additively and can be arbitrarily negative;
+      the expression decays smoothly to zero. The specific clamp-bypass
+      argument is not in any cited literature --- it is a property of
+      \emph{this} implementation's interaction.
+\item \textbf{Asymmetry: cathodic branch carries the full sum loop; anodic
+      branch is single-species} (\texttt{forms\_logc.py:340-356}). The
+      writeup's ``both branches subtracted with
+      $\sum_f \nu_f(u_{\mathrm{sp}(f)}-\ln c_{\mathrm{ref},f})$'' is
+      \emph{partially} accurate: cathodic has the full loop (lines 331--337);
+      anodic has only the bare anodic-species term $u_{\mathrm{anod}}$
+      (lines 343--345 main case, 350--353 fallback). For production,
+      $\mathrm{R}_2$ is irreversible
+      (\texttt{v24\_3sp\_logc\_vs\_4sp\_validation.py:233}), so the anodic
+      branch falls into else at line 355 $\to$ $\mathrm{anodic}=0$.
+      Algebra-description should be tightened.
+\item \textbf{Line-range pointer drift.} Writeup says
+      \texttt{forms\_logc.py:294-360}. The codebase shows the log-rate true
+      branch at 324--356; full \texttt{if/else} block runs 294--388.
+      \textbf{Recommend \texttt{forms\_logc.py:294-388}.}
+\end{enumerate}
+
+\paragraph{Genuine novelty assessment.}
+Small local numerical novelty (defensible). Construction mathematically
+trivial; deployment in a PNP--BV / ORR solver undocumented in the surveyed
+literature; structurally identical machinery exists in different fields. The
+unique angle is the clamp-bypass mechanism specific to this code's
+\texttt{\_U\_CLAMP}-vs-saturated-BV interaction.
+
+%% ============================================================
+\section{Surrounding-Methods Provenance}
+%% ============================================================
+
+\subsection{ORR Mechanism / RRDE}
+
+\paragraph{Two-step equilibrium potentials.}
+$\mathrm{R}_1$: $\mathrm{O}_2+2\Hpe+2e^-\to\HtwoOtwo$,
+$\Eeq^{(1)}=+\SI{0.695}{\volt}$ vs SHE ($\approx \SI{0.68}{\volt}$).
+$\mathrm{R}_2$: $\HtwoOtwo+2\Hpe+2e^-\to 2\mathrm{H}_2\mathrm{O}$,
+$\Eeq^{(2)}=+\SI{1.776}{\volt}$ vs SHE ($\approx \SI{1.78}{\volt}$). Sum: 4-$e^-$
+ORR with $\Eeq=+\SI{1.229}{\volt}$ vs SHE. Cite Bard, Faulkner \& White 3rd~ed.\
+(2022) ch.~9.
+
+Production reaction config
+(\texttt{v24\_3sp\_logc\_vs\_4sp\_validation.py:222-237}): $\mathrm{R}_1$ has
+\texttt{E\_eq\_v=0.68}, \texttt{n\_electrons=2}, cathodic $\mathrm{O}_2$,
+anodic $\HtwoOtwo$, stoichiometry $[-1,+1,-2]$ with $\Hpe$ power 2;
+$\mathrm{R}_2$ has \texttt{E\_eq\_v=1.78}, \texttt{n\_electrons=2},
+irreversible.
+
+\paragraph{Foundational mechanism papers.}
+\begin{itemize}
+\item Wroblowa, Yen-Chi-Pan, Razumney 1976,
+      \emph{J.~Electroanal.~Chem.}\ \textbf{69}(2), 195--201,
+      doi:10.1016/S0022-0728(76)80250-1. THE classic 2-step ORR paper.
+\item Damjanovic, Genshaw, Bockris 1967,
+      \emph{J.~Electrochem.~Soc.}\ \textbf{114}(5), 466--472. RRDE
+      $\HtwoOtwo$-on-Pt mechanism.
+\item Markovi\'c, Schmidt, Stamenkovi\'c, Ross 2001, \emph{Fuel Cells}
+      \textbf{1}(2), 105--116.
+\item Markovi\'c \& Ross 2002, \emph{Surf.~Sci.~Rep.}\ \textbf{45}(4--6),
+      117--229.
+\item N{\o}rskov, Rossmeisl et al.\ 2004, \emph{J.~Phys.~Chem.~B}
+      \textbf{108}(46), 17886--17892, doi:10.1021/jp047349j.
+\item Stamenkovi\'c et al.\ 2007, \emph{Science} \textbf{315}(5811), 493--497,
+      doi:10.1126/science.1135941.
+\item Kulkarni, Siahrostami, Patel, N{\o}rskov 2018, \emph{Chem.~Rev.}\
+      \textbf{118}(5), 2302--2312, doi:10.1021/acs.chemrev.7b00488.
+\end{itemize}
+
+\subsection{Kinetic Inverse Problems and Tafel-Ridge Identifiability}
+
+\paragraph{Battery / Newman-style PDE-constrained ID.}
+\begin{itemize}
+\item Bizeray, Kim, Duncan, Howey 2017/2018,
+      \emph{IEEE Trans.~Control Syst.~Technol.}\ (preprint
+      arXiv:1702.02471). SPM Li-ion has only six identifiable parameter
+      groups.
+\item Forman, Moura, Stein, Fathy 2012, \emph{J.~Power Sources} \textbf{210},
+      263--275, doi:10.1016/j.jpowsour.2012.03.009. DFN parameter ID $+$
+      post-hoc FIM.
+\item Laue, R\"oder, Krewer 2021, \emph{J.~Appl.~Electrochem.}\ \textbf{51},
+      1253--1265, doi:10.1007/s10800-021-01579-5.
+\item Park, Kato, Gima, Klein, Moura 2018, \emph{J.~Electrochem.~Soc.}\
+      \textbf{165}(7), A1309. Convex OED for SPM via FIM.
+\end{itemize}
+
+\paragraph{Identifiability theory.}
+\begin{itemize}
+\item Raue et al.\ 2009, \emph{Bioinformatics} \textbf{25}(15), 1923--1929,
+      doi:10.1093/bioinformatics/btp358. Profile likelihood; structural vs
+      practical non-identifiability cleavage.
+\item Brun, Reichert, K\"unsch 2001, \emph{Water Resour.~Res.}\
+      \textbf{37}(4), 1015--1030, doi:10.1029/2000WR900350. Sensitivity index
+      $+$ collinearity index $=1/\sigma_{\min}(J_{\mathrm{normalized}})$.
+\item Quaiser \& M\"onnigmann 2009, \emph{BMC Syst.~Biol.}\ \textbf{3}, 50,
+      doi:10.1186/1752-0509-3-50. Eigenvalue method.
+\end{itemize}
+
+\paragraph{Tafel-ridge directly.}
+In the BV Tafel branch, $\log|i|\approx \log i_0 + (1-\alpha) f \eta$:
+$\log i_0$ enters additively, $\alpha$ as slope; both identifiable. The ridge
+emerges when (a)~the $\eta$ window is narrow or (b)~mass transport /
+$\mathrm{R}_2$ coupling bends the apparent Tafel slope.
+\begin{itemize}
+\item Schalenbach et al.\ 2024, \emph{ACS Energy Lett.},
+      doi:10.1021/acsenergylett.4c00266. Variance in $(\alpha,i_0)$ across
+      groups.
+\item Anantharaj \& Noda 2021, \emph{Sci.~Rep.}\ \textbf{11}, 8915,
+      doi:10.1038/s41598-021-87951-z. Differential Tafel decoupler.
+\item Bilodeau, Gibson, Garnett 2021, \emph{Nat.~Commun.}\ \textbf{12}, 825,
+      doi:10.1038/s41467-021-20924-y. Bayesian $(i_0,\alpha)$ elongated
+      posterior in $\mathrm{CO}_2\mathrm{RR}$.
+\end{itemize}
+
+\subsection{Charge / Voltage Continuation}
+
+\begin{itemize}
+\item Keller 1977, ``Numerical solution of bifurcation and nonlinear
+      eigenvalue problems,'' in \emph{Applications of Bifurcation Theory}
+      (Rabinowitz, ed.), Academic Press. Pseudo-arclength continuation.
+\item Allgower \& Georg 1990/2003 SIAM Classics, \emph{Numerical Continuation
+      Methods}.
+\item Doedel et al.\ AUTO-07P / AUTO-2000.
+\item Uecker 2021, \emph{Jahresber.~DMV} \textbf{123}, 199--248,
+      doi:10.1365/s13291-021-00241-5.
+\item Markowich, Ringhofer, Schmeiser 1990, \emph{Semiconductor Equations},
+      Springer, doi:10.1007/978-3-7091-6961-2. \textbf{Textbook origin of
+      bias-ramping for drift-diffusion / PNP.}
+\item Hyon, Eisenberg, Liu 2010, \emph{Commun.~Math.~Sci.}\ \textbf{9}(2),
+      459--475. Energetic-variational PNP with steric.
+\item Kilic, Bazant, Ajdari 2007, \emph{Phys.~Rev.~E} \textbf{75}, 021502
+      (I), 021503 (II), doi:10.1103/PhysRevE.75.021502. Why classical PB/PNP
+      fails $>\SI{25}{\milli\volt}$.
+\item Schmuck, Bazant 2015, \emph{SIAM J.~Appl.~Math.}\ \textbf{75}(3),
+      1369--1401, doi:10.1137/140968082.
+\item EchemFEM (Roy, Lin, Hahn 2024), JOSS / LLNL-JRNL-860653. Most direct
+      contemporary Firedrake-PNP reference.
+\end{itemize}
+
+\subsection{Adjoint / Discrete-Adjoint in Firedrake}
+
+\begin{itemize}
+\item Farrell, Ham, Funke, Rognes 2013, \emph{SIAM J.~Sci.~Comput.}\
+      \textbf{35}(4), C369--C393, doi:10.1137/120873558. Algorithmic basis of
+      \texttt{dolfin-adjoint}.
+\item Mitusch, Funke, Dokken 2019, \emph{J.~Open Source Softw.}\ \textbf{4}(38),
+      1292, doi:10.21105/joss.01292. \texttt{pyadjoint} software paper.
+\item Plessix 2006, \emph{Geophys.~J.~Int.}\ \textbf{167}(2), 495--503,
+      doi:10.1111/j.1365-246X.2006.02978.x. Adjoint-state method review.
+\item Gunzburger 2003, \emph{Perspectives in Flow Control and Optimization},
+      SIAM.
+\item Hinze, Pinnau, Ulbrich, Ulbrich 2009, \emph{Optimization with PDE
+      Constraints}, Springer.
+\item Ascher \& Petzold 1998, \emph{Computer Methods for ODEs and DAEs}, SIAM.
+\end{itemize}
+Taylor-test verification documented in Farrell--Ham--Funke--Rognes 2013, \S5.
+
+\subsection{Local Fisher Information \& Canonical-Ridge Cosines}
+
+\begin{itemize}
+\item Fisher 1922, \emph{Phil.~Trans.~R.~Soc.~A} \textbf{222}, 309--368,
+      doi:10.1098/rsta.1922.0009.
+\item Lehmann \& Casella 1998, \emph{Theory of Point Estimation}, 2nd~ed.,
+      Springer.
+\item Brun, Reichert, K\"unsch 2001 (above). Their collinearity index is
+      $1/\sigma_{\min}(J_{\mathrm{normalized}})$.
+\item Quaiser, M\"onnigmann 2009 (above). Eigenvalue method $=$ SVD of the FIM.
+\item Pant 2018, \emph{J.~R.~Soc.~Interface} \textbf{15}, 20170871,
+      doi:10.1098/rsif.2017.0871. Most modern $v_{\min}(\mathrm{FIM})$
+      inspection.
+\item Hotelling 1936 (\emph{Biometrika}), canonical correlation analysis.
+\item van der Vaart 2000, \emph{Asymptotic Statistics}, \S5.
+\item Vajda \& Rabitz 1989, \emph{J.~Phys.~Chem.}\ \textbf{93}, 5043. Overlap
+      angles between sensitivity-derived eigenvectors.
+\item Komorowski, Costa, Rand, Stumpf 2011, \emph{PNAS} \textbf{108}(21),
+      8645--8650, doi:10.1073/pnas.1015814108.
+\end{itemize}
+The canonical-ridge cosine is the user's naming for the dot-product of
+$v_{\min}(\mathrm{FIM})$ with a chosen analytical Tafel-ridge direction. Pant
+2018 is the closest pre-existing diagnostic.
+
+\textbf{``Joshi, Seidel-Morgenstern, Tiller 2006''} --- not located in any
+database. Drop or replace with Brun 2001 $+$ Quaiser 2009 $+$ Pant 2018.
+
+\subsection{Monolithic vs Splitting PNP Solvers}
+
+\begin{itemize}
+\item Gummel 1964, \emph{IEEE TED} \textbf{11}(10), 455--465. Original Gummel
+      iteration.
+\item Markowich, Ringhofer, Schmeiser 1990 (above), ch.~7.
+\item Yu, Holst, McCammon 2007, \emph{J.~Comput.~Chem.}\ \textbf{28},
+      1827--1839. Monolithic PNP, biological geometries.
+\item Liu \& Wang 2014, \emph{J.~Comput.~Phys.}\ \textbf{268}, 363--376.
+      Energy-stable structure-preserving FD.
+\item EchemFEM (Roy, Lin, Hahn 2024).
+\end{itemize}
+The writeup uses monolithic Newton on the mixed
+$(u_1,\dots,u_n,\varphi)$ space.
+
+%% ============================================================
+\section{Annotated Bibliography (verified)}
+%% ============================================================
+
+\subsection{Log-density / entropy-variable PNP}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.46\textwidth} p{0.13\textwidth} p{0.36\textwidth}@{}}
+\toprule
+\textbf{Citation} & \textbf{Status} & \textbf{One-sentence summary} \\
+\midrule
+\endhead
+Slotboom 1969, \emph{Electronics Letters} \textbf{5}(26), 677--678,
+doi:10.1049/el:19690510 &
+Verified &
+Canonical Slotboom-variables paper; introduces $\Phi_n=n\exp(-\psi/\VT)$ \\
+Slotboom 1973, \emph{IEEE TED} \textbf{ED-20}, 669--679 &
+Verified &
+Bipolar transistor analysis; not the PN-product paper \\
+Slotboom 1977, \emph{Solid-State Electron.}\ \textbf{20}(4), 279--283 &
+Verified &
+Band-gap-narrowing paper, not log-density \\
+Scharfetter \& Gummel 1969, \emph{IEEE TED} \textbf{ED-16}(1), 64--77 &
+Verified &
+Exponential-fitting / upwind FV on $c$-primary; \emph{not} log-density
+substitution \\
+Brezzi, Marini, Pietra 1989, \emph{SIAM J.~Numer.~Anal.}\ \textbf{26}(6),
+1342--1355 &
+Verified &
+Mixed-FE generalization of SG \\
+Markowich 1986, \emph{The Stationary Semiconductor Device Equations}, Springer,
+doi:10.1007/978-3-7091-3678-2 &
+Verified &
+Surveys variable choices \\
+Markowich, Ringhofer, Schmeiser 1990, \emph{Semiconductor Equations}, Springer
+&
+Verified &
+Drift-diffusion $+$ iterative schemes textbook \\
+Selberherr 1984, \emph{Analysis and Simulation of Semiconductor Devices},
+Springer &
+Verified &
+Industrial Slotboom $+$ SG $+$ Gummel \\
+Metti, Xu, Liu 2016, \emph{J.~Comput.~Phys.}\ \textbf{306}, 1--18,
+doi:10.1016/j.jcp.2015.10.053 &
+Verified &
+Canonical PNP log-density FEM paper \\
+Fu \& Xu 2022, \emph{CMAME} \textbf{395}, 115031,
+doi:10.1016/j.cma.2022.115031, arXiv:2105.01163 &
+Verified &
+High-order space-time FEM for PNP via the entropy variable; \textbf{the paper
+currently mis-cited as ``Liu, Maxian, Shen, Zitelli, Waltz, Monteiro 2022''} \\
+H.~Liu \& Maimaitiyiming 2021, \emph{J.~Sci.~Comput.}\ \textbf{87}(3), 92,
+doi:10.1007/s10915-021-01503-1 &
+Verified &
+FD $c$-primary positivity $+$ energy stability for multi-D PNP \\
+C.~Liu, Wang, Wise, Yue, Zhou, arXiv:2009.08076 &
+Verified &
+$H^{-1}$ gradient flow with singular log potential \\
+Huang \& Shen 2021, \emph{SIAM J.~Sci.~Comput.}\ \textbf{43}(3), B746--B759,
+doi:10.1137/20M1365417 &
+Verified &
+SAV scheme for PNP/Keller--Segel \\
+Canc\`es, Chainais-Hillairet, Gaudeul, Fuhrmann 2022, \emph{Numer.~Math.}\
+\textbf{151}, 949--986, doi:10.1007/s00211-022-01279-y &
+Verified &
+Entropy-FV for PNP with size exclusion \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\subsection{PBNP hybrid and ion-channel PNP}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.50\textwidth} p{0.13\textwidth} p{0.32\textwidth}@{}}
+\toprule
+\textbf{Citation} & \textbf{Status} & \textbf{Summary} \\
+\midrule
+\endhead
+Zheng \& Wei 2011, \emph{J.~Chem.~Phys.}\ \textbf{134}(19), 194101,
+doi:10.1063/1.3581031, PMID 21599038, PMC PMC3122111 &
+Verified &
+Canonical PBNP paper \\
+Zheng, Chen, Wei 2011, \emph{J.~Comput.~Phys.}\ \textbf{230}(13), 5239--5262,
+doi:10.1016/j.jcp.2011.03.020, PMC PMC3087981 &
+Verified &
+Second-order full-PNP solver, \emph{not} PBNP \\
+Gouy 1910, \emph{J.~Phys.~Theor.~Appl.}\ \textbf{9}, 457--468 &
+Verified &
+Diffuse-layer model, Boltzmann ion statistics \\
+Chapman 1913, \emph{Phil.~Mag.}\ \textbf{25}, 475--481 &
+Verified &
+Closed-form Gouy--Chapman \\
+Stern 1924, \emph{Z.~Elektrochem.}\ \textbf{30}, 508--516 &
+Verified &
+Combines Helmholtz $+$ GC \\
+Chen, Barcilon, Eisenberg 1992, \emph{Biophys.~J.}\ \textbf{61}, 1372--1393 &
+Verified &
+Open ionic channel PNP \\
+Chen, Eisenberg 1993, \emph{Biophys.~J.}\ \textbf{64}, 1405--1421,
+PMID 7686784 &
+Verified &
+Foundational PNP for one-conformation channels \\
+Kurnikova, Coalson, Graf, Nitzan 1999, \emph{Biophys.~J.}\ \textbf{76},
+642--656 &
+Verified &
+3D PNP for gramicidin A \\
+Cardenas, Coalson, Kurnikova 2000, \emph{Biophys.~J.}\ \textbf{79}, 80--93,
+PMC1300917 &
+Verified &
+3D PNP gramicidin A \\
+Lu, Holst, McCammon, Zhou 2010, \emph{J.~Comput.~Phys.}\ \textbf{229},
+6979--6994, doi:10.1016/j.jcp.2010.05.035, PMC2922884 &
+Verified &
+FEM-PNP for biomolecular diffusion-reaction \\
+Newman \& Thomas-Alyea 2004, \emph{Electrochemical Systems}, 3rd~ed., Wiley,
+ISBN 0-471-47756-7 &
+Verified &
+Electroneutrality reference \\
+Newman \& Balsara 2019, \emph{Electrochemical Systems}, 4th~ed., Wiley-ECS &
+Verified &
+Current edition \\
+Newman 1975, \emph{AIChE~J.}\ \textbf{21}, 25--41 &
+Verified &
+Porous-electrode theory \\
+Shinozaki et al.\ 2015, \emph{J.~Electrochem.~Soc.}\ \textbf{162}, F1144--F1158,
+doi:10.1149/2.1071509jes &
+Verified &
+RDE/ORR $\mathrm{HClO}_4$ benchmarking \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\subsection{Butler--Volmer, Tafel, Frumkin, generalized BV}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.50\textwidth} p{0.18\textwidth} p{0.27\textwidth}@{}}
+\toprule
+\textbf{Citation} & \textbf{Status} & \textbf{Summary} \\
+\midrule
+\endhead
+Tafel 1905, \emph{Z.~Phys.~Chem.}\ \textbf{50U}(1), 641--712,
+doi:10.1515/zpch-1905-5043 &
+Verified &
+Original empirical Tafel law \\
+Frumkin 1933, \emph{Z.~Phys.~Chem.~A} \textbf{164}, 121--133 &
+Verified &
+Frumkin correction $\eta_{\mathrm{eff}}=\eta-\varphi_d$ \\
+Bazant, Thornton, Ajdari 2004, \emph{Phys.~Rev.~E} \textbf{70}, 021506,
+doi:10.1103/PhysRevE.70.021506, PMID 15447495 &
+Verified &
+Diffuse-charge dynamics; PNP $+$ gFBV \\
+Kilic, Bazant, Ajdari 2007, \emph{Phys.~Rev.~E} \textbf{75}, 021502/021503,
+doi:10.1103/PhysRevE.75.021502 &
+Verified &
+Steric effects; classical PB fails $>\SI{25}{\milli\volt}$ \\
+Bazant, Kilic, Storey, Ajdari 2009, \emph{Adv.~Colloid Interface Sci.}\
+\textbf{152}, 48--88, doi:10.1016/j.cis.2009.10.001 &
+Verified &
+Induced-charge electrokinetics \\
+van Soestbergen, Biesheuvel, Bazant 2010, \emph{Phys.~Rev.~E} \textbf{81},
+021503 &
+Verified &
+PNP $+$ gFBV transient response \\
+van Soestbergen 2012, \emph{Russ.~J.~Electrochem.}\ \textbf{48}, 570--579,
+doi:10.1134/S1023193512060110 &
+Verified &
+Frumkin-BV $+$ mass transfer \\
+Bazant 2013, \emph{Acc.~Chem.~Res.}\ \textbf{46}, 1144--1160,
+doi:10.1021/ar300145c, PMID 23520980, arXiv:1208.1587 &
+Verified &
+Generalized BV via nonequilibrium thermodynamics \\
+Bockris, Reddy, Gamboa-Aldeco 2002, \emph{Modern Electrochemistry} \textbf{2A},
+2nd~ed., Kluwer/Plenum &
+Verified (IA) &
+Canonical BV/Tafel textbook \\
+Bard, Faulkner, White 2022, \emph{Electrochemical Methods}, 3rd~ed., Wiley &
+Verified &
+Canonical RRDE/Levich/BV textbook \\
+Khalili et al.\ 2016, ASME \emph{J.~Electrochem.~En.~Conv.~Stor.}\
+\textbf{13}(2), 021003 &
+Verified &
+Algebraic BV reformulation (inverts for $\eta$) \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\subsection{Closest log-rate-evaluation cousins (different domains)}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.46\textwidth} p{0.20\textwidth} p{0.30\textwidth}@{}}
+\toprule
+\textbf{Citation} & \textbf{Status} & \textbf{Summary} \\
+\midrule
+\endhead
+\textbf{Fattal \& Kupferman 2004}, \emph{J.~Non-Newtonian Fluid Mech.}\
+\textbf{123}(2--3), 281--285, doi:10.1016/j.jnnfm.2004.08.008 &
+Verified &
+Log-conformation tensor at high Weissenberg; \textbf{closest published
+structural cousin to log-rate BV} \\
+Fattal \& Kupferman 2005, \emph{J.~Non-Newtonian Fluid Mech.}\ \textbf{126},
+23--37, doi:10.1016/j.jnnfm.2004.12.003 &
+Verified &
+Application paper for log-conformation \\
+Kee, Rupley, Miller (CHEMKIN-II SAND-89-8009; CHEMKIN-III SAND96-8216) &
+Verified &
+PLOG (logarithmic interpolation) reactions \\
+Lu \& Law 2009, \emph{Prog.~Energy Combust.~Sci.}\ \textbf{35}, 192--215 &
+Verified (metadata) &
+Stiff-chemistry numerics review \\
+Pope 1997, \emph{Combust.~Theory Model.}\ \textbf{1}, 41--63 &
+Verified (metadata) &
+Tabulates log of rates \\
+Higham et al.\ 2021, \emph{IMA J.~Numer.~Anal.}\ \textbf{41}, 2311--2330,
+doi:10.1093/imanum/draa038 &
+Verified &
+Log-sum-exp / softmax numerical analysis \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\subsection{ORR mechanism}
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.78\textwidth} p{0.16\textwidth}@{}}
+\toprule
+\textbf{Citation} & \textbf{Status} \\
+\midrule
+Wroblowa, Yen-Chi-Pan, Razumney 1976,
+\emph{J.~Electroanal.~Chem.~Interfacial Electrochem.}\ \textbf{69}(2),
+195--201, doi:10.1016/S0022-0728(76)80250-1 &
+Verified \\
+Damjanovic, Genshaw, Bockris 1967, \emph{J.~Electrochem.~Soc.}\ \textbf{114}(5),
+466--472 &
+Verified \\
+Markovi\'c, Schmidt, Stamenkovi\'c, Ross 2001, \emph{Fuel Cells} \textbf{1}(2),
+105--116 &
+Verified \\
+Markovi\'c \& Ross 2002, \emph{Surf.~Sci.~Rep.}\ \textbf{45}(4--6), 117--229 &
+Verified \\
+N{\o}rskov, Rossmeisl et al.\ 2004, \emph{J.~Phys.~Chem.~B} \textbf{108}(46),
+17886--17892, doi:10.1021/jp047349j &
+Verified \\
+Stamenkovi\'c et al.\ 2007, \emph{Science} \textbf{315}(5811), 493--497,
+doi:10.1126/science.1135941 &
+Verified \\
+Kulkarni, Siahrostami, Patel, N{\o}rskov 2018, \emph{Chem.~Rev.}\
+\textbf{118}(5), 2302--2312, doi:10.1021/acs.chemrev.7b00488 &
+Verified \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Inverse problems / identifiability / FIM}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.78\textwidth} p{0.16\textwidth}@{}}
+\toprule
+\textbf{Citation} & \textbf{Status} \\
+\midrule
+\endhead
+Fisher 1922, \emph{Phil.~Trans.~R.~Soc.~A} \textbf{222}, 309--368,
+doi:10.1098/rsta.1922.0009 & Verified \\
+Lehmann \& Casella 1998, \emph{Theory of Point Estimation}, 2nd~ed., Springer
+& textbook \\
+Brun, Reichert, K\"unsch 2001, \emph{Water Resour.~Res.}\ \textbf{37}(4),
+1015--1030, doi:10.1029/2000WR900350 & Verified \\
+Quaiser \& M\"onnigmann 2009, \emph{BMC Syst.~Biol.}\ \textbf{3}, 50,
+doi:10.1186/1752-0509-3-50 & Verified \\
+Raue et al.\ 2009, \emph{Bioinformatics} \textbf{25}(15), 1923--1929,
+doi:10.1093/bioinformatics/btp358 & Verified \\
+Pant 2018, \emph{J.~R.~Soc.~Interface} \textbf{15}, 20170871,
+doi:10.1098/rsif.2017.0871 & Verified \\
+Komorowski, Costa, Rand, Stumpf 2011, \emph{PNAS} \textbf{108}(21), 8645--8650,
+doi:10.1073/pnas.1015814108 & Verified \\
+Vajda \& Rabitz 1989, \emph{J.~Phys.~Chem.}\ \textbf{93}, 5043 & Verified \\
+Bizeray, Kim, Duncan, Howey 2018, \emph{IEEE Trans.~Control Syst.~Technol.}\
+(arXiv:1702.02471) & Verified \\
+Forman, Moura, Stein, Fathy 2012, \emph{J.~Power Sources} \textbf{210},
+263--275, doi:10.1016/j.jpowsour.2012.03.009 & Verified \\
+Laue, R\"oder, Krewer 2021, \emph{J.~Appl.~Electrochem.}\ \textbf{51},
+1253--1265, doi:10.1007/s10800-021-01579-5 & Verified \\
+Park, Kato, Gima, Klein, Moura 2018, \emph{J.~Electrochem.~Soc.}\
+\textbf{165}(7), A1309 & Verified \\
+Bilodeau, Gibson, Garnett 2021, \emph{Nat.~Commun.}\ \textbf{12}, 825,
+doi:10.1038/s41467-021-20924-y & Verified \\
+Anantharaj \& Noda 2021, \emph{Sci.~Rep.}\ \textbf{11}, 8915,
+doi:10.1038/s41598-021-87951-z & Verified \\
+Schalenbach et al.\ 2024, \emph{ACS Energy Lett.},
+doi:10.1021/acsenergylett.4c00266 & Verified \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\subsection{Continuation and adjoint}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.78\textwidth} p{0.16\textwidth}@{}}
+\toprule
+\textbf{Citation} & \textbf{Status} \\
+\midrule
+\endhead
+Keller 1977, pseudo-arclength continuation chapter & book chapter \\
+Allgower \& Georg 1990/2003, \emph{Numerical Continuation Methods},
+Springer / SIAM & textbook \\
+Doedel et al.\ 2007, AUTO-07P manual & Concordia listing \\
+Uecker 2021, \emph{Jahresber.~DMV} \textbf{123}, 199--248,
+doi:10.1365/s13291-021-00241-5 & Verified \\
+Hyon, Eisenberg, Liu 2010, \emph{Commun.~Math.~Sci.}\ \textbf{9}(2), 459--475 &
+Verified \\
+Schmuck, Bazant 2015, \emph{SIAM J.~Appl.~Math.}\ \textbf{75}(3), 1369--1401,
+doi:10.1137/140968082 & Verified \\
+Roy, Lin, Hahn 2024 EchemFEM, JOSS / LLNL-JRNL-860653 & Verified \\
+Farrell, Ham, Funke, Rognes 2013, \emph{SIAM J.~Sci.~Comput.}\ \textbf{35}(4),
+C369--C393, doi:10.1137/120873558 & Verified \\
+Mitusch, Funke, Dokken 2019, \emph{J.~Open Source Softw.}\ \textbf{4}(38),
+1292, doi:10.21105/joss.01292 & Verified \\
+Plessix 2006, \emph{Geophys.~J.~Int.}\ \textbf{167}(2), 495--503,
+doi:10.1111/j.1365-246X.2006.02978.x & Verified \\
+Gunzburger 2003, \emph{Perspectives in Flow Control and Optimization}, SIAM &
+textbook \\
+Hinze, Pinnau, Ulbrich, Ulbrich 2009, \emph{Optimization with PDE Constraints},
+Springer & textbook \\
+Ascher \& Petzold 1998, \emph{Computer Methods for ODEs and DAEs}, SIAM &
+textbook \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\subsection{Monolithic vs splitting PNP}
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.78\textwidth} p{0.16\textwidth}@{}}
+\toprule
+\textbf{Citation} & \textbf{Status} \\
+\midrule
+Gummel 1964, \emph{IEEE TED} \textbf{11}(10), 455--465 & original \\
+Yu, Holst, McCammon 2007, \emph{J.~Comput.~Chem.}\ \textbf{28}, 1827--1839 &
+monolithic PNP, biological \\
+Liu \& Wang 2014, \emph{J.~Comput.~Phys.}\ \textbf{268}, 363--376 &
+energy-stable FD \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Not located / verification failed}
+
+\begin{itemize}
+\item \textbf{``Liu, Maxian, Shen, Zitelli, Waltz, Monteiro 2022, CMAME 396,
+      115070, arXiv:2105.01163''} --- \textbf{fabricated}. arXiv:2105.01163
+      resolves to Fu \& Xu 2022, CMAME 395, 115031. Replace.
+\item \textbf{``Joshi, Seidel-Morgenstern, Tiller 2006''} --- not located in
+      any database. If used in writeup, drop or replace with Brun--Reichert--K\"unsch
+      2001 $+$ Quaiser--M\"onnigmann 2009 $+$ Pant 2018.
+\end{itemize}
+
+%% ============================================================
+\section{Recommendations for the LaTeX Writeup's \texttt{thebibliography}}
+%% ============================================================
+
+\subsection{Critical corrections (blocking publication)}
+
+\paragraph{Correction 1 --- Remove the fabricated CMAME 2022 reference;
+replace with Fu \& Xu 2022.}
+
+\begin{lstlisting}[style=bibstyle]
+\bibitem{FuXu2022}
+G.~Fu and Z.~Xu,
+``High-order space-time finite element methods for the
+Poisson--Nernst--Planck equations: positivity and unconditional energy
+stability,''
+{\em Computer Methods in Applied Mechanics and Engineering}, vol.~395,
+art.~115031, 2022.
+\href{https://doi.org/10.1016/j.cma.2022.115031}{doi:10.1016/j.cma.2022.115031}.
+arXiv:2105.01163.
+\end{lstlisting}
+
+\paragraph{Correction 2 --- Disambiguate the Slotboom citation.}
+
+\begin{lstlisting}[style=bibstyle]
+\bibitem{Slotboom1969}
+J.~W. Slotboom,
+``Iterative scheme for 1- and 2-dimensional d.c.-transistor simulation,''
+{\em Electronics Letters}, vol.~5, no.~26, pp.~677--678, 1969.
+\href{https://doi.org/10.1049/el:19690510}{doi:10.1049/el:19690510}.
+\end{lstlisting}
+
+Add a one-sentence disambiguation in the methods text:
+\begin{quote}
+\small
+``Slotboom variables and the log-density substitution are related by a
+logarithm and additive shift --- $\ln(\Phi_n)=\ln(n)-\psi/\VT$ --- so they
+share continuous structure but yield distinct Galerkin discretizations.''
+\end{quote}
+
+\paragraph{Correction 3 --- Disambiguate Zheng--Wei vs Zheng--Chen--Wei.}
+
+\begin{lstlisting}[style=bibstyle]
+\bibitem{ZhengWei2011}
+Q.~Zheng and G.-W. Wei,
+``Poisson--Boltzmann--Nernst--Planck model,''
+{\em The Journal of Chemical Physics}, vol.~134, no.~19, art.~194101,
+12~pp., 2011.
+\href{https://doi.org/10.1063/1.3581031}{doi:10.1063/1.3581031}.
+PMID:~21599038.
+
+\bibitem{ZhengChenWei2011}
+Q.~Zheng, D.~Chen, and G.-W. Wei,
+``Second-order Poisson--Nernst--Planck solver for ion transport,''
+{\em Journal of Computational Physics}, vol.~230, no.~13,
+pp.~5239--5262, 2011.
+\href{https://doi.org/10.1016/j.jcp.2011.03.020}{doi:10.1016/j.jcp.2011.03.020}.
+\end{lstlisting}
+
+Do \textbf{not} cite Zheng--Chen--Wei 2011 as the PBNP source.
+
+\subsection{Recommended additions}
+
+\begin{lstlisting}[style=bibstyle]
+\bibitem{MettiXuLiu2016}
+M.~S. Metti, J.~Xu, and C.~Liu,
+``Energetically stable discretizations for charge transport and
+electrokinetic models,''
+{\em Journal of Computational Physics}, vol.~306, pp.~1--18, 2016.
+\href{https://doi.org/10.1016/j.jcp.2015.10.053}{doi:10.1016/j.jcp.2015.10.053}.
+
+\bibitem{CancesEtAl2022}
+C.~Canc\`es, C.~Chainais-Hillairet, B.~Gaudeul, and J.~Fuhrmann,
+``Entropy and convergence analysis for two finite-volume schemes for a
+Nernst--Planck--Poisson system with ion-volume constraints,''
+{\em Numerische Mathematik}, vol.~151, pp.~949--986, 2022.
+\href{https://doi.org/10.1007/s00211-022-01279-y}{doi:10.1007/s00211-022-01279-y}.
+
+\bibitem{Tafel1905}
+J.~Tafel,
+``\"Uber die Polarisation bei kathodischer Wasserstoffentwicklung,''
+{\em Zeitschrift f\"ur Physikalische Chemie}, vol.~50U, no.~1,
+pp.~641--712, 1905.
+\href{https://doi.org/10.1515/zpch-1905-5043}{doi:10.1515/zpch-1905-5043}.
+
+\bibitem{FattalKupferman2004}
+R.~Fattal and R.~Kupferman,
+``Constitutive laws for the matrix-logarithm of the conformation tensor,''
+{\em Journal of Non-Newtonian Fluid Mechanics}, vol.~123, no.~2--3,
+pp.~281--285, 2004.
+\href{https://doi.org/10.1016/j.jnnfm.2004.08.008}{doi:10.1016/j.jnnfm.2004.08.008}.
+
+\bibitem{LuHolstMcCammonZhou2010}
+B.~Lu, M.~J. Holst, J.~A. McCammon, and Y.~C. Zhou,
+``Poisson--Nernst--Planck equations for simulating biomolecular
+diffusion-reaction processes I: Finite element solutions,''
+{\em Journal of Computational Physics}, vol.~229, pp.~6979--6994, 2010.
+\href{https://doi.org/10.1016/j.jcp.2010.05.035}{doi:10.1016/j.jcp.2010.05.035}.
+
+\bibitem{Wroblowa1976}
+H.~Wroblowa, Yen-Chi-Pan, and G.~Razumney,
+``Electroreduction of oxygen: a new mechanistic criterion,''
+{\em Journal of Electroanalytical Chemistry and Interfacial
+Electrochemistry}, vol.~69, no.~2, pp.~195--201, 1976.
+\href{https://doi.org/10.1016/S0022-0728(76)80250-1}{doi:10.1016/S0022-0728(76)80250-1}.
+
+\bibitem{KulkarniSiahrostami2018}
+A.~Kulkarni, S.~Siahrostami, A.~Patel, and J.~K. N{\o}rskov,
+``Understanding catalytic activity trends in the oxygen reduction reaction,''
+{\em Chemical Reviews}, vol.~118, no.~5, pp.~2302--2312, 2018.
+\href{https://doi.org/10.1021/acs.chemrev.7b00488}{doi:10.1021/acs.chemrev.7b00488}.
+
+\bibitem{FarrellHamFunkeRognes2013}
+P.~E. Farrell, D.~A. Ham, S.~W. Funke, and M.~E. Rognes,
+``Automated derivation of the adjoint of high-level transient finite
+element programs,''
+{\em SIAM Journal on Scientific Computing}, vol.~35, no.~4,
+pp.~C369--C393, 2013.
+\href{https://doi.org/10.1137/120873558}{doi:10.1137/120873558}.
+
+\bibitem{MituschFunkeDokken2019}
+S.~K. Mitusch, S.~W. Funke, and J.~S. Dokken,
+``dolfin-adjoint 2018.1: automated adjoints for FEniCS and Firedrake,''
+{\em Journal of Open Source Software}, vol.~4, no.~38, p.~1292, 2019.
+\href{https://doi.org/10.21105/joss.01292}{doi:10.21105/joss.01292}.
+
+\bibitem{MarkowichRinghoferSchmeiser1990}
+P.~A. Markowich, C.~A. Ringhofer, and C.~Schmeiser,
+{\em Semiconductor Equations}.
+Wien: Springer, 1990.
+\href{https://doi.org/10.1007/978-3-7091-6961-2}{doi:10.1007/978-3-7091-6961-2}.
+
+\bibitem{KilicBazantAjdari2007a}
+M.~S. Kilic, M.~Z. Bazant, and A.~Ajdari,
+``Steric effects in the dynamics of electrolytes at large applied
+voltages. I. Double-layer charging,''
+{\em Physical Review E}, vol.~75, art.~021502, 2007.
+\href{https://doi.org/10.1103/PhysRevE.75.021502}{doi:10.1103/PhysRevE.75.021502}.
+
+\bibitem{BrunReichertKunsch2001}
+R.~Brun, P.~Reichert, and H.~R. K\"unsch,
+``Practical identifiability analysis of large environmental simulation
+models,''
+{\em Water Resources Research}, vol.~37, no.~4, pp.~1015--1030, 2001.
+\href{https://doi.org/10.1029/2000WR900350}{doi:10.1029/2000WR900350}.
+
+\bibitem{Pant2018}
+S.~Pant,
+``Information sensitivity functions to assess parameter information
+gain and identifiability of dynamical systems,''
+{\em Journal of the Royal Society Interface}, vol.~15,
+art.~20170871, 2018.
+\href{https://doi.org/10.1098/rsif.2017.0871}{doi:10.1098/rsif.2017.0871}.
+\end{lstlisting}
+
+\subsection{Recommended deletions}
+
+\begin{itemize}
+\item The fabricated \textbf{Liu--Maxian--Shen--Zitelli--Waltz--Monteiro 2022}
+      entry must be removed.
+\item If the writeup cites \textbf{Joshi, Seidel-Morgenstern, Tiller 2006},
+      drop or replace with Brun~2001 $+$ Quaiser~2009 $+$ Pant~2018.
+\item The misattributed Slotboom citation as printed (chimera 1973$+$1977
+      conflation) must be replaced with Slotboom~1969.
+\item Reassign Zheng--Chen--Wei 2011 JCP from PBNP-source role to
+      full-PNP-numerical-methods role.
+\end{itemize}
+
+\subsection{Code-pointer corrections (writeup prose, not bibliography)}
+
+\begin{enumerate}
+\item \textbf{Line range for the log-rate branch}: change
+      \texttt{forms\_logc.py:294-360} to \texttt{forms\_logc.py:294-388}.
+\item \textbf{Cathodic-vs-anodic algebra description}: tighten ``both branches
+      subtracted with $\sum_f\nu_f(u_{\mathrm{sp}(f)}-\ln c_{\mathrm{ref},f})$''
+      to specify ``the cathodic branch carries the full stoichiometric-power
+      loop (\texttt{forms\_logc.py:331-337}); the anodic branch is
+      single-species (lines 343--345 and fallback 350--353). For the
+      production setup $\mathrm{R}_2$ is irreversible
+      (\texttt{v24\_3sp\_logc\_vs\_4sp\_validation.py:233}), so its anodic
+      branch is zero, and the algebraic asymmetry has no production-output
+      consequence.''
+\item \textbf{Architectural note on \texttt{add\_boltzmann()}}: the writeup's
+      pointer ``see \texttt{add\_boltzmann()} in the current study scripts''
+      is technically correct but architecturally fragile (the function is
+      monkey-patched in 7 study scripts). Tightening recommendation: future
+      work should migrate the Boltzmann contribution into
+      \texttt{Forward/bv\_solver/forms\_logc.build\_forms\_logc()} as an
+      option.
+\end{enumerate}
+
+%% ============================================================
+\section*{Document Provenance}
+%% ============================================================
+This document was synthesized from four parallel research investigations
+(two web searches, one academic-literature search, one codebase audit) plus
+direct DOI/arXiv verification of every cited paper. Raw research outputs are
+preserved at \path{.research/pnp-bv-literature-provenance/}
+(\texttt{web-logc.md}, \texttt{web-pbnp-lograte.md}, \texttt{lit-context.md},
+\texttt{codebase.md}, \texttt{SUMMARY.md}).
+
+\end{document}

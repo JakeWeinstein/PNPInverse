@@ -33,6 +33,7 @@ import os
 import signal
 import sys
 import time
+import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -264,6 +265,21 @@ def _compute_gradients_single_point(
             "reason": f"adjoint derivative failed: {type(exc).__name__}: {exc}",
         }
 
+    # Gradient sanity check: warn on non-finite or suspiciously large values
+    control_names = ["k0_1", "k0_2", "alpha_1", "alpha_2"]
+    phi_val_str = f"phi={solver_params_list[0] if solver_params_list else '?'}"
+    for ci, (cname, gval) in enumerate(zip(control_names, grad)):
+        if not np.isfinite(gval):
+            warnings.warn(
+                f"Non-finite gradient d({observable_mode})/d({cname})={gval} "
+                f"at {phi_val_str}"
+            )
+        elif abs(gval) > 1e6:
+            warnings.warn(
+                f"Suspiciously large gradient d({observable_mode})/d({cname})"
+                f"={gval:.2e} at {phi_val_str}"
+            )
+
     return {
         "success": True,
         "gradient": grad,
@@ -429,6 +445,35 @@ def _load_forward_data(batch_dir: str) -> Tuple[
     print(f"[load] parameters: {parameters.shape}, converged: {converged.sum()}/{len(converged)}")
     print(f"[load] phi_applied: {phi_applied.shape} ({phi_applied.min():.1f} to {phi_applied.max():.1f})")
     print(f"[load] solution keys: {len(u_data_map)}")
+
+    # Re-validate loaded forward data (spot-check first 10 converged samples)
+    from Forward.bv_solver.validation import validate_observables
+
+    converged_indices = np.where(converged)[0]
+    n_eta = len(phi_applied)
+    # The training_data.npz may contain observable arrays; look for them.
+    obs_cd_all = data["current_density"] if "current_density" in data.files else None
+    obs_pc_all = data["peroxide_current"] if "peroxide_current" in data.files else None
+
+    if obs_cd_all is not None and obs_pc_all is not None:
+        for sample_idx in converged_indices[:10]:
+            cd_vals = obs_cd_all[sample_idx]
+            pc_vals = obs_pc_all[sample_idx]
+            for j in range(min(len(cd_vals), n_eta)):
+                vr = validate_observables(
+                    cd_vals[j], pc_vals[j],
+                    I_lim=2.0,  # nondimensional diffusion-limit estimate
+                    phi_applied=float(phi_applied[j]),
+                    V_T=1.0,
+                )
+                if not vr.valid:
+                    warnings.warn(
+                        f"Loaded sample {sample_idx} point {j} has physics "
+                        f"violations: {vr.failures}"
+                    )
+                    break
+    else:
+        print("[load] obs_cd/obs_pc not in training_data.npz — skipping re-validation")
 
     return parameters, converged, phi_applied, u_data_map
 

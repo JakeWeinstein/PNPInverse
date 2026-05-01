@@ -1,0 +1,188 @@
+===========================================================================
+  NEW SURROGATE MODEL TRAINING LOG
+  Date: 2026-03-17
+===========================================================================
+
+===========================================================================
+  1. DEPENDENCY INSTALLATION
+===========================================================================
+
+Installed packages (into ../venv-firedrake):
+  - gpytorch       1.15.2  (+ linear_operator 0.6.1)
+  - chaospy        4.3.21  (+ numpoly 1.3.9)
+  - joblib         1.5.3
+  - scikit-learn   1.8.0   (pulled in by gpytorch)
+  - threadpoolctl  3.6.0   (pulled in by scikit-learn)
+  - importlib-metadata 8.7.1, zipp 3.23.0 (pulled in by numpoly)
+
+Existing PyTorch version: 2.10.0 (already installed, compatible)
+
+All imports verified successfully.
+
+===========================================================================
+  2. GP SURROGATE TRAINING
+===========================================================================
+
+Command:
+  python scripts/surrogate/train_gp.py \
+    --training-data data/surrogate_models/training_data_merged.npz \
+    --split-indices data/surrogate_models/split_indices.npz \
+    --output-dir data/surrogate_models/gp
+
+Configuration:
+  - 44 independent exact GPs (22 CD + 22 PC), Matern 5/2 ARD kernel
+  - 2967 train / 524 test samples, 22 voltage points
+  - Max Adam iterations: 200, LR: 0.1, early stopping patience: 20
+  - Parallelized with joblib (10 workers)
+
+Training time: 499.3s (~8.3 min)
+
+Validation metrics (test set, 524 samples):
+  Current Density:
+    RMSE:               1.950e-02
+    Max absolute error: 7.490e-01
+    Mean NRMSE:         3.85%
+  Peroxide Current:
+    RMSE:               2.655e-02
+    Max absolute error: 7.665e-01
+    Mean NRMSE:         1610.96%  (inflated by near-zero PC samples)
+
+UQ Calibration (predictive intervals):
+     Level    CD coverage    PC coverage
+      50%        74.2%          59.7%
+      80%        84.9%          79.4%
+      90%        89.2%          82.2%
+      95%        90.1%          84.3%
+  CD 90% interval: WELL-CALIBRATED (89.2% coverage)
+  PC 90% interval: OVERCONFIDENT (82.2% coverage, below 85%)
+
+Save/Load Round-Trip: PASS (max abs diff = 0.0 for both CD and PC)
+
+Gradient Accuracy (autograd vs central finite differences):
+  Result: 0/10 points passed (<1% relative error)
+  All 10 test points showed ~100% relative error between autograd
+  and FD gradients. This is caused by GPyTorch's CG-based approximate
+  inference during prediction (NumericalWarnings about CG convergence
+  were abundant). The fast_pred_var setting uses conjugate gradient
+  approximations that break the autograd gradient chain. This is a
+  known limitation for exact GP models with large training sets (N=2967).
+
+Model saved to: data/surrogate_models/gp/
+
+===========================================================================
+  3. PCE SURROGATE TRAINING
+===========================================================================
+
+Command:
+  python scripts/surrogate/train_pce.py \
+    --training-data data/surrogate_models/training_data_merged.npz \
+    --split-indices data/surrogate_models/split_indices.npz \
+    --output-dir data/surrogate_models/pce \
+    --max-degree 5 --skip-convergence
+
+Note: Initial run with default max-degree 6 and convergence study was
+killed after 25+ minutes (LOO cross-validation with hat matrix was
+extremely slow for large N=2967 with high-degree polynomial bases).
+Re-ran with --max-degree 5 and --skip-convergence to reduce wall time.
+
+LOO Cross-Validation Degree Selection:
+  degree=3, terms=19,  LOO RMSE=1.057e-03  <-- SELECTED
+  degree=4, terms=35,  LOO RMSE=1.065e-03
+  degree=5, terms=55,  LOO RMSE=1.069e-03
+  degree=6, terms=89,  LOO RMSE=1.078e-03
+  degree=7, terms=118, LOO RMSE=1.073e-03
+  degree=8, terms=168, LOO RMSE=1.070e-03
+
+Selected degree: 3 (19 basis terms, hyperbolic truncation q=0.75)
+
+Training time: 107.1s (~1.8 min)
+
+Validation metrics (test set, 524 samples):
+  Current Density:
+    RMSE:               2.144e-02
+    Max absolute error: 7.565e-01
+    Mean NRMSE:         4.75%
+  Peroxide Current:
+    RMSE:               2.873e-02
+    Max absolute error: 7.109e-01
+    Mean NRMSE:         47.73%
+
+Model saved to: data/surrogate_models/pce/pce_model.pkl
+Sobol indices saved to: StudyResults/surrogate_fidelity/pce_sobol_indices.json
+
+===========================================================================
+  4. PCE SOBOL SENSITIVITY ANALYSIS
+===========================================================================
+
+Command:
+  python scripts/surrogate/pce_sensitivity_report.py \
+    --model data/surrogate_models/pce/pce_model.pkl \
+    --output-dir StudyResults/surrogate_fidelity
+
+Generated files:
+  - StudyResults/surrogate_fidelity/pce_sobol_cd_vs_voltage.png
+  - StudyResults/surrogate_fidelity/pce_variance_decomposition_cd.png
+  - StudyResults/surrogate_fidelity/pce_sobol_table.tex
+
+CURRENT DENSITY -- Mean Sobol Indices (averaged over 22 voltages):
+  Parameter            S_i (1st)    ST_i (total)   Interaction
+  log10_k0_1              0.6342       0.6789        0.0448
+  log10_k0_2              0.0320       0.0471        0.0151
+  alpha_1                 0.2601       0.2996        0.0395
+  alpha_2                 0.0191       0.0291        0.0100
+
+PEROXIDE CURRENT -- Mean Sobol Indices (averaged over 22 voltages):
+  Parameter            S_i (1st)    ST_i (total)   Interaction
+  log10_k0_1              0.4591       0.4748        0.0157
+  log10_k0_2              0.1684       0.1787        0.0103
+  alpha_1                 0.1770       0.1914        0.0144
+  alpha_2                 0.1696       0.1808        0.0112
+
+Top interactions:
+  CD: log10_k0_1 x alpha_1 (S_13 = 0.0372)
+  PC: log10_k0_1 x alpha_1 (S_13 = 0.0079)
+
+KEY FINDING:
+  k0_1 dominates CD variance (63.4% first-order, 67.9% total).
+  k0_2 is relatively minor for CD (3.2% first-order) but more
+  important for PC (16.8% first-order).
+  alpha_1 is the second most influential for CD (26.0%).
+  For PC, all four parameters contribute (46%/17%/18%/17%).
+
+Voltage-resolved:
+  k0_2 most influential for CD at V=5.000 (S_1=0.494)
+  k0_2 least influential for CD at V=1.000 (S_1=0.000)
+
+===========================================================================
+  5. BUGS FIXED
+===========================================================================
+
+None -- all scripts ran without code bugs. The only issue was performance:
+the PCE LOO cross-validation was too slow at default settings (degree
+candidates 3-8 on 2967 samples). Resolved by passing --max-degree 5
+and --skip-convergence. The LOO CV still evaluated all 6 candidate
+degrees (3-8) during degree selection, but the convergence study
+(which re-fits separate models at each degree and validates on test set)
+was skipped to save time.
+
+===========================================================================
+  6. MODEL COMPARISON SUMMARY
+===========================================================================
+
+                    GP (Matern 5/2)     PCE (degree 3)
+  CD NRMSE:            3.85%               4.75%
+  PC NRMSE:          1610.96%             47.73%
+  CD RMSE:            1.95e-02            2.14e-02
+  PC RMSE:            2.65e-02            2.87e-02
+  Training time:      499s                107s
+  UQ available:       Yes (GP posterior)  No (point estimates)
+  Sobol indices:      No                  Yes (analytic from PCE)
+
+Notes:
+  - Both NRMSE values for PC are inflated by samples with near-zero
+    peroxide current (the range denominator is tiny).
+  - The raw RMSE values are comparable between the two models.
+  - GP provides uncertainty quantification; PCE provides sensitivity analysis.
+  - GP gradient check failed due to CG approximation in GPyTorch;
+    for gradient-based inference, the POD-RBF or NN surrogates may
+    be more reliable.

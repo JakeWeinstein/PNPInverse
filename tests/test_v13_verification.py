@@ -31,8 +31,6 @@ from __future__ import annotations
 import os
 import sys
 
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_THIS_DIR)
 if _ROOT not in sys.path:

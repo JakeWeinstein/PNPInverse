@@ -261,7 +261,9 @@ FOUR_SPECIES_CHARGED = SpeciesConfig(
 # BV convergence + nondim sub-configs
 # ---------------------------------------------------------------------------
 
-def _make_bv_convergence_cfg(*, softplus: bool = False) -> Dict[str, Any]:
+def _make_bv_convergence_cfg(*, softplus: bool = False,
+                              log_rate: bool = False,
+                              u_clamp: float = 30.0) -> Dict[str, Any]:
     """Standard BV convergence config sub-dict."""
     cfg: Dict[str, Any] = {
         "clip_exponent": True,
@@ -269,6 +271,8 @@ def _make_bv_convergence_cfg(*, softplus: bool = False) -> Dict[str, Any]:
         "regularize_concentration": True,
         "conc_floor": 1e-12,
         "use_eta_in_bv": True,
+        "bv_log_rate": log_rate,
+        "u_clamp": u_clamp,
     }
     if softplus:
         cfg["softplus_regularization"] = True
@@ -300,6 +304,8 @@ def _make_bv_bc_cfg(
     k0_hat_r2: float = K0_HAT_R2,
     alpha_r1: float = ALPHA_R1,
     alpha_r2: float = ALPHA_R2,
+    E_eq_r1: float = 0.0,
+    E_eq_r2: float = 0.0,
     c_hp_hat: float = C_HP_HAT,
     electrode_marker: int = 3,
     concentration_marker: int = 4,
@@ -315,6 +321,7 @@ def _make_bv_bc_cfg(
         "stoichiometry": list(species.stoichiometry_r1),
         "n_electrons": N_ELECTRONS,
         "reversible": True,
+        "E_eq_v": E_eq_r1,
     }
     reaction_2: Dict[str, Any] = {
         "k0": k0_hat_r2,
@@ -325,6 +332,7 @@ def _make_bv_bc_cfg(
         "stoichiometry": list(species.stoichiometry_r2),
         "n_electrons": N_ELECTRONS,
         "reversible": False,
+        "E_eq_v": E_eq_r2,
     }
 
     # 4-species charged system uses cathodic_conc_factors for H⁺ dependence
@@ -364,6 +372,8 @@ def make_bv_solver_params(
     k0_hat_r2: float = K0_HAT_R2,
     alpha_r1: float = ALPHA_R1,
     alpha_r2: float = ALPHA_R2,
+    E_eq_r1: float = 0.0,
+    E_eq_r2: float = 0.0,
     electrode_marker: int = 3,
     concentration_marker: int = 4,
     ground_marker: int = 4,
@@ -408,6 +418,8 @@ def make_bv_solver_params(
         k0_hat_r2=k0_hat_r2,
         alpha_r1=alpha_r1,
         alpha_r2=alpha_r2,
+        E_eq_r1=E_eq_r1,
+        E_eq_r2=E_eq_r2,
         c_hp_hat=c_hp_hat,
         electrode_marker=electrode_marker,
         concentration_marker=concentration_marker,

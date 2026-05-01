@@ -131,6 +131,7 @@ def _add_bv_reactions_scaling_to_transform(
         if not nondim_enabled:
             srxn["k0_model"] = rxn["k0"]
             srxn["c_ref_model"] = rxn["c_ref"]
+            srxn["E_eq_model"] = rxn.get("E_eq_v", 0.0)
         else:
             if kappa_inputs_dimless:
                 srxn["k0_model"] = rxn["k0"]
@@ -140,6 +141,7 @@ def _add_bv_reactions_scaling_to_transform(
                 srxn["c_ref_model"] = rxn["c_ref"]
             else:
                 srxn["c_ref_model"] = rxn["c_ref"] / conc_scale
+            srxn["E_eq_model"] = rxn.get("E_eq_v", 0.0) / potential_scale
 
         # Scale cathodic_conc_factors c_ref_nondim values
         scaled_factors = []

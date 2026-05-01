@@ -11,6 +11,7 @@ from FluxCurve.bv_config import BVFluxCurveInferenceRequest
 from FluxCurve.results import CurveAdjointResult, PointAdjointResult
 from FluxCurve.recovery import _reduce_kappa_anisotropy
 from FluxCurve.bv_point_solve import solve_bv_curve_points_with_warmstart
+from Forward.bv_solver.validation import validate_observables, compute_i_lim_from_params
 
 
 def evaluate_bv_curve_objective_and_gradient(
@@ -71,8 +72,21 @@ def evaluate_bv_curve_objective_and_gradient(
         total_gradient = np.zeros(n_controls, dtype=float)
         n_failed = 0
 
+        _i_lim = compute_i_lim_from_params(request.base_solver_params)
         for i, point in enumerate(points):
             simulated_flux[i] = point.simulated_flux
+            # Physics validation: skip non-physical points from objective
+            if point.converged:
+                vr = validate_observables(
+                    float(point.simulated_flux), 0.0,
+                    I_lim=_i_lim, phi_applied=float(phi_applied_values[i]), V_T=1.0,
+                )
+                if not vr.valid:
+                    # Non-physical solution -- treat as failed point
+                    # Skip both objective AND gradient to maintain invariant
+                    # total_gradient == d(total_objective)/d(params)
+                    n_failed += 1
+                    continue
             total_objective += float(point.objective)
             if point.converged:
                 total_gradient += point.gradient
@@ -279,6 +293,21 @@ def evaluate_bv_multi_observable_objective_and_gradient(
             primary_points = multi_result["primary_results"]
             secondary_points = multi_result["secondary_results"]
 
+            # Cross-validate primary/secondary pairs (F3 selectivity check)
+            _i_lim_multi = compute_i_lim_from_params(request.base_solver_params)
+            _skip_mask = np.zeros(n_points, dtype=bool)
+            for i in range(n_points):
+                pt_p = primary_points[i] if i < len(primary_points) else None
+                pt_s = secondary_points[i] if i < len(secondary_points) else None
+                if (pt_p is not None and pt_s is not None
+                        and pt_p.converged and pt_s.converged):
+                    vr = validate_observables(
+                        float(pt_p.simulated_flux), float(pt_s.simulated_flux),
+                        I_lim=_i_lim_multi, phi_applied=float(phi_applied_values[i]), V_T=1.0,
+                    )
+                    if not vr.valid:
+                        _skip_mask[i] = True
+
             # Aggregate primary
             sim_flux_primary = np.full(n_points, np.nan, dtype=float)
             total_obj_primary = 0.0
@@ -287,6 +316,10 @@ def evaluate_bv_multi_observable_objective_and_gradient(
             for i, pt in enumerate(primary_points):
                 if pt is not None:
                     sim_flux_primary[i] = pt.simulated_flux
+                    if _skip_mask[i]:
+                        # Non-physical solution -- skip both objective AND gradient
+                        n_failed_primary += 1
+                        continue
                     total_obj_primary += float(pt.objective)
                     if pt.converged:
                         total_grad_primary += pt.gradient
@@ -314,6 +347,10 @@ def evaluate_bv_multi_observable_objective_and_gradient(
             for i, pt in enumerate(secondary_points):
                 if pt is not None:
                     sim_flux_secondary[i] = pt.simulated_flux
+                    if _skip_mask[i]:
+                        # Non-physical solution -- skip both objective AND gradient
+                        n_failed_secondary += 1
+                        continue
                     total_obj_secondary += float(pt.objective)
                     if pt.converged:
                         total_grad_secondary += pt.gradient

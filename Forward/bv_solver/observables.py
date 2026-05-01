@@ -66,3 +66,50 @@ def _build_bv_observable_form(
             f"Unknown BV observable mode '{mode}'. "
             "Use 'current_density', 'peroxide_current', or 'reaction'."
         )
+
+
+def assemble_observable_validated(
+    form: object,
+    *,
+    I_lim: float,
+    phi_applied: float,
+    V_T: float,
+    mode: str = "current_density",
+) -> tuple[float, object]:
+    """Assemble an observable form and validate the result.
+
+    Parameters
+    ----------
+    form : ufl.Form
+        The observable form to assemble.
+    I_lim : float
+        Diffusion-limited current (same units as assembled value).
+    phi_applied : float
+        Applied potential (nondimensional).
+    V_T : float
+        Thermal voltage for sign convention.
+    mode : str
+        "current_density" or "peroxide_current" — affects which checks run.
+
+    Returns
+    -------
+    tuple[float, ValidationResult]
+        (assembled_value, validation_result)
+    """
+    import firedrake as fd
+    from .validation import ValidationResult
+
+    value = float(fd.assemble(form))
+
+    # Only check F2 (magnitude exceeds diffusion limit) for single-observable
+    # validation.  Cross-observable checks (F3, F7) require both cd and pc,
+    # which happens at the pipeline level (training.py, bv_curve_eval.py).
+    failures = []
+    warnings_list = []
+
+    if mode in ("current_density", "peroxide_current"):
+        if abs(value) > abs(I_lim) * 1.05:
+            failures.append(f"F2: |{mode}|={abs(value):.4g} exceeds I_lim={abs(I_lim):.4g}")
+
+    result = ValidationResult(valid=len(failures) == 0, failures=failures, warnings=warnings_list)
+    return value, result

@@ -455,15 +455,22 @@ def run_mms_4species(
         # H+ factor: (c0_H+/c_ref_H+)^2
         H_factor = (C0_VALS[2] / C_REF_H_PLUS) ** 2  # = (0.2/0.2)^2 = 1.0
 
-        # R1 = k0_1 * c_O2(y=0) * H_factor * exp(-alpha1*eta0)
-        #     - k0_1 * c_ref_anodic * exp((1-alpha1)*eta0)
-        R1_exact = K0_1 * (
-            C0_VALS[0] * H_factor * fd.exp(-ALPHA_1 * ETA0)
-            - C_REF_ANODIC * fd.exp((1.0 - ALPHA_1) * ETA0)
+        # MUST match current forms.py build_forms BV rate expression:
+        #   cathodic = k0 * c_cat_surf * H_factor * exp(-alpha * n_e * eta)
+        #   anodic   = k0 * c_anod_surf * exp((1-alpha) * n_e * eta)   [anodic_species!=None]
+        #              OR k0 * c_ref * exp((1-alpha) * n_e * eta)      [anodic_species=None, reversible]
+        #              OR 0                                             [irreversible]
+        #
+        # NOTE (2026-04-16): historical R1_exact used `exp(-alpha*eta)` (no n_e) and
+        # C_REF_ANODIC for the anodic branch. The solver's current formula uses
+        # `n_e*eta` and `c_surf[anod_idx]`. This MMS was updated to match.
+        N_E = 2.0
+        R1_exact = (
+            K0_1 * C0_VALS[0] * H_factor * fd.exp(-ALPHA_1 * N_E * ETA0)
+            - K0_1 * C0_VALS[1] * fd.exp((1.0 - ALPHA_1) * N_E * ETA0)
         )
-
-        # R2 = k0_2 * c_H2O2(y=0) * H_factor * exp(-alpha2*eta0)
-        R2_exact = K0_2 * C0_VALS[1] * H_factor * fd.exp(-ALPHA_2 * ETA0)
+        # R2 irreversible: anodic = 0. Cathodic uses c_H2O2_surf = C0_VALS[1].
+        R2_exact = K0_2 * C0_VALS[1] * H_factor * fd.exp(-ALPHA_2 * N_E * ETA0)
 
         R_exact = [R1_exact, R2_exact]
 

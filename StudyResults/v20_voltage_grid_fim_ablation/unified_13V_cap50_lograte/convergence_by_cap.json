@@ -1,0 +1,86 @@
+{
+  "50": {
+    "status": "ok",
+    "n_used": 11,
+    "per_v": [
+      {
+        "V_RHE": -0.5,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 4.13
+      },
+      {
+        "V_RHE": -0.3,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.52
+      },
+      {
+        "V_RHE": -0.2,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 12.59
+      },
+      {
+        "V_RHE": -0.1,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 12.01
+      },
+      {
+        "V_RHE": 0.0,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 12.22
+      },
+      {
+        "V_RHE": 0.1,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 12.13
+      },
+      {
+        "V_RHE": 0.15,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 12.93
+      },
+      {
+        "V_RHE": 0.2,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 14.14
+      },
+      {
+        "V_RHE": 0.25,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 14.95
+      },
+      {
+        "V_RHE": 0.3,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 14.49
+      },
+      {
+        "V_RHE": 0.4,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 14.42
+      },
+      {
+        "V_RHE": 0.5,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 14.98
+      },
+      {
+        "V_RHE": 0.6,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 16.1
+      }
+    ]
+  }
+}

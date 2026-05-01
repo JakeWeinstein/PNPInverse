@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import numpy as np
 import firedrake as fd
 
 from .forms import build_context, build_forms, set_initial_conditions
+from .validation import validate_solution_state
 
 
 def _clone_params_with_phi(solver_params, *, phi_applied: float):
@@ -68,6 +70,18 @@ def forsolve_bv(
             print(f"[bv_solver] step {step}/{num_steps}  eta_hat={float(ctx['phi_applied_func'].dat.data[0]):.4f}")
         solver.solve()
         U_prev.assign(U)
+
+    # --- Physics validation before return ---
+    _c_bulk = list(c0) if hasattr(c0, '__iter__') else [c0] * n_species
+    _vr = validate_solution_state(
+        U, n_species=n_species, c_bulk=_c_bulk, phi_applied=float(phi_applied),
+        z_vals=list(z_vals), eps_c=float(params.get("bv_convergence", {}).get("conc_floor", 1e-8)),
+        exponent_clip=float(params.get("bv_convergence", {}).get("exponent_clip", 50.0)),
+    )
+    for w in _vr.warnings:
+        warnings.warn(f"forsolve_bv: {w}", stacklevel=2)
+    if not _vr.valid:
+        warnings.warn(f"forsolve_bv: physics violations: {_vr.failures}", stacklevel=2)
 
     return U
 
@@ -209,6 +223,18 @@ def solve_bv_with_continuation(
                 f"[continuation] Failed to converge at eta={eta_target_step:.4f} after "
                 f"{max_sub} sub-stepping attempts (reached eta={eta_lo:.4f})."
             )
+
+    # --- Physics validation before return ---
+    _c_bulk = list(c0) if hasattr(c0, '__iter__') else [c0] * n_s
+    _vr = validate_solution_state(
+        ctx["U"], n_species=n_s, c_bulk=_c_bulk, phi_applied=float(phi_applied),
+        z_vals=list(z_v), eps_c=float(params.get("bv_convergence", {}).get("conc_floor", 1e-8)),
+        exponent_clip=float(params.get("bv_convergence", {}).get("exponent_clip", 50.0)),
+    )
+    for w in _vr.warnings:
+        warnings.warn(f"solve_bv_with_continuation: {w}", stacklevel=2)
+    if not _vr.valid:
+        warnings.warn(f"solve_bv_with_continuation: physics violations: {_vr.failures}", stacklevel=2)
 
     return ctx["U"]
 
@@ -391,6 +417,19 @@ def solve_bv_with_ptc(
                 break
 
     ctx["dt_const"].assign(original_dt)
+
+    # --- Physics validation before return ---
+    _c_bulk = list(c0) if hasattr(c0, '__iter__') else [c0] * n_s
+    _vr = validate_solution_state(
+        ctx["U"], n_species=n_s, c_bulk=_c_bulk, phi_applied=float(phi_applied),
+        z_vals=list(z_v), eps_c=float(params.get("bv_convergence", {}).get("conc_floor", 1e-8)),
+        exponent_clip=float(params.get("bv_convergence", {}).get("exponent_clip", 50.0)),
+    )
+    for w in _vr.warnings:
+        warnings.warn(f"solve_bv_with_ptc: {w}", stacklevel=2)
+    if not _vr.valid:
+        warnings.warn(f"solve_bv_with_ptc: physics violations: {_vr.failures}", stacklevel=2)
+
     return ctx["U"]
 
 
@@ -563,6 +602,26 @@ def solve_bv_with_charge_continuation(
 
     print(f"[charge-cont] Phase 2 complete: z_factor={achieved_z_factor:.4f}")
     ctx["achieved_z_factor"] = achieved_z_factor
+
+    # --- Physics validation before return ---
+    _c_bulk = list(c0) if hasattr(c0, '__iter__') else [c0] * n_s
+    _vr = validate_solution_state(
+        ctx["U"], n_species=n_s, c_bulk=_c_bulk, phi_applied=float(phi_applied),
+        z_vals=list(z_v), eps_c=float(params.get("bv_convergence", {}).get("conc_floor", 1e-8)),
+        exponent_clip=float(params.get("bv_convergence", {}).get("exponent_clip", 50.0)),
+    )
+    for w in _vr.warnings:
+        warnings.warn(f"solve_bv_with_charge_continuation: {w}", stacklevel=2)
+    if not _vr.valid:
+        warnings.warn(f"solve_bv_with_charge_continuation: physics violations: {_vr.failures}", stacklevel=2)
+    # F5: incomplete charge ramp
+    if ctx.get("achieved_z_factor", 1.0) < 1.0 - 1e-6:
+        warnings.warn(
+            f"solve_bv_with_charge_continuation: F5: incomplete charge ramp, "
+            f"achieved_z_factor={ctx['achieved_z_factor']:.4f}",
+            stacklevel=2,
+        )
+
     if return_ctx:
         return ctx
     return ctx["U"]

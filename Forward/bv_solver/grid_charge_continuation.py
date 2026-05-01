@@ -41,6 +41,7 @@ class GridPointResult:
     U_data: tuple                # tuple(d.data_ro.copy() for d in ctx["U"].dat)
     achieved_z_factor: float
     converged: bool              # achieved_z >= 1.0 - 1e-6
+    validation: object = None    # Optional[ValidationResult] from validation.py
 
 
 @dataclasses.dataclass(frozen=True)
@@ -58,6 +59,11 @@ class GridChargeContinuationResult:
 
     def partial_points(self) -> list:
         return [p for p in self.points.values() if not p.converged]
+
+    def physics_failures(self) -> list:
+        """Points where physics validation failed."""
+        return [p for p in self.points.values()
+                if p.validation is not None and not p.validation.valid]
 
 
 # ---------------------------------------------------------------------------
@@ -559,6 +565,17 @@ def solve_grid_with_charge_continuation(
         # Snapshot final state
         U_data = tuple(d.data_ro.copy() for d in ctx["U"].dat)
 
+        # --- Physics validation ---
+        from .validation import validate_solution_state
+        _c_bulk = [float(v) for v in (list(c0) if hasattr(c0, '__iter__') else [c0] * n_s)]
+        _vr = validate_solution_state(
+            ctx["U"], n_species=n_s, c_bulk=_c_bulk, phi_applied=eta_i,
+            z_vals=[float(v) for v in z_nominal],
+            eps_c=ctx.get("_diag_eps_c", 1e-8),
+            exponent_clip=ctx.get("_diag_exponent_clip", 50.0),
+        )
+        _phys_valid = _vr.valid
+
         # Optional callback for observable extraction from live ctx
         if per_point_callback is not None:
             per_point_callback(orig_idx, eta_i, ctx)
@@ -568,7 +585,8 @@ def solve_grid_with_charge_continuation(
             phi_applied=eta_i,
             U_data=U_data,
             achieved_z_factor=achieved_z,
-            converged=(achieved_z >= 1.0 - 1e-6),
+            converged=(achieved_z >= 1.0 - 1e-6) and _phys_valid,
+            validation=_vr,
         )
 
         tag = "OK" if achieved_z >= 1.0 - 1e-6 else f"PARTIAL z={achieved_z:.3f}"

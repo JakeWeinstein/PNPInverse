@@ -1,0 +1,138 @@
+{
+  "k02_marginal_bins": [
+    117,
+    151,
+    174,
+    183,
+    376,
+    388,
+    386,
+    386,
+    370,
+    344,
+    159,
+    160
+  ],
+  "k02_per_decade": {
+    "[1e-7, 1e-6)": 268,
+    "[1e-6, 1e-5)": 357,
+    "[1e-5, 1e-4)": 764,
+    "[1e-4, 1e-3)": 772,
+    "[1e-3, 1e-2)": 714,
+    "[1e-2, 1e-1)": 319
+  },
+  "k02_vs_k01": {
+    "n_empty_bins": 0,
+    "n_sparse_bins_lt5": 1,
+    "min_count": 3,
+    "max_count": 66,
+    "total_bins": 144
+  },
+  "k02_vs_alpha1": {
+    "n_empty_bins": 0,
+    "n_sparse_bins_lt5": 0,
+    "min_count": 8,
+    "max_count": 78,
+    "total_bins": 96
+  },
+  "k02_vs_alpha2": {
+    "n_empty_bins": 0,
+    "n_sparse_bins_lt5": 2,
+    "min_count": 3,
+    "max_count": 73,
+    "total_bins": 96
+  },
+  "error_density": {
+    "r=0.25": {
+      "spearman_cd": {
+        "rho": -0.5698568377058313,
+        "p": 1.3619146455680233e-42
+      },
+      "spearman_pc": {
+        "rho": -0.34690532995575585,
+        "p": 5.4268814378174925e-15
+      },
+      "mean_density": 93.27557411273486,
+      "min_density": 5,
+      "max_density": 265
+    },
+    "r=0.5": {
+      "spearman_cd": {
+        "rho": -0.5558960754640871,
+        "p": 3.3721327802044886e-40
+      },
+      "spearman_pc": {
+        "rho": -0.3068832157454574,
+        "p": 6.6368159465979754e-12
+      },
+      "mean_density": 871.294363256785,
+      "min_density": 95,
+      "max_density": 1893
+    },
+    "r=1.0": {
+      "spearman_cd": {
+        "rho": -0.480625329880489,
+        "p": 4.688301278939717e-29
+      },
+      "spearman_pc": {
+        "rho": -0.2030367192063717,
+        "p": 7.506398156557046e-06
+      },
+      "mean_density": 2956.436325678497,
+      "min_density": 1741,
+      "max_density": 3194
+    },
+    "top5pct_worst_cd": {
+      "n_worst": 24,
+      "worst_mean_density": 295.7916666666667,
+      "rest_mean_density": 901.6505494505494,
+      "worst_in_low_density": 24
+    },
+    "top5pct_worst_pc": {
+      "n_worst": 24,
+      "worst_mean_density": 482.9583333333333,
+      "rest_mean_density": 891.778021978022,
+      "worst_in_low_density": 24
+    }
+  },
+  "sensitivity_scan": {
+    "status": "completed",
+    "weak_signal_region_log10": [
+      -2.224489795918368,
+      -1.0
+    ],
+    "pc_range_min": 0.004958190057761964,
+    "pc_range_max": 0.18231722860272725
+  },
+  "convergence_failures": {
+    "n_intended": 3000,
+    "n_converged": 2749,
+    "n_failed": 251,
+    "failure_rate": 0.08366666666666667,
+    "failures_per_decade": {
+      "[1e-7, 1e-6)": 84,
+      "[1e-6, 1e-5)": 64,
+      "[1e-5, 1e-4)": 45,
+      "[1e-4, 1e-3)": 22,
+      "[1e-3, 1e-2)": 22,
+      "[1e-2, 1e-1)": 14
+    }
+  },
+  "max_empty_ball": {
+    "radius": 0.5846452833722501,
+    "location_normed": [
+      0.9902423433639317,
+      0.03311621550467525,
+      0.9241544015149975,
+      0.009143140827731377
+    ],
+    "location_physical": {
+      "k0_1": 0.8738845478997729,
+      "k0_2": 1.5801462798621793e-07,
+      "alpha_1": 0.839323521211998,
+      "alpha_2": 0.10731451266218511
+    },
+    "n_candidates": 50000
+  },
+  "weak_signal_sample_count": 466
+}

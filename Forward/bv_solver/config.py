@@ -73,6 +73,8 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
             "use_eta_in_bv":            True,
             "packing_floor":            1e-8,
             "softplus_regularization":  False,
+            "bv_log_rate":              False,
+            "u_clamp":                  30.0,
         }
     raw = params.get("bv_convergence", {})
     if not isinstance(raw, dict):
@@ -84,16 +86,21 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
             "use_eta_in_bv":            True,
             "packing_floor":            1e-8,
             "softplus_regularization":  False,
+            "bv_log_rate":              False,
+            "u_clamp":                  30.0,
         }
     exponent_clip = float(raw.get("exponent_clip", 50.0))
     conc_floor = float(raw.get("conc_floor", 1e-8))
     packing_floor = float(raw.get("packing_floor", 1e-8))
+    u_clamp = float(raw.get("u_clamp", 30.0))
     if exponent_clip <= 0:
         raise ValueError(f"exponent_clip must be positive; got {exponent_clip}")
     if conc_floor <= 0:
         raise ValueError(f"conc_floor must be positive; got {conc_floor}")
     if packing_floor <= 0:
         raise ValueError(f"packing_floor must be positive; got {packing_floor}")
+    if u_clamp <= 0:
+        raise ValueError(f"u_clamp must be positive; got {u_clamp}")
     return {
         "clip_exponent":              _bool(raw.get("clip_exponent", True)),
         "exponent_clip":              exponent_clip,
@@ -102,6 +109,8 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
         "use_eta_in_bv":              _bool(raw.get("use_eta_in_bv", True)),
         "packing_floor":              packing_floor,
         "softplus_regularization":    _bool(raw.get("softplus_regularization", False)),
+        "bv_log_rate":                _bool(raw.get("bv_log_rate", False)),
+        "u_clamp":                    u_clamp,
     }
 
 
@@ -175,5 +184,6 @@ def _get_bv_reactions_cfg(params: Any, n_species: int) -> list[dict] | None:
             "n_electrons": n_e,
             "reversible": _bool(rxn.get("reversible", True)),
             "cathodic_conc_factors": cat_conc_factors,
+            "E_eq_v": float(rxn.get("E_eq_v", 0.0)),
         })
     return reactions

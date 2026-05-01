@@ -1,0 +1,97 @@
+{
+  "config": {
+    "V_TEST": [
+      0.3
+    ],
+    "PARAMS": [
+      "log_k0_1",
+      "log_k0_2",
+      "alpha_1",
+      "alpha_2"
+    ],
+    "FD_steps": [
+      0.001,
+      0.001,
+      0.0001,
+      0.0001
+    ],
+    "log_rate": true,
+    "annotate_steps": 5,
+    "ss_rel_tol": 1e-09,
+    "ss_abs_tol": 1e-08
+  },
+  "results": [
+    {
+      "V_RHE": 0.3,
+      "observable": "cd",
+      "param": "log_k0_1",
+      "adjoint": -3.762755036890343e-06,
+      "fd": -3.7627651618351736e-06,
+      "rel_err": 2.6908256016341432e-06,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "cd",
+      "param": "log_k0_2",
+      "adjoint": -5.265029089387085e-13,
+      "fd": -7.481537091236223e-13,
+      "rel_err": 1.9913873102853644e-09,
+      "verdict": "PASS-NEAR0"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "cd",
+      "param": "alpha_1",
+      "adjoint": -0.0001113042734103115,
+      "fd": -0.00011130471658632368,
+      "rel_err": 3.981646292895701e-06,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "cd",
+      "param": "alpha_2",
+      "adjoint": -5.265029026160978e-11,
+      "fd": -7.481648899585261e-11,
+      "rel_err": 1.9914878195706624e-07,
+      "verdict": "PASS-NEAR0"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "pc",
+      "param": "log_k0_1",
+      "adjoint": -1.2367081145283256e-12,
+      "fd": -1.2398715815977943e-12,
+      "rel_err": 0.002551447356662486,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "pc",
+      "param": "log_k0_2",
+      "adjoint": 5.246744740690605e-13,
+      "fd": 7.463495289459707e-13,
+      "rel_err": 0.2970123866628146,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "pc",
+      "param": "alpha_1",
+      "adjoint": -3.65824765977802e-11,
+      "fd": -3.6675730405140786e-11,
+      "rel_err": 0.002542657128582018,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "pc",
+      "param": "alpha_2",
+      "adjoint": 5.246744660117264e-11,
+      "fd": 7.46363928506074e-11,
+      "rel_err": 0.29702596016139526,
+      "verdict": "FAIL"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "tool_name": "Multi-Seed Pipeline Robustness Assessment",
+  "phase": "07-baseline-diagnostics",
+  "requirement": "DIAG-01",
+  "justification_type": "empirical",
+  "reference": "Standard practice in inverse problems: test parameter recovery across noise realizations to assess estimator variance",
+  "rationale": "Running across 20 noise seeds at 2% noise quantifies pipeline sensitivity to noise realization and identifies parameters with high variance",
+  "parameters": {
+    "n_seeds": 20,
+    "noise_percent": 2.0,
+    "pipeline_version": "v13"
+  },
+  "generated": "2026-03-10T22:20:37.673074+00:00"
+}

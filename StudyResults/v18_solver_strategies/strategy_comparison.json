@@ -1,0 +1,62 @@
+{
+  "damping_0.15": {
+    "ok": false,
+    "cd": NaN,
+    "time": 1.1361091136932373
+  },
+  "tr_0.15": {
+    "ok": false,
+    "cd": NaN,
+    "time": 6.782993793487549
+  },
+  "1mV_0.15": {
+    "ok": false,
+    "cd": NaN,
+    "time": 41.802239179611206
+  },
+  "smalldt_0.15": {
+    "ok": false,
+    "cd": NaN,
+    "time": 0.32454681396484375
+  },
+  "damping_0.2": {
+    "ok": false,
+    "cd": NaN,
+    "time": 0.7500989437103271
+  },
+  "tr_0.2": {
+    "ok": false,
+    "cd": NaN,
+    "time": 11.906969785690308
+  },
+  "1mV_0.2": {
+    "ok": false,
+    "cd": NaN,
+    "time": 41.464359998703
+  },
+  "smalldt_0.2": {
+    "ok": false,
+    "cd": NaN,
+    "time": 0.17307186126708984
+  },
+  "damping_0.25": {
+    "ok": false,
+    "cd": NaN,
+    "time": 0.7425327301025391
+  },
+  "tr_0.25": {
+    "ok": false,
+    "cd": NaN,
+    "time": 12.153703212738037
+  },
+  "1mV_0.25": {
+    "ok": false,
+    "cd": NaN,
+    "time": 41.412980794906616
+  },
+  "smalldt_0.25": {
+    "ok": false,
+    "cd": NaN,
+    "time": 0.22203302383422852
+  }
+}

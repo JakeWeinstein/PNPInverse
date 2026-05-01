@@ -379,6 +379,7 @@ def _validate_sample(
     z_factors: np.ndarray,
     obs_cd: np.ndarray,
     obs_pc: np.ndarray,
+    phi_applied: Optional[np.ndarray] = None,
 ) -> bool:
     """Return True only if ALL voltage points pass strict validation.
 
@@ -386,15 +387,67 @@ def _validate_sample(
     - Every point must be converged.
     - Every z_factor >= 1.0 - 1e-6.
     - All observables must be finite (no NaN, no Inf).
+    - F2: |cd| must not exceed diffusion-limit estimate.
+    - F3: Peroxide selectivity must not exceed 100%.
+    - F7: Peroxide current must have correct sign at cathodic voltages.
+    - W1: Clip saturation warnings (non-fatal).
 
     No 80% threshold. No interpolation.
     """
+    from Forward.bv_solver.validation import check_clip_saturation
+
     if not np.all(converged_flags):
         return False
     if not np.all(z_factors >= 1.0 - 1e-6):
         return False
     if not (np.all(np.isfinite(obs_cd)) and np.all(np.isfinite(obs_pc))):
         return False
+
+    # Nondimensional diffusion-limit estimate: 2 * max(c_bulk_hat).
+    # FOUR_SPECIES_CHARGED.c0_vals_hat = [1.0, 0.0, 0.2, 0.2] -> max = 1.0
+    I_LIM = 2.0 * max(FOUR_SPECIES_CHARGED.c0_vals_hat)
+
+    for i in range(len(obs_cd)):
+        cd_i = obs_cd[i]
+        pc_i = obs_pc[i]
+
+        # F2: current density exceeds diffusion limit
+        if abs(cd_i) > I_LIM * 1.05:
+            logger.warning(
+                "F2: sample rejected — |cd[%d]|=%.4g exceeds 1.05*I_lim=%.4g",
+                i, abs(cd_i), I_LIM * 1.05,
+            )
+            return False
+
+        # F3: peroxide selectivity > 100%
+        if abs(cd_i) > 1e-10 and abs(pc_i / cd_i) > 1.05:
+            logger.warning(
+                "F3: sample rejected — |pc/cd|=%.4g > 1.05 at point %d",
+                abs(pc_i / cd_i), i,
+            )
+            return False
+
+        # F7: peroxide current wrong sign at cathodic voltages
+        if cd_i < 0.0 and pc_i > abs(cd_i) * 0.01:
+            logger.warning(
+                "F7: sample rejected — pc=%.4g > 0 while cd=%.4g < 0 at point %d",
+                pc_i, cd_i, i,
+            )
+            return False
+
+    # W1: clip saturation warnings (non-fatal)
+    if phi_applied is not None:
+        for i in range(len(obs_cd)):
+            clip_warns = check_clip_saturation(
+                eta_raw=float(phi_applied[i]),
+                exponent_clip=50.0,
+                bv_exp_scale=1.0,
+                alpha_vals=[0.627, 0.5],
+                n_e_vals=[2, 2],
+            )
+            for w in clip_warns:
+                logger.warning("W1 at voltage point %d: %s", i, w)
+
     return True
 
 
@@ -863,7 +916,7 @@ def _worker_solve_group_v16(
         # Validate
         valid = False
         if success and obs_cd is not None and obs_pc is not None:
-            valid = _validate_sample(converged_flags, z_factors, obs_cd, obs_pc)
+            valid = _validate_sample(converged_flags, z_factors, obs_cd, obs_pc, phi_applied)
 
         # Update within-group chain
         if valid and U_data_per_eta is not None:

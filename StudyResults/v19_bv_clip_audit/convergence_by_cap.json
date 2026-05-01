@@ -1,0 +1,218 @@
+{
+  "50": {
+    "status": "ok",
+    "n_used": 5,
+    "per_v": [
+      {
+        "V_RHE": -0.1,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 14.53
+      },
+      {
+        "V_RHE": 0.0,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 12.08
+      },
+      {
+        "V_RHE": 0.1,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 12.15
+      },
+      {
+        "V_RHE": 0.15,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 12.88
+      },
+      {
+        "V_RHE": 0.2,
+        "converged": true,
+        "z_achieved": 1.0,
+        "elapsed_s": 14.19
+      }
+    ]
+  },
+  "60": {
+    "status": "insufficient_voltages",
+    "n_used": 0,
+    "per_v": [
+      {
+        "V_RHE": -0.1,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.23
+      },
+      {
+        "V_RHE": 0.0,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.15
+      },
+      {
+        "V_RHE": 0.1,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.19
+      },
+      {
+        "V_RHE": 0.15,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.2
+      },
+      {
+        "V_RHE": 0.2,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.15
+      }
+    ]
+  },
+  "70": {
+    "status": "insufficient_voltages",
+    "n_used": 0,
+    "per_v": [
+      {
+        "V_RHE": -0.1,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.28
+      },
+      {
+        "V_RHE": 0.0,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.19
+      },
+      {
+        "V_RHE": 0.1,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.23
+      },
+      {
+        "V_RHE": 0.15,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.15
+      },
+      {
+        "V_RHE": 0.2,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.19
+      }
+    ]
+  },
+  "80": {
+    "status": "insufficient_voltages",
+    "n_used": 0,
+    "per_v": [
+      {
+        "V_RHE": -0.1,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.19
+      },
+      {
+        "V_RHE": 0.0,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.19
+      },
+      {
+        "V_RHE": 0.1,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.23
+      },
+      {
+        "V_RHE": 0.15,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.15
+      },
+      {
+        "V_RHE": 0.2,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.19
+      }
+    ]
+  },
+  "100": {
+    "status": "insufficient_voltages",
+    "n_used": 0,
+    "per_v": [
+      {
+        "V_RHE": -0.1,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.19
+      },
+      {
+        "V_RHE": 0.0,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.23
+      },
+      {
+        "V_RHE": 0.1,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.23
+      },
+      {
+        "V_RHE": 0.15,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.15
+      },
+      {
+        "V_RHE": 0.2,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.19
+      }
+    ]
+  },
+  "none": {
+    "status": "insufficient_voltages",
+    "n_used": 0,
+    "per_v": [
+      {
+        "V_RHE": -0.1,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 19.28
+      },
+      {
+        "V_RHE": 0.0,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.19
+      },
+      {
+        "V_RHE": 0.1,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.23
+      },
+      {
+        "V_RHE": 0.15,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.22
+      },
+      {
+        "V_RHE": 0.2,
+        "converged": false,
+        "z_achieved": 0.0,
+        "elapsed_s": 0.19
+      }
+    ]
+  }
+}

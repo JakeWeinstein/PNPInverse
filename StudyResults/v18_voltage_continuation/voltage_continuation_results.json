@@ -1,0 +1,210 @@
+[
+  {
+    "V_RHE": 0.1,
+    "phi_hat": 3.892174481025757,
+    "cd": -0.16288716455300417,
+    "pc": -7.761808562059176e-10,
+    "ok": true,
+    "steps": 0
+  },
+  {
+    "V_RHE": 0.125,
+    "phi_hat": 4.865218101282196,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.15,
+    "phi_hat": 5.838261721538634,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.175,
+    "phi_hat": 6.811305341795073,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.19999999999999998,
+    "phi_hat": 7.784348962051512,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.22499999999999998,
+    "phi_hat": 8.75739258230795,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.24999999999999997,
+    "phi_hat": 9.73043620256439,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.27499999999999997,
+    "phi_hat": 10.703479822820828,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.29999999999999993,
+    "phi_hat": 11.676523443077267,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.32499999999999996,
+    "phi_hat": 12.649567063333707,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.35,
+    "phi_hat": 13.622610683590146,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.37499999999999994,
+    "phi_hat": 14.595654303846585,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.3999999999999999,
+    "phi_hat": 15.568697924103022,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.42499999999999993,
+    "phi_hat": 16.54174154435946,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.44999999999999996,
+    "phi_hat": 17.5147851646159,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.4749999999999999,
+    "phi_hat": 18.48782878487234,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.4999999999999999,
+    "phi_hat": 19.46087240512878,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.5249999999999999,
+    "phi_hat": 20.43391602538522,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.5499999999999999,
+    "phi_hat": 21.406959645641656,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.575,
+    "phi_hat": 22.380003265898097,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.5999999999999999,
+    "phi_hat": 23.353046886154534,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.6249999999999999,
+    "phi_hat": 24.326090506410974,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.6499999999999999,
+    "phi_hat": 25.299134126667415,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.6749999999999998,
+    "phi_hat": 26.272177746923848,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.6999999999999998,
+    "phi_hat": 27.24522136718029,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  },
+  {
+    "V_RHE": 0.7249999999999999,
+    "phi_hat": 28.21826498743673,
+    "cd": NaN,
+    "pc": NaN,
+    "ok": false,
+    "boundary": true
+  }
+]

@@ -1,0 +1,316 @@
+{
+  "config": {
+    "V_TEST": [
+      0.3,
+      0.4,
+      0.5,
+      0.6
+    ],
+    "PARAMS": [
+      "log_k0_1",
+      "log_k0_2",
+      "alpha_1",
+      "alpha_2"
+    ],
+    "FD_steps": [
+      0.001,
+      0.001,
+      0.0001,
+      0.0001
+    ],
+    "log_rate": true,
+    "annotate_steps": 5,
+    "ss_rel_tol": 1e-09,
+    "ss_abs_tol": 1e-08
+  },
+  "results": [
+    {
+      "V_RHE": 0.3,
+      "observable": "cd",
+      "param": "log_k0_1",
+      "adjoint": -3.762755036890343e-06,
+      "fd": -3.7627651618351736e-06,
+      "rel_err": 2.6908256016341432e-06,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "cd",
+      "param": "log_k0_2",
+      "adjoint": -5.265029089387085e-13,
+      "fd": -7.481537091236223e-13,
+      "rel_err": 1.9913873102853644e-09,
+      "verdict": "PASS-NEAR0"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "cd",
+      "param": "alpha_1",
+      "adjoint": -0.0001113042734103115,
+      "fd": -0.00011130471658632368,
+      "rel_err": 3.981646292895701e-06,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "cd",
+      "param": "alpha_2",
+      "adjoint": -5.265029026160978e-11,
+      "fd": -7.481648899585261e-11,
+      "rel_err": 1.9914878195706624e-07,
+      "verdict": "PASS-NEAR0"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "pc",
+      "param": "log_k0_1",
+      "adjoint": -1.2367081145283256e-12,
+      "fd": -1.2398715815977943e-12,
+      "rel_err": 0.002551447356662486,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "pc",
+      "param": "log_k0_2",
+      "adjoint": 5.246744740690605e-13,
+      "fd": 7.463495289459707e-13,
+      "rel_err": 0.2970123866628146,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "pc",
+      "param": "alpha_1",
+      "adjoint": -3.65824765977802e-11,
+      "fd": -3.6675730405140786e-11,
+      "rel_err": 0.002542657128582018,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.3,
+      "observable": "pc",
+      "param": "alpha_2",
+      "adjoint": 5.246744660117264e-11,
+      "fd": 7.46363928506074e-11,
+      "rel_err": 0.29702596016139526,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.4,
+      "observable": "cd",
+      "param": "log_k0_1",
+      "adjoint": -1.1884844056125893e-11,
+      "fd": -1.1884673543145936e-11,
+      "rel_err": 1.4347300271855064e-05,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.4,
+      "observable": "cd",
+      "param": "log_k0_2",
+      "adjoint": -1.1648903838991192e-09,
+      "fd": -1.5987260699453854e-09,
+      "rel_err": 0.2713633649954095,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.4,
+      "observable": "cd",
+      "param": "alpha_1",
+      "adjoint": -2.590441657788536e-10,
+      "fd": -2.590405476655521e-10,
+      "rel_err": 1.3967362770328785e-05,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.4,
+      "observable": "cd",
+      "param": "alpha_2",
+      "adjoint": -1.1648903839019496e-07,
+      "fd": -1.5987524021668365e-07,
+      "rel_err": 0.27137536598966844,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.4,
+      "observable": "pc",
+      "param": "log_k0_1",
+      "adjoint": -4.528328190198545e-16,
+      "fd": -6.268043809681823e-16,
+      "rel_err": 1.088171715654332e-09,
+      "verdict": "PASS-NEAR0"
+    },
+    {
+      "V_RHE": 0.4,
+      "observable": "pc",
+      "param": "log_k0_2",
+      "adjoint": 1.1648889747296852e-09,
+      "fd": 1.5987246723410224e-09,
+      "rel_err": 0.27136360945507204,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.4,
+      "observable": "pc",
+      "param": "alpha_1",
+      "adjoint": -9.870024317294916e-15,
+      "fd": -1.3688052427629493e-14,
+      "rel_err": 2.3881318031008115e-08,
+      "verdict": "PASS-NEAR0"
+    },
+    {
+      "V_RHE": 0.4,
+      "observable": "pc",
+      "param": "alpha_2",
+      "adjoint": 1.1648889747285896e-07,
+      "fd": 1.5987510008355285e-07,
+      "rel_err": 0.27137560875971106,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.5,
+      "observable": "cd",
+      "param": "log_k0_1",
+      "adjoint": 5.180787625621194e-11,
+      "fd": 5.0383135841549145e-11,
+      "rel_err": 5.199111476895313e-09,
+      "verdict": "PASS-NEAR0"
+    },
+    {
+      "V_RHE": 0.5,
+      "observable": "cd",
+      "param": "log_k0_2",
+      "adjoint": -2.1553649628707337e-06,
+      "fd": -2.750265864440854e-06,
+      "rel_err": 0.21630668847757645,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.5,
+      "observable": "cd",
+      "param": "alpha_1",
+      "adjoint": 7.25923057970046e-10,
+      "fd": 7.058002152290823e-10,
+      "rel_err": 0.028510678102347198,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.5,
+      "observable": "cd",
+      "param": "alpha_2",
+      "adjoint": -0.00021475984654803186,
+      "fd": -0.00027403536565705417,
+      "rel_err": 0.21630609234285322,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.5,
+      "observable": "pc",
+      "param": "log_k0_1",
+      "adjoint": 5.186245859192538e-12,
+      "fd": 6.611002367827405e-12,
+      "rel_err": 5.19925297102178e-09,
+      "verdict": "PASS-NEAR0"
+    },
+    {
+      "V_RHE": 0.5,
+      "observable": "pc",
+      "param": "log_k0_2",
+      "adjoint": 2.1553183243083834e-06,
+      "fd": 2.7502220841614644e-06,
+      "rel_err": 0.21631117111564668,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.5,
+      "observable": "pc",
+      "param": "alpha_1",
+      "adjoint": 7.266878562770882e-11,
+      "fd": 9.279197656292867e-11,
+      "rel_err": 7.343399354365994e-08,
+      "verdict": "PASS-NEAR0"
+    },
+    {
+      "V_RHE": 0.5,
+      "observable": "pc",
+      "param": "alpha_2",
+      "adjoint": 0.00021475519949722341,
+      "fd": 0.00027403100341064345,
+      "rel_err": 0.21631057499210596,
+      "verdict": "FAIL"
+    },
+    {
+      "V_RHE": 0.6,
+      "observable": "cd",
+      "param": "log_k0_1",
+      "adjoint": 2.264162915956655e-09,
+      "fd": 2.2638957481875847e-09,
+      "rel_err": 0.00011801239932724377,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.6,
+      "observable": "cd",
+      "param": "log_k0_2",
+      "adjoint": -4.4018501779981455e-10,
+      "fd": -4.4024157571266967e-10,
+      "rel_err": 0.00012847017631980364,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.6,
+      "observable": "cd",
+      "param": "alpha_1",
+      "adjoint": 1.4100027395794178e-08,
+      "fd": 1.4098362176824338e-08,
+      "rel_err": 0.00011811435604751789,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.6,
+      "observable": "cd",
+      "param": "alpha_2",
+      "adjoint": -4.043333467976323e-08,
+      "fd": -4.043909164204988e-08,
+      "rel_err": 0.00014236131557065067,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.6,
+      "observable": "pc",
+      "param": "log_k0_1",
+      "adjoint": 2.264162915956655e-09,
+      "fd": 2.263766694129661e-09,
+      "rel_err": 0.00017502767755243152,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.6,
+      "observable": "pc",
+      "param": "log_k0_2",
+      "adjoint": 4.4018501779981455e-10,
+      "fd": 4.4010132775814335e-10,
+      "rel_err": 0.00019016084795179557,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.6,
+      "observable": "pc",
+      "param": "alpha_1",
+      "adjoint": 1.4100027395794178e-08,
+      "fd": 1.4097558495423473e-08,
+      "rel_err": 0.00017512964188139235,
+      "verdict": "PASS"
+    },
+    {
+      "V_RHE": 0.6,
+      "observable": "pc",
+      "param": "alpha_2",
+      "adjoint": 4.043333467976323e-08,
+      "fd": 4.0426208944812744e-08,
+      "rel_err": 0.00017626522833778853,
+      "verdict": "PASS"
+    }
+  ]
+}

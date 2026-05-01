@@ -30,9 +30,12 @@ from __future__ import annotations
 
 import copy
 import time as _time
+import warnings as _warnings
 from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
+
+from Forward.bv_solver.validation import validate_solution_state
 
 from FluxCurve.bv_config import BVFluxCurveInferenceRequest
 from FluxCurve.config import ForwardRecoveryConfig
@@ -699,6 +702,37 @@ def solve_bv_curve_points_with_warmstart(
                     )
                     failed_by_exception = True
                     last_reason = f"adjoint derivative: {type(rf_exc).__name__}"
+
+                if not failed_by_exception:
+                    # Physics validation on converged solution state
+                    _n_sp_v = int(ctx["n_species"])
+                    _scaling_v = ctx.get("nondim", {})
+                    _c_bulk_v = _scaling_v.get("c0_model_vals", [1.0] * _n_sp_v)
+                    _z_vals_v = [float(zc) for zc in ctx["z_consts"]]
+                    _conv_cfg_v = ctx.get("bv_convergence", {})
+                    _eps_c_v = float(_conv_cfg_v.get("conc_floor", 1e-8))
+                    _exp_clip_v = float(_conv_cfg_v.get("exponent_clip", 50.0))
+                    _sol_vr = validate_solution_state(
+                        U,
+                        n_species=_n_sp_v,
+                        c_bulk=_c_bulk_v,
+                        phi_applied=phi_applied_i,
+                        z_vals=_z_vals_v,
+                        eps_c=_eps_c_v,
+                        exponent_clip=_exp_clip_v,
+                    )
+                    for _w in _sol_vr.warnings:
+                        _warnings.warn(
+                            f"solve_bv_curve_points phi={phi_applied_i:.4f}: {_w}",
+                            stacklevel=1,
+                        )
+                    if not _sol_vr.valid:
+                        # Downgrade to failed -- physics violations
+                        failed_by_exception = True
+                        last_reason = (
+                            f"physics validation (solution state): "
+                            + "; ".join(_sol_vr.failures)
+                        )
 
                 if not failed_by_exception:
                     point_result = PointAdjointResult(

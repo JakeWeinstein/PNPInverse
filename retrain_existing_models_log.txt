@@ -1,0 +1,154 @@
+Surrogate Model Retraining Summary (v12 Data)
+===============================================
+Date: 2026-03-17
+
+Training Data
+-------------
+Source: data/surrogate_models/training_data_merged.npz
+Samples: 3,491 total (22 voltage points)
+Split:  data/surrogate_models/split_indices.npz
+  Train: 2,967
+  Test:  524
+
+All models were retrained from scratch using the v12 training data.
+All models verified to load and predict correctly after training.
+
+================================================================================
+Model 1: RBF Baseline
+================================================================================
+Config: thin_plate_spline kernel, degree=1, smoothing_cd=0.0, smoothing_pc=1e-3,
+        log_space_k0=True, normalize_inputs=True
+Fit time: 0.4s
+Output:   data/surrogate_models/model_rbf_baseline.pkl
+
+Test set metrics (524 samples):
+  CD RMSE:  2.1891e-02
+  CD NRMSE: 3.40%
+  PC RMSE:  1.7523e-02
+  PC NRMSE: 301.02%
+  CD max abs error: 9.0535e-01
+  PC max abs error: 8.3434e-01
+
+================================================================================
+Model 2: POD-RBF (log PC transform)
+================================================================================
+Config: variance_threshold=0.999, thin_plate_spline kernel, degree=1,
+        log_space_k0=True, normalize_inputs=True, optimize_smoothing=True,
+        n_smoothing_candidates=30, smoothing_range=(1e-8, 1e0),
+        log_transform_pc=True
+POD modes: 13 modes retain 99.91% variance (out of 44 total)
+Fit time: 752.3s
+Output:   data/surrogate_models/model_pod_rbf_log.pkl
+
+Test set metrics (524 samples):
+  CD RMSE:  1.9684e-02
+  CD NRMSE: 3.00%
+  PC RMSE:  1.6893e-02
+  PC NRMSE: 366.13%
+  CD max abs error: 7.8039e-01
+  PC max abs error: 7.6040e-01
+
+================================================================================
+Model 3: POD-RBF (no log PC transform)
+================================================================================
+Config: same as POD-RBF-log but with log_transform_pc=False
+POD modes: 12 modes retain 99.90% variance (out of 44 total)
+Fit time: 522.0s
+Output:   data/surrogate_models/model_pod_rbf_nolog.pkl
+
+Test set metrics (524 samples):
+  CD RMSE:  1.9688e-02
+  CD NRMSE: 3.01%
+  PC RMSE:  1.6615e-02
+  PC NRMSE: 400.97%
+  CD max abs error: 7.7981e-01
+  PC max abs error: 7.5479e-01
+
+================================================================================
+Model 4: NN Ensemble - D3-deeper (PRIMARY, used by codebase)
+================================================================================
+Config: 5 members, hidden=128, n_blocks=6, epochs=5000, patience=500,
+        lr=1e-3, weight_decay=1e-4, T_0=500, T_mult=2, eta_min=1e-6,
+        monotonicity_weight=0.01, smoothness_weight=0.001
+Total fit time: 635.5s
+Output: data/surrogate_models/nn_ensemble/D3-deeper/member_{0..4}/saved_model/
+
+Per-member test set metrics:
+  Member 0: CD RMSE=1.9369e-02, PC RMSE=1.6090e-02, CD NRMSE=3.06%, PC NRMSE=504.70%
+  Member 1: CD RMSE=1.9814e-02, PC RMSE=1.7133e-02, CD NRMSE=3.02%, PC NRMSE=351.91%
+  Member 2: CD RMSE=1.8888e-02, PC RMSE=1.6373e-02, CD NRMSE=3.14%, PC NRMSE=451.93%
+  Member 3: CD RMSE=1.9608e-02, PC RMSE=1.6739e-02, CD NRMSE=3.16%, PC NRMSE=500.74%
+  Member 4: CD RMSE=1.9866e-02, PC RMSE=1.6811e-02, CD NRMSE=2.92%, PC NRMSE=355.05%
+
+Ensemble mean test metrics:
+  CD RMSE: 1.9246e-02
+  PC RMSE: 1.6060e-02
+
+Member training details:
+  Member 0: best_val=5.772e-02, stopped at epoch 1480, time=213.9s
+  Member 1: best_val=2.847e-01, stopped at epoch 765, time=84.3s
+  Member 2: best_val=9.148e-02, stopped at epoch 1130, time=91.7s
+  Member 3: best_val=2.838e-01, stopped at epoch 1167, time=119.1s
+  Member 4: best_val=4.658e-02, stopped at epoch 1394, time=125.7s
+
+================================================================================
+Model 5: NN Ensemble - D1-default
+================================================================================
+Config: 5 members, hidden=128, n_blocks=4
+Total fit time: 409.5s
+Output: data/surrogate_models/nn_ensemble/D1-default/member_{0..4}/saved_model/
+Ensemble mean test: CD RMSE=1.9107e-02, PC RMSE=1.6186e-02
+
+================================================================================
+Model 6: NN Ensemble - D2-wider
+================================================================================
+Config: 5 members, hidden=256, n_blocks=4
+Total fit time: 443.5s
+Output: data/surrogate_models/nn_ensemble/D2-wider/member_{0..4}/saved_model/
+Ensemble mean test: CD RMSE=1.8896e-02, PC RMSE=1.5730e-02
+
+================================================================================
+Model 7: NN Ensemble - D4-no-physics
+================================================================================
+Config: 5 members, hidden=128, n_blocks=4, monotonicity=0.0, smoothness=0.0
+Total fit time: 111.0s
+Output: data/surrogate_models/nn_ensemble/D4-no-physics/member_{0..4}/saved_model/
+Ensemble mean test: CD RMSE=1.9179e-02, PC RMSE=1.6307e-02
+
+================================================================================
+Model 8: NN Ensemble - D5-strong-physics
+================================================================================
+Config: 5 members, hidden=128, n_blocks=4, monotonicity=0.1, smoothness=0.01
+Total fit time: 454.7s
+Output: data/surrogate_models/nn_ensemble/D5-strong-physics/member_{0..4}/saved_model/
+Ensemble mean test: CD RMSE=1.8901e-02, PC RMSE=1.6000e-02
+
+================================================================================
+COMPARISON SUMMARY (Test Set, 524 samples)
+================================================================================
+
+Model                     CD RMSE       PC RMSE       CD NRMSE    PC NRMSE
+---------------------------------------------------------------------------
+RBF Baseline              2.1891e-02    1.7523e-02    3.40%       301.02%
+POD-RBF (log)             1.9684e-02    1.6893e-02    3.00%       366.13%
+POD-RBF (nolog)           1.9688e-02    1.6615e-02    3.01%       400.97%
+NN D1-default (ens)       1.9107e-02    1.6186e-02    --          --
+NN D2-wider (ens)         1.8896e-02    1.5730e-02    --          --
+NN D3-deeper (ens)        1.9246e-02    1.6060e-02    --          --
+NN D4-no-physics (ens)    1.9179e-02    1.6307e-02    --          --
+NN D5-strong-physics (ens) 1.8901e-02   1.6000e-02    --          --
+
+Notes:
+- PC NRMSE values are high across all models due to near-zero peroxide current
+  at some voltage points making relative error large. The absolute PC RMSE
+  values (1.57e-02 to 1.75e-02) are the more meaningful metric.
+- D2-wider achieves the best PC RMSE (1.5730e-02), followed by D5-strong-physics
+  (1.6000e-02) and D3-deeper (1.6060e-02).
+- All NN ensembles outperform the RBF models on both CD and PC RMSE.
+- D3-deeper remains the primary ensemble used by the codebase (loaded by
+  Surrogate/ensemble.py's load_nn_ensemble function).
+
+Verification:
+- All 8 models (3 pkl + 5 NN ensembles x 5 members = 28 total model files)
+  load and predict correctly.
+- All predictions produce the expected output shape (22,) matching the voltage grid.
