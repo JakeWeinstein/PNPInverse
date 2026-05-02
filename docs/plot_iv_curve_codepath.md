@@ -1,6 +1,6 @@
 # `scripts/plot_iv_curve_unified.py` — Full Codepath Map
 
-**Last updated:** 2026-05-02
+**Last updated:** 2026-05-02 (refreshed after the forward-tree cleanup)
 
 This document traces every function and subfunction reached when
 `scripts/plot_iv_curve_unified.py` runs. The script is the canonical
@@ -9,6 +9,13 @@ production 3sp + analytic Boltzmann counterion + log-c + log-rate BV
 stack documented in
 `writeups/WeekOfApr27/PNP Inverse Solver Revised.tex` and
 `docs/bv_solver_unified_api.md`.
+
+After the May 2026 cleanup the legacy concentration backend
+(`forms.py`), the strategy-B orchestrator (`grid_charge_continuation.py`),
+and the four legacy continuation helpers in `solvers.py` were removed.
+`dispatch.py` no longer routes between backends — it is a thin wrapper
+that delegates to `forms_logc`. Recovery point if anything ever needs
+to be reverted: `git checkout pre-cleanup-2026-05-02`.
 
 The map is organized as:
 
@@ -51,19 +58,16 @@ calls.
 - `import firedrake as fd`
 - `import firedrake.adjoint as adj`
 - `from Forward.bv_solver import make_graded_rectangle_mesh, solve_grid_per_voltage_cold_with_warm_fallback`
-  - Triggers `Forward/bv_solver/__init__.py:91-126`, which imports:
+  - Triggers `Forward/bv_solver/__init__.py`, which imports:
     - `Forward.bv_solver.mesh` → `make_graded_rectangle_mesh`.
     - `Forward.bv_solver.config` → BV/convergence/Boltzmann config parsers.
     - `Forward.bv_solver.nondim` → BV scaling helpers.
     - `Forward.bv_solver.boltzmann` → `add_boltzmann_counterion_residual`.
     - `Forward.bv_solver.dispatch` → `build_context`/`build_forms`/
-      `set_initial_conditions` (which in turn import `forms.py` AND
-      `forms_logc.py` at module load).
-    - `Forward.bv_solver.solvers` → `forsolve_bv`,
-      `solve_bv_with_continuation`, `solve_bv_with_ptc`,
-      `solve_bv_with_charge_continuation` (none invoked from this script).
-    - `Forward.bv_solver.grid_charge_continuation` → strategy-B
-      orchestrator (NOT used here).
+      `set_initial_conditions`, which directly re-export
+      `build_context_logc` / `build_forms_logc` /
+      `set_initial_conditions_logc` from `forms_logc.py`. There is
+      no longer a concentration backend to route to.
     - `Forward.bv_solver.grid_per_voltage` → C+D orchestrator
       (the one this script uses).
 - `from Forward.bv_solver.observables import _build_bv_observable_form`
@@ -131,14 +135,16 @@ tape — the orchestrator never builds adjoints in this script.
 
 #### 1e-i. Inner setup
 
-Imports lazily inside the function body (`grid_per_voltage.py:181-186`):
+Imports lazily inside the function body
+(`grid_per_voltage.py:182-186`):
 
 - `firedrake as fd`
 - `from .dispatch import build_context, build_forms, set_initial_conditions`
 - `from .observables import _build_bv_observable_form`
 - `from .solvers import _clone_params_with_phi` (only used as the
   list-fallback in `_params_with_phi`; `SolverParams` takes the
-  `with_phi_applied` branch).
+  `with_phi_applied` branch). After the cleanup, this is the **only**
+  function still defined in `solvers.py`.
 - `from Forward.params import SolverParams`
 
 Unpacks the 11-tuple, derives `z_nominal`, defines
@@ -154,18 +160,16 @@ For each voltage:
    `SolverParams.with_phi_applied()` →
    `dataclasses.replace(...)` (`Forward/params.py:170`).
 2. `ctx = build_context(sp, mesh=mesh)` —
-   `Forward/bv_solver/dispatch.py:78` reads
-   `params['bv_convergence']['formulation']` (= `"logc"` here) via
-   `_get_formulation` and dispatches to
-   `build_context_logc(sp, mesh=mesh)` — `forms_logc.py:37`. That
-   builds:
+   `Forward/bv_solver/dispatch.py:24` is now a one-line wrapper that
+   delegates directly to `build_context_logc(sp, mesh=mesh)` —
+   `forms_logc.py:37`. That builds:
    - `V_scalar = FunctionSpace(mesh, "CG", 1)`
    - `W = MixedFunctionSpace([V_scalar]*3 + [V_scalar])` (three
      log-c species + φ).
    - `U`, `U_prev`. Returns ctx with `logc_transform=True`.
-3. `ctx = build_forms(ctx, sp)` — `dispatch.py:89` again routes on
-   formulation. For `logc`, calls `build_forms_logc(ctx, sp)` —
-   `forms_logc.py:72`. This is the heavy lifting:
+3. `ctx = build_forms(ctx, sp)` — `dispatch.py:28` likewise delegates
+   directly to `build_forms_logc(ctx, sp)` — `forms_logc.py:72`.
+   This is the heavy lifting:
    - `_get_bv_cfg(params, n)` — `config.py:14`: parses markers,
      k0/alpha legacy lists, Stern.
    - `_get_bv_convergence_cfg(params)` — `config.py:96`: parses
@@ -225,11 +229,13 @@ For each voltage:
      - Recomputes `J_form = derivative(F_res, U)`.
      - Stores `ctx['boltzmann_z_scale']` and
        `ctx['boltzmann_counterions']`.
-4. `set_initial_conditions(ctx, sp)` — `dispatch.py:108` →
-   `set_initial_conditions_logc(ctx, sp)` —
-   `forms_logc.py:479`. Sets `U_prev.sub(i) = ln(c0_model[i])` for
-   species, and `U_prev.sub(n) = phi_applied_model · (1 − y)`
-   (linear ramp from electrode to bulk). Then `U.assign(U_prev)`.
+4. `set_initial_conditions(ctx, sp)` — `dispatch.py:32` accepts a
+   `blob=False` kwarg for backward compat (silently ignored — blob
+   ICs were a concentration-formulation feature) and delegates to
+   `set_initial_conditions_logc(ctx, sp)` — `forms_logc.py:479`.
+   Sets `U_prev.sub(i) = ln(c0_model[i])` for species, and
+   `U_prev.sub(n) = phi_applied_model · (1 − y)` (linear ramp from
+   electrode to bulk). Then `U.assign(U_prev)`.
 5. `problem = fd.NonlinearVariationalProblem(F_res, U, bcs, J_form)`;
    `solver = fd.NonlinearVariationalSolver(problem,
    solver_parameters=SNES_OPTS_CHARGED + tightened atol/rtol/stol/
@@ -336,36 +342,50 @@ For each successful voltage:
 | `Forward/params.py` | `SolverParams.from_list`, `SolverParams.with_phi_applied` |
 | `Forward/bv_solver/__init__.py` | re-exports only |
 | `Forward/bv_solver/mesh.py` | `make_graded_rectangle_mesh` |
-| `Forward/bv_solver/dispatch.py` | `build_context`, `build_forms`, `set_initial_conditions`, `_get_formulation`, `_params_dict` |
+| `Forward/bv_solver/dispatch.py` | `build_context`, `build_forms`, `set_initial_conditions` (each is a one-line wrapper around the corresponding `*_logc` function) |
 | `Forward/bv_solver/forms_logc.py` | `build_context_logc`, `build_forms_logc` (incl. nested `_build_eta_clipped`), `set_initial_conditions_logc` |
-| `Forward/bv_solver/forms.py` | imported only (concentration backend); not invoked because `formulation="logc"` |
 | `Forward/bv_solver/config.py` | `_get_bv_cfg`, `_get_bv_convergence_cfg`, `_validate_formulation`, `_default_bv_convergence_cfg`, `_get_bv_reactions_cfg`, `_get_bv_boltzmann_counterions_cfg` |
 | `Forward/bv_solver/nondim.py` | `_add_bv_reactions_scaling_to_transform` |
 | `Forward/bv_solver/boltzmann.py` | `add_boltzmann_counterion_residual` |
 | `Forward/bv_solver/observables.py` | `_build_bv_observable_form` |
 | `Forward/bv_solver/grid_per_voltage.py` | `solve_grid_per_voltage_cold_with_warm_fallback`, `_snapshot_U`, `_restore_U`; closures `_params_with_phi`, `_build_for_voltage`, `_make_run_ss`, `_set_z_factor`, `_solve_cold`, `_solve_warm`, `_march` |
-| `Forward/bv_solver/solvers.py` | `_clone_params_with_phi` (only as a list-fallback path that is **not** taken when `SolverParams` is passed; `SolverParams.with_phi_applied` is used instead) |
+| `Forward/bv_solver/solvers.py` | `_clone_params_with_phi` (only as a list-fallback path that is **not** taken when `SolverParams` is passed; `SolverParams.with_phi_applied` is used instead). After the cleanup, this is the only function the file defines. |
 | `Nondim/transform.py` | `build_model_scaling`, `_get_nondim_cfg`, `_get_robin_cfg`, `_as_list`, `_pos`, `_bool` |
 | `Nondim/constants.py` | constants only |
 | Firedrake | `RectangleMesh`, `FunctionSpace`, `MixedFunctionSpace`, `Function`, `Constant`, `TestFunctions`, `split`, `grad`, `dot`, `exp`, `ln`, `min_value`, `max_value`, `derivative`, `Measure`, `DirichletBC`, `NonlinearVariationalProblem`, `NonlinearVariationalSolver` (PETSc SNES + MUMPS LU), `assemble`; `firedrake.adjoint.stop_annotating` |
 
-### What is NOT in this codepath (despite living next to it)
+### What is NOT in this codepath
 
-- `Forward/bv_solver/solvers.py` heavyweight helpers (`forsolve_bv`,
-  `solve_bv_with_continuation`, `solve_bv_with_ptc`,
-  `solve_bv_with_charge_continuation`) — the orchestrator does its
-  own SS loop.
-- `Forward/bv_solver/validation.py` (`validate_solution_state`) —
-  only `forsolve_bv` calls it; the orchestrator does not.
-- `Forward/bv_solver/grid_charge_continuation.py` (Strategy B) —
-  only `grid_per_voltage.py` (C+D) is used here.
-- `Forward/bv_solver/forms.py` (concentration backend) — not
-  invoked because `formulation="logc"`.
-- `FluxCurve/bv_point_solve/*` — Strategy A; only used by
-  inverse-pipeline scripts.
+- `Forward/bv_solver/validation.py` (`validate_solution_state`,
+  `validate_observables`, `compute_i_lim_from_params`) — kept in the
+  tree because `FluxCurve.bv_point_solve` and `Surrogate/training.py`
+  use them on the surrogate side, but this script's orchestrator
+  does not call them.
+- `Forward/bv_solver/sweep_order.py` (`_apply_predictor`,
+  `_build_sweep_order`) — kept because `FluxCurve.bv_point_solve.predictor`
+  re-exports them; this script does not call them.
+- `FluxCurve/bv_point_solve/*` — Strategy A; only used by the
+  surrogate / inverse pipeline.
 - pyadjoint tape / k0/α controls (`bv_k0_funcs`, `bv_alpha_funcs`)
   — present in ctx but never read because the whole run is wrapped
   in `adj.stop_annotating()`.
+
+### What was removed in the May 2026 cleanup
+
+The pre-cleanup version of this document listed the following as
+"NOT in this codepath." They have since been deleted entirely; the
+list is preserved here for navigation against older commits.
+
+- `Forward/bv_solver/solvers.py` heavyweight helpers (`forsolve_bv`,
+  `solve_bv_with_continuation`, `solve_bv_with_ptc`,
+  `solve_bv_with_charge_continuation`) — deleted in `3586ad0`.
+- `Forward/bv_solver/grid_charge_continuation.py` (Strategy B) —
+  deleted in `e72163d`.
+- `Forward/bv_solver/forms.py` (concentration backend) — deleted in
+  `e72163d`. The dispatcher no longer routes between backends.
+- Seven abandoned bv_solver experiments (`forms_log`, `forms_mixed_logc`,
+  `gummel_solver`, `hybrid_forward`, `robust_forward`,
+  `stabilized_forward`, `stabilization`) — deleted in `92ef08a`.
 
 ---
 
@@ -384,9 +404,9 @@ plot_iv_curve_unified.main()
    ├─ Phase 1 (C): for each V — _solve_cold
    │  └─ _build_for_voltage(V)
    │     ├─ SolverParams.with_phi_applied         [params.py:170]
-   │     ├─ build_context (dispatch.py:78)
+   │     ├─ build_context (dispatch.py:24)
    │     │  └─ build_context_logc                 [forms_logc.py:37]
-   │     ├─ build_forms (dispatch.py:89)
+   │     ├─ build_forms (dispatch.py:28)
    │     │  └─ build_forms_logc                   [forms_logc.py:72]
    │     │     ├─ _get_bv_cfg / _get_bv_convergence_cfg / _get_bv_reactions_cfg [config.py]
    │     │     ├─ build_model_scaling             [Nondim/transform.py:172]
@@ -394,7 +414,7 @@ plot_iv_curve_unified.main()
    │     │     ├─ assemble F_res (NP, BV log-rate, Poisson) + bcs + J_form
    │     │     └─ add_boltzmann_counterion_residual    [boltzmann.py:37]
    │     │        └─ _get_bv_boltzmann_counterions_cfg [config.py:134]
-   │     ├─ set_initial_conditions (dispatch.py:108)
+   │     ├─ set_initial_conditions (dispatch.py:32)
    │     │  └─ set_initial_conditions_logc        [forms_logc.py:479]
    │     ├─ fd.NonlinearVariationalProblem / Solver (PETSc SNES + MUMPS)
    │     └─ _build_bv_observable_form(mode="current_density", scale=1.0)
@@ -429,5 +449,8 @@ plot_iv_curve_unified.main()
   `writeups/WeekOfApr27/PNP Inverse Solver Revised.tex`.
 - Standalone-vs-main parity test for the same stack:
   `scripts/studies/v25_main_pipeline_vs_standalone_logc.py`.
-- 4sp ↔ 3sp+Boltzmann reduction validation:
-  `scripts/studies/v24_3sp_logc_vs_4sp_validation.py`.
+- 4sp ↔ 3sp+Boltzmann reduction validation: previously
+  `scripts/studies/v24_3sp_logc_vs_4sp_validation.py`; the script
+  was removed in `ebea17f` and the historical results remain at
+  `StudyResults/v24_3sp_logc_vs_4sp_validation/`. Recovery:
+  `git checkout pre-cleanup-2026-05-02`.
