@@ -223,43 +223,6 @@ def validate_observables(
 
 
 # ---------------------------------------------------------------------------
-# Function 3 -- steady-state checks
-# ---------------------------------------------------------------------------
-
-def validate_steady_state(
-    flux_history: Sequence[float],
-    *,
-    bulk_integral_history: Optional[Sequence[float]] = None,
-) -> ValidationResult:
-    """Check whether bulk integrals are still drifting despite flux convergence."""
-    fails: list[str] = []
-    warns: list[str] = []
-
-    # --- W8: bulk integral still drifting ---
-    if bulk_integral_history is not None and len(bulk_integral_history) >= 4:
-        last4 = list(bulk_integral_history[-4:])
-        ref = abs(last4[-1])
-        if ref < 1e-30:
-            ref = 1.0
-        max_rel_change = 0.0
-        for k in range(1, 4):
-            rel = abs(last4[k] - last4[k - 1]) / ref
-            if rel > max_rel_change:
-                max_rel_change = rel
-        if max_rel_change > 1e-3:
-            warns.append(
-                f"W8: bulk integral still drifting, max relative change="
-                f"{max_rel_change:.4g} over last 4 entries"
-            )
-
-    valid = len(fails) == 0
-    if warns:
-        for w in warns:
-            warnings.warn(w, stacklevel=2)
-    return ValidationResult(valid=valid, failures=fails, warnings=warns)
-
-
-# ---------------------------------------------------------------------------
 # Helper -- diffusion-limited current from solver_params
 # ---------------------------------------------------------------------------
 
@@ -273,42 +236,3 @@ def compute_i_lim_from_params(solver_params: Sequence[object]) -> float:
     c0 = solver_params[8]
     c0_vals = list(c0) if hasattr(c0, "__iter__") else [c0]
     return 2.0 * max(float(v) for v in c0_vals)
-
-
-# ---------------------------------------------------------------------------
-# Function 4 -- exponent clip saturation
-# ---------------------------------------------------------------------------
-
-def check_clip_saturation(
-    eta_raw: float,
-    *,
-    exponent_clip: float,
-    bv_exp_scale: float,
-    alpha_vals: Sequence[float],
-    n_e_vals: Sequence[int],
-) -> list[str]:
-    """Return W1 warnings for reactions whose BV exponent is near the clip.
-
-    Parameters
-    ----------
-    eta_raw : float
-        Overpotential (dimensional or non-dimensional, matching *bv_exp_scale*).
-    exponent_clip : float
-        Maximum allowed exponent magnitude before clipping is applied.
-    bv_exp_scale : float
-        Typically ``F / (R T)`` or ``1 / V_T`` depending on nondimensionalisation.
-    alpha_vals : sequence of float
-        Transfer coefficients per reaction.
-    n_e_vals : sequence of int
-        Number of electrons per reaction.
-    """
-    result: list[str] = []
-    threshold = exponent_clip * 0.95
-    for j, (alpha_j, n_e_j) in enumerate(zip(alpha_vals, n_e_vals)):
-        arg = abs(alpha_j * n_e_j * bv_exp_scale * eta_raw)
-        if arg >= threshold:
-            result.append(
-                f"W1: reaction {j} clip-saturated, |arg|={arg:.4g} >= "
-                f"0.95*clip={threshold:.4g}"
-            )
-    return result

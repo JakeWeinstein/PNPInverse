@@ -114,11 +114,6 @@ from Forward.bv_solver.solvers import (
     solve_bv_with_ptc,
     solve_bv_with_charge_continuation,
 )
-from Forward.bv_solver.grid_charge_continuation import (
-    solve_grid_with_charge_continuation,
-    GridChargeContinuationResult,
-    GridPointResult,
-)
 from Forward.bv_solver.grid_per_voltage import (
     solve_grid_per_voltage_cold_with_warm_fallback,
     PerVoltageContinuationResult,
@@ -140,9 +135,6 @@ __all__ = [
     "solve_bv_with_continuation",
     "solve_bv_with_ptc",
     "solve_bv_with_charge_continuation",
-    "solve_grid_with_charge_continuation",
-    "GridChargeContinuationResult",
-    "GridPointResult",
     "solve_grid_per_voltage_cold_with_warm_fallback",
     "PerVoltageContinuationResult",
     "PerVoltagePointResult",
