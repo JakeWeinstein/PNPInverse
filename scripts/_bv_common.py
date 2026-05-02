@@ -1,16 +1,16 @@
-"""Shared constants, scales, and configuration for BV inference scripts.
+"""Shared constants, scales, and configuration for BV scripts.
 
-This module eliminates the ~6,400 lines of copy-pasted boilerplate across
-35+ inference scripts by centralizing:
+After the May 2026 cleanup, this module supports only the production
+log-c + Boltzmann counterion + log-rate BV stack.  It centralizes:
 
-- Environment / path setup
+- Firedrake cache environment setup (``setup_firedrake_env``)
 - Physical constants (Faraday, gas constant, thermal voltage)
-- Species diffusivities and bulk concentrations
-- Dimensionless scaling computations
-- Base SNES solver options
-- SolverParams factory for 2-species neutral and 4-species charged systems
-- Current-density scale (I_SCALE) computation
-- ForwardRecoveryConfig factory
+- Species diffusivities and bulk concentrations (Mangan2025, pH 4)
+- Dimensionless scaling and ``I_SCALE`` current-density conversion
+- SNES solver options (``SNES_OPTS``, ``SNES_OPTS_CHARGED``)
+- ``THREE_SPECIES_LOGC_BOLTZMANN`` species preset
+- ``DEFAULT_CLO4_BOLTZMANN_COUNTERION`` ClO4- counterion entry
+- ``make_bv_solver_params`` SolverParams factory
 
 Usage from any script in ``scripts/*/``::
 
@@ -23,9 +23,10 @@ Usage from any script in ``scripts/*/``::
     from scripts._bv_common import (
         setup_firedrake_env,
         F_CONST, V_T, N_ELECTRONS,
-        TWO_SPECIES_NEUTRAL, FOUR_SPECIES_CHARGED,
+        THREE_SPECIES_LOGC_BOLTZMANN,
+        DEFAULT_CLO4_BOLTZMANN_COUNTERION,
         make_bv_solver_params, compute_i_scale,
-        SNES_OPTS, make_recovery_config,
+        SNES_OPTS, SNES_OPTS_CHARGED,
     )
 """
 
@@ -40,28 +41,6 @@ from typing import Any, Dict, List, Optional, Sequence
 # ---------------------------------------------------------------------------
 # Environment / path setup
 # ---------------------------------------------------------------------------
-
-def setup_pnpinverse_env(script_file: str) -> str:
-    """Add PNPInverse root to sys.path and set Firedrake cache env vars.
-
-    Parameters
-    ----------
-    script_file:
-        Pass ``__file__`` from the calling script.
-
-    Returns
-    -------
-    str
-        Absolute path to the PNPInverse root directory.
-    """
-    this_dir = os.path.dirname(os.path.abspath(script_file))
-    # scripts are 2 levels deep: scripts/<category>/<script>.py
-    root = os.path.dirname(os.path.dirname(this_dir))
-    if root not in sys.path:
-        sys.path.insert(0, root)
-    setup_firedrake_env()
-    return root
-
 
 def setup_firedrake_env() -> None:
     """Set Firedrake/PyOP2 cache environment variables."""
@@ -118,11 +97,6 @@ D_REF = D_O2                # m²/s (O₂ diffusivity as reference)
 C_SCALE = C_O2              # mol/m³ (O₂ bulk concentration as reference)
 K_SCALE = D_REF / L_REF     # m/s (velocity scale for k0 nondimensionalization)
 
-# Neutral-system reference scales (D_O2 = 2.10e-9 m²/s from water at 25°C)
-D_O2_NEUTRAL = 2.10e-9
-D_REF_NEUTRAL = D_O2_NEUTRAL
-K_SCALE_NEUTRAL = D_REF_NEUTRAL / L_REF
-
 
 # ---------------------------------------------------------------------------
 # Dimensionless species properties
@@ -164,16 +138,9 @@ def compute_i_scale(
 
 I_SCALE = compute_i_scale()
 
-# Neutral-system dimensionless values
-D_O2_HAT_NEUTRAL = D_O2_NEUTRAL / D_REF_NEUTRAL  # = 1.0
-D_H2O2_HAT_NEUTRAL = D_H2O2 / D_REF_NEUTRAL
-K0_HAT_R1_NEUTRAL = K0_PHYS_R1 / K_SCALE_NEUTRAL
-K0_HAT_R2_NEUTRAL = K0_PHYS_R2 / K_SCALE_NEUTRAL
-I_SCALE_NEUTRAL = compute_i_scale(d_ref=D_REF_NEUTRAL)
-
 
 # ---------------------------------------------------------------------------
-# Base SNES solver options (all 7 convergence strategies)
+# SNES solver options
 # ---------------------------------------------------------------------------
 
 SNES_OPTS: Dict[str, Any] = {
@@ -196,13 +163,6 @@ SNES_OPTS: Dict[str, Any] = {
 SNES_OPTS_CHARGED: Dict[str, Any] = {
     **SNES_OPTS,
     "snes_max_it": 300,
-}
-
-# Stricter variant for multi-pH / elevated H⁺ robustness
-SNES_OPTS_STRICT: Dict[str, Any] = {
-    **SNES_OPTS,
-    "snes_max_it": 300,
-    "snes_linesearch_maxlambda": 0.3,
 }
 
 
@@ -228,40 +188,13 @@ class SpeciesConfig:
     c_ref_legacy: List[float] = field(default_factory=list)
 
 
-TWO_SPECIES_NEUTRAL = SpeciesConfig(
-    n_species=2,
-    z_vals=[0, 0],
-    d_vals_hat=[D_O2_HAT_NEUTRAL, D_H2O2_HAT_NEUTRAL],
-    a_vals_hat=[A_DEFAULT, A_DEFAULT],
-    c0_vals_hat=[1.0, 0.0],
-    stoichiometry_r1=[-1, +1],
-    stoichiometry_r2=[0, -1],
-    k0_legacy=[K0_HAT_R1_NEUTRAL, K0_HAT_R2_NEUTRAL],
-    alpha_legacy=[ALPHA_R1, ALPHA_R2],
-    stoichiometry_legacy=[-1, -1],
-    c_ref_legacy=[1.0, 0.0],
-)
-
-FOUR_SPECIES_CHARGED = SpeciesConfig(
-    n_species=4,
-    z_vals=[0, 0, 1, -1],
-    d_vals_hat=[D_O2_HAT, D_H2O2_HAT, D_HP_HAT, D_CLO4_HAT],
-    a_vals_hat=[A_DEFAULT] * 4,
-    c0_vals_hat=[C_O2_HAT, C_H2O2_HAT, C_HP_HAT, C_CLO4_HAT],
-    stoichiometry_r1=[-1, +1, -2, 0],
-    stoichiometry_r2=[0, -1, -2, 0],
-    k0_legacy=[K0_HAT_R1] * 4,
-    alpha_legacy=[ALPHA_R1] * 4,
-    stoichiometry_legacy=[-1, +1, -2, 0],
-    c_ref_legacy=[1.0, 0.0, 1.0, 1.0],  # H2O2 c_ref=0 matches per-reaction config
-)
-
-# 3-species + analytic-Boltzmann counterion preset, matching the production
-# log-c stack used in v18_logc_lsq_inverse.py.  The fourth (ClO4-) ion is
-# moved out of the dynamic Nernst--Planck system into a Boltzmann residual
-# on Poisson; see _make_bv_bc_cfg(boltzmann_counterions=...).
-# H2O2 is initialised at a small positive seed (1e-4) to keep ln(c0) finite
-# in the log-c primary variable.
+# 3-species + analytic-Boltzmann counterion preset — the production
+# log-c stack used by scripts/plot_iv_curve_unified.py and
+# scripts/studies/v18_logc_lsq_inverse.py.  The fourth (ClO4-) ion is
+# moved out of the dynamic Nernst--Planck system into a Boltzmann
+# residual on Poisson; see _make_bv_bc_cfg(boltzmann_counterions=...).
+# H2O2 is initialised at a small positive seed (1e-4) to keep ln(c0)
+# finite in the log-c primary variable.
 H2O2_SEED_NONDIM = 1e-4
 THREE_SPECIES_LOGC_BOLTZMANN = SpeciesConfig(
     n_species=3,
@@ -443,7 +376,7 @@ def make_bv_solver_params(
     eta_hat: float,
     dt: float,
     t_end: float,
-    species: SpeciesConfig = FOUR_SPECIES_CHARGED,
+    species: SpeciesConfig = THREE_SPECIES_LOGC_BOLTZMANN,
     snes_opts: Optional[Dict[str, Any]] = None,
     softplus: bool = False,
     c_hp_hat: float = C_HP_HAT,
@@ -456,7 +389,7 @@ def make_bv_solver_params(
     electrode_marker: int = 3,
     concentration_marker: int = 4,
     ground_marker: int = 4,
-    formulation: str = "concentration",
+    formulation: str = "logc",
     log_rate: bool = False,
     boltzmann_counterions: Optional[Sequence[Dict[str, Any]]] = None,
     u_clamp: float = 30.0,
@@ -471,9 +404,9 @@ def make_bv_solver_params(
     dt, t_end:
         Time step / end time (both dimensionless).
     species:
-        Species configuration preset (e.g. ``FOUR_SPECIES_CHARGED`` for the
-        v13 4sp standard PNP path, ``THREE_SPECIES_LOGC_BOLTZMANN`` for the
-        production log-c + Boltzmann reduction).
+        Species configuration preset.  Only ``THREE_SPECIES_LOGC_BOLTZMANN``
+        is supported by the production stack; other presets were removed
+        with the legacy concentration backend.
     snes_opts:
         Override SNES options (defaults to ``SNES_OPTS``).
     softplus:
@@ -557,79 +490,3 @@ def make_bv_solver_params(
     ])
 
 
-# ---------------------------------------------------------------------------
-# ForwardRecoveryConfig factory
-# ---------------------------------------------------------------------------
-
-def make_recovery_config(
-    *,
-    max_attempts: int = 6,  # 6 (not class default 8): enough for typical BV solves, avoids wasting time on hopeless points
-    max_it_only_attempts: int = 2,
-    anisotropy_only_attempts: int = 1,
-    tolerance_relax_attempts: int = 2,
-    max_it_growth: float = 1.5,
-    max_it_cap: int = 600,
-    atol_relax_factor: float = 10.0,
-    rtol_relax_factor: float = 10.0,
-    ksp_rtol_relax_factor: float = 10.0,
-    line_search_schedule: Sequence[str] = ("bt", "l2", "cp", "basic"),
-    anisotropy_target_ratio: float = 3.0,
-    anisotropy_blend: float = 0.5,
-) -> "ForwardRecoveryConfig":
-    """Build ForwardRecoveryConfig with project-standard defaults."""
-    from FluxCurve.config import ForwardRecoveryConfig
-
-    return ForwardRecoveryConfig(
-        max_attempts=max_attempts,
-        max_it_only_attempts=max_it_only_attempts,
-        anisotropy_only_attempts=anisotropy_only_attempts,
-        tolerance_relax_attempts=tolerance_relax_attempts,
-        max_it_growth=max_it_growth,
-        max_it_cap=max_it_cap,
-        atol_relax_factor=atol_relax_factor,
-        rtol_relax_factor=rtol_relax_factor,
-        ksp_rtol_relax_factor=ksp_rtol_relax_factor,
-        line_search_schedule=tuple(line_search_schedule),
-        anisotropy_target_ratio=anisotropy_target_ratio,
-        anisotropy_blend=anisotropy_blend,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Logging helpers
-# ---------------------------------------------------------------------------
-
-def print_params_summary() -> None:
-    """Print dimensionless parameter summary for log output."""
-    print(f"[params] D_ref = {D_REF:.3e} m²/s")
-    print(f"[params] K_scale = {K_SCALE:.3e} m/s")
-    print(f"[params] k0_hat (R1) = {K0_HAT_R1:.6f}")
-    print(f"[params] k0_hat (R2) = {K0_HAT_R2:.8f}")
-    print(f"[params] I_scale = {I_SCALE:.4f} mA/cm²")
-
-
-def print_redimensionalized_results(
-    best_k0: "np.ndarray",
-    true_k0: "np.ndarray",
-    *,
-    best_alpha: "np.ndarray | None" = None,
-    true_alpha: "np.ndarray | None" = None,
-) -> None:
-    """Print redimensionalized inference results."""
-    import numpy as np
-
-    best_k0_phys = best_k0 * K_SCALE
-    true_k0_phys = true_k0 * K_SCALE
-
-    print("\n=== Redimensionalized Results ===")
-    print(f"K_scale = {K_SCALE:.6e} m/s")
-    for i in range(len(best_k0)):
-        print(f"  k0_{i+1} true={true_k0_phys[i]:.4e}  est={best_k0_phys[i]:.4e} m/s")
-    rel_err = np.abs(best_k0 - true_k0) / np.maximum(np.abs(true_k0), 1e-16)
-    print(f"  k0 relative error: {rel_err.tolist()}")
-
-    if best_alpha is not None and true_alpha is not None:
-        alpha_err = np.abs(best_alpha - true_alpha) / np.maximum(np.abs(true_alpha), 1e-16)
-        for i in range(len(best_alpha)):
-            print(f"  alpha_{i+1} true={true_alpha[i]:.6f}  est={best_alpha[i]:.6f}")
-        print(f"  alpha relative error: {alpha_err.tolist()}")
