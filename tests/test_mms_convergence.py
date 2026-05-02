@@ -1,8 +1,9 @@
-"""4-species MMS convergence test with formal rate assertions and GCI output.
+"""3-species + Boltzmann ClO4- log-c MMS convergence test.
 
-Tests FWD-01, FWD-03, FWD-05: automated, publication-grade convergence proof
-for the forward PDE solver using the 4-species charged PNP + 2 BV reactions
-case (O2, H2O2, H+, ClO4-) matching the v13 production config.
+Publication-grade convergence proof for the production forward PDE
+solver: 3 dynamic species (O2, H2O2, H+) with log-concentration primary
+variables ``u_i = ln(c_i)``, ClO4- counterion handled via analytic
+Boltzmann residual on Poisson, and the standard 2 BV reactions.
 
 Convergence is verified via log-log linear regression (scipy.stats.linregress):
   - L2 error rate ~ O(h^2) for CG1 elements
@@ -13,8 +14,7 @@ GCI (Grid Convergence Index) is computed using the Roache 3-grid formula
 with safety factor Fs=1.25, providing uncertainty quantification for the
 finest-grid solution.
 
-Artifacts (JSON + PNG) are saved to StudyResults/mms_convergence/ for
-Phase 6 report generation.
+Artifacts (JSON + PNG) are saved to StudyResults/mms_convergence/.
 """
 
 from __future__ import annotations
@@ -41,18 +41,20 @@ from conftest import skip_without_firedrake
 # Lazy import of MMS functions (Firedrake must be available at import time)
 # ---------------------------------------------------------------------------
 
-def _import_mms_4species():
-    """Import run_mms_4species lazily to avoid Firedrake import errors at collection."""
-    from scripts.verification.mms_bv_4species import run_mms_4species
-    return run_mms_4species
+def _import_mms_run():
+    """Import run_mms lazily to avoid Firedrake import errors at collection."""
+    from scripts.verification.mms_bv_3sp_logc_boltzmann import run_mms
+    return run_mms
 
 
 # ---------------------------------------------------------------------------
 # Field iteration constants
 # ---------------------------------------------------------------------------
 
-FIELD_NAMES = ["c0", "c1", "c2", "c3", "phi"]
-SPECIES_LABELS = ["O2", "H2O2", "H+", "ClO4-", "phi"]
+# u_i = ln(c_i) primary variables for 3 dynamic species + phi.  ClO4- is
+# the analytic Boltzmann background, not a primary unknown.
+FIELD_NAMES = ["u0", "u1", "u2", "phi"]
+SPECIES_LABELS = ["O2 (u)", "H2O2 (u)", "H+ (u)", "phi"]
 
 
 # ---------------------------------------------------------------------------
@@ -191,16 +193,16 @@ class _NumpyEncoder(json.JSONEncoder):
 @skip_without_firedrake
 @pytest.mark.slow
 class TestMMSConvergence:
-    """4-species MMS convergence tests with rate assertions and GCI output."""
+    """3-species + Boltzmann log-c MMS convergence tests."""
 
     MESH_SIZES = [8, 16, 32, 64]
     OUTPUT_DIR = os.path.join(_ROOT, "StudyResults", "mms_convergence")
 
     @pytest.fixture(scope="class")
     def mms_results(self):
-        """Run the 4-species MMS convergence study once for the entire class."""
-        run_mms_4species = _import_mms_4species()
-        results = run_mms_4species(self.MESH_SIZES, verbose=True)
+        """Run the 3sp+Boltzmann log-c MMS convergence study once for the class."""
+        run_mms = _import_mms_run()
+        results = run_mms(self.MESH_SIZES, verbose=True)
 
         # Sanity: all mesh sizes should have produced results
         assert len(results["N"]) == len(self.MESH_SIZES), (
@@ -330,11 +332,14 @@ class TestMMSConvergence:
                 "date": datetime.now(timezone.utc).isoformat(),
                 "mesh_sizes": list(mms_results["N"]),
                 "h_values": list(mms_results["h"]),
-                "species": ["O2", "H2O2", "H+", "ClO4-"],
+                "species": ["O2", "H2O2", "H+"],
+                "boltzmann_counterion": "ClO4-",
+                "primary_variable": "u_i = ln(c_i)",
                 "Fs": 1.25,
                 "description": (
-                    "4-species MMS convergence study (O2, H2O2, H+, ClO4-) "
-                    "with 2 BV reactions. Production solver pipeline."
+                    "3-species + analytic Boltzmann ClO4- log-c MMS "
+                    "convergence study with 2 BV reactions. Production "
+                    "solver pipeline."
                 ),
             },
             "fields": fields_data,
@@ -347,13 +352,12 @@ class TestMMSConvergence:
         assert os.path.isfile(json_path), f"JSON not created: {json_path}"
 
         # --- Generate PNG ---
-        # Use the plot_convergence function from mms_bv_4species
-        from scripts.verification.mms_bv_4species import plot_convergence
+        from scripts.verification.mms_bv_3sp_logc_boltzmann import plot_convergence
 
         png_path = plot_convergence(mms_results, out_dir)
 
-        # The function saves as mms_bv_4species.png; copy/rename to the
-        # canonical name expected by the plan
+        # The function saves as mms_3sp_logc_boltzmann.png; copy to the
+        # canonical name expected by the report generator.
         canonical_png = os.path.join(out_dir, "mms_convergence.png")
         if png_path != canonical_png:
             import shutil
