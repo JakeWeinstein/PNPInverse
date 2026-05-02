@@ -45,8 +45,6 @@ from Forward.bv_solver import (
     build_context as build_context_bv,
     build_forms as build_forms_bv,
     set_initial_conditions as set_initial_conditions_bv,
-    forsolve_bv,
-    solve_bv_with_continuation,
     make_graded_interval_mesh,
     make_graded_rectangle_mesh,
 )
@@ -91,8 +89,6 @@ __all__ = [
     "build_context_bv",
     "build_forms_bv",
     "set_initial_conditions_bv",
-    "forsolve_bv",
-    "solve_bv_with_continuation",
     "make_graded_interval_mesh",
     "make_graded_rectangle_mesh",
     # steady state
