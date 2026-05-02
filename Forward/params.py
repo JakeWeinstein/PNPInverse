@@ -171,10 +171,6 @@ class SolverParams:
         """Return a new SolverParams with updated phi_applied."""
         return dataclasses.replace(self, phi_applied=float(phi))
 
-    def with_phi0(self, phi0: float) -> "SolverParams":
-        """Return a new SolverParams with updated phi0."""
-        return dataclasses.replace(self, phi0=float(phi0))
-
     def with_dt(self, dt: float) -> "SolverParams":
         """Return a new SolverParams with updated dt."""
         return dataclasses.replace(self, dt=float(dt))
@@ -187,17 +183,9 @@ class SolverParams:
         """Return a new SolverParams with updated D_vals."""
         return dataclasses.replace(self, D_vals=list(D_vals))
 
-    def with_a_vals(self, a_vals: Sequence[float]) -> "SolverParams":
-        """Return a new SolverParams with updated a_vals."""
-        return dataclasses.replace(self, a_vals=list(a_vals))
-
     def with_c0_vals(self, c0_vals: Sequence[float]) -> "SolverParams":
         """Return a new SolverParams with updated c0_vals."""
         return dataclasses.replace(self, c0_vals=list(c0_vals))
-
-    def with_z_vals(self, z_vals: Sequence[float]) -> "SolverParams":
-        """Return a new SolverParams with updated z_vals."""
-        return dataclasses.replace(self, z_vals=list(z_vals))
 
     # ------------------------------------------------------------------
     # Display
