@@ -62,37 +62,49 @@ def _get_bv_cfg(params: Any, n_species: int) -> dict:
     }
 
 
+_VALID_FORMULATIONS = ("concentration", "logc")
+
+
+def _validate_formulation(value: Any) -> str:
+    """Coerce/validate the formulation config field."""
+    if value is None:
+        return "concentration"
+    s = str(value).strip().lower()
+    if s not in _VALID_FORMULATIONS:
+        raise ValueError(
+            f"bv_convergence.formulation must be one of {_VALID_FORMULATIONS}; got {value!r}"
+        )
+    return s
+
+
+def _default_bv_convergence_cfg() -> dict:
+    """Default BV convergence config (used when params is missing the block)."""
+    return {
+        "clip_exponent":            True,
+        "exponent_clip":            50.0,
+        "regularize_concentration": True,
+        "conc_floor":               1e-8,
+        "use_eta_in_bv":            True,
+        "packing_floor":            1e-8,
+        "softplus_regularization":  False,
+        "bv_log_rate":              False,
+        "u_clamp":                  30.0,
+        "formulation":              "concentration",
+    }
+
+
 def _get_bv_convergence_cfg(params: Any) -> dict:
     """Parse optional BV convergence-strategy settings."""
     if not isinstance(params, dict):
-        return {
-            "clip_exponent":            True,
-            "exponent_clip":            50.0,
-            "regularize_concentration": True,
-            "conc_floor":               1e-8,
-            "use_eta_in_bv":            True,
-            "packing_floor":            1e-8,
-            "softplus_regularization":  False,
-            "bv_log_rate":              False,
-            "u_clamp":                  30.0,
-        }
+        return _default_bv_convergence_cfg()
     raw = params.get("bv_convergence", {})
     if not isinstance(raw, dict):
-        return {
-            "clip_exponent":            True,
-            "exponent_clip":            50.0,
-            "regularize_concentration": True,
-            "conc_floor":               1e-8,
-            "use_eta_in_bv":            True,
-            "packing_floor":            1e-8,
-            "softplus_regularization":  False,
-            "bv_log_rate":              False,
-            "u_clamp":                  30.0,
-        }
+        return _default_bv_convergence_cfg()
     exponent_clip = float(raw.get("exponent_clip", 50.0))
     conc_floor = float(raw.get("conc_floor", 1e-8))
     packing_floor = float(raw.get("packing_floor", 1e-8))
     u_clamp = float(raw.get("u_clamp", 30.0))
+    formulation = _validate_formulation(raw.get("formulation", "concentration"))
     if exponent_clip <= 0:
         raise ValueError(f"exponent_clip must be positive; got {exponent_clip}")
     if conc_floor <= 0:
@@ -111,12 +123,79 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
         "softplus_regularization":    _bool(raw.get("softplus_regularization", False)),
         "bv_log_rate":                _bool(raw.get("bv_log_rate", False)),
         "u_clamp":                    u_clamp,
+        "formulation":                formulation,
     }
 
 
 # ---------------------------------------------------------------------------
 # Multi-reaction BV config helpers
 # ---------------------------------------------------------------------------
+
+def _get_bv_boltzmann_counterions_cfg(params: Any) -> list[dict]:
+    """Parse ``bv_bc.boltzmann_counterions`` — analytic Boltzmann ions in Poisson.
+
+    Each entry represents an inert ion that is treated as locally
+    equilibrated with the electrostatic potential (Poisson--Boltzmann
+    reduction) instead of being solved as a dynamic Nernst--Planck
+    unknown.  The ion contributes an additional charge density term
+    ``z * c_bulk * exp(-z * phi)`` (in nondimensional units, sign
+    consistent with the Poisson convention used by the forms modules)
+    to the right-hand side of Poisson's equation.
+
+    The exponent is symmetrically clamped at ``|phi| <= phi_clamp`` to
+    prevent floating-point overflow during Newton iteration.
+
+    Each list entry is a dict with keys:
+        z              (int)           — counterion charge number (e.g. -1).
+        c_bulk_nondim  (float)         — bulk concentration in nondim units.
+        phi_clamp      (float, optional, default 50.0) — exponent clamp.
+
+    Returns ``[]`` when not configured (no Boltzmann counterions).
+    """
+    if not isinstance(params, dict):
+        return []
+    bv_raw = params.get("bv_bc", {})
+    if not isinstance(bv_raw, dict):
+        return []
+    raw = bv_raw.get("boltzmann_counterions", [])
+    if raw in (None, [], ()):
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(
+            "bv_bc.boltzmann_counterions must be a list of dicts."
+        )
+    out: list[dict] = []
+    for j, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"bv_bc.boltzmann_counterions[{j}] must be a dict."
+            )
+        if "z" not in entry:
+            raise ValueError(
+                f"bv_bc.boltzmann_counterions[{j}] missing required key 'z'."
+            )
+        if "c_bulk_nondim" not in entry:
+            raise ValueError(
+                f"bv_bc.boltzmann_counterions[{j}] missing required key 'c_bulk_nondim'."
+            )
+        z_val = int(entry["z"])
+        c_bulk = float(entry["c_bulk_nondim"])
+        phi_clamp = float(entry.get("phi_clamp", 50.0))
+        if c_bulk < 0:
+            raise ValueError(
+                f"boltzmann_counterions[{j}].c_bulk_nondim must be non-negative; got {c_bulk}"
+            )
+        if phi_clamp <= 0:
+            raise ValueError(
+                f"boltzmann_counterions[{j}].phi_clamp must be positive; got {phi_clamp}"
+            )
+        out.append({
+            "z": z_val,
+            "c_bulk_nondim": c_bulk,
+            "phi_clamp": phi_clamp,
+        })
+    return out
+
 
 def _get_bv_reactions_cfg(params: Any, n_species: int) -> list[dict] | None:
     """Parse multi-reaction BV config from ``bv_bc.reactions``.

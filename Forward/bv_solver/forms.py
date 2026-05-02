@@ -11,6 +11,7 @@ from Nondim.transform import build_model_scaling, _get_nondim_cfg, _as_list, _bo
 
 from .config import _get_bv_cfg, _get_bv_convergence_cfg, _get_bv_reactions_cfg
 from .nondim import _add_bv_scaling_to_transform, _add_bv_reactions_scaling_to_transform
+from .boltzmann import add_boltzmann_counterion_residual
 
 
 # ---------------------------------------------------------------------------
@@ -487,7 +488,10 @@ def build_forms(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
         "steric_a_funcs": steric_a_funcs,
         "nondim": scaling,
         "use_stern": use_stern,
+        "logc_transform": False,
     })
+    # Analytic Boltzmann counterions (no-op when bv_bc.boltzmann_counterions is unset).
+    add_boltzmann_counterion_residual(ctx, params)
     return ctx
 
 

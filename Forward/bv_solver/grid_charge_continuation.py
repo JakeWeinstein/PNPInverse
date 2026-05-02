@@ -124,7 +124,10 @@ def solve_grid_with_charge_continuation(
     """
     import firedrake as fd
 
-    from .forms import build_context, build_forms, set_initial_conditions
+    # Use the formulation dispatcher so the logc + Boltzmann + log-rate
+    # stack is reachable through this pipeline whenever solver_params
+    # requests it via bv_convergence.formulation.
+    from .dispatch import build_context, build_forms, set_initial_conditions
     from .solvers import _clone_params_with_phi
 
     # ------------------------------------------------------------------
@@ -153,6 +156,14 @@ def solve_grid_with_charge_continuation(
     ctx = build_context(params_neutral, mesh=mesh)
     ctx = build_forms(ctx, params_neutral)
     set_initial_conditions(ctx, params_neutral, blob=False)
+
+    # When the formulation uses an analytic Boltzmann counterion, also
+    # zero its z-scale during Phase 1 so the bulk is truly neutral
+    # (otherwise the counterion's z=-1 charge stays full while the
+    # dynamic species sit at z=0, leaving an unbalanced charge that
+    # breaks the V-sweep bisection).  Phase 2 ramps both back to 1.
+    if ctx.get("boltzmann_z_scale") is not None:
+        ctx["boltzmann_z_scale"].assign(0.0)
 
     # ------------------------------------------------------------------
     # Step 2: Build solver and time-stepping constants
@@ -433,13 +444,25 @@ def solve_grid_with_charge_continuation(
     results = {}
     n_points = len(phi_applied_values)
 
+    # Boltzmann counterion scale: when present, ramp it in lockstep with
+    # the dynamic-species z so Phase 1 (z=0) is truly neutral (no analytic
+    # counterion charge contribution either) and Phase 2 ramps both
+    # together to reach the physical z=1 solution.
+    boltz_z_scale = ctx.get("boltzmann_z_scale", None)
+
+    def _set_z_factor(z_val: float, ns: int) -> None:
+        """Set every z scaling (dynamic + Boltzmann) to ``z_val``."""
+        for i in range(ns):
+            ctx["z_consts"][i].assign(z_nominal[i] * z_val)
+        if boltz_z_scale is not None:
+            boltz_z_scale.assign(float(z_val))
+
     def _adaptive_z_ramp(z_nom, ns):
         """Adaptive z-ramp from 0 to 1. Returns achieved_z_factor."""
 
         def _try_z(z_val):
             """Returns (converged, usable) — same semantics as _try_timestep."""
-            for i in range(ns):
-                ctx["z_consts"][i].assign(z_nom[i] * z_val)
+            _set_z_factor(z_val, ns)
             converged, steps = _run_to_steady_state(_MAX_COLD_STEPS)
             if converged:
                 return True, True
@@ -555,9 +578,10 @@ def solve_grid_with_charge_continuation(
         ctx["U_prev"].assign(ctx["U"])
         ctx["phi_applied_func"].assign(eta_i)
 
-        # Reset z_consts to 0
-        for i in range(n_s):
-            ctx["z_consts"][i].assign(0.0)
+        # Reset z_consts to 0 (and Boltzmann z_scale if present, so the
+        # analytic counterion is also off at the start of the per-point
+        # z-ramp).
+        _set_z_factor(0.0, n_s)
 
         # Run adaptive z-ramp
         achieved_z = _adaptive_z_ramp(z_nominal, n_s)
@@ -573,6 +597,7 @@ def solve_grid_with_charge_continuation(
             z_vals=[float(v) for v in z_nominal],
             eps_c=ctx.get("_diag_eps_c", 1e-8),
             exponent_clip=ctx.get("_diag_exponent_clip", 50.0),
+            is_logc=bool(ctx.get("logc_transform", False)),
         )
         _phys_valid = _vr.valid
 

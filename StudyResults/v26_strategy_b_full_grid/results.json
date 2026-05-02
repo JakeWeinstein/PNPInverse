@@ -1,0 +1,125 @@
+{
+  "config": {
+    "v_grid": [
+      -0.5,
+      -0.4,
+      -0.3,
+      -0.2,
+      -0.1,
+      0.0,
+      0.05,
+      0.1,
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6
+    ],
+    "mesh_ny": 200,
+    "K0_HAT_R1": 0.0012631578947368421,
+    "K0_HAT_R2": 5.2631578947368424e-05,
+    "ALPHA_R1": 0.627,
+    "ALPHA_R2": 0.5,
+    "E_EQ_R1": 0.68,
+    "E_EQ_R2": 1.78
+  },
+  "rows": [
+    {
+      "V_RHE": -0.5,
+      "cd": null,
+      "pc": null,
+      "z_factor": 0.0,
+      "converged": false
+    },
+    {
+      "V_RHE": -0.4,
+      "cd": null,
+      "pc": null,
+      "z_factor": 0.0,
+      "converged": false
+    },
+    {
+      "V_RHE": -0.3,
+      "cd": null,
+      "pc": null,
+      "z_factor": 0.0,
+      "converged": false
+    },
+    {
+      "V_RHE": -0.2,
+      "cd": null,
+      "pc": null,
+      "z_factor": 0.0,
+      "converged": false
+    },
+    {
+      "V_RHE": -0.1,
+      "cd": 5.197434816536181e+103,
+      "pc": 5.197434816536181e+103,
+      "z_factor": 0.0,
+      "converged": false
+    },
+    {
+      "V_RHE": 0.0,
+      "cd": -0.1737856663757959,
+      "pc": 1.5288303512067167e-05,
+      "z_factor": 1.0,
+      "converged": true
+    },
+    {
+      "V_RHE": 0.05,
+      "cd": -0.16985327284699236,
+      "pc": 1.5377762747330264e-05,
+      "z_factor": 1.0,
+      "converged": true
+    },
+    {
+      "V_RHE": 0.1,
+      "cd": -0.16307160783137564,
+      "pc": 1.5387636796087666e-05,
+      "z_factor": 1.0,
+      "converged": true
+    },
+    {
+      "V_RHE": 0.2,
+      "cd": 7.08808867579876e+131,
+      "pc": 7.08808867579876e+131,
+      "z_factor": 0.0,
+      "converged": false
+    },
+    {
+      "V_RHE": 0.3,
+      "cd": null,
+      "pc": null,
+      "z_factor": 0.0,
+      "converged": false
+    },
+    {
+      "V_RHE": 0.4,
+      "cd": null,
+      "pc": null,
+      "z_factor": 0.0,
+      "converged": false
+    },
+    {
+      "V_RHE": 0.5,
+      "cd": null,
+      "pc": null,
+      "z_factor": 0.0,
+      "converged": false
+    },
+    {
+      "V_RHE": 0.6,
+      "cd": null,
+      "pc": null,
+      "z_factor": 0.0,
+      "converged": false
+    }
+  ],
+  "summary": {
+    "n_converged": 3,
+    "n_total": 13,
+    "wall_seconds": 25.44205904006958,
+    "rel_window_full": false
+  }
+}

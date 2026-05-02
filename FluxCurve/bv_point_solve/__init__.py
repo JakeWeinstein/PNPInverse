@@ -720,6 +720,7 @@ def solve_bv_curve_points_with_warmstart(
                         z_vals=_z_vals_v,
                         eps_c=_eps_c_v,
                         exponent_clip=_exp_clip_v,
+                        is_logc=bool(ctx.get("logc_transform", False)),
                     )
                     for _w in _sol_vr.warnings:
                         _warnings.warn(

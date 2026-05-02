@@ -256,6 +256,27 @@ FOUR_SPECIES_CHARGED = SpeciesConfig(
     c_ref_legacy=[1.0, 0.0, 1.0, 1.0],  # H2O2 c_ref=0 matches per-reaction config
 )
 
+# 3-species + analytic-Boltzmann counterion preset, matching the production
+# log-c stack used in v18_logc_lsq_inverse.py.  The fourth (ClO4-) ion is
+# moved out of the dynamic Nernst--Planck system into a Boltzmann residual
+# on Poisson; see _make_bv_bc_cfg(boltzmann_counterions=...).
+# H2O2 is initialised at a small positive seed (1e-4) to keep ln(c0) finite
+# in the log-c primary variable.
+H2O2_SEED_NONDIM = 1e-4
+THREE_SPECIES_LOGC_BOLTZMANN = SpeciesConfig(
+    n_species=3,
+    z_vals=[0, 0, 1],
+    d_vals_hat=[D_O2_HAT, D_H2O2_HAT, D_HP_HAT],
+    a_vals_hat=[A_DEFAULT] * 3,
+    c0_vals_hat=[C_O2_HAT, H2O2_SEED_NONDIM, C_HP_HAT],
+    stoichiometry_r1=[-1, +1, -2],
+    stoichiometry_r2=[0, -1, -2],
+    k0_legacy=[K0_HAT_R1] * 3,
+    alpha_legacy=[ALPHA_R1] * 3,
+    stoichiometry_legacy=[-1, -1, -1],
+    c_ref_legacy=[1.0, 0.0, 1.0],
+)
+
 
 # ---------------------------------------------------------------------------
 # BV convergence + nondim sub-configs
@@ -263,8 +284,28 @@ FOUR_SPECIES_CHARGED = SpeciesConfig(
 
 def _make_bv_convergence_cfg(*, softplus: bool = False,
                               log_rate: bool = False,
-                              u_clamp: float = 30.0) -> Dict[str, Any]:
-    """Standard BV convergence config sub-dict."""
+                              u_clamp: float = 30.0,
+                              formulation: str = "concentration") -> Dict[str, Any]:
+    """Standard BV convergence config sub-dict.
+
+    Parameters
+    ----------
+    softplus:
+        If True, adds ``softplus_regularization`` to soften the eps_c floor.
+    log_rate:
+        If True, sets ``bv_log_rate=True`` so the BV residual is built in
+        log-rate form (see Change 3 in WeekOfApr27/PNP Inverse Solver
+        Revised.tex).  Compatible with both formulations but only useful
+        in tandem with the log-c primary variable.
+    u_clamp:
+        Symmetric clamp on ``u_i = ln c_i`` to prevent overflow during
+        Newton iteration in the log-c bulk terms.  Has no effect when
+        ``formulation="concentration"``.
+    formulation:
+        ``"concentration"`` (default, legacy) or ``"logc"``.  Selects
+        which weak-form backend the dispatcher in
+        ``Forward.bv_solver`` uses.
+    """
     cfg: Dict[str, Any] = {
         "clip_exponent": True,
         "exponent_clip": 50.0,
@@ -273,6 +314,7 @@ def _make_bv_convergence_cfg(*, softplus: bool = False,
         "use_eta_in_bv": True,
         "bv_log_rate": log_rate,
         "u_clamp": u_clamp,
+        "formulation": str(formulation).strip().lower(),
     }
     if softplus:
         cfg["softplus_regularization"] = True
@@ -310,8 +352,26 @@ def _make_bv_bc_cfg(
     electrode_marker: int = 3,
     concentration_marker: int = 4,
     ground_marker: int = 4,
+    boltzmann_counterions: Optional[Sequence[Dict[str, Any]]] = None,
+    include_h_factor: Optional[bool] = None,
 ) -> Dict[str, Any]:
-    """Build the ``bv_bc`` config sub-dict for 2-reaction BV."""
+    """Build the ``bv_bc`` config sub-dict for 2-reaction BV.
+
+    Parameters
+    ----------
+    boltzmann_counterions:
+        Optional list of analytic-Boltzmann counterion entries for Poisson
+        (Poisson-Boltzmann-Nernst-Planck reduction).  Each entry is a dict
+        with keys ``z`` and ``c_bulk_nondim``.  When provided, the forms
+        modules add a residual ``-charge_rhs * z * c_bulk * exp(-z*phi)``
+        per entry to Poisson's equation.  See
+        ``Forward/bv_solver/boltzmann.py``.
+    include_h_factor:
+        Whether to attach H+ stoichiometric concentration factors to each
+        reaction's ``cathodic_conc_factors``.  Defaults to True for
+        ``species.n_species >= 3`` (works for both the 4sp charged preset
+        and the 3sp logc+Boltzmann preset).
+    """
     reaction_1: Dict[str, Any] = {
         "k0": k0_hat_r1,
         "alpha": alpha_r1,
@@ -335,13 +395,19 @@ def _make_bv_bc_cfg(
         "E_eq_v": E_eq_r2,
     }
 
-    # 4-species charged system uses cathodic_conc_factors for H⁺ dependence
-    if species.n_species >= 4:
+    # H+ stoichiometric concentration factor.  Apply automatically when the
+    # species set has at least 3 species (i.e. tracks H+ explicitly), unless
+    # the caller overrides via include_h_factor.
+    if include_h_factor is None:
+        attach_h = species.n_species >= 3
+    else:
+        attach_h = bool(include_h_factor)
+    if attach_h:
         h_factor = [{"species": 2, "power": 2, "c_ref_nondim": c_hp_hat}]
         reaction_1["cathodic_conc_factors"] = h_factor
         reaction_2["cathodic_conc_factors"] = [dict(f) for f in h_factor]
 
-    return {
+    cfg: Dict[str, Any] = {
         "reactions": [reaction_1, reaction_2],
         # Legacy per-species fallback (used by _get_bv_cfg for markers)
         "k0": list(species.k0_legacy),
@@ -353,6 +419,19 @@ def _make_bv_bc_cfg(
         "concentration_marker": concentration_marker,
         "ground_marker": ground_marker,
     }
+    if boltzmann_counterions:
+        cfg["boltzmann_counterions"] = [dict(entry) for entry in boltzmann_counterions]
+    return cfg
+
+
+# Convenience: the standard ClO4- counterion entry that pairs with the
+# 3-species log-c preset (matches the inline `add_boltzmann()` helper used
+# inside scripts/studies/v18_logc_lsq_inverse.py).
+DEFAULT_CLO4_BOLTZMANN_COUNTERION: Dict[str, Any] = {
+    "z": -1,
+    "c_bulk_nondim": C_CLO4_HAT,
+    "phi_clamp": 50.0,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -377,6 +456,11 @@ def make_bv_solver_params(
     electrode_marker: int = 3,
     concentration_marker: int = 4,
     ground_marker: int = 4,
+    formulation: str = "concentration",
+    log_rate: bool = False,
+    boltzmann_counterions: Optional[Sequence[Dict[str, Any]]] = None,
+    u_clamp: float = 30.0,
+    include_h_factor: Optional[bool] = None,
 ) -> "SolverParams":
     """Build SolverParams for multi-species BV with graded rectangle mesh markers.
 
@@ -384,12 +468,12 @@ def make_bv_solver_params(
     ----------
     eta_hat:
         Applied overpotential (dimensionless).
-    dt:
-        Time step (dimensionless).
-    t_end:
-        End time (dimensionless).
+    dt, t_end:
+        Time step / end time (both dimensionless).
     species:
-        Species configuration preset (2-species neutral or 4-species charged).
+        Species configuration preset (e.g. ``FOUR_SPECIES_CHARGED`` for the
+        v13 4sp standard PNP path, ``THREE_SPECIES_LOGC_BOLTZMANN`` for the
+        production log-c + Boltzmann reduction).
     snes_opts:
         Override SNES options (defaults to ``SNES_OPTS``).
     softplus:
@@ -402,6 +486,23 @@ def make_bv_solver_params(
         Transfer coefficients for reactions 1 and 2.
     electrode_marker, concentration_marker, ground_marker:
         Mesh boundary markers.
+    formulation:
+        ``"concentration"`` (legacy default) or ``"logc"``.  Selects the
+        backend that the dispatcher in ``Forward.bv_solver`` uses.  See
+        the writeup ``writeups/WeekOfApr27/PNP Inverse Solver Revised.tex``
+        for the formulation choices.
+    log_rate:
+        Enable log-rate Butler-Volmer evaluation (Change 3 in the
+        writeup).  Compatible with both formulations but only useful in
+        the log-c primary variable.
+    boltzmann_counterions:
+        Optional analytic-Boltzmann counterions (Change 1 in the writeup,
+        the PBNP reduction).  For the standard ClO4- supporting
+        electrolyte pass ``[DEFAULT_CLO4_BOLTZMANN_COUNTERION]``.
+    u_clamp:
+        Symmetric clamp on ``u_i = ln(c_i)`` in the log-c bulk forms.
+    include_h_factor:
+        Override the auto-detection in :func:`_make_bv_bc_cfg`.
 
     Returns
     -------
@@ -410,7 +511,10 @@ def make_bv_solver_params(
     from Forward.params import SolverParams
 
     params = dict(snes_opts or SNES_OPTS)
-    params["bv_convergence"] = _make_bv_convergence_cfg(softplus=softplus)
+    params["bv_convergence"] = _make_bv_convergence_cfg(
+        softplus=softplus, log_rate=log_rate, u_clamp=u_clamp,
+        formulation=formulation,
+    )
     params["nondim"] = _make_nondim_cfg()
     params["bv_bc"] = _make_bv_bc_cfg(
         species,
@@ -424,13 +528,17 @@ def make_bv_solver_params(
         electrode_marker=electrode_marker,
         concentration_marker=concentration_marker,
         ground_marker=ground_marker,
+        boltzmann_counterions=boltzmann_counterions,
+        include_h_factor=include_h_factor,
     )
 
     c0 = list(species.c0_vals_hat)
-    # Override H⁺ concentration if custom c_hp_hat provided (4-species)
-    if species.n_species >= 4 and c_hp_hat != C_HP_HAT:
+    # Override H⁺ concentration if custom c_hp_hat provided (3- or 4-species)
+    if species.n_species >= 3 and c_hp_hat != C_HP_HAT:
         c0[2] = c_hp_hat
-        # Maintain electroneutrality with counterion
+        # Maintain electroneutrality with counterion (only the 4-species
+        # set carries an explicit ClO4- entry in c0; 3sp + Boltzmann
+        # tracks the counterion analytically inside Poisson).
         if species.n_species > 3:
             c0[3] = c_hp_hat
 

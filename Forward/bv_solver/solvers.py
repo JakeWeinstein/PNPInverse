@@ -8,7 +8,11 @@ from typing import Any
 import numpy as np
 import firedrake as fd
 
-from .forms import build_context, build_forms, set_initial_conditions
+# Use the formulation dispatcher (concentration vs logc backend selected
+# by params['bv_convergence']['formulation']) so any solver helper here
+# works uniformly with the production log-c stack from
+# writeups/WeekOfApr27/PNP Inverse Solver Revised.tex.
+from .dispatch import build_context, build_forms, set_initial_conditions
 from .validation import validate_solution_state
 
 
@@ -77,6 +81,7 @@ def forsolve_bv(
         U, n_species=n_species, c_bulk=_c_bulk, phi_applied=float(phi_applied),
         z_vals=list(z_vals), eps_c=float(params.get("bv_convergence", {}).get("conc_floor", 1e-8)),
         exponent_clip=float(params.get("bv_convergence", {}).get("exponent_clip", 50.0)),
+        is_logc=bool(ctx.get("logc_transform", False)),
     )
     for w in _vr.warnings:
         warnings.warn(f"forsolve_bv: {w}", stacklevel=2)
@@ -230,6 +235,7 @@ def solve_bv_with_continuation(
         ctx["U"], n_species=n_s, c_bulk=_c_bulk, phi_applied=float(phi_applied),
         z_vals=list(z_v), eps_c=float(params.get("bv_convergence", {}).get("conc_floor", 1e-8)),
         exponent_clip=float(params.get("bv_convergence", {}).get("exponent_clip", 50.0)),
+        is_logc=bool(ctx.get("logc_transform", False)),
     )
     for w in _vr.warnings:
         warnings.warn(f"solve_bv_with_continuation: {w}", stacklevel=2)
@@ -424,6 +430,7 @@ def solve_bv_with_ptc(
         ctx["U"], n_species=n_s, c_bulk=_c_bulk, phi_applied=float(phi_applied),
         z_vals=list(z_v), eps_c=float(params.get("bv_convergence", {}).get("conc_floor", 1e-8)),
         exponent_clip=float(params.get("bv_convergence", {}).get("exponent_clip", 50.0)),
+        is_logc=bool(ctx.get("logc_transform", False)),
     )
     for w in _vr.warnings:
         warnings.warn(f"solve_bv_with_ptc: {w}", stacklevel=2)
@@ -609,6 +616,7 @@ def solve_bv_with_charge_continuation(
         ctx["U"], n_species=n_s, c_bulk=_c_bulk, phi_applied=float(phi_applied),
         z_vals=list(z_v), eps_c=float(params.get("bv_convergence", {}).get("conc_floor", 1e-8)),
         exponent_clip=float(params.get("bv_convergence", {}).get("exponent_clip", 50.0)),
+        is_logc=bool(ctx.get("logc_transform", False)),
     )
     for w in _vr.warnings:
         warnings.warn(f"solve_bv_with_charge_continuation: {w}", stacklevel=2)

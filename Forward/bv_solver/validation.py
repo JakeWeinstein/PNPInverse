@@ -52,10 +52,20 @@ def validate_solution_state(
     eps_c: float,
     exponent_clip: float,
     species_names: Optional[Sequence[str]] = None,
+    is_logc: bool = False,
 ) -> ValidationResult:
-    """Validate a Firedrake mixed-space solution [c_0, ..., c_{n-1}, phi].
+    """Validate a Firedrake mixed-space solution.
 
-    All checks use numpy on ``U.dat[i].data_ro`` -- no FEM assembly.
+    Concentration formulation: ``U`` carries ``[c_0, ..., c_{n-1}, phi]``
+    and concentration data is read directly from ``U.dat[i].data_ro``.
+
+    Log-concentration formulation (``is_logc=True``): ``U`` carries
+    ``[u_0, ..., u_{n-1}, phi]`` with ``u_i = ln(c_i)``.  Concentration
+    samples are recovered as ``c_i = exp(u_i)`` before the standard
+    checks run.  ``F1`` (negative concentration) is unreachable in this
+    mode since ``exp(u_i) > 0`` exactly.
+
+    All checks use numpy on dat data -- no FEM assembly.
     """
     import numpy as np
 
@@ -63,10 +73,19 @@ def validate_solution_state(
     warns: list[str] = []
     names = species_names or [f"species_{i}" for i in range(n_species)]
 
+    def _conc_array(i: int):
+        """Return concentration samples for species ``i`` as a numpy array."""
+        raw = U.dat[i].data_ro
+        if is_logc:
+            return np.exp(raw)
+        return raw
+
     # --- F1: negative concentration ---
     # Guard against floating-point noise below zero (|c| < eps_c treated as 0).
+    # In logc mode this loop is structurally unreachable (exp(u) > 0) but is
+    # kept for symmetry with the concentration path.
     for i in range(n_species):
-        c_min = float(U.dat[i].data_ro.min())
+        c_min = float(_conc_array(i).min())
         if c_min < -eps_c:
             fails.append(f"F1: negative {names[i]}, min={c_min:.4g}")
 
@@ -74,19 +93,22 @@ def validate_solution_state(
     # Only meaningful for species whose bulk concentration is substantial --
     # a species that legitimately starts at c=0 (e.g. H2O2) is not
     # "floor-dominated" merely because it equals its initial value.
-    # Skip species where F1 already fired (negative c is a distinct failure).
-    for i in range(min(n_species, 2)):
-        if c_bulk[i] <= eps_c * 10:  # species with no meaningful bulk source
-            continue
-        c_min = float(U.dat[i].data_ro.min())
-        if 0.0 <= c_min <= eps_c * 2.0:
-            fails.append(
-                f"F4: {names[i]} floor-dominated, min={c_min:.4g} <= 2*eps_c={eps_c * 2.0:.4g}"
-            )
+    # Skip in logc mode: there is no eps_c floor; small concentrations are
+    # represented exactly via large negative u_i.  Skip species where F1
+    # already fired (negative c is a distinct failure).
+    if not is_logc:
+        for i in range(min(n_species, 2)):
+            if c_bulk[i] <= eps_c * 10:  # species with no meaningful bulk source
+                continue
+            c_min = float(_conc_array(i).min())
+            if 0.0 <= c_min <= eps_c * 2.0:
+                fails.append(
+                    f"F4: {names[i]} floor-dominated, min={c_min:.4g} <= 2*eps_c={eps_c * 2.0:.4g}"
+                )
 
     # --- F6: H2O2 exceeds stoichiometric limit ---
     if n_species >= 2 and c_bulk[1] < c_bulk[0] * 0.01:
-        c_h2o2_max = float(U.dat[1].data_ro.max())
+        c_h2o2_max = float(_conc_array(1).max())
         if c_h2o2_max > c_bulk[0] * 1.05:
             fails.append(
                 f"F6: {names[1]} exceeds O2 bulk, max={c_h2o2_max:.4g} > "
@@ -98,7 +120,7 @@ def validate_solution_state(
     # via Boltzmann-style attraction; only flag large overshoots to catch
     # CG1 oscillations rather than physical accumulation.
     for i in range(n_species):
-        c_max = float(U.dat[i].data_ro.max())
+        c_max = float(_conc_array(i).max())
         if c_bulk[i] <= 0:
             continue
         # Neutral species: 20% tolerance.  Charged species: 5x tolerance
@@ -138,7 +160,7 @@ def validate_solution_state(
             coords = U.function_space().mesh().coordinates.dat.data_ro
             y_coords = coords[:, -1] if coords.ndim == 2 else coords
             y_median = float(np.median(y_coords))
-            c_data = U.dat[i].data_ro
+            c_data = _conc_array(i)
             top_mask = y_coords >= y_median
             if np.any(top_mask):
                 c_top_min = float(c_data[top_mask].min())
