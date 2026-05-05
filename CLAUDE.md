@@ -32,15 +32,12 @@ should opt in to the production stack via the flags above.
 ## Inverse status: paused
 
 All inverse scripts in this repo are **legacy / non-operational**. No
-inverse work is currently running. The repo is being held until the
-forward solver is mature enough to support a clean re-entry. When
-inverse work resumes, the basin-geometry conclusion and FIM/noise-
-model conventions in
+inverse work is currently running. Held until the forward solver is
+mature enough for a clean re-entry. When it resumes, start from
 `docs/CHATGPT_HANDOFF_10_LM_TIKHONOV_BASIN_GEOMETRY.md`,
 `docs/Next Steps After Basin Geometry.md`, and
-`docs/noise_model_conventions.md` will be the starting points; treat
-the v13–v24 study scripts (`scripts/studies/v*.py`) as historical
-reference only.
+`docs/noise_model_conventions.md`; treat the v13–v24 study scripts
+(`scripts/studies/v*.py`) as historical reference only.
 
 ## Source-of-truth docs (read before opining on status)
 
@@ -88,19 +85,28 @@ reference only.
    z=0 hands bisection a mismatched species IC it can't recover from
    on the logc+counterion stack (3/13 at production resolution).
 
-2. **The `eta_scaled` clip threshold depends on `exponent_clip`.**
-   Convention: `eta_scaled = (V_RHE − E_eq)/V_T`, clipped to
-   ±`exponent_clip` *before* the α·n_e multiplication
+2. **`exponent_clip` choice — clip=50 PC is fictitious; clip=100 is
+   the only PC-trustworthy setting.** Convention:
+   `eta_scaled = (V_RHE − E_eq)/V_T` clipped to ±`exponent_clip`
+   *before* the α·n_e multiplication
    (`forms_logc.py:_build_eta_clipped`).
-   - At the **historical default 50** (used by V19–V24 inverse
-     runs): R2 unclips at V_RHE > +0.495 V.
-   - At the **current default 100** (raised 2026-05-04): R2
-     unclips at V_RHE > −0.79 V — production grid fully unclipped.
+   - **clip=50** (historical default; V19–V24 runs): R2 unclips at
+     V_RHE > +0.495 V. **Do not trust PC** — clipped R2 produces a
+     fictitious peroxide current (sign-flipped at V_RHE < −0.1 V;
+     magnitude artefacted across the cathodic grid). Don't compare
+     clip=50 PC against experiment. See
+     `docs/clip_observable_investigation.md` §5.2.
+   - **clip=100** (current default, raised 2026-05-04): R2 unclips
+     at V_RHE > −0.79 V — production grid fully unclipped, and the
+     **only configuration where negative-voltage PC is trustworthy**.
+     Some configs cold-fail more often here than at clip=50
+     (no-Stern bikerman near V_RHE ≈ +0.1 V); recover with C+D
+     warm-walk or Stern, not by lowering the clip.
    Older handoffs say ~+1.14 V — wrong (missed the α factor); ignore.
-   Log-rate did *not* remove this clip (it's structural for
-   `exp(α·n_e·η)`); what log-rate eliminated is the separate
-   `c_surf = exp(clamp(u, ±30))` clamp inside the BV residual.
-   `u_clamp` default is also 100 now. Full breakdown in
+   Log-rate did *not* remove this clip (structural for
+   `exp(α·n_e·η)`); it eliminated a *separate* `c_surf =
+   exp(clamp(u, ±30))` clamp inside the BV residual. `u_clamp`
+   default is also 100 now. Full breakdown in
    `docs/clipping_conventions.md`.
 
 3. **The IC and the residual must agree about steric saturation.**
@@ -161,9 +167,8 @@ Reference driver:
   the muh formulation also pass `mu_species=ctx.get('mu_species')`
   and `em=ctx['nondim'].get('electromigration_prefactor', 1.0)`.
 - The `debye_boltzmann` IC requires either a `synthesised_4sp` ClO₄⁻
-  counterion *or* a `boltzmann_counterions=[…]` entry with
-  `steric_mode='bikerman'`. With `steric_mode='ideal'` the legacy
-  tanh-Gouy-Chapman seed is used.
+  counterion *or* a `steric_mode='bikerman'` entry; with
+  `steric_mode='ideal'` it falls back to the tanh-Gouy-Chapman seed.
 - `H2O2_SEED_NONDIM = 1e-4` is the finite seed for `ln c_H2O2` at the
   bulk Dirichlet BC, not a physics tweak.
 
@@ -171,8 +176,8 @@ Reference driver:
 
 - Run scripts from `PNPInverse/` (the directory containing this file),
   not from `Forward/` or `scripts/`.
-- `scripts/Inference/` is **uppercase**. There is no
-  `scripts/inference/` and no `scripts/bv/`.
+- `scripts/Inference/` is **uppercase** — no `scripts/inference/`
+  or `scripts/bv/` exists.
 - `scripts/studies/v*.py` are legacy inverse scripts; not operational.
 - `StudyResults/` is part of the working research record, not a clean
   build-artifact directory. Check existing `summary.md` files before
@@ -181,16 +186,15 @@ Reference driver:
 
 ## Workflow notes
 
-- **Plan before non-trivial forward-solver changes.** The legacy
-  concentration `forms.py` was removed in the May 2026 cleanup; the
-  live backends are `Forward/bv_solver/forms_logc.py` and
-  `forms_logc_muh.py`. Decide which validation scripts you'll run
-  (the MMS scripts in `scripts/verification/`,
+- **Plan before non-trivial forward-solver changes.** Live backends
+  are `forms_logc.py` and `forms_logc_muh.py` (concentration backend
+  removed in the May 2026 cleanup). Decide which validation scripts
+  you'll run (`scripts/verification/` MMS scripts,
   `scripts/studies/peroxide_window_3sp_bikerman_muh.py`) before
   implementing.
 - **Long-running studies cost minutes-to-hours.** Confirm with the
   user before regenerating expensive runs.
 - **Adjoint tape hygiene** (when inverse work resumes): wrap
   unannotated cold-ramp / continuation work in
-  `with adj.stop_annotating():`, and only annotate the SS steps you
-  actually want on the tape.
+  `with adj.stop_annotating():` and only annotate the SS steps you
+  want on the tape.
