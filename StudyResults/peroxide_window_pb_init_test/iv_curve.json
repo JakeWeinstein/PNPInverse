@@ -1,0 +1,125 @@
+{
+  "v_rhe": [
+    0.66,
+    0.68,
+    0.7,
+    0.75,
+    0.8,
+    1.0
+  ],
+  "exponent_clip": 100.0,
+  "mesh_Ny": 200,
+  "n_substeps_warm": 8,
+  "bisect_depth_warm": 5,
+  "steric_cap": 100.0,
+  "reports": [
+    {
+      "initializer": "linear_phi",
+      "wall_seconds": 408.9002981185913,
+      "v_rhe": [
+        0.66,
+        0.68,
+        0.7,
+        0.75,
+        0.8,
+        1.0
+      ],
+      "cd_mA_cm2": [
+        1.29212150752015e-08,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "pc_mA_cm2": [
+        1.2921942287552328e-08,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "converged": [
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "method": [
+        "cold",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed"
+      ],
+      "z_achieved": [
+        1.0,
+        0.75,
+        0.5,
+        0.2,
+        0.15000000000000002,
+        0.05
+      ],
+      "n_converged": 1,
+      "n_total": 6
+    },
+    {
+      "initializer": "debye_boltzmann",
+      "wall_seconds": 628.3427109718323,
+      "v_rhe": [
+        0.66,
+        0.68,
+        0.7,
+        0.75,
+        0.8,
+        1.0
+      ],
+      "cd_mA_cm2": [
+        1.2921910113425847e-08,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "pc_mA_cm2": [
+        1.2922637364867493e-08,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "converged": [
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "method": [
+        "cold",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed"
+      ],
+      "z_achieved": [
+        1.0,
+        0.75,
+        0.5,
+        0.2,
+        0.15000000000000002,
+        0.05
+      ],
+      "n_converged": 1,
+      "n_total": 6
+    }
+  ]
+}

@@ -1,0 +1,1118 @@
+{
+  "V_GRID": [
+    -0.5,
+    -0.4,
+    -0.3,
+    -0.2,
+    -0.1,
+    0.0,
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5,
+    0.6
+  ],
+  "exponent_clip": 100.0,
+  "mesh_Ny": 200,
+  "max_ss_steps": 200,
+  "ss_rel_tol": 0.0001,
+  "ss_consec": 4,
+  "truth": {
+    "0": {
+      "V_RHE": -0.5,
+      "cd_truth": -0.18379460764066533,
+      "pc_truth": 1.5382211840763674e-05,
+      "converged": true,
+      "method": "warm<--15.569"
+    },
+    "1": {
+      "V_RHE": -0.4,
+      "cd_truth": -0.18277516747175648,
+      "pc_truth": 1.5382513480761714e-05,
+      "converged": true,
+      "method": "warm<--11.677"
+    },
+    "2": {
+      "V_RHE": -0.3,
+      "cd_truth": -0.18161160673013738,
+      "pc_truth": 1.538285883080369e-05,
+      "converged": true,
+      "method": "warm<--7.784"
+    },
+    "3": {
+      "V_RHE": -0.2,
+      "cd_truth": -0.18016888937753034,
+      "pc_truth": 1.5383288186248924e-05,
+      "converged": true,
+      "method": "warm<--3.892"
+    },
+    "4": {
+      "V_RHE": -0.1,
+      "cd_truth": -0.1780187733720623,
+      "pc_truth": 1.538393073930253e-05,
+      "converged": true,
+      "method": "warm<-+0.000"
+    },
+    "5": {
+      "V_RHE": 0.0,
+      "cd_truth": -0.17378566131622672,
+      "pc_truth": 1.538519901437123e-05,
+      "converged": true,
+      "method": "warm<-+3.892"
+    },
+    "6": {
+      "V_RHE": 0.1,
+      "cd_truth": -0.16307160718923994,
+      "pc_truth": 1.5388413668611e-05,
+      "converged": true,
+      "method": "warm<-+7.784"
+    },
+    "7": {
+      "V_RHE": 0.2,
+      "cd_truth": -0.07860707995016689,
+      "pc_truth": 1.5413842062445024e-05,
+      "converged": true,
+      "method": "warm<-+11.677"
+    },
+    "8": {
+      "V_RHE": 0.3,
+      "cd_truth": -1.9200812511694078e-05,
+      "pc_truth": 1.5437624061124024e-05,
+      "converged": true,
+      "method": "warm<-+15.569"
+    },
+    "9": {
+      "V_RHE": 0.4,
+      "cd_truth": -1.543759010443512e-05,
+      "pc_truth": 1.5437578217781643e-05,
+      "converged": true,
+      "method": "cold"
+    },
+    "10": {
+      "V_RHE": 0.5,
+      "cd_truth": -1.1823821747472646e-05,
+      "pc_truth": 1.1823878464111658e-05,
+      "converged": true,
+      "method": "cold"
+    },
+    "11": {
+      "V_RHE": 0.6,
+      "cd_truth": 1.8178079877853605e-09,
+      "pc_truth": 2.695199073535243e-09,
+      "converged": true,
+      "method": "cold"
+    }
+  },
+  "records": [
+    {
+      "V_RHE": -0.5,
+      "initializer": "linear_phi",
+      "picard_iters": null,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -3.345330392894446e+29,
+      "pc_IC": 3.3453303452351e+29,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.2037060260772705
+    },
+    {
+      "V_RHE": -0.4,
+      "initializer": "linear_phi",
+      "picard_iters": null,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -6.824787201775277e+27,
+      "pc_IC": 6.824787165596883e+27,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.15359902381896973
+    },
+    {
+      "V_RHE": -0.3,
+      "initializer": "linear_phi",
+      "picard_iters": null,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -1.3923204888599623e+26,
+      "pc_IC": 1.3923204861136461e+26,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.15434908866882324
+    },
+    {
+      "V_RHE": -0.2,
+      "initializer": "linear_phi",
+      "picard_iters": null,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -2.8404641616089613e+24,
+      "pc_IC": 2.840464159524222e+24,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.14908123016357422
+    },
+    {
+      "V_RHE": -0.1,
+      "initializer": "linear_phi",
+      "picard_iters": null,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -5.794812847384388e+22,
+      "pc_IC": 5.794812845801853e+22,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.1944429874420166
+    },
+    {
+      "V_RHE": 0.0,
+      "initializer": "linear_phi",
+      "picard_iters": null,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -1.1821960788988912e+21,
+      "pc_IC": 1.1821960787787606e+21,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.15239572525024414
+    },
+    {
+      "V_RHE": 0.1,
+      "initializer": "linear_phi",
+      "picard_iters": null,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -2.411790692550124e+19,
+      "pc_IC": 2.411790692458932e+19,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.19825482368469238
+    },
+    {
+      "V_RHE": 0.2,
+      "initializer": "linear_phi",
+      "picard_iters": null,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -4.9202788341218086e+17,
+      "pc_IC": 4.920278834052583e+17,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.22019600868225098
+    },
+    {
+      "V_RHE": 0.3,
+      "initializer": "linear_phi",
+      "picard_iters": null,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -1.0037829518319208e+16,
+      "pc_IC": 1.0037829518266662e+16,
+      "first_step_snes_iters": 24,
+      "first_step_cd": -378941.5696488472,
+      "total_ss_steps": 8,
+      "total_snes_iters": 53,
+      "converged_z1": true,
+      "cd_SS": -1.9367152635166885e-05,
+      "pc_SS": 1.5603990508745052e-05,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": 24,
+          "dt": 0.25,
+          "cd": -378941.5696488472,
+          "pc": 378941.5696450822
+        },
+        {
+          "step": 2,
+          "snes_iters": 23,
+          "dt": 0.25,
+          "cd": -5.7495431299292644e-05,
+          "pc": 5.373281784227567e-05
+        },
+        {
+          "step": 3,
+          "snes_iters": 4,
+          "dt": 0.25,
+          "cd": -2.0931051268646968e-05,
+          "pc": 1.7168058933592157e-05
+        },
+        {
+          "step": 4,
+          "snes_iters": 2,
+          "dt": 1.0,
+          "cd": -1.9367152635166885e-05,
+          "pc": 1.5603990508745052e-05
+        },
+        {
+          "step": 5,
+          "snes_iters": 0,
+          "dt": 4.0,
+          "cd": -1.9367152635166885e-05,
+          "pc": 1.5603990508745052e-05
+        },
+        {
+          "step": 6,
+          "snes_iters": 0,
+          "dt": 4.0,
+          "cd": -1.9367152635166885e-05,
+          "pc": 1.5603990508745052e-05
+        },
+        {
+          "step": 7,
+          "snes_iters": 0,
+          "dt": 4.0,
+          "cd": -1.9367152635166885e-05,
+          "pc": 1.5603990508745052e-05
+        },
+        {
+          "step": 8,
+          "snes_iters": 0,
+          "dt": 4.0,
+          "cd": -1.9367152635166885e-05,
+          "pc": 1.5603990508745052e-05
+        }
+      ],
+      "wall_seconds": 2.371095895767212
+    },
+    {
+      "V_RHE": 0.4,
+      "initializer": "linear_phi",
+      "picard_iters": null,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -204781120818540.7,
+      "pc_IC": 204781120818141.72,
+      "first_step_snes_iters": 24,
+      "first_step_cd": -7730.746677466251,
+      "total_ss_steps": 10,
+      "total_snes_iters": 72,
+      "converged_z1": true,
+      "cd_SS": -1.5543988469056867e-05,
+      "pc_SS": 1.5543976582460953e-05,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": 24,
+          "dt": 0.25,
+          "cd": -7730.746677466251,
+          "pc": 7730.746677474674
+        },
+        {
+          "step": 2,
+          "snes_iters": 17,
+          "dt": 0.25,
+          "cd": -0.009531482786305424,
+          "pc": 0.009531482778614172
+        },
+        {
+          "step": 3,
+          "snes_iters": 10,
+          "dt": 0.25,
+          "cd": -0.0016562989594905092,
+          "pc": 0.0016562989486514593
+        },
+        {
+          "step": 4,
+          "snes_iters": 10,
+          "dt": 1.0,
+          "cd": -0.00016864018204108347,
+          "pc": 0.00016864017025966494
+        },
+        {
+          "step": 5,
+          "snes_iters": 9,
+          "dt": 4.0,
+          "cd": -1.9765062975523977e-05,
+          "pc": 1.9765051091824942e-05
+        },
+        {
+          "step": 6,
+          "snes_iters": 2,
+          "dt": 5.0,
+          "cd": -1.5543988469056867e-05,
+          "pc": 1.5543976582460953e-05
+        },
+        {
+          "step": 7,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.5543988469056867e-05,
+          "pc": 1.5543976582460953e-05
+        },
+        {
+          "step": 8,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.5543988469056867e-05,
+          "pc": 1.5543976582460953e-05
+        },
+        {
+          "step": 9,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.5543988469056867e-05,
+          "pc": 1.5543976582460953e-05
+        },
+        {
+          "step": 10,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.5543988469056867e-05,
+          "pc": 1.5543976582460953e-05
+        }
+      ],
+      "wall_seconds": 3.18412709236145
+    },
+    {
+      "V_RHE": 0.5,
+      "initializer": "linear_phi",
+      "picard_iters": null,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -4177726605857.21,
+      "pc_IC": 4177726605854.1807,
+      "first_step_snes_iters": 24,
+      "first_step_cd": -157.55212397807446,
+      "total_ss_steps": 13,
+      "total_snes_iters": 76,
+      "converged_z1": true,
+      "cd_SS": -1.1950445861361116e-05,
+      "pc_SS": 1.1950503186443233e-05,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": 24,
+          "dt": 0.25,
+          "cd": -157.55212397807446,
+          "pc": 157.55212565266143
+        },
+        {
+          "step": 2,
+          "snes_iters": 13,
+          "dt": 0.25,
+          "cd": -0.015939368912540972,
+          "pc": 0.015939999074690743
+        },
+        {
+          "step": 3,
+          "snes_iters": 4,
+          "dt": 0.25,
+          "cd": -0.010616076346729779,
+          "pc": 0.010616408422258144
+        },
+        {
+          "step": 4,
+          "snes_iters": 5,
+          "dt": 1.0,
+          "cd": -0.005122621633699308,
+          "pc": 0.0051226766743390495
+        },
+        {
+          "step": 5,
+          "snes_iters": 4,
+          "dt": 0.5,
+          "cd": -0.002114400687552315,
+          "pc": 0.002114414498019085
+        },
+        {
+          "step": 6,
+          "snes_iters": 8,
+          "dt": 0.9130736756664481,
+          "cd": -0.0004283121320241024,
+          "pc": 0.0004283143117259963
+        },
+        {
+          "step": 7,
+          "snes_iters": 9,
+          "dt": 1.6290528439384067,
+          "cd": -5.591965312795606e-05,
+          "pc": 5.591992304459474e-05
+        },
+        {
+          "step": 8,
+          "snes_iters": 7,
+          "dt": 5.0,
+          "cd": -1.3499733008975694e-05,
+          "pc": 1.3499797780042478e-05
+        },
+        {
+          "step": 9,
+          "snes_iters": 2,
+          "dt": 5.0,
+          "cd": -1.1950445861361116e-05,
+          "pc": 1.1950503186443233e-05
+        },
+        {
+          "step": 10,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.1950445861361116e-05,
+          "pc": 1.1950503186443233e-05
+        },
+        {
+          "step": 11,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.1950445861361116e-05,
+          "pc": 1.1950503186443233e-05
+        },
+        {
+          "step": 12,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.1950445861361116e-05,
+          "pc": 1.1950503186443233e-05
+        },
+        {
+          "step": 13,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.1950445861361116e-05,
+          "pc": 1.1950503186443233e-05
+        }
+      ],
+      "wall_seconds": 3.4399259090423584
+    },
+    {
+      "V_RHE": 0.6,
+      "initializer": "linear_phi",
+      "picard_iters": null,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -85229534458.69455,
+      "pc_IC": 85229534458.67155,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 1.0552599430084229
+    },
+    {
+      "V_RHE": -0.5,
+      "initializer": "debye_boltzmann",
+      "picard_iters": 50,
+      "initializer_fallback": true,
+      "initializer_fallback_reason": "picard_max_iters_delta=2",
+      "cd_IC": -3.345330392894446e+29,
+      "pc_IC": 3.3453303452351e+29,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.20540118217468262
+    },
+    {
+      "V_RHE": -0.4,
+      "initializer": "debye_boltzmann",
+      "picard_iters": 50,
+      "initializer_fallback": true,
+      "initializer_fallback_reason": "picard_max_iters_delta=2",
+      "cd_IC": -6.824787201775277e+27,
+      "pc_IC": 6.824787165596883e+27,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.1493980884552002
+    },
+    {
+      "V_RHE": -0.3,
+      "initializer": "debye_boltzmann",
+      "picard_iters": 50,
+      "initializer_fallback": true,
+      "initializer_fallback_reason": "picard_max_iters_delta=2",
+      "cd_IC": -1.3923204888599623e+26,
+      "pc_IC": 1.3923204861136461e+26,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.14914202690124512
+    },
+    {
+      "V_RHE": -0.2,
+      "initializer": "debye_boltzmann",
+      "picard_iters": 50,
+      "initializer_fallback": true,
+      "initializer_fallback_reason": "picard_max_iters_delta=2",
+      "cd_IC": -2.8404641616089613e+24,
+      "pc_IC": 2.840464159524222e+24,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.149000883102417
+    },
+    {
+      "V_RHE": -0.1,
+      "initializer": "debye_boltzmann",
+      "picard_iters": 50,
+      "initializer_fallback": true,
+      "initializer_fallback_reason": "picard_max_iters_delta=2",
+      "cd_IC": -5.794812847384388e+22,
+      "pc_IC": 5.794812845801853e+22,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.1922149658203125
+    },
+    {
+      "V_RHE": 0.0,
+      "initializer": "debye_boltzmann",
+      "picard_iters": 50,
+      "initializer_fallback": true,
+      "initializer_fallback_reason": "picard_max_iters_delta=2",
+      "cd_IC": -1.1821960788988912e+21,
+      "pc_IC": 1.1821960787787606e+21,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.1492018699645996
+    },
+    {
+      "V_RHE": 0.1,
+      "initializer": "debye_boltzmann",
+      "picard_iters": 50,
+      "initializer_fallback": true,
+      "initializer_fallback_reason": "picard_max_iters_delta=2",
+      "cd_IC": -2.411790692550124e+19,
+      "pc_IC": 2.411790692458932e+19,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.19386506080627441
+    },
+    {
+      "V_RHE": 0.2,
+      "initializer": "debye_boltzmann",
+      "picard_iters": 50,
+      "initializer_fallback": true,
+      "initializer_fallback_reason": "picard_max_iters_delta=1.221e-05",
+      "cd_IC": -4.9202788341218086e+17,
+      "pc_IC": 4.920278834052583e+17,
+      "first_step_snes_iters": null,
+      "first_step_cd": null,
+      "total_ss_steps": 1,
+      "total_snes_iters": 0,
+      "converged_z1": false,
+      "cd_SS": null,
+      "pc_SS": null,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": null,
+          "cd": null,
+          "dt": 0.25,
+          "error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged"
+        }
+      ],
+      "wall_seconds": 0.21920418739318848
+    },
+    {
+      "V_RHE": 0.3,
+      "initializer": "debye_boltzmann",
+      "picard_iters": 21,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -723360.0788225047,
+      "pc_IC": 723360.078818718,
+      "first_step_snes_iters": 23,
+      "first_step_cd": -9.863374470565888e-05,
+      "total_ss_steps": 9,
+      "total_snes_iters": 31,
+      "converged_z1": true,
+      "cd_SS": -1.9206948331105113e-05,
+      "pc_SS": 1.5443768137873154e-05,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": 23,
+          "dt": 0.25,
+          "cd": -9.863374470565888e-05,
+          "pc": 9.487108910542609e-05
+        },
+        {
+          "step": 2,
+          "snes_iters": 4,
+          "dt": 0.25,
+          "cd": -2.295180076294829e-05,
+          "pc": 1.9188978113768653e-05
+        },
+        {
+          "step": 3,
+          "snes_iters": 2,
+          "dt": 0.25,
+          "cd": -2.030371279559476e-05,
+          "pc": 1.6540663263031595e-05
+        },
+        {
+          "step": 4,
+          "snes_iters": 1,
+          "dt": 1.0,
+          "cd": -1.9341759494718588e-05,
+          "pc": 1.557859287778101e-05
+        },
+        {
+          "step": 5,
+          "snes_iters": 1,
+          "dt": 2.7528238272498076,
+          "cd": -1.9206948331105113e-05,
+          "pc": 1.5443768137873154e-05
+        },
+        {
+          "step": 6,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.9206948331105113e-05,
+          "pc": 1.5443768137873154e-05
+        },
+        {
+          "step": 7,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.9206948331105113e-05,
+          "pc": 1.5443768137873154e-05
+        },
+        {
+          "step": 8,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.9206948331105113e-05,
+          "pc": 1.5443768137873154e-05
+        },
+        {
+          "step": 9,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.9206948331105113e-05,
+          "pc": 1.5443768137873154e-05
+        }
+      ],
+      "wall_seconds": 1.8968048095703125
+    },
+    {
+      "V_RHE": 0.4,
+      "initializer": "debye_boltzmann",
+      "picard_iters": 21,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -6.142447507638168,
+      "pc_IC": 6.1424475076398455,
+      "first_step_snes_iters": 15,
+      "first_step_cd": -3.45188281882669e-05,
+      "total_ss_steps": 8,
+      "total_snes_iters": 22,
+      "converged_z1": true,
+      "cd_SS": -1.5552567368457696e-05,
+      "pc_SS": 1.5552555481868456e-05,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": 15,
+          "dt": 0.25,
+          "cd": -3.45188281882669e-05,
+          "pc": 3.4518816308133425e-05
+        },
+        {
+          "step": 2,
+          "snes_iters": 3,
+          "dt": 0.25,
+          "cd": -1.9184731840969588e-05,
+          "pc": 1.9184719956394474e-05
+        },
+        {
+          "step": 3,
+          "snes_iters": 2,
+          "dt": 0.25,
+          "cd": -1.6540883417350754e-05,
+          "pc": 1.6540871531383738e-05
+        },
+        {
+          "step": 4,
+          "snes_iters": 2,
+          "dt": 1.0,
+          "cd": -1.5552567368457696e-05,
+          "pc": 1.5552555481868456e-05
+        },
+        {
+          "step": 5,
+          "snes_iters": 0,
+          "dt": 2.6751042104193474,
+          "cd": -1.5552567368457696e-05,
+          "pc": 1.5552555481868456e-05
+        },
+        {
+          "step": 6,
+          "snes_iters": 0,
+          "dt": 2.6751042104193474,
+          "cd": -1.5552567368457696e-05,
+          "pc": 1.5552555481868456e-05
+        },
+        {
+          "step": 7,
+          "snes_iters": 0,
+          "dt": 2.6751042104193474,
+          "cd": -1.5552567368457696e-05,
+          "pc": 1.5552555481868456e-05
+        },
+        {
+          "step": 8,
+          "snes_iters": 0,
+          "dt": 2.6751042104193474,
+          "cd": -1.5552567368457696e-05,
+          "pc": 1.5552555481868456e-05
+        }
+      ],
+      "wall_seconds": 1.1056468486785889
+    },
+    {
+      "V_RHE": 0.5,
+      "initializer": "debye_boltzmann",
+      "picard_iters": 21,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": -5.215846587568636e-05,
+      "pc_IC": 5.2158714704475206e-05,
+      "first_step_snes_iters": 5,
+      "first_step_cd": -2.0701935856081907e-05,
+      "total_ss_steps": 9,
+      "total_snes_iters": 12,
+      "converged_z1": true,
+      "cd_SS": -1.1930972550753087e-05,
+      "pc_SS": 1.1931029782247226e-05,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": 5,
+          "dt": 0.25,
+          "cd": -2.0701935856081907e-05,
+          "pc": 2.0702035246540264e-05
+        },
+        {
+          "step": 2,
+          "snes_iters": 2,
+          "dt": 0.25,
+          "cd": -1.520311370866182e-05,
+          "pc": 1.52031866669626e-05
+        },
+        {
+          "step": 3,
+          "snes_iters": 2,
+          "dt": 0.25,
+          "cd": -1.3260801439433877e-05,
+          "pc": 1.3260865061644205e-05
+        },
+        {
+          "step": 4,
+          "snes_iters": 2,
+          "dt": 0.707767519484114,
+          "cd": -1.2176921337987382e-05,
+          "pc": 1.2176979751312838e-05
+        },
+        {
+          "step": 5,
+          "snes_iters": 1,
+          "dt": 1.2683188251361055,
+          "cd": -1.1930972550753087e-05,
+          "pc": 1.1931029782247226e-05
+        },
+        {
+          "step": 6,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.1930972550753087e-05,
+          "pc": 1.1931029782247226e-05
+        },
+        {
+          "step": 7,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.1930972550753087e-05,
+          "pc": 1.1931029782247226e-05
+        },
+        {
+          "step": 8,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.1930972550753087e-05,
+          "pc": 1.1931029782247226e-05
+        },
+        {
+          "step": 9,
+          "snes_iters": 0,
+          "dt": 5.0,
+          "cd": -1.1930972550753087e-05,
+          "pc": 1.1931029782247226e-05
+        }
+      ],
+      "wall_seconds": 0.6364068984985352
+    },
+    {
+      "V_RHE": 0.6,
+      "initializer": "debye_boltzmann",
+      "picard_iters": 21,
+      "initializer_fallback": false,
+      "initializer_fallback_reason": "",
+      "cd_IC": 1.8262071313742364e-09,
+      "pc_IC": 2.7121818572689425e-09,
+      "first_step_snes_iters": 8,
+      "first_step_cd": 1.8240250149364167e-09,
+      "total_ss_steps": 5,
+      "total_snes_iters": 11,
+      "converged_z1": true,
+      "cd_SS": 1.8240168909671024e-09,
+      "pc_SS": 2.704405972541777e-09,
+      "history": [
+        {
+          "step": 1,
+          "snes_iters": 8,
+          "dt": 0.25,
+          "cd": 1.8240250149364167e-09,
+          "pc": 2.704758693330179e-09
+        },
+        {
+          "step": 2,
+          "snes_iters": 1,
+          "dt": 0.25,
+          "cd": 1.8240807739933001e-09,
+          "pc": 2.7045391940580713e-09
+        },
+        {
+          "step": 3,
+          "snes_iters": 1,
+          "dt": 0.25,
+          "cd": 1.824054291859767e-09,
+          "pc": 2.7044664662440206e-09
+        },
+        {
+          "step": 4,
+          "snes_iters": 1,
+          "dt": 0.5263837297471348,
+          "cd": 1.8240168909671024e-09,
+          "pc": 2.704405972541777e-09
+        },
+        {
+          "step": 5,
+          "snes_iters": 0,
+          "dt": 0.2631918648735674,
+          "cd": 1.8240168909671024e-09,
+          "pc": 2.704405972541777e-09
+        }
+      ],
+      "wall_seconds": 0.5687429904937744
+    }
+  ]
+}

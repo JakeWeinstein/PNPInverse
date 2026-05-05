@@ -1,0 +1,65 @@
+{
+  "config": {
+    "v_rhe": [
+      -0.5,
+      -0.3,
+      -0.1,
+      0.0,
+      0.1
+    ],
+    "mesh_Ny": 200,
+    "exponent_clip": 50.0,
+    "u_clamp": 100.0,
+    "species": "FOUR_SPECIES_LOGC_DYNAMIC",
+    "initializer": "linear_phi",
+    "stern_capacitance_f_m2": null
+  },
+  "wall_seconds": 102.74092698097229,
+  "rows": [
+    {
+      "v_rhe": -0.5,
+      "converged": true,
+      "method": "warm<--11.677",
+      "z_achieved": 1.0,
+      "cd_mA_cm2": -0.18390326081039962,
+      "pc_mA_cm2": -0.18111999898990291,
+      "c_clo4_surface": 7.051637956847202e-10
+    },
+    {
+      "v_rhe": -0.3,
+      "converged": true,
+      "method": "warm<--3.892",
+      "z_achieved": 1.0,
+      "cd_mA_cm2": -0.18133201579813882,
+      "pc_mA_cm2": -0.06499328510926462,
+      "c_clo4_surface": 1.686930418207443e-06
+    },
+    {
+      "v_rhe": -0.1,
+      "converged": true,
+      "method": "cold",
+      "z_achieved": 1.0,
+      "cd_mA_cm2": -0.17752892976532975,
+      "pc_mA_cm2": 2.882309741674236e-06,
+      "c_clo4_surface": 0.004043811658673376
+    },
+    {
+      "v_rhe": 0.0,
+      "converged": true,
+      "method": "cold",
+      "z_achieved": 1.0,
+      "cd_mA_cm2": -0.1733124876228605,
+      "pc_mA_cm2": 1.527303292261973e-05,
+      "c_clo4_surface": 0.19863097704416577
+    },
+    {
+      "v_rhe": 0.1,
+      "converged": true,
+      "method": "cold",
+      "z_achieved": 1.0,
+      "cd_mA_cm2": -0.16308111219787505,
+      "pc_mA_cm2": 1.5373290337883415e-05,
+      "c_clo4_surface": 10.936030722107724
+    }
+  ]
+}

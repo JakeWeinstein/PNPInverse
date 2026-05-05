@@ -1,0 +1,65 @@
+{
+  "config": {
+    "v_rhe": [
+      -0.5,
+      -0.3,
+      -0.1,
+      0.0,
+      0.1
+    ],
+    "mesh_Ny": 200,
+    "exponent_clip": 100.0,
+    "u_clamp": 100.0,
+    "species": "FOUR_SPECIES_LOGC_DYNAMIC",
+    "initializer": "linear_phi",
+    "stern_capacitance_f_m2": null
+  },
+  "wall_seconds": 4.632709980010986,
+  "rows": [
+    {
+      "v_rhe": -0.5,
+      "converged": false,
+      "method": "cold-failed",
+      "z_achieved": 0.0,
+      "cd_mA_cm2": null,
+      "pc_mA_cm2": null,
+      "c_clo4_surface": 0.24824050686140153
+    },
+    {
+      "v_rhe": -0.3,
+      "converged": false,
+      "method": "cold-failed",
+      "z_achieved": 0.0,
+      "cd_mA_cm2": null,
+      "pc_mA_cm2": null,
+      "c_clo4_surface": 0.0
+    },
+    {
+      "v_rhe": -0.1,
+      "converged": false,
+      "method": "cold-failed",
+      "z_achieved": 0.0,
+      "cd_mA_cm2": null,
+      "pc_mA_cm2": null,
+      "c_clo4_surface": 0.18506385237057854
+    },
+    {
+      "v_rhe": 0.0,
+      "converged": false,
+      "method": "cold-failed",
+      "z_achieved": 0.0,
+      "cd_mA_cm2": null,
+      "pc_mA_cm2": null,
+      "c_clo4_surface": Infinity
+    },
+    {
+      "v_rhe": 0.1,
+      "converged": false,
+      "method": "cold-failed",
+      "z_achieved": 0.0,
+      "cd_mA_cm2": null,
+      "pc_mA_cm2": null,
+      "c_clo4_surface": 9.445952458241956e-06
+    }
+  ]
+}

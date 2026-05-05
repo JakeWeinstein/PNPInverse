@@ -1,0 +1,515 @@
+{
+  "voltages": [
+    0.55,
+    0.495,
+    0.4,
+    0.2,
+    -0.1,
+    -0.3,
+    -0.5
+  ],
+  "n_vals": [
+    8,
+    16,
+    32,
+    64
+  ],
+  "clip_source": false,
+  "per_voltage": [
+    {
+      "v_rhe": 0.55,
+      "eta_hat": 21.406959645641663,
+      "eta_R1": -5.0598268253334835,
+      "eta_R2": -47.8737461166168,
+      "r1_clip_status": "unclipped",
+      "r2_clip_status": "unclipped",
+      "newton_converged_count": 4,
+      "n_attempts": 4,
+      "h_values": [
+        0.125,
+        0.0625,
+        0.03125,
+        0.015625
+      ],
+      "fields": {
+        "u0_L2": {
+          "rate": 1.9814454338355416,
+          "r_squared": 0.9999669463832543,
+          "errors": [
+            0.0022411436278549713,
+            0.0005808238917154948,
+            0.00014538265777360235,
+            3.6536920896772064e-05
+          ]
+        },
+        "u0_H1": {
+          "rate": 0.9942714959721802,
+          "r_squared": 0.9999917584432891,
+          "errors": [
+            0.07025427396888378,
+            0.03545308679615614,
+            0.017770949270791772,
+            0.008891371271353254
+          ]
+        },
+        "u1_L2": {
+          "rate": 2.000671760007387,
+          "r_squared": 0.9969089245519548,
+          "errors": [
+            0.002277477466104018,
+            0.0006896216664238767,
+            0.0001669772276982247,
+            3.5911311685009605e-05
+          ]
+        },
+        "u1_H1": {
+          "rate": 1.0046784279391126,
+          "r_squared": 0.9999978981612523,
+          "errors": [
+            0.07189313302878331,
+            0.03574357709351045,
+            0.017818488084622733,
+            0.00889887940674178
+          ]
+        },
+        "u2_L2": {
+          "rate": 2.061883842420271,
+          "r_squared": 0.999128160283968,
+          "errors": [
+            0.0014406500452936338,
+            0.00030757248858209074,
+            7.644104552410019e-05,
+            1.954950833288786e-05
+          ]
+        },
+        "u2_H1": {
+          "rate": 1.0229586388658813,
+          "r_squared": 0.9997706571183297,
+          "errors": [
+            0.07497982840626845,
+            0.035803397307910205,
+            0.0178236481750554,
+            0.008901220082518382
+          ]
+        },
+        "phi_L2": {
+          "rate": 2.2011088284553115,
+          "r_squared": 0.9965810358979512,
+          "errors": [
+            0.0013758404430487764,
+            0.00023286348615491945,
+            5.5758731707317434e-05,
+            1.370350420003694e-05
+          ]
+        },
+        "phi_H1": {
+          "rate": 1.036250132469254,
+          "r_squared": 0.999448835385847,
+          "errors": [
+            0.06260172651744404,
+            0.029114276117905905,
+            0.01445529067785638,
+            0.007213368579304785
+          ]
+        }
+      },
+      "elapsed_seconds": 3.8123629093170166,
+      "run_error": null
+    },
+    {
+      "v_rhe": 0.495,
+      "eta_hat": 19.266263681077493,
+      "eta_R1": -7.200522789897652,
+      "eta_R2": -50.014442081180974,
+      "r1_clip_status": "unclipped",
+      "r2_clip_status": "clipped (cathodic)",
+      "newton_converged_count": 4,
+      "n_attempts": 4,
+      "h_values": [
+        0.125,
+        0.0625,
+        0.03125,
+        0.015625
+      ],
+      "fields": {
+        "u0_L2": {
+          "rate": 1.5498398753138507,
+          "r_squared": 0.9521874554536455,
+          "errors": [
+            0.0020052212741078442,
+            0.0006769523105823992,
+            0.0001360314803715435,
+            9.53471136474409e-05
+          ]
+        },
+        "u0_H1": {
+          "rate": 0.9951418442923167,
+          "r_squared": 0.9999947033481323,
+          "errors": [
+            0.07040558849989885,
+            0.03547154998220133,
+            0.017774149318140132,
+            0.008893630799373884
+          ]
+        },
+        "u1_L2": {
+          "rate": -0.08188498340145654,
+          "r_squared": 0.8594163579145541,
+          "errors": [
+            0.006979067986894107,
+            0.007742217224714825,
+            0.008245043810182233,
+            0.00825760956111567
+          ]
+        },
+        "u1_H1": {
+          "rate": 0.6513905883641088,
+          "r_squared": 0.9686921614079305,
+          "errors": [
+            0.07246485334637372,
+            0.038961688182397564,
+            0.02436329513351773,
+            0.018813415379321595
+          ]
+        },
+        "u2_L2": {
+          "rate": 1.5326412171487125,
+          "r_squared": 0.9464123063745572,
+          "errors": [
+            0.0015726309352266242,
+            0.00042491122251029945,
+            0.00010140307512874206,
+            7.347494053575104e-05
+          ]
+        },
+        "u2_H1": {
+          "rate": 1.0162916508956616,
+          "r_squared": 0.999897699989992,
+          "errors": [
+            0.07392796612396171,
+            0.03584070773759391,
+            0.017837003724315154,
+            0.008913455049537417
+          ]
+        },
+        "phi_L2": {
+          "rate": 2.1242699402518377,
+          "r_squared": 0.9986589599632142,
+          "errors": [
+            0.001169597886613396,
+            0.00023148652354999317,
+            5.5736566445452836e-05,
+            1.3886789073063311e-05
+          ]
+        },
+        "phi_H1": {
+          "rate": 1.0234367755105818,
+          "r_squared": 0.9998071513723691,
+          "errors": [
+            0.06079736067012983,
+            0.029106627531162405,
+            0.014455250631460885,
+            0.007215330905420906
+          ]
+        }
+      },
+      "elapsed_seconds": 4.338030099868774,
+      "run_error": null
+    },
+    {
+      "v_rhe": 0.4,
+      "eta_hat": 15.568697924103027,
+      "eta_R1": -10.898088546872119,
+      "eta_R2": -53.712007838155436,
+      "r1_clip_status": "unclipped",
+      "r2_clip_status": "clipped (cathodic)",
+      "newton_converged_count": 0,
+      "n_attempts": 4,
+      "h_values": [],
+      "fields": {
+        "u0_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u0_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u1_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u1_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u2_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u2_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "phi_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "phi_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        }
+      },
+      "elapsed_seconds": 3.8563950061798096,
+      "run_error": null
+    },
+    {
+      "v_rhe": 0.2,
+      "eta_hat": 7.784348962051514,
+      "eta_R1": -18.682437508923634,
+      "eta_R2": -61.496356800206954,
+      "r1_clip_status": "unclipped",
+      "r2_clip_status": "clipped (cathodic)",
+      "newton_converged_count": 0,
+      "n_attempts": 4,
+      "h_values": [],
+      "fields": {
+        "u0_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u0_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u1_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u1_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u2_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u2_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "phi_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "phi_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        }
+      },
+      "elapsed_seconds": 3.8644590377807617,
+      "run_error": null
+    },
+    {
+      "v_rhe": -0.1,
+      "eta_hat": -3.892174481025757,
+      "eta_R1": -30.358960952000903,
+      "eta_R2": -73.17288024328423,
+      "r1_clip_status": "unclipped",
+      "r2_clip_status": "clipped (cathodic)",
+      "newton_converged_count": 0,
+      "n_attempts": 4,
+      "h_values": [],
+      "fields": {
+        "u0_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u0_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u1_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u1_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u2_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u2_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "phi_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "phi_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        }
+      },
+      "elapsed_seconds": 4.591958045959473,
+      "run_error": null
+    },
+    {
+      "v_rhe": -0.3,
+      "eta_hat": -11.676523443077269,
+      "eta_R1": -38.14330991405241,
+      "eta_R2": -80.95722920533574,
+      "r1_clip_status": "unclipped",
+      "r2_clip_status": "clipped (cathodic)",
+      "newton_converged_count": 0,
+      "n_attempts": 4,
+      "h_values": [],
+      "fields": {
+        "u0_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u0_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u1_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u1_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u2_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u2_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "phi_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "phi_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        }
+      },
+      "elapsed_seconds": 4.7729270458221436,
+      "run_error": null
+    },
+    {
+      "v_rhe": -0.5,
+      "eta_hat": -19.460872405128782,
+      "eta_R1": -45.92765887610393,
+      "eta_R2": -88.74157816738726,
+      "r1_clip_status": "unclipped",
+      "r2_clip_status": "clipped (cathodic)",
+      "newton_converged_count": 0,
+      "n_attempts": 4,
+      "h_values": [],
+      "fields": {
+        "u0_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u0_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u1_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u1_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u2_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "u2_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "phi_L2": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        },
+        "phi_H1": {
+          "rate": NaN,
+          "r_squared": NaN,
+          "errors": []
+        }
+      },
+      "elapsed_seconds": 4.905406951904297,
+      "run_error": null
+    }
+  ],
+  "metadata": {
+    "date": "2026-05-03T18:00:14.987438+00:00",
+    "voltages": [
+      0.55,
+      0.495,
+      0.4,
+      0.2,
+      -0.1,
+      -0.3,
+      -0.5
+    ],
+    "n_vals": [
+      8,
+      16,
+      32,
+      64
+    ],
+    "mode": "unclipped",
+    "description": "MMS convergence rate at multiple voltages spanning the R2 eta-clip activation threshold (+0.495 V). Source mode = unclipped."
+  }
+}

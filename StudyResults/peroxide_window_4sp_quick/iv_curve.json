@@ -1,0 +1,237 @@
+{
+  "v_rhe": [
+    0.6,
+    0.66,
+    0.68,
+    0.7,
+    0.75,
+    0.8,
+    1.0
+  ],
+  "passes": [
+    "4sp_no_stern",
+    "4sp_stern_0p10",
+    "4sp_stern_0p05"
+  ],
+  "cs_f_m2": [
+    null,
+    0.1,
+    0.05
+  ],
+  "mesh_Ny": 200,
+  "exponent_clip": 100.0,
+  "initializer": "linear_phi",
+  "steric_cap": 100.0,
+  "reports": [
+    {
+      "label": "4sp_no_stern",
+      "cs_f_m2": null,
+      "wall_seconds": 77.07816505432129,
+      "v_rhe": [
+        0.6,
+        0.66,
+        0.68,
+        0.7,
+        0.75,
+        0.8,
+        1.0
+      ],
+      "phi_applied_hat": [
+        23.353046886154537,
+        25.688351574769992,
+        26.466786470975144,
+        27.245221367180292,
+        29.191308607693173,
+        31.137395848206054,
+        38.921744810257564
+      ],
+      "cd_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "pc_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "converged": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "method": [
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed"
+      ],
+      "z_achieved": [
+        0.2,
+        0.15000000000000002,
+        0.15000000000000002,
+        0.15000000000000002,
+        0.15000000000000002,
+        0.15000000000000002,
+        0.1
+      ],
+      "n_converged": 0,
+      "n_total": 7
+    },
+    {
+      "label": "4sp_stern_0p10",
+      "cs_f_m2": 0.1,
+      "wall_seconds": 18.794100284576416,
+      "v_rhe": [
+        0.6,
+        0.66,
+        0.68,
+        0.7,
+        0.75,
+        0.8,
+        1.0
+      ],
+      "phi_applied_hat": [
+        23.353046886154537,
+        25.688351574769992,
+        26.466786470975144,
+        27.245221367180292,
+        29.191308607693173,
+        31.137395848206054,
+        38.921744810257564
+      ],
+      "cd_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "pc_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "converged": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "method": [
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed"
+      ],
+      "z_achieved": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "n_converged": 0,
+      "n_total": 7
+    },
+    {
+      "label": "4sp_stern_0p05",
+      "cs_f_m2": 0.05,
+      "wall_seconds": 2.887477159500122,
+      "v_rhe": [
+        0.6,
+        0.66,
+        0.68,
+        0.7,
+        0.75,
+        0.8,
+        1.0
+      ],
+      "phi_applied_hat": [
+        23.353046886154537,
+        25.688351574769992,
+        26.466786470975144,
+        27.245221367180292,
+        29.191308607693173,
+        31.137395848206054,
+        38.921744810257564
+      ],
+      "cd_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "pc_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "converged": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "method": [
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed"
+      ],
+      "z_achieved": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "n_converged": 0,
+      "n_total": 7
+    }
+  ]
+}
