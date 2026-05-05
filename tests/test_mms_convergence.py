@@ -47,6 +47,14 @@ def _import_mms_run():
     return run_mms
 
 
+def _import_graded_verifier():
+    """Import the graded-mesh verifier lazily."""
+    from scripts.verification.mms_bv_3sp_logc_boltzmann import (
+        verify_on_graded_production_mesh,
+    )
+    return verify_on_graded_production_mesh
+
+
 # ---------------------------------------------------------------------------
 # Field iteration constants
 # ---------------------------------------------------------------------------
@@ -364,3 +372,68 @@ class TestMMSConvergence:
             shutil.copy2(png_path, canonical_png)
 
         assert os.path.isfile(canonical_png), f"PNG not created: {canonical_png}"
+
+
+# ---------------------------------------------------------------------------
+# Production graded-mesh recovery test (single solve)
+# ---------------------------------------------------------------------------
+
+@skip_without_firedrake
+@pytest.mark.slow
+class TestMMSProductionGradedMesh:
+    """Single-mesh MMS recovery on the production graded rectangle.
+
+    Verifies the solver produces the manufactured solution within the
+    expected discretization error of the actual production mesh
+    (Nx=8, Ny=200, beta=3 -- mirrors plot_iv_curve_unified.py).  This is
+    not an asymptotic convergence test; the thresholds are sized to the
+    Nx=8-dominated x-direction discretization error (h_x^2 = 1/64) with
+    safety margin.  Intended to fail loudly on any wiring bug that
+    causes O(1) rather than O(h_x^2) errors.
+    """
+
+    # Empirically observed errors (May 2026 baseline):
+    #   u0 (O2):   L2 = 1.6e-3,  H1 = 5.4e-2
+    #   u1 (H2O2): L2 = 6.5e-4,  H1 = 5.5e-2
+    #   u2 (H+):   L2 = 7.2e-4,  H1 = 5.5e-2
+    #   phi:       L2 = 3.8e-4,  H1 = 4.0e-2
+    # Thresholds set ~6x above observed to stay robust to compiler /
+    # solver-version drift, while still ~100x below the O(1) errors a
+    # wiring bug would produce.
+    L2_THRESHOLD = 1e-2
+    H1_THRESHOLD = 3e-1
+
+    @pytest.fixture(scope="class")
+    def graded_mesh_results(self):
+        """Run a single solve on the production graded rectangle."""
+        verify = _import_graded_verifier()
+        return verify(verbose=True)
+
+    def test_newton_converges(self, graded_mesh_results):
+        """Newton must converge on the production mesh."""
+        assert graded_mesh_results.get("newton_converged") is True, (
+            f"Newton failed on production graded mesh: "
+            f"{graded_mesh_results.get('newton_error', 'no error message')}"
+        )
+        assert graded_mesh_results["newton_iterations"] >= 0
+
+    def test_l2_recovery(self, graded_mesh_results):
+        """L2 errors of u_i and phi must be below the recovery threshold."""
+        for field, label in zip(FIELD_NAMES, SPECIES_LABELS):
+            err = graded_mesh_results[f"{field}_L2"]
+            assert math.isfinite(err), f"{label}: L2 error is not finite ({err})"
+            assert err < self.L2_THRESHOLD, (
+                f"{label}: L2 error {err:.3e} >= threshold "
+                f"{self.L2_THRESHOLD:.3e} -- solver may not be recovering "
+                f"the manufactured solution"
+            )
+
+    def test_h1_recovery(self, graded_mesh_results):
+        """H1 errors of u_i and phi must be below the recovery threshold."""
+        for field, label in zip(FIELD_NAMES, SPECIES_LABELS):
+            err = graded_mesh_results[f"{field}_H1"]
+            assert math.isfinite(err), f"{label}: H1 error is not finite ({err})"
+            assert err < self.H1_THRESHOLD, (
+                f"{label}: H1 error {err:.3e} >= threshold "
+                f"{self.H1_THRESHOLD:.3e}"
+            )
