@@ -211,14 +211,37 @@ THREE_SPECIES_LOGC_BOLTZMANN = SpeciesConfig(
 )
 
 
+# 4-species fully-dynamic preset (no Boltzmann reduction).  ClO4- is
+# tracked as a 4th NP species with z=-1, mirroring how the legacy
+# concentration backend handled it.  Pair with
+# ``boltzmann_counterions=None`` in ``make_bv_solver_params``.  H+ and
+# ClO4- have matching bulk concentration (C_HP_HAT == C_CLO4_HAT == 0.2)
+# so the bulk is electroneutral.  Used by the equivalence test that
+# verifies the Boltzmann reduction against the dynamic formulation.
+FOUR_SPECIES_LOGC_DYNAMIC = SpeciesConfig(
+    n_species=4,
+    z_vals=[0, 0, 1, -1],
+    d_vals_hat=[D_O2_HAT, D_H2O2_HAT, D_HP_HAT, D_CLO4_HAT],
+    a_vals_hat=[A_DEFAULT] * 4,
+    c0_vals_hat=[C_O2_HAT, H2O2_SEED_NONDIM, C_HP_HAT, C_CLO4_HAT],
+    stoichiometry_r1=[-1, +1, -2, 0],   # ClO4- inert in R1
+    stoichiometry_r2=[ 0, -1, -2, 0],   # ClO4- inert in R2
+    k0_legacy=[K0_HAT_R1] * 4,
+    alpha_legacy=[ALPHA_R1] * 4,
+    stoichiometry_legacy=[-1, -1, -1, 0],
+    c_ref_legacy=[1.0, 0.0, 1.0, 1.0],
+)
+
+
 # ---------------------------------------------------------------------------
 # BV convergence + nondim sub-configs
 # ---------------------------------------------------------------------------
 
 def _make_bv_convergence_cfg(*, softplus: bool = False,
                               log_rate: bool = False,
-                              u_clamp: float = 30.0,
-                              formulation: str = "concentration") -> Dict[str, Any]:
+                              u_clamp: float = 100.0,
+                              formulation: str = "concentration",
+                              initializer: str = "linear_phi") -> Dict[str, Any]:
     """Standard BV convergence config sub-dict.
 
     Parameters
@@ -235,19 +258,25 @@ def _make_bv_convergence_cfg(*, softplus: bool = False,
         Newton iteration in the log-c bulk terms.  Has no effect when
         ``formulation="concentration"``.
     formulation:
-        ``"concentration"`` (default, legacy) or ``"logc"``.  Selects
-        which weak-form backend the dispatcher in
+        ``"concentration"`` (default, legacy), ``"logc"`` (production), or
+        ``"logc_muh"`` (experimental — proton electrochemical-potential
+        primary variable; Phase 1 routes to ``logc`` with a warning).
+        Selects which weak-form backend the dispatcher in
         ``Forward.bv_solver`` uses.
     """
     cfg: Dict[str, Any] = {
         "clip_exponent": True,
-        "exponent_clip": 50.0,
+        # exponent_clip raised from 50.0 -> 100.0 on 2026-05-04: clip=50
+        # sign-flips PC at V_RHE < -0.1 V (see clip_observable_investigation.md
+        # §5.2).  At clip=100 the production V grid is fully unclipped.
+        "exponent_clip": 100.0,
         "regularize_concentration": True,
         "conc_floor": 1e-12,
         "use_eta_in_bv": True,
         "bv_log_rate": log_rate,
         "u_clamp": u_clamp,
         "formulation": str(formulation).strip().lower(),
+        "initializer": str(initializer).strip().lower(),
     }
     if softplus:
         cfg["softplus_regularization"] = True
@@ -286,6 +315,7 @@ def _make_bv_bc_cfg(
     concentration_marker: int = 4,
     ground_marker: int = 4,
     boltzmann_counterions: Optional[Sequence[Dict[str, Any]]] = None,
+    stern_capacitance_f_m2: Optional[float] = None,
     include_h_factor: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Build the ``bv_bc`` config sub-dict for 2-reaction BV.
@@ -299,6 +329,16 @@ def _make_bv_bc_cfg(
         modules add a residual ``-charge_rhs * z * c_bulk * exp(-z*phi)``
         per entry to Poisson's equation.  See
         ``Forward/bv_solver/boltzmann.py``.
+    stern_capacitance_f_m2:
+        Optional compact-layer Stern capacitance in physical units
+        ``F/m²`` (1 F/m² = 100 µF/cm²).  When ``None`` the cfg key is
+        omitted entirely and the no-Stern Dirichlet BC ``phi_s = phi_m``
+        is used (the idealised C_S → ∞ limit).  When set to a positive
+        value, ``forms_logc.py`` switches to a Robin BC that lets the
+        compact-layer voltage drop ``phi_m - phi_s`` be solved for, and
+        the BV overpotential becomes ``eta = phi_applied - phi - E_eq``.
+        A value of ``0.0`` is written through but is runtime-inactive
+        (``forms_logc.py`` requires ``> 0`` to activate Stern).
     include_h_factor:
         Whether to attach H+ stoichiometric concentration factors to each
         reaction's ``cathodic_conc_factors``.  Defaults to True for
@@ -354,6 +394,8 @@ def _make_bv_bc_cfg(
     }
     if boltzmann_counterions:
         cfg["boltzmann_counterions"] = [dict(entry) for entry in boltzmann_counterions]
+    if stern_capacitance_f_m2 is not None:
+        cfg["stern_capacitance_f_m2"] = float(stern_capacitance_f_m2)
     return cfg
 
 
@@ -364,6 +406,19 @@ DEFAULT_CLO4_BOLTZMANN_COUNTERION: Dict[str, Any] = {
     "z": -1,
     "c_bulk_nondim": C_CLO4_HAT,
     "phi_clamp": 50.0,
+}
+
+
+# Steric-aware variant of the ClO4- counterion: uses the Bikerman
+# closure  c_b * exp(phi) * (1-A_dyn) / (theta_b + a_b * c_b * exp(phi))
+# instead of the unbounded ideal Boltzmann.  Drop-in replacement for
+# DEFAULT_CLO4_BOLTZMANN_COUNTERION when the residual should respect
+# steric saturation at high anodic V_RHE.  See
+# docs/steric_analytic_clo4_reduction_handoff.md for the derivation.
+DEFAULT_CLO4_BOLTZMANN_COUNTERION_STERIC: Dict[str, Any] = {
+    **DEFAULT_CLO4_BOLTZMANN_COUNTERION,
+    "steric_mode": "bikerman",
+    "a_nondim": A_DEFAULT,
 }
 
 
@@ -392,7 +447,9 @@ def make_bv_solver_params(
     formulation: str = "logc",
     log_rate: bool = False,
     boltzmann_counterions: Optional[Sequence[Dict[str, Any]]] = None,
-    u_clamp: float = 30.0,
+    stern_capacitance_f_m2: Optional[float] = None,
+    u_clamp: float = 100.0,
+    initializer: str = "linear_phi",
     include_h_factor: Optional[bool] = None,
 ) -> "SolverParams":
     """Build SolverParams for multi-species BV with graded rectangle mesh markers.
@@ -420,8 +477,13 @@ def make_bv_solver_params(
     electrode_marker, concentration_marker, ground_marker:
         Mesh boundary markers.
     formulation:
-        ``"concentration"`` (legacy default) or ``"logc"``.  Selects the
-        backend that the dispatcher in ``Forward.bv_solver`` uses.  See
+        ``"concentration"`` (legacy), ``"logc"`` (production default), or
+        ``"logc_muh"`` (experimental — proton electrochemical-potential
+        primary variable; see ``docs/electrochemical_potential_solver_plan.md``
+        and the plan at ``~/.claude/plans/look-at-docs-electrochemical-potential-s-misty-trinket.md``).
+        Selects the backend that the dispatcher in ``Forward.bv_solver``
+        uses.  Phase 1 of the muh landing accepts the flag but routes to
+        ``logc`` with a ``UserWarning``; Phase 2 wires the math.  See
         the writeup ``writeups/WeekOfApr27/PNP Inverse Solver Revised.tex``
         for the formulation choices.
     log_rate:
@@ -432,6 +494,11 @@ def make_bv_solver_params(
         Optional analytic-Boltzmann counterions (Change 1 in the writeup,
         the PBNP reduction).  For the standard ClO4- supporting
         electrolyte pass ``[DEFAULT_CLO4_BOLTZMANN_COUNTERION]``.
+    stern_capacitance_f_m2:
+        Optional compact-layer Stern capacitance, ``F/m²`` (1 F/m² = 100
+        µF/cm²).  ``None`` (default) → no-Stern Dirichlet BC; positive
+        value → Robin BC with finite compact-layer drop.  See
+        ``docs/stern_layer_physics_and_next_steps.md``.
     u_clamp:
         Symmetric clamp on ``u_i = ln(c_i)`` in the log-c bulk forms.
     include_h_factor:
@@ -446,7 +513,7 @@ def make_bv_solver_params(
     params = dict(snes_opts or SNES_OPTS)
     params["bv_convergence"] = _make_bv_convergence_cfg(
         softplus=softplus, log_rate=log_rate, u_clamp=u_clamp,
-        formulation=formulation,
+        formulation=formulation, initializer=initializer,
     )
     params["nondim"] = _make_nondim_cfg()
     params["bv_bc"] = _make_bv_bc_cfg(
@@ -462,6 +529,7 @@ def make_bv_solver_params(
         concentration_marker=concentration_marker,
         ground_marker=ground_marker,
         boltzmann_counterions=boltzmann_counterions,
+        stern_capacitance_f_m2=stern_capacitance_f_m2,
         include_h_factor=include_h_factor,
     )
 
