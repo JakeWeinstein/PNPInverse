@@ -24,14 +24,16 @@ Experimental context and physical constants are tied to the
 
 ## Current State
 
-As of 2026-05-01, the production forward model is not the original full
-4-species concentration-formulation solver. The active solver stack for the
-latest inverse work is:
+As of 2026-05-04, the production forward model is not the original full
+4-species concentration-formulation solver. There are two coexisting
+production stacks:
+
+### Stable production (used by the v13–v24 inverse scripts)
 
 1. **3 explicit transported species:** O2, H2O2, H+.
 2. **Analytic Boltzmann counterion:** inert ClO4- is removed as a dynamic
    Nernst-Planck unknown and added to Poisson through
-   `bv_bc.boltzmann_counterions`.
+   `bv_bc.boltzmann_counterions` with `steric_mode="ideal"`.
 3. **Log-concentration primary variables:** `u_i = ln(c_i)`, selected by
    `bv_convergence.formulation = "logc"`.
 4. **Log-rate Butler-Volmer evaluation:** selected by
@@ -39,16 +41,47 @@ latest inverse work is:
 5. **Two-observable inverse data:** current density (CD) plus peroxide
    current (PC), both assembled from the per-reaction BV rates.
 
-The most important recent validation result is V24:
+Solver window V_RHE ∈ [−0.5, +0.6] V via the C+D orchestrator. The
+V24 cross-validation against the canonical 4-species solver passes the
+5% F2-style observable tolerance on the 8-voltage cathodic overlap
+(max differences 0.269% of CD max, 0.104% of PC max — see
+`StudyResults/v24_3sp_logc_vs_4sp_validation/summary.md`).
 
-```text
-StudyResults/v24_3sp_logc_vs_4sp_validation/summary.md
-```
+### New production target (Bikerman closure, Option 2b, 2026-05-04)
 
-On the 8-voltage overlap window where both the canonical 4-species solver
-and current 3sp+Boltzmann log-c solver converge, all points pass the 5%
-F2-style observable tolerance. The max differences were 0.269% of CD max
-and 0.104% of PC max.
+On top of the stable stack:
+
+6. **Bikerman analytic counterion** (`steric_mode="bikerman"`,
+   `a_nondim=0.01`): the ClO4- closure is the steric-aware
+   `c_b * exp(-z·phi) * (1-A_dyn) / (theta_b + a_b·c_b·exp(-z·phi))`
+   instead of the unbounded `c_b·exp(-z·phi)`. Both the IC seed and
+   the residual side use the same Bikerman closure (the residual is
+   built by `Forward/bv_solver/boltzmann.py:build_steric_boltzmann_expressions`).
+7. **Proton electrochemical potential** (`formulation="logc_muh"`):
+   the H+ primary variable is `mu_H = u_H + em·z_H·phi`, which keeps
+   Newton smooth in deep-ψ regions where u_H and phi separately vary
+   by tens of log units.
+8. **Bikerman-consistent IC** (`initializer="debye_boltzmann"`):
+   composite-ψ (BKSA matched-asymptotic, saturated zone + outer
+   exponential) plus multispecies-γ correction so the IC and residual
+   agree about steric saturation.
+9. **Finite Stern compact layer** (`stern_capacitance_f_m2 ≈ 0.10`):
+   absorbs ≈10–13 V of applied potential at high anodic V_RHE,
+   keeping ψ_D modest enough that the proton supply doesn't underflow
+   the BV cathodic terms.
+
+This stack reaches **V_RHE = +1.0 V at 15/15** (cold ceiling +0.60 V;
+warm-walk to +1.00 V) on a 15-voltage grid spanning
+V_RHE ∈ [−0.5, +1.0]. Cross-stack equivalence with the 4sp dynamic
+reference holds to 1e-9 in the cathodic regime and 5·10⁻³ at the
++0.5 V edge. See `docs/4sp_bikerman_ic_option_2b_results.md` for the
+full sweep and `docs/4sp_drop_boltzmann_investigation.md` for the
+investigation log behind it.
+
+The inverse pipeline has not yet been migrated onto this stack — the
+v13–v24 scripts and the FIM work continue to use the stable
+production stack while the new target is exercised through the
+`peroxide_window_3sp_bikerman_muh.py` driver.
 
 ### Direct PDE Inverse Status
 
@@ -127,12 +160,20 @@ Use these as the current source of truth:
 |---|---|
 | `writeups/WeekOfApr27/PNP Inverse Solver Revised.pdf` | Main narrative of the forward-solver rebuild. |
 | `writeups/WeekOfApr27/literature_provenance.md` | Provenance and novelty audit for PBNP, log-c, and log-rate BV. |
+| `docs/bv_solver_unified_api.md` | How to call the dispatcher and configure the production stack. |
+| `docs/CONTINUATION_STRATEGY_HANDOFF.md` | Why C+D over A/B for the logc+Boltzmann path. |
+| `docs/4sp_bikerman_ic_option_2b_results.md` | New production target: bikerman + Stern + muh + debye_boltzmann IC = 15/15 over V_RHE [−0.5, +1.0]. |
+| `docs/4sp_drop_boltzmann_investigation.md` | §11–§13: full investigation log behind the 2b fix. |
+| `docs/steric_analytic_clo4_reduction_handoff.md` | Derivation of the Bikerman analytic-counterion residual closure. |
+| `docs/Mangan2025_experimental_alignment.md` | Gap audit between the current model and the Mangan 2025 deck (sulfate / Cs⁺ / RRDE / IrOx). |
+| `docs/clipping_conventions.md` | Three distinct BV-related clips, including the `exponent_clip` raise from 50 → 100. |
 | `docs/Next Steps After Basin Geometry.md` | Current inverse-problem plan after V20-V22. |
 | `docs/CHATGPT_HANDOFF_10_LM_TIKHONOV_BASIN_GEOMETRY.md` | LM and Tikhonov results; basin-geometry conclusion. |
 | `docs/noise_model_conventions.md` | Current FIM/inverse noise-model convention. |
 | `docs/TODO_extend_inverse_v_range_negative.md` | Negative-voltage extension rationale and caveats. |
 | `StudyResults/v24_3sp_logc_vs_4sp_validation/summary.md` | Current 3sp vs 4sp overlap validation. |
 | `StudyResults/v23_negative_v_fim_ablation/summary.md` | Negative-V FIM result and noise-model artifact warning. |
+| `StudyResults/peroxide_window_3sp_bikerman_muh_2b/` | Reference 2b sweep on the new production target stack. |
 | `writeups/vv_report/vv_report.pdf` | Surrogate-era V&V report. |
 
 Older `CHATGPT_HANDOFF*` files are useful chronology, but the newest docs
@@ -144,7 +185,7 @@ fixed.
 | Path | Role |
 |---|---|
 | `Forward/` | Forward solvers, parameters, noise, plotting, and steady-state utilities. |
-| `Forward/bv_solver/` | Main PNP-BV package: concentration/log-c forms, log-rate BV, Boltzmann counterions, observables, validation, continuation, hybrid/stabilized/robust/Gummel helpers. |
+| `Forward/bv_solver/` | Main PNP-BV package: log-c forms (`forms_logc.py`) and the experimental muh variant (`forms_logc_muh.py`), log-rate BV, ideal + Bikerman analytic counterions (`boltzmann.py`), per-voltage diagnostics (`diagnostics.py`), observables, validation, and the C+D continuation orchestrator (`grid_per_voltage.py`). The legacy concentration backend was removed in the May 2026 cleanup. |
 | `Inverse/` | Generic Pyadjoint inverse framework and objective factories. |
 | `FluxCurve/` | Adjoint-gradient curve-fitting framework for Robin and BV flux/current curves, including point-solve caches and parallel helpers. |
 | `Nondim/` | Physical constants, scaling transforms, and compatibility wrappers. |
@@ -165,16 +206,19 @@ and `scripts/surrogate/`.
 
 ## Core Forward-Solver Configuration
 
-The active production stack is controlled through `solver_params[10]`:
+The active production stack is controlled through `solver_params[10]`.
+The factory is `scripts/_bv_common.py:make_bv_solver_params`; the
+shape it produces is:
 
 ```python
 solver_options = {
     "bv_convergence": {
-        "formulation": "logc",
+        "formulation": "logc",          # or "logc_muh" for the muh backend
+        "initializer": "linear_phi",    # or "debye_boltzmann"
         "bv_log_rate": True,
         "clip_exponent": True,
-        "exponent_clip": 50.0,
-        "u_clamp": 30.0,
+        "exponent_clip": 100.0,         # raised from 50.0 on 2026-05-04
+        "u_clamp": 100.0,               # raised from 30.0 on 2026-05-04
     },
     "bv_bc": {
         "reactions": [
@@ -206,8 +250,16 @@ solver_options = {
             },
         ],
         "boltzmann_counterions": [
-            {"z": -1, "c_bulk_nondim": c_clo4_hat, "phi_clamp": 50.0},
+            {
+                "z": -1,
+                "c_bulk_nondim": c_clo4_hat,
+                "phi_clamp": 50.0,
+                "steric_mode": "ideal",      # or "bikerman" for new target
+                # "a_nondim": 0.01,          # required iff steric_mode == "bikerman"
+            },
         ],
+        # Optional finite Stern compact layer (omit for no-Stern Dirichlet BC):
+        # "stern_capacitance_f_m2": 0.10,
         "electrode_marker": 3,
         "concentration_marker": 4,
         "ground_marker": 4,
@@ -215,9 +267,15 @@ solver_options = {
 }
 ```
 
-The dispatcher in `Forward/bv_solver/__init__.py` routes
-`build_context()`, `build_forms()`, and `set_initial_conditions()` to the
-concentration or log-c backend based on `bv_convergence.formulation`.
+The dispatcher in `Forward/bv_solver/dispatch.py` routes
+`build_context()`, `build_forms()`, and `set_initial_conditions()` to
+the appropriate backend (`forms_logc.py` or `forms_logc_muh.py`)
+based on `bv_convergence.formulation`, then to the appropriate IC
+routine (linear-phi or debye_boltzmann) based on
+`bv_convergence.initializer`. The Bikerman residual-side closure is
+built by `Forward/bv_solver/boltzmann.py:build_steric_boltzmann_expressions`
+and enters both the Poisson source and the dynamic-species packing
+fraction.
 
 ## Environment
 
