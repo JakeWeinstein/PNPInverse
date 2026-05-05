@@ -1,7 +1,7 @@
 """Tests for the experimental ``formulation="logc_muh"`` branch.
 
 The muh branch is being landed in phases (see
-``~/.claude/plans/look-at-docs-electrochemical-potential-s-misty-trinket.md``).
+``docs/electrochemical_potential_solver_plan.md``).
 
 Phase 1 (config validation + dispatcher routing) and Phase 2 (IC
 reconstruction + transform-correctness residual-zero test) live in this

@@ -42,11 +42,12 @@ Critical implementation notes:
 
 See:
 
-* ``docs/electrochemical_potential_solver_plan.md`` (GPT scoping doc)
-* ``~/.claude/plans/look-at-docs-electrochemical-potential-s-misty-trinket.md``
-  (this implementation's plan with traps + sequencing)
+* ``docs/electrochemical_potential_solver_plan.md`` (scoping doc and
+  multi-phase landing plan with traps + sequencing).
 * ``docs/PNP_BV_Analytical_Simplifications.md`` -- the rigorous reason
   ``mu_i`` is the smooth variable in the Debye layer.
+* ``docs/4sp_bikerman_ic_option_2b_results.md`` -- the May 4 sweep
+  exercising this backend end-to-end on the production target stack.
 """
 
 from __future__ import annotations

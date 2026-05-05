@@ -7,8 +7,7 @@ backend stores the proton primary variable as ``mu_H = u_H + em*z_H*phi``
 to give Newton a smoother variable in Debye-layer regions where ``u_H``
 and ``phi`` separately vary by tens of log-units.  See
 ``Forward/bv_solver/forms_logc_muh.py`` for the math and
-``~/.claude/plans/look-at-docs-electrochemical-potential-s-misty-trinket.md``
-for the multi-phase landing plan.
+``docs/electrochemical_potential_solver_plan.md`` for the landing plan.
 
 ``build_context`` / ``build_forms`` / ``set_initial_conditions`` dispatch on:
 

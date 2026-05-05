@@ -5,10 +5,10 @@ Tests whether ``formulation="logc_muh"`` (Phase 2 hybrid: H+ stored as
 ``V_RHE >= +0.68 V`` peroxide-window wall, and/or reduces SNES iteration
 counts at peroxide voltages, vs the production ``"logc"`` baseline.
 
-Per the plan
-``~/.claude/plans/look-at-docs-electrochemical-potential-s-misty-trinket.md``,
-the muh transform targets the *Newton-stiffness* failure mode (``u_H`` and
-``phi`` separately blow up in the Debye layer; ``mu_H`` is nearly flat).
+Per the muh landing plan in
+``docs/electrochemical_potential_solver_plan.md``, the muh transform
+targets the *Newton-stiffness* failure mode (``u_H`` and ``phi``
+separately blow up in the Debye layer; ``mu_H`` is nearly flat).
 It does **not** fix the *physical-validity* failure mode (analytic
 Boltzmann ``c_ClO4 = c_bulk * exp(+phi)`` exceeds the Bikerman steric
 cap ~100 at high anodic phi).  The summary.md emitted by this study
@@ -657,8 +657,8 @@ def _decision_block(
             "physical validity.** The analytic Boltzmann ClO4- residual "
             "still produces c_ClO4_surface > steric cap at peroxide "
             "voltages.  This was the predicted outcome (per "
-            "`~/.claude/plans/look-at-docs-electrochemical-potential-s-misty-trinket.md` "
-            "Phase 7 caveat).  Proceed to Phase 7 (charged-species mu on "
+            "`docs/electrochemical_potential_solver_plan.md` Phase 7 "
+            "caveat).  Proceed to Phase 7 (charged-species mu on "
             "4sp+Bikerman) for a physically valid solver at peroxide V."
         )
     return out
@@ -687,7 +687,7 @@ def _make_summary(
     lines.append("# Peroxide-window proton-electrochemical-potential (muh) sweep")
     lines.append("")
     lines.append("Study script: `scripts/studies/peroxide_window_muh_test.py`.")
-    lines.append("Plan: `~/.claude/plans/look-at-docs-electrochemical-potential-s-misty-trinket.md`.")
+    lines.append("Plan: `docs/electrochemical_potential_solver_plan.md`.")
     lines.append("Forms: `Forward/bv_solver/forms_logc_muh.py`.")
     lines.append("")
     lines.append("## Configuration")

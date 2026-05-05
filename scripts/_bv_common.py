@@ -479,13 +479,13 @@ def make_bv_solver_params(
     formulation:
         ``"concentration"`` (legacy), ``"logc"`` (production default), or
         ``"logc_muh"`` (experimental — proton electrochemical-potential
-        primary variable; see ``docs/electrochemical_potential_solver_plan.md``
-        and the plan at ``~/.claude/plans/look-at-docs-electrochemical-potential-s-misty-trinket.md``).
+        primary variable; see ``docs/electrochemical_potential_solver_plan.md``).
         Selects the backend that the dispatcher in ``Forward.bv_solver``
-        uses.  Phase 1 of the muh landing accepts the flag but routes to
-        ``logc`` with a ``UserWarning``; Phase 2 wires the math.  See
-        the writeup ``writeups/WeekOfApr27/PNP Inverse Solver Revised.tex``
-        for the formulation choices.
+        uses.  See the writeup
+        ``writeups/WeekOfApr27/PNP Inverse Solver Revised.tex`` for the
+        formulation choices and
+        ``docs/4sp_bikerman_ic_option_2b_results.md`` for the May 4
+        production-target sweep that uses this backend end-to-end.
     log_rate:
         Enable log-rate Butler-Volmer evaluation (Change 3 in the
         writeup).  Compatible with both formulations but only useful in
