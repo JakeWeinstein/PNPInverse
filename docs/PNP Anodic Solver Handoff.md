@@ -1,5 +1,35 @@
 # PNP-BV Forward Solver Extension Handoff for Claude Code
 
+> ## ⚠ SUPERSEDED — CONTAINS WRONG NUMBERS
+>
+> **Do not act on the threshold numbers in this document.** This
+> handoff was written before the May 2026 production rebuild and
+> reports an R2 unclip threshold of ~+1.14 V vs RHE. **That number
+> is wrong** — it was derived without including the α·n_e factor
+> that multiplies `eta_scaled` after the clip in the actual code
+> (`forms_logc.py:_build_eta_clipped`).
+>
+> The corrected thresholds (under the convention
+> `eta_scaled = (V_RHE − E_eq)/V_T`, clipped to ±`exponent_clip`
+> *before* the α·n_e multiplication):
+>
+> - `exponent_clip = 50` (legacy default): R2 unclips at
+>   **V_RHE > +0.495 V**.
+> - `exponent_clip = 100` (current default, raised 2026-05-04):
+>   R2 unclips at **V_RHE > −0.79 V** — the entire production grid
+>   V_RHE ∈ [−0.5, +1.0] V is unclipped.
+>
+> The full breakdown of the three distinct BV-related clips
+> (`exponent_clip` on η, `u_clamp` on `u = ln c`, and the historical
+> `c_surf = exp(clamp(u, ±30))` clamp inside the BV residual that
+> log-rate eliminated) is in `docs/clipping_conventions.md`. The
+> production-target reference sweep (15/15 V_RHE [−0.5, +1.0] V) is
+> in `docs/4sp_bikerman_ic_option_2b_results.md`.
+>
+> The rest of this document is preserved for chronology only —
+> treat the staged-path recommendations and FIM-direction analysis
+> as a snapshot of what was being considered before the rebuild.
+
 ## Purpose
 
 This handoff converts the latest ChatGPT review into concrete implementation tasks. The goal is to extend the forward solver to higher anodic voltages so that `k0_2` and `alpha_2` become data-identifiable rather than prior-selected.
