@@ -1,0 +1,714 @@
+% !TEX TS-program = pdflatex
+% Forward-solver changes summary, April--May 2026.
+%
+% Companion to:
+%   docs/PNP_BV_Analytical_Simplifications.md
+%   docs/4sp_drop_boltzmann_investigation.md
+%   docs/4sp_bikerman_ic_option_2a_plan.md
+%   docs/4sp_bikerman_ic_option_2b_plan.md
+%   docs/steric_sign_correction_plan.md
+%   docs/steric_analytic_clo4_reduction_handoff.md
+%   docs/electrochemical_potential_solver_plan.md
+%   docs/ic_refinement_study.md
+%   docs/clipping_conventions.md
+%   docs/Log Space Clamp Removal Suggestions.md
+%   docs/forward_cleanup_may2026.md
+%
+% For each derivation we mark provenance:
+%   [LIT]  -- pulled directly from the literature, citation given.
+%   [APP]  -- standard literature result applied to this project's
+%              specific symbolic/algebraic setup.
+%   [NEW]  -- genuinely new to this project (no literature analogue
+%              identified in the May~2026 search).
+
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\newcommand{\lit}{\textcolor{blue}{[LIT]}}
+\newcommand{\app}{\textcolor{teal}{[APP]}}
+\newcommand{\new}{\textcolor{red!70!black}{[NEW]}}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\diff}{\mathrm{d}}
+\newcommand{\eps}{\varepsilon}
+\newcommand{\ClO}{\text{ClO}_4^-}
+\newcommand{\Hp}{\text{H}^+}
+\newcommand{\Otwo}{\text{O}_2}
+\newcommand{\Htwo}{\text{H}_2\text{O}_2}
+\newcommand{\msteric}{\mu^{\mathrm{steric}}}
+\newcommand{\mch}{\mu^{\mathrm{ch}}}
+
+\title{PNPInverse forward solver: changes since late April 2026 \\
+\large mathematical formulation, with literature provenance}
+\author{}
+\date{2026-05-04}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This note collects the mathematical changes to the PNP--BV forward
+solver between the original v18/v19 log-rate landing (late April 2026)
+and the present production state (May~4, 2026).  Each piece of
+mathematics is annotated with its provenance: \lit{} = standard result
+from the literature; \app{} = a literature result specialized to this
+project's symbolic setup; \new{} = a derivation that the May~2026
+literature search did not place in any prior published form.
+\end{abstract}
+
+\tableofcontents
+
+% ====================================================================
+\section{Setting and notation}
+\label{sec:setting}
+
+The active production stack tracks dynamic species
+$\Otwo, \Htwo, \Hp$ with charges $z=(0,0,+1)$, an analytic Boltzmann
+counterion for $\ClO$, log-concentration primary variables
+$u_i = \ln c_i$, and a log-rate Butler--Volmer (BV) boundary
+condition for the two-step ORR
+\[
+  R_1: \Otwo + 2\Hp + 2e^- \rightleftharpoons \Htwo, \qquad
+  R_2: \Htwo + 2\Hp + 2e^- \to 2\,\text{H}_2\text{O}.
+\]
+The dimensionless potential is $\phi = \Phi/V_T$ with bulk $\phi=0$ at
+$y=1$ and the electrode at $y=0$.  The electromigration prefactor is
+$em\cdot z_i$; in production scaling $em\cdot z_{\Hp} = +1$.
+A 4-species dynamic preset is also supported in which $\ClO$
+($z=-1$) is dynamic with Bikerman steric coefficient
+$a_{\ClO} = a$.
+
+% ====================================================================
+\section{Bikerman/lattice-gas steric sign correction \app}
+\label{sec:steric-sign}
+
+\paragraph{Origin in the literature.}
+The free energy density of a binary lattice gas with cell size $a$ is
+\cite{borukhov1997}
+\begin{equation}
+  \sigma(c^+,c^-) \;=\; \frac{k_B T}{a^3}\!\left[
+    c^+a^3\ln(c^+a^3)
+    + c^-a^3\ln(c^-a^3)
+    + (1-\Phi)\ln(1-\Phi)
+  \right],\quad \Phi = a^3(c^++c^-).
+  \label{eq:bao-entropy}
+\end{equation}
+Bazant et al.\ \cite{bazant2009} write the resulting excess chemical
+potential of species $i$ as
+\begin{equation}
+  \msteric_i \;=\; -k_B T\,\ln(1-\Phi).
+  \label{eq:bazant20}
+\end{equation}
+Both forms are textbook \lit{}.
+
+\paragraph{Variational derivation.}
+Direct partial differentiation of \eqref{eq:bao-entropy} with respect
+to $c^+$ recovers \eqref{eq:bazant20} via
+\begin{align}
+  \frac{\partial\sigma}{\partial c^+}
+   &= k_B T\!\left[\ln(c^+a^3)+1
+       - \ln(1-\Phi) - 1\right]\nonumber\\
+   &= \underbrace{k_B T \ln(c^+a^3)}_{\text{ideal}}
+       \;+\; \underbrace{\bigl(-k_B T \ln(1-\Phi)\bigr)}_{\msteric_+}.
+  \label{eq:dsigma-dc}
+\end{align}
+The leading $-1$ from differentiating the ideal log piece cancels the
+$+1$ from differentiating $(1-\Phi)\ln(1-\Phi)$.  The remaining
+$-\ln(1-\Phi)$ is the excess Bikerman piece with an unambiguous
+\emph{negative} sign \app{}.
+
+\paragraph{The bug and its fix.}
+Until 2026-05-04, both \texttt{Forward/bv\_solver/forms\_logc.py:266}
+and the writeup \texttt{docs/PNP Equation Formulations.tex} carried
+\(\msteric = +k_B T\,\ln(1-\Phi)\), i.e.\ the opposite sign.
+That sign change makes \(c_i\,\theta\,\exp(z_i\phi) = \mathrm{const}\)
+the zero-flux relation, which forces counterions \emph{larger}, not
+smaller, as the packing fraction tightens---no saturation, and
+indeed no equilibrium SS exists for the dynamic counterion above
+\(\psi_D \approx \ln(1/(4 a c_b))\approx 4.83\) nondim
+($\approx +0.124$~V vs RHE).
+The fix in \texttt{forms\_logc.py} and \texttt{forms\_logc\_muh.py}
+is the one-character change
+\begin{equation}
+  \msteric \;=\; -\ln(\theta), \qquad \theta := 1-\sum_j a_j c_j,
+  \label{eq:musteric-fixed}
+\end{equation}
+matched by the same flip in
+\texttt{scripts/verification/mms\_bv\_3sp\_logc\_boltzmann.py}.  The
+3sp+Boltzmann production observable shifted by $+0.36\%$ in CD/PC at
+$V_{\mathrm{RHE}}=+0.66$~V; the Stern-no-Stern pinned snapshot was
+refreshed accordingly.  Mathematics \app{}; the audit and code-spec
+mismatch identification are \new{} project work.
+
+% ====================================================================
+\section{Multispecies $\gamma$-corrected analytical IC \app}
+\label{sec:gamma-IC}
+
+\subsection{The zero-flux relation under the corrected residual}
+With the corrected steric chemical potential
+\eqref{eq:musteric-fixed}, the full electrochemical potential is
+\begin{equation}
+  \mch_i \;=\; \ln c_i + z_i\,\phi - \ln\theta.
+  \label{eq:much}
+\end{equation}
+Setting $\nabla\mch_i = 0$ with bulk anchors $c_i(0)=c_{b,i}$,
+$\theta(0)=\theta_b = 1-\sum_j a_j c_{b,j}$ gives the global
+constant
+\begin{equation}
+  c_i\,\theta^{-1}\,e^{z_i\phi}
+   \;=\; c_{b,i}/\theta_b.
+  \label{eq:zeroflux-const}
+\end{equation}
+This is the standard MPB equilibrium condition \cite{kornyshev2007}
+\lit{}.
+
+\subsection{Closed form for $c_i(\psi)$ \app}
+Let $\psi = \phi-\phi_o$ be the diffuse-layer potential measured from
+the outer (electroneutral) reference $\phi_o$.  Write
+$c_i(\psi) = (c_{b,i}/\theta_b)\,\theta(\psi)\,e^{-z_i\psi}$ from
+\eqref{eq:zeroflux-const} and substitute into the closure
+$1-\theta = \sum_j a_j c_j$:
+\begin{equation}
+  \theta(\psi)
+  = \frac{\theta_b}{\theta_b + S(\psi)},\qquad
+  S(\psi) \;:=\; \sum_j a_j c_{b,j}\bigl(e^{-z_j\psi}-1\bigr).
+  \label{eq:theta-of-psi}
+\end{equation}
+Define the multispecies steric activity factor
+\begin{equation}
+  \boxed{\;
+  \gamma(\psi) \;=\; \frac{1}{1+\sum_j a_j c_{b,j}\bigl(e^{-z_j\psi}-1\bigr)}
+  \;}
+  \label{eq:gamma-multispecies}
+\end{equation}
+so that
+\begin{equation}
+  c_i(\psi) \;=\; c_{b,i}\,\gamma(\psi)\,e^{-z_i\psi}.
+  \label{eq:c_i-gamma}
+\end{equation}
+This is the multispecies generalization of Borukhov's eq.~(5)
+\cite{borukhov1997} \lit{}/\app{}; for a binary symmetric $z=\pm 1$
+electrolyte,
+\(\gamma(\psi) = \bigl[1+2 a c_b(\cosh\psi-1)\bigr]^{-1}\),
+recovering the form quoted in
+\cite{kornyshev2007,bazant2009}.
+
+\subsection{Neutral species enter $\theta$ but drop out of $S(\psi)$ \new}
+For a $z_j=0$ species, $e^{-z_j\psi}-1 = 0$, so $S(\psi)$ is
+\emph{algebraically identical} to the binary symmetric case even though
+the lattice carries $\Otwo$ and $\Htwo$.  The neutrals nevertheless
+do follow $\gamma$ in their concentrations:
+$c_{\Otwo}(\psi)=c_{\Otwo,b}\,\gamma(\psi)$ etc.  This decoupling
+between the algebraic form of $\gamma$ and the species count
+$n$ is exploited heavily by the IC: one only needs $a_{\Hp}$ and
+$a_{\ClO}$ in the denominator, but $\gamma$ multiplies every
+$c_i$.  We did not find this point made explicitly in the surveyed
+literature; treat as \new{} for the current 2D ORR setup.
+
+\subsection{Local-anchor variant for the analytical IC \new}
+The IC's outer Picard loop already produces $y$-dependent outer
+profiles $H_o(y)$ etc.  Outer electroneutrality
+$c_-(y)\approx c_b\, e^{\phi(y)}$ together with the chosen
+$\phi_o(y)=\ln\!\bigl(H_o(y)/c_{\ClO,b}\bigr)$ forces
+$c_{\ClO,o}(y) = H_o(y)$.  The IC therefore uses $H_o(y)$
+as a \emph{local} anchor for both charged species in $\gamma$:
+\begin{equation}
+  \gamma_{\mathrm{IC}}(y)
+   = \frac{1}{1
+       + a_{\Hp}\,H_o(y)\bigl(e^{-\psi(y)}-1\bigr)
+       + a_{\ClO}\,H_o(y)\bigl(e^{+\psi(y)}-1\bigr)},
+  \label{eq:gamma-local}
+\end{equation}
+with $\psi(y)$ the matched-asymptotic Debye profile of
+\S\ref{sec:matched-IC}.  Constant-bulk anchors give a packing
+margin of $\approx 0.5\%$; the local-anchor variant gives $\approx 2\%$.
+This local construction is \new{} (not in the surveyed Bikerman
+literature, which is overwhelmingly 1D with bulk anchors and no
+reactive transport).
+
+\subsection{The chemical potential cancels $\gamma$ in $\phi$ \new}
+A natural-looking but \emph{wrong} extension is to add $\ln\gamma$
+to the electrostatic potential seed.  Substituting
+\eqref{eq:c_i-gamma} into \eqref{eq:much} gives
+\(
+  \mch_i = \ln c_{b,i} + \ln\gamma + z_i\phi - \ln(\theta_b\gamma)
+       = \ln c_{b,i} + z_i\phi - \ln\theta_b,
+\)
+i.e.\ $\gamma$ cancels between the species and the
+$-\ln\theta$ contribution.  Adding $\ln\gamma$ to $\phi$ would
+double-count it.  Correct seeding is therefore
+\begin{equation}
+  u_i^{\mathrm{IC}}(y) = \ln c_{b,i} + \ln\gamma_{\mathrm{IC}}(y) - z_i\psi(y), \qquad
+  \phi^{\mathrm{IC}}(y) = \phi_o(y) + \psi(y).
+  \label{eq:IC-final}
+\end{equation}
+This subtlety triggered a GPT-review correction round; the final
+form above is implemented at
+\texttt{Forward/bv\_solver/forms\_logc.py:795--833} (Option~2a$'$).
+Treat as \new{} project clarification.
+
+% ====================================================================
+\section{The matched-asymptotic Debye-layer initial condition \new}
+\label{sec:matched-IC}
+
+\subsection{Outer two-rate algebraic model \new}
+Outside the Debye layer, electroneutrality gives
+$c_{\Hp}\approx c_{\ClO,b}\,e^{\phi}$, hence
+\(
+  J_{\Hp} = -D_{\Hp} c_{\Hp}\,\nabla(\ln c_{\Hp}+\phi)
+          = -2\,D_{\Hp}\,\nabla c_{\Hp},
+\)
+the standard ambipolar reduction \cite{newman2004} \lit{}.  The
+neutral fluxes are already pure diffusion, so for steady $\Otwo$,
+$\Htwo$, and $\Hp$ on $y\in[0,1]$ with linear outer profiles, the
+reaction-plane outer values satisfy
+\begin{align}
+  O_s &= O_b - R_1/D_{\Otwo}, \\
+  P_s &= P_b + (R_1-R_2)/D_{\Htwo}, \\
+  H_o &= H_b - (R_1+R_2)/D_{\Hp},
+\end{align}
+where $D_{\Hp}$ is now the ambipolar value and the proton stoichiometry
+$-2$ cancels the factor of $2$.  The Boltzmann factor maps the outer
+proton concentration to the reaction plane:
+\(
+  H_s = H_o\,e^{-\psi_D},
+\)
+with $\psi_D = \phi_e-\phi_o$, $\phi_o = \ln(H_o/c_{\ClO,b})$.
+Define BV log-prefactors $A_1,B_1,A_2$ from the production rate
+constants and $\eta_j$ values, then $R_1, R_2$ satisfy the linear
+system
+\begin{equation}
+  \begin{pmatrix}
+    1+A_1/D_{\Otwo}+B_1/D_{\Htwo} & -B_1/D_{\Htwo}\\[2pt]
+    -A_2/D_{\Htwo} & 1+A_2/D_{\Htwo}
+  \end{pmatrix}\!
+  \begin{pmatrix}R_1\\R_2\end{pmatrix}
+  = \begin{pmatrix}A_1 O_b - B_1 P_b\\ A_2 P_b\end{pmatrix},
+\end{equation}
+solved by Picard iteration with under-relaxation (default $\omega=0.5$)
+together with refresh of $H_o, \phi_o, \psi_D, A_j, B_1$.
+The ambipolar reduction is \lit{}; assembling the
+\emph{two}-rate ORR analytic Picard predictor is \new{}.
+
+\subsection{Inner Gouy--Chapman closed form \lit}
+The 1D Poisson--Boltzmann equation for the symmetric
+$\Hp/\ClO$ pair in nondimensional form,
+\begin{equation}
+  \eps\,\psi'' = 2 H_o\,\sinh\psi,\qquad
+  \lambda_{D,o} = \sqrt{\eps/(2H_o)},
+\end{equation}
+admits the standard Gouy--Chapman solution
+\begin{equation}
+  \boxed{\;
+  \psi(y)\;=\;4\,\text{atanh}\!\Bigl(
+       \tanh(\psi_D/4)\,e^{-y/\lambda_{D,o}}
+   \Bigr)
+  \;}
+  \label{eq:GC}
+\end{equation}
+\cite{newman2004,bazant2009} \lit{}.  We use this profile inside the
+Debye layer for the IC and---together with the local-anchor
+$\gamma_{\mathrm{IC}}$ from \eqref{eq:gamma-local}---obtain a
+matched-asymptotic IC that is internally consistent at $y=0$ and
+$y=\infty$ but \emph{not} pointwise consistent with the
+Bikerman-modified profile in the saturated zone (see
+\S\ref{sec:option2b}).
+
+\subsection{Composite IC field \new}
+Combining the outer linear profiles, the inner GC potential, and the
+$\gamma$-corrected concentration map gives the production IC fields
+\begin{equation}
+  \begin{aligned}
+    \phi^{\mathrm{IC}}(y) &= \ln\!\bigl(H_o(y)/c_{\ClO,b}\bigr) + \psi(y),\\
+    H^{\mathrm{IC}}(y)    &= H_o(y)\,\gamma_{\mathrm{IC}}(y)\,e^{-\psi(y)},\\
+    \ClO^{\mathrm{IC}}(y) &= H_o(y)\,\gamma_{\mathrm{IC}}(y)\,e^{+\psi(y)},\\
+    \Otwo^{\mathrm{IC}}(y) &= O_b + (O_s-O_b)(1-y) ,\quad \text{(times $\gamma$ in 4sp branch)}\\
+    \Htwo^{\mathrm{IC}}(y) &= P_b + (P_s-P_b)(1-y) ,\quad \text{(times $\gamma$ in 4sp branch)}.
+  \end{aligned}
+  \label{eq:IC-fields}
+\end{equation}
+Here $H_o(y)$ is the linear interpolant from $H_o(0)$ (Picard surface
+value) to $H_b$ at $y=1$.
+Empirical performance \new{} (see \texttt{StudyResults/ic\_refinement\_study/}):
+on $V_{\mathrm{RHE}}\in[+0.30,+0.60]$~V the IC reduces total Newton
+iterations to SS by $1.7\times$ -- $6.3\times$ over the linear-$\phi$
+baseline, and unblocks $V_{\mathrm{RHE}}=+0.60$~V where direct $z=1$
+SS with linear-$\phi$ fails.
+
+\subsection{Why the IC silently no-ops at cathodic $V$ \new}
+At cathodic voltages the ORR is mass-transport-limited, so
+$R_1+R_2\approx D_{\Hp}H_b$ saturates on the first Picard iterate and
+$H_o\to$ (numerical floor).  Then $\phi_o\sim-690$ and $\psi_D$ flips
+sign, sending $H_s$ to underflow.  The next Picard iterate flips
+$R_1$ negative; under-relaxation $\omega=0.5$ does not damp this
+bistability and Picard hits the 50-iter cap.  The orchestrator falls
+back to linear-$\phi$ + z-ramp, which is the right behavior for
+mass-transport-limited regimes.  Diagnosis is \new{}; quantitative
+voltage breakpoint $V_{\mathrm{RHE}}=+0.30$~V is empirical.
+
+% ====================================================================
+\section{Composite asymptotic $\psi(y)$ for the Bikerman regime \app}
+\label{sec:option2b}
+
+\subsection{Bikerman first integral}
+For the symmetric $z=\pm 1$ Bikerman/Kornyshev MPB, the first
+integral is
+\cite{borukhov1997,bazant2009}
+\begin{equation}
+  \Bigl(\frac{\diff\psi}{\diff y}\Bigr)^{\!2}
+   = \frac{2}{\nu\,\lambda_D^2}\,
+     \ln\!\bigl[\,1 + \nu\,(\cosh\psi-1)\bigr],
+   \qquad \nu = 2 a c_b.
+  \label{eq:Bik-first-int}
+\end{equation}
+Standard Gouy--Chapman gives
+$(\psi')^2 = (2/\lambda_D^2)(\cosh\psi-1)$.  In the saturated regime
+$\nu(\cosh\psi-1)\gg 1$ the Bikerman form grows like $|\psi|$ rather
+than $\exp|\psi|/2$, so $\psi$ must extend deeper into the bulk to
+absorb a given applied voltage \lit{}.
+
+\subsection{Saturation crossover and composite profile \app}
+Define the saturation potential
+\(\psi_{\mathrm{sat}} = \ln(2/\nu) = \ln\!\bigl(1/(a c_b)\bigr)\),
+which for $a=0.01$, $c_b=0.2$ is $\psi_{\mathrm{sat}}\approx 6.21$ nondim.
+Above $\psi_{\mathrm{sat}}$ the first integral linearises to
+$(\psi')^2 \approx (2/(\nu\lambda_D^2))(|\psi|-\psi_{\mathrm{sat}})$;
+below $\psi_{\mathrm{sat}}$ it linearises to the standard
+Debye exponential.  The composite asymptotic profile is
+\begin{equation}
+  \psi(y) =
+  \begin{cases}
+    \psi_D - \alpha(\psi_D)\,y,
+       & 0\le y\le y_m,\\[3pt]
+    \psi_{\mathrm{sat}}\,\exp\!\bigl(-(y-y_m)/\lambda_D\bigr),
+       & y\ge y_m,
+  \end{cases}
+  \label{eq:composite-psi}
+\end{equation}
+with slope
+\(\alpha(\psi_D)=\sqrt{(2/(\nu\lambda_D^2))\ln[1+\nu(\cosh\psi_D-1)]}\)
+and $C^0$ matching at $y_m=(|\psi_D|-\psi_{\mathrm{sat}})/\alpha$.
+The two limits and their matching are textbook MPB \lit{}; the
+particular two-zone closed form, the safety guards
+($\psi_{\mathrm{sat}}(1-\eps)$ near $|\psi_D|\approx\psi_{\mathrm{sat}}$;
+$\alpha\to 0$ guarded near $\psi_D=0$), and the integration with the
+production code are \app{}/\new{}.
+
+\subsection{Status (2026-05-04)}
+Option 2b is planned but not yet executed.  The 2a$'$ sweep
+($\gamma$ on every species, GC $\psi$, sign-fixed steric residual)
+already reached $V_{\mathrm{RHE}}\le +0.50$~V cold-converged with
+Stern $C_S=0.10$, with $c_{\ClO}(0)\to 1/a$ saturating cleanly.
+$V_{\mathrm{RHE}}\ge +0.55$~V cold-fails despite a healthy
+saturated IC; this is the empirical signal that 2b's
+modified-Bikerman $\psi$ is needed.
+
+% ====================================================================
+\section{Steric-aware analytic counterion closure \new}
+\label{sec:steric-boltzmann}
+
+\subsection{The reduction}
+The 3sp+Boltzmann production stack eliminates $\ClO$ as a dynamic NP
+unknown by setting $c_-(x) = c_{\ClO,b}\,e^{\phi}$ in the Poisson source.
+This is correct \emph{only} for $\msteric_-=0$, i.e.\ when $a_{\ClO}=0$.
+Once we restore $\msteric_- = -\ln\theta$ from
+\eqref{eq:musteric-fixed}, the inert-counterion zero-flux condition
+$\nabla\mch_- = 0$ becomes
+\(
+  \ln c_- - \phi - \ln\theta = \ln c_{\ClO,b} - \ln\theta_b,
+\)
+i.e.
+\(
+  c_-\,e^{-\phi}/\theta = c_{\ClO,b}/\theta_b.
+\)
+With $\theta = 1 - A_d - a_{\ClO} c_-$ where
+$A_d = \sum_{i\in\text{dyn}} a_i c_i(x)$, this is linear in $c_-$:
+\begin{equation}
+  \boxed{\;
+  c_-(x) \;=\;
+   \frac{c_{\ClO,b}\,e^{\phi(x)}\,\bigl[1-A_d(x)\bigr]}
+        {\theta_b + a_{\ClO}\,c_{\ClO,b}\,e^{\phi(x)}}.
+  \;}
+  \label{eq:steric-boltz}
+\end{equation}
+Saturation: as $\phi\to+\infty$,
+$c_-\to (1-A_d)/a_{\ClO}$.  At the bulk $\phi=0$, $A_d=A_{d,b}$, the
+expression collapses to $c_- = c_{\ClO,b}$.  In the dilute limit
+$a_{\ClO}\to 0$ with $A_d\to 0$, $c_- \to c_{\ClO,b}\,e^{\phi}$ and
+the original ideal Boltzmann is recovered.
+
+\subsection{Provenance and what is new}
+The structure of \eqref{eq:steric-boltz} -- a Bikerman correction
+applied to a single inert ion using the local dynamic-species
+packing fraction -- did not appear in the May~2026 literature search.
+The two-step zero-flux algebra (\S\ref{sec:gamma-IC}) is
+\app{}/\lit{}; reading off a single-ion analytic closure that
+\emph{simultaneously} (i) feeds Poisson and (ii) appears in the
+dynamic-species packing $\theta_{\mathrm{tot}} = 1 - A_d - a_{\ClO}c_-$
+is \new{} for this project.  Both occurrences (Poisson source and
+$\theta$) must use the same expression; that mathematical
+constraint is enforced by inlining the closure helper
+\texttt{Forward/bv\_solver/boltzmann.py::build\_steric\_boltzmann\_expressions}
+in both places.
+
+\subsection{Equivalence to dynamic 4sp Bikerman}
+At steady state with no $\ClO$ flux at non-bulk boundaries and
+\eqref{eq:musteric-fixed} as the steric chemical potential, the
+4sp~dynamic and 3sp+steric-Boltzmann stacks solve the same PDE.
+The MMS test \texttt{tests/test\_mms\_steric\_boltzmann\_convergence.py}
+verifies an L2 convergence rate $\ge 1.95$ for the
+manufactured-source variant, and
+\texttt{tests/test\_steric\_boltzmann\_closure.py::test\_steric\_boltzmann\_equiv\_to\_4sp\_dynamic}
+confirms agreement on the cathodic overlap window.
+
+% ====================================================================
+\section{Hybrid proton electrochemical-potential transform $\mu_{\Hp}$ \app}
+\label{sec:muh}
+
+\subsection{Motivation \lit}
+At Boltzmann equilibrium the electrochemical potential
+$\mch_i$ is constant; in particular $u_{\Hp}=\ln c_{\Hp}$ and $\phi$
+each vary by tens of log-units across the Debye layer while
+\(\mch_{\Hp} = u_{\Hp} + em\,z_{\Hp}\,\phi\)
+is approximately flat.  Slotboom's classical change of variable
+\cite{slotboom1973} for semiconductor drift--diffusion uses exactly
+this fact; the same transformation generalizes to PNP electrolytes,
+where the result is sometimes called a quasi-Fermi or
+electrochemical-potential variable \lit{}.
+
+\subsection{The hybrid implementation}
+We change the proton primary variable only:
+\begin{equation}
+  \mu_{\Hp} := u_{\Hp} + em\,z_{\Hp}\,\phi
+        \quad\Longleftrightarrow\quad
+  c_{\Hp} = \exp\!\bigl(\mu_{\Hp} - em\,z_{\Hp}\,\phi\bigr).
+  \label{eq:muh-def}
+\end{equation}
+Neutrals $\Otwo, \Htwo$ keep $u_i = \ln c_i$.  The proton flux,
+\begin{equation}
+  J_{\Hp} \;=\; -D_{\Hp}\,c_{\Hp}\,\nabla\mu_{\Hp}
+            \;-\; D_{\Hp}\,c_{\Hp}\,\nabla\msteric,
+\end{equation}
+is reconstructed from the new unknown plus the resolved $\phi$, with
+no separate $em\,z_{\Hp}\nabla\phi$ drift term.  This is mathematically
+equivalent to the log-c form when both converge to the same SS, but
+gives Newton a much smoother primary variable in the Debye layer.
+
+\subsection{IC under cancellation \new}
+Plugging the matched-asymptotic IC \eqref{eq:IC-final} into
+\eqref{eq:muh-def} with $em\,z_{\Hp}=+1$,
+\begin{equation}
+  \mu_{\Hp}^{\mathrm{IC}}
+   = \ln H_o(y) - \psi(y) + \phi_o(y) + \psi(y)
+   = \ln H_o(y) + \ln\!\bigl(H_o(y)/c_{\ClO,b}\bigr).
+\end{equation}
+The diffuse-layer $\psi$ cancels exactly: the IC for $\mu_{\Hp}$ is
+visibly smooth in $y$.  The cancellation is what makes Newton easier
+in this variable; it is observed numerically and is \new{} only in
+the sense that the explicit cancellation has not been written out
+in the surveyed PNP literature for this specific reactive ORR setup.
+
+\subsection{Implementation}
+The hybrid lives at \texttt{Forward/bv\_solver/forms\_logc\_muh.py}
+(964~LOC, near-clone of \texttt{forms\_logc.py}); routing is via
+\texttt{formulation="logc\_muh"}.  Five \texttt{c\_H}-touch sites
+were substituted (NP flux, BV surface concentration, BV log-rate,
+Bikerman packing, Poisson source) plus the IC pair.  The
+\texttt{u\_clamp} is applied to the reconstructed
+$\ln c_{\Hp} = \mu_{\Hp} - em\,z_{\Hp}\,\phi$, not to raw $\mu_{\Hp}$,
+because the offset by $\phi$ is $O(40)$ at high anodic $V$ and a
+symmetric clamp on raw $\mu_{\Hp}$ would impose a different physical
+bound.  The $c_{\Hp,\mathrm{old}}$ in the time term must be
+reconstructed using $\phi_{\mathrm{prev}}$, not the current $\phi$,
+or transient runs are silently inconsistent.
+
+% ====================================================================
+\section{The three clipping conventions, audited \new}
+\label{sec:clipping}
+
+The phrase ``log-rate removed exponent clipping'' in older docs is
+incorrect.  Three distinct clamps appear in the production stack;
+log-rate eliminates only one.
+
+\subsection{$\eta$-clip at $\pm 50$ (active)}
+\(
+  \eta_{\mathrm{scaled}}
+   = (V_{\mathrm{RHE}}-E_{\mathrm{eq},j})/V_T,
+\)
+clipped to $[-50,+50]$ \emph{before} multiplication by $\alpha\,n_e$
+\cite{forms_logc_py_217_236} \new{}.  The clip is on
+$\eta_{\mathrm{scaled}}$, not on $\alpha n_e\eta$; this matters
+because the unclipping voltage for $R_2$
+($E_{\mathrm{eq},2}=1.78$~V, $n_e=2$) is
+\begin{equation}
+  V_{\mathrm{unclip}}^{R_2} = E_{\mathrm{eq},2} - 50\,V_T = +0.495~\text{V},
+\end{equation}
+not the $+1.14$~V quoted in older handoffs (which mistakenly applied
+the clip to $\alpha n_e\eta$ and dropped the $\alpha$ factor).
+The corrected threshold is project-internal \new{}.  Below this
+voltage, $R_2$'s cathodic exponent is frozen at
+$\alpha_2 n_e\cdot 50$; above, the true $\alpha_2$-dependence
+recovers (measured $\partial$CD$/\partial\alpha_2$ jumps $\sim 340\times$
+across threshold).
+The clip is \emph{not} merely an overflow guard for the production V
+range; it is also a Newton-stability device on cold transients.
+At converged SS, $u_{\mathrm{cat}}\approx -\alpha n|\eta|$ and the
+log-rate sum cancels, so the clip is effectively inactive at SS for
+$V$ above its threshold.
+
+\subsection{$U$-clamp at $\pm 30$ (active in bulk only)}
+\(
+  c_i = \exp\!\bigl(\mathrm{clamp}(u_i,\pm 30)\bigr)
+\)
+appears as a coefficient in bulk integrals (time term, NP flux,
+Poisson source).  Log-rate cannot algebraically defer this
+$\exp$ because it is not a single scalar rate but a coefficient that
+multiplies test-function expressions over $\Omega$ \new{}.
+For $V_{\mathrm{RHE}}>+0.30$~V the SS $u_{\Htwo}$ approaches $-30$
+and the clamp begins to bind at SS; widen to
+$u_{\mathrm{clamp}}=100$ in that regime.
+
+\subsection{Surface $c_{\mathrm{surf}}$ clamp inside BV (removed by log-rate)}
+The legacy BV residual evaluates
+$k_0\,c_{\mathrm{surf}}\,\exp(-\alpha n_e\eta)$ with
+$c_{\mathrm{surf}}=\exp(\mathrm{clamp}(u,\pm 30))$.  When the
+production V drives $c_{\Htwo}$ below the floor, the floored
+$c_{\mathrm{surf}}$ multiplied by the saturated $\exp(\alpha n_e\cdot 50)$
+produces a spurious $R_2$ sink.  The log-rate rearrangement
+\begin{equation}
+  \log r_{\mathrm{cath}} \;=\; \ln k_0 + u_{\mathrm{cat}}
+       + \sum_{\mathrm{others}} p_s\,(u_s-\ln c_{\mathrm{ref}})
+       - \alpha n_e\,\eta,
+   \qquad r = \exp(\log r_{\mathrm{cath}}) - \exp(\log r_{\mathrm{anod}})
+   \label{eq:lograte}
+\end{equation}
+defers the only $\exp$ in the rate expression to the very end and
+uses $u_{\mathrm{cat}}$ unclamped \new{}.  This eliminates the
+artificial sink and the floor pinning, but \emph{does not} eliminate
+either of the other two clips.
+
+\subsection{CD vs PC asymmetry below threshold \new}
+The clip-threshold sensitivity sweep
+(\texttt{StudyResults/clip\_threshold\_sensitivity/}, 2026-05-03)
+established that:
+\begin{itemize}[leftmargin=*]
+\item CD is approximately preserved across clip $\in\{50,100\}$
+      ($\sim 0.2\%$ max distortion at $V_{\mathrm{RHE}}=-0.5$~V).
+\item PC is qualitatively wrong below $V_{\mathrm{RHE}}=-0.1$~V at
+      clip $=50$: opposite sign and 3--4 OOM magnitude shift relative
+      to clip $=100$.
+\item Internal $c_{\Htwo}^{\mathrm{surface}}$ at clip $=50$
+      \emph{accumulates} above bulk; the unclipped truth depletes
+      below bulk by 9--12 OOM.
+\item $\partial R_2/\partial \alpha_2 \approx 0$ in the clipped
+      regime because the exponent is frozen w.r.t.\ $\alpha_2$.
+\end{itemize}
+These observable-level asymmetries are the empirical motivation for
+restricting PC fits to $V_{\mathrm{RHE}}\ge -0.1$~V at clip $=50$, or
+re-running at clip $=100$ (smaller cold-start basin: 10/13 $\to$
+3/13 cold-converged on the production grid, but warm-walk
+continuation handles the remainder).
+
+% ====================================================================
+\section{Production-tree cleanup \new{} (no math)}
+\label{sec:cleanup}
+
+The pre-cleanup stack (commit \texttt{6a46d98}, tagged
+\texttt{pre-cleanup-2026-05-02}) carried both the production
+3sp+Boltzmann+log-c+log-rate path and the legacy 4sp/concentration
+backend that this work superseded.  Phases 1--5 of the cleanup
+removed $-9{,}468$ LOC across 8 dead \texttt{Forward/bv\_solver/}
+modules, 7 dead test/verification files, and 1 broken study
+script; the production driver
+\texttt{scripts/plot\_iv\_curve\_unified.py} reproduced the
+pre-cleanup baseline \emph{bit-exactly} on a 13-voltage sweep at
+$N_y=200$.  The dispatcher
+\texttt{Forward/bv\_solver/dispatch.py} collapsed from 125 LOC to
+51 LOC: \texttt{build\_context}, \texttt{build\_forms}, and
+\texttt{set\_initial\_conditions} are now one-line wrappers around
+\texttt{forms\_logc.\{...\}\_logc} and the new
+\texttt{forms\_logc\_muh.\{...\}\_logc\_muh}.
+
+% ====================================================================
+\section{Status and pointers}
+\label{sec:status}
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{p{4.7cm}p{4.7cm}p{4cm}}
+\toprule
+Topic & Production state (2026-05-04) & Code pointer \\
+\midrule
+Steric sign & corrected to $-\ln\theta$ & \texttt{forms\_logc.py:266} \\
+Multispecies $\gamma$ IC (4sp) & local-anchor $H_o$, in 4sp branch only & \texttt{forms\_logc.py:795--833} \\
+Composite $\psi$ (Option~2b) & planned, not executed & \texttt{4sp\_bikerman\_ic\_option\_2b\_plan.md} \\
+Steric Boltzmann counterion & opt-in via \texttt{steric\_mode="bikerman"} & \texttt{boltzmann.py::build\_steric\_boltzmann\_expressions} \\
+$\mu_{\Hp}$ hybrid & \texttt{formulation="logc\_muh"} & \texttt{forms\_logc\_muh.py} \\
+$\eta$-clip & $\pm 50$ default; widen to $\pm 100$ for clean PC below threshold & \texttt{forms\_logc.py:\_build\_eta\_clipped} \\
+$U$-clamp & $\pm 30$ default; widen to $\pm 100$ for $V>+0.30$~V & \texttt{forms\_logc.py:194--198} \\
+Tree cleanup & $-9{,}468$ LOC; bit-exact baseline & tag \texttt{pre-cleanup-2026-05-02} \\
+\bottomrule
+\end{tabular}
+\caption{Status of the May~2026 forward-solver changes.}
+\end{table}
+
+% ====================================================================
+\begin{thebibliography}{9}
+\bibitem{borukhov1997}
+I.\ Borukhov, D.\ Andelman, H.\ Orland.
+\emph{Steric Effects in Electrolytes: A Modified Poisson--Boltzmann
+Equation.}
+Phys.\ Rev.\ Lett.\ \textbf{79}, 435 (1997).
+\href{https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.79.435}{PRL link}.
+
+\bibitem{bazant2009}
+M.\ Z.\ Bazant, M.\ S.\ Kilic, B.\ D.\ Storey, A.\ Ajdari.
+\emph{Towards an understanding of induced-charge electrokinetics at
+large applied voltages in concentrated solutions.}
+Adv.\ Colloid Interface Sci.\ \textbf{152}, 48 (2009).
+\href{http://web.mit.edu/bazant/www/papers/pdf/Bazant_2009_ACIS.pdf}{PDF}.
+
+\bibitem{kilic2007}
+M.\ S.\ Kilic, M.\ Z.\ Bazant, A.\ Ajdari.
+\emph{Steric effects in the dynamics of electrolytes at large applied
+voltages.\ I.\ Double-layer charging.}
+Phys.\ Rev.\ E \textbf{75}, 021502 (2007).
+\href{https://arxiv.org/abs/physics/0611030}{arXiv}.
+
+\bibitem{kornyshev2007}
+A.\ A.\ Kornyshev.
+\emph{Double-Layer in Ionic Liquids: Paradigm Change?}
+J.\ Phys.\ Chem.\ B \textbf{111}, 5545 (2007).
+\href{https://pubs.acs.org/doi/full/10.1021/jp067857o}{ACS link}.
+
+\bibitem{newman2004}
+J.\ Newman, K.\ E.\ Thomas-Alyea.
+\emph{Electrochemical Systems}, 3rd ed., Wiley, 2004.
+
+\bibitem{slotboom1973}
+J.\ W.\ Slotboom.
+\emph{Computer-aided two-dimensional analysis of bipolar transistors.}
+IEEE Trans.\ Electron Devices \textbf{20}, 669 (1973).
+
+\bibitem{bazant2005}
+M.\ Z.\ Bazant, K.\ T.\ Chu, B.\ J.\ Bayly.
+\emph{Current-Voltage Relations for Electrochemical Thin Films.}
+SIAM J.\ Appl.\ Math.\ \textbf{65}, 1463 (2005).
+\href{http://web.mit.edu/bazant/www/papers/pdf/Bazant_2005_SIAM_J_Appl_Math_MTF2.pdf}{PDF}.
+
+\bibitem{forms_logc_py_217_236}
+Project source.
+\texttt{Forward/bv\_solver/forms\_logc.py:217--236}
+(\texttt{\_build\_eta\_clipped}).
+See \texttt{docs/clipping\_conventions.md}.
+\end{thebibliography}
+
+\end{document}

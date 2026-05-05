@@ -1,0 +1,309 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,array,hyperref,microtype,xcolor}
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=*,topsep=2pt,itemsep=2pt}
+
+\title{PNP Log-Concentration Transition\\
+       \large Side-by-Side Comparison with the Concentration Formulation}
+\author{Jake Weinstein}
+\date{Week of April~27, 2026}
+
+\newcommand{\Eeq}{E_{\mathrm{eq}}}
+\newcommand{\VT}{V_{T}}
+\newcommand{\Gelec}{\Gamma_{\mathrm{elec}}}
+\newcommand{\Gconc}{\Gamma_{\mathrm{conc}}}
+\newcommand{\Gground}{\Gamma_{\mathrm{ground}}}
+\newcommand{\dx}{\,\mathrm{d}x}
+\newcommand{\ds}{\,\mathrm{d}s}
+
+\begin{document}
+\maketitle
+
+\section{Purpose and scope}
+The active production stack
+(\verb|Forward/bv_solver/forms_logc.py|) uses
+$u_i = \ln c_i$ as primary unknowns instead of $c_i$. This note maps every
+equation in \texttt{docs/PNP Equation Formulations.tex} to its
+log-concentration counterpart so the transition can be verified line by line.
+The mathematical change is a single substitution; the practical change is the
+elimination of negative-concentration Newton iterates and the resulting
+floor/regularization terms. The Poisson equation is structurally unchanged
+modulo $c_i \to e^{u_i}$ in its source.
+
+Throughout, the substitution
+\[
+  c_i = e^{u_i},
+  \qquad
+  \nabla c_i = e^{u_i}\,\nabla u_i = c_i\,\nabla u_i,
+\]
+is applied to every term in the strong and weak forms. The combination
+$\nabla c_i + \tfrac{z_i F}{RT}\,c_i\,\nabla\phi$ that appears in the
+Nernst--Planck flux factors as $c_i \bigl(\nabla u_i + \tfrac{z_i
+F}{RT}\,\nabla\phi\bigr)$, which is the central simplification.
+
+\section{Strong form}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.6}
+\begin{tabular}{@{} >{\bfseries}p{0.18\textwidth} p{0.36\textwidth} p{0.40\textwidth} @{}}
+\toprule
+& \textbf{Concentration ($c_i$)} & \textbf{Log-concentration ($u_i = \ln c_i$)} \\
+\midrule
+NP equation &
+$\displaystyle \frac{\partial c_i}{\partial t}
+   = \nabla\!\cdot\!\Bigl(D_i\bigl[\nabla c_i
+       + \tfrac{z_i F}{RT}\,c_i\,\nabla\phi\bigr]\Bigr)$ &
+$\displaystyle \frac{\partial e^{u_i}}{\partial t}
+   = \nabla\!\cdot\!\Bigl(D_i\,e^{u_i}\bigl[\nabla u_i
+       + \tfrac{z_i F}{RT}\,\nabla\phi\bigr]\Bigr)$ \\
+NP flux &
+$\mathbf J_i = -D_i\bigl(\nabla c_i + \tfrac{z_i F}{RT}\,c_i\,\nabla\phi\bigr)$ &
+$\mathbf J_i = -D_i\,e^{u_i}\bigl(\nabla u_i + \tfrac{z_i F}{RT}\,\nabla\phi\bigr)$ \\
+Poisson &
+$-\nabla\!\cdot\!(\epsilon\,\nabla\phi) = \sum_i z_i F\,c_i$ &
+$-\nabla\!\cdot\!(\epsilon\,\nabla\phi) = \sum_i z_i F\,e^{u_i}$ \\
+BV flux BC on $\Gelec$ &
+$-D_i\bigl(\nabla c_i + \tfrac{z_i F}{RT}\,c_i\,\nabla\phi\bigr)\cdot\mathbf n = \pm \tfrac{j}{n_e F}$ &
+$-D_i\,e^{u_i}\bigl(\nabla u_i + \tfrac{z_i F}{RT}\,\nabla\phi\bigr)\cdot\mathbf n = \pm \tfrac{j}{n_e F}$ \\
+Bulk concentration BC on $\Gconc$ &
+$c_i = c_{0,i}$ &
+$u_i = \ln c_{0,i}$ \quad (with floor $\max(c_{0,i},10^{-20})$ for product species with $c_{0,i}=0$) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+\textbf{What is unchanged}: the Poisson PDE structure, the dielectric
+$\epsilon$, the valences $z_i$, $E_{\mathrm{eq}}$, the bulk Poisson source
+sum, and the choice of which boundary carries the BV flux. Only the
+representation of $c_i$ has changed.
+
+\textbf{What is new}: the Dirichlet bulk BC is now $u_i = \ln c_{0,i}$,
+which is undefined for $c_{0,i}=0$. The code uses a floor
+$c_{0,i} \leftarrow \max(c_{0,i}, 10^{-20})$ for product species
+(\texttt{forms\_logc.py:441,510}); this matters for $\mathrm{H_2O_2}$,
+whose physical bulk IC is zero.
+
+\section{Weak form}
+
+Multiplying the NP equation by $v\in V$ and integrating by parts (with the
+electrode boundary handled by the BV flux condition):
+
+\begin{center}
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{@{} >{\bfseries}p{0.13\textwidth} p{0.40\textwidth} p{0.42\textwidth} @{}}
+\toprule
+& \textbf{Concentration} & \textbf{Log-concentration} \\
+\midrule
+NP weak form &
+$\displaystyle\int_\Omega \frac{\partial c_i}{\partial t}\,v\dx
+ + \int_\Omega D_i\bigl[\nabla c_i + \tfrac{z_i F}{RT}\,c_i\,\nabla\phi\bigr]\!\cdot\!\nabla v\dx$
+\newline\hspace*{4em}$=\displaystyle\int_{\Gelec}\!\Bigl(\!\mp\tfrac{j}{n_e F}\Bigr) v\ds$ &
+$\displaystyle\int_\Omega \frac{\partial e^{u_i}}{\partial t}\,v\dx
+ + \int_\Omega D_i\,e^{u_i}\bigl[\nabla u_i + \tfrac{z_i F}{RT}\,\nabla\phi\bigr]\!\cdot\!\nabla v\dx$
+\newline\hspace*{4em}$=\displaystyle\int_{\Gelec}\!\Bigl(\!\mp\tfrac{j}{n_e F}\Bigr) v\ds$ \\
+\midrule
+Poisson weak form &
+$\displaystyle\int_\Omega \epsilon\,\nabla\phi\!\cdot\!\nabla w\dx
+ = \int_\Omega\!\Bigl(\sum_i z_i F\,c_i\Bigr) w\dx$ &
+$\displaystyle\int_\Omega \epsilon\,\nabla\phi\!\cdot\!\nabla w\dx
+ = \int_\Omega\!\Bigl(\sum_i z_i F\,e^{u_i}\Bigr) w\dx$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Time discretization (backward Euler)}
+The code uses backward Euler in $c$-space, even though the unknown is $u$:
+\[
+  \boxed{\;
+  \int_\Omega \frac{e^{u_i^{n+1}} - e^{u_i^{n}}}{\Delta t}\,v\dx
+  \;\neq\;
+  \int_\Omega e^{u_i^{n+1}}\frac{u_i^{n+1} - u_i^{n}}{\Delta t}\,v\dx
+  \;}
+\]
+The left-hand form (used in \verb|forms_logc.py:294|) preserves discrete
+species mass directly; the right-hand form would not. This is the only point
+in the discretization where the choice of variable could in principle drift
+from the concentration formulation, and the code is correct.
+
+\section{Butler--Volmer boundary residual}
+
+The BV reaction rate is
+\[
+  R_{\mathrm{BV}}
+  = k_0\Bigl[c_{\mathrm{cat}}\,e^{-\alpha n_e \eta/V_T}
+            - c_{\mathrm{anod}}\,e^{(1-\alpha)n_e \eta/V_T}\Bigr],
+  \qquad
+  \eta = \phi_m - \phi_s - \Eeq.
+\]
+Both branches in \verb|forms_logc.py| evaluate the same rate
+mathematically; they differ in how they assemble it numerically.
+
+\subsection{Standard branch (\texttt{bv\_log\_rate=False})}
+Evaluates surface concentrations directly from the (clamped) log unknowns:
+\[
+  c_{\mathrm{surf},i} = \exp\!\bigl(\mathrm{clamp}(u_i,\,\pm 30)\bigr),
+  \qquad
+  R = k_0\,c_{\mathrm{surf,cat}}\,e^{-\alpha n_e\eta/V_T}
+        - k_0\,c_{\mathrm{surf,anod}}\,e^{(1-\alpha)n_e\eta/V_T}.
+\]
+This is the literal port of the original BV formulation to the log-c
+unknowns. The clamp $\pm 30$ is required because $u$ can wander wildly
+during Newton iteration and \texttt{exp(u)} would otherwise overflow.
+
+\subsection{Log-rate branch (\texttt{bv\_log\_rate=True}, current default)}
+Algebraically rearranges the cathodic and anodic terms so the only $\exp$
+applies to a single scalar sum, deferring evaluation:
+\begin{align*}
+  \log r_{\mathrm{cath}} &= \ln k_0 + u_{\mathrm{cat}}
+       + \sum_{j} p_j\bigl(u_j - \ln c_{\mathrm{ref},j}\bigr)
+       - \alpha\,n_e\,\eta/V_T \\
+  \log r_{\mathrm{anod}} &= \ln k_0 + u_{\mathrm{anod}}
+       + (1-\alpha)\,n_e\,\eta/V_T \\
+  R &= e^{\log r_{\mathrm{cath}}} - e^{\log r_{\mathrm{anod}}}.
+\end{align*}
+The $u_i$ enter \emph{unclamped}. There is no $c_{\mathrm{surf}}$ floor in
+this branch. This is what eliminates the phantom $\mathrm{R}_2$ sink at
+$V_{\mathrm{RHE}} > +0.30$ V (when $u_{\mathrm{H_2O_2}}$ approaches the
+$-30$ floor of the standard branch).
+
+The two branches are identical in exact arithmetic; the difference is
+purely numerical. See \texttt{docs/clipping\_conventions.md} for the full
+discussion.
+
+\section{Active clamps in the production solver}
+
+The transition to log-c does \emph{not} eliminate clipping. Three distinct
+guards exist in the code; only one was removed by the log-rate algebraic
+rearrangement.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\small
+\begin{tabular}{@{} p{0.27\textwidth} p{0.27\textwidth} c p{0.30\textwidth} @{}}
+\toprule
+\textbf{Clip / clamp} & \textbf{Where in code} & \textbf{Active?} & \textbf{Guards against} \\
+\midrule
+$\eta$-clip $\pm 50$ on $\eta_{\mathrm{scaled}}$ &
+\verb|_build_eta_clipped| (l.226) & yes &
+overflow of $\exp(\alpha n_e\eta)$ \\
+$u$-clamp $\pm 30$ on bulk $u_i$ &
+bulk PDE residual (l.203) & yes &
+overflow / underflow of $e^{u_i}$ as PDE coefficient \\
+$c_{\mathrm{surf}}$ clamp inside BV &
+legacy BV branch only (l.369--389) & no (log-rate) &
+under-floored $e^{u}$ corrupting BV at high $V$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+\textbf{Why the bulk $u$-clamp cannot be eliminated by the log-rate trick}:
+in the BV residual the entire reaction rate collapses to a single
+$\exp(\text{scalar sum})$, so the $\exp$ can be deferred. In the bulk PDE,
+$e^{u_i}$ appears as a \emph{coefficient} multiplying $\nabla v$ and other
+terms that vary across the domain --- there is no single $\exp$ to defer.
+The $u$-clamp is therefore floating-point safety only; widen to $u_{\max}=100$
+when $V_{\mathrm{RHE}} > +0.30$ V because $u_{\mathrm{H_2O_2}}$ at SS
+itself approaches $-30$ in that regime.
+
+\noindent
+\textbf{Why the $\eta$-clip cannot be eliminated either}:
+$\exp(\pm 138)\sim 10^{\pm 60}$ overflows double precision; $\eta$-clip at
+$\pm 50$ is the standard guard. R$_2$ ($\Eeq = 1.78$~V, $n_e = 2$) unclips
+when $|V - \Eeq| < 50\,V_T = 1.285$~V, i.e. $V > +0.495$~V. R$_1$
+($\Eeq = 0.68$~V, $n_e = 1$) unclips for $V > -0.605$~V, so it is
+essentially always unclipped on the production grid.
+
+\section{Verification checklist}
+Items to spot-check while reading the code against this writeup. All line
+numbers refer to \texttt{Forward/bv\_solver/forms\_logc.py} unless otherwise
+noted.
+
+\begin{enumerate}\setlength\itemsep{4pt}
+  \item \textbf{Flux factoring} (l.\,291). \\
+        \verb|Jflux = D[i] * c_i * (grad(u_i) + grad(drift))| \\
+        Confirms $\mathbf J = -D\,c\,(\nabla u + \tfrac{zF}{RT}\nabla\phi)$.
+  \item \textbf{Time derivative} (l.\,294). \\
+        \verb|((c_i - c_old) / dt_const) * v * dx| \\
+        Confirms $\Delta(e^u)/\Delta t$, not $e^u\,\Delta u/\Delta t$.
+  \item \textbf{Poisson source} (l.\,428). \\
+        \verb|sum(z[i] * ci[i] * w for i in range(n))| \\
+        Confirms $\sum_i z_i\,e^{u_i}$; the $F$ prefactor is folded
+        into \verb|charge_rhs|.
+  \item \textbf{Bulk Dirichlet BC} (l.\,445--447). \\
+        \verb|c0_i = max(float(c0_model[i]), _C_FLOOR)| then
+        \verb|fd.Constant(np.log(c0_i))|. \\
+        Confirms $u_i = \ln c_{0,i}$ on $\Gconc$ with floor
+        $c_{0,i}\leftarrow\max(c_{0,i}, 10^{-20})$ for product species.
+  \item \textbf{Initial conditions} (l.\,511--513). Same floor convention as
+        the bulk BC; assigns $u_i^{(0)} = \ln c_{0,i}$.
+  \item \textbf{No blob IC.} The kwarg
+        \verb|set_initial_conditions(..., blob=True)| is silently ignored
+        in log-c (see \verb|dispatch.py:32-41|). The blob IC was a
+        concentration-formulation feature with no log-c analog.
+  \item \textbf{$\eta$-clip on $\eta_{\mathrm{scaled}}$, not on
+        $\alpha n_e \eta_{\mathrm{scaled}}$} (l.\,244). \\
+        \verb|min_value(max_value(eta_scaled, -clip_val), clip_val)| \\
+        Applied \emph{before} multiplying by $\alpha n_e$. This is the
+        source of the $V_{\mathrm{RHE}} > +0.495$~V R$_2$ unclip
+        threshold (\emph{not} the $+1.14$~V number from older handoffs).
+  \item \textbf{Log-rate BV uses unclamped $u_i$} (l.\,337). The cathodic
+        log-rate is built as
+        \begin{quote}\small
+          \verb|log_cathodic = fd.ln(k0_j) + ui[cat_idx]|\\
+          \hspace*{2em}\verb|- alpha_j * n_e_j * eta_j|
+        \end{quote}
+        Compare to the legacy branch (l.\,369) which uses
+        \verb|c_surf[cat_idx] = exp(clamp(ui, +/-30))|.
+\end{enumerate}
+
+\section{What this transition did and did not change}
+
+\textbf{Did change.}
+\begin{itemize}
+  \item Primary unknown $c_i \to u_i = \ln c_i$ on the dynamic species.
+  \item Bulk Dirichlet BC type $c_i = c_{0,i} \to u_i = \ln c_{0,i}$;
+        $c_{0,i}=0$ now requires a floor.
+  \item Time stepping is backward Euler in $c = e^u$, so the time term is
+        $(\,e^{u^{n+1}} - e^{u^n}\,)/\Delta t$, not $e^{u^{n+1}}(u^{n+1} - u^n)/\Delta t$.
+  \item Concentrations are positive by construction, so the negative-$c$
+        Newton iterates and the associated floor regularizations
+        in the old solver are gone.
+  \item Conditioning of Debye-layer regions is improved: the exponential
+        in $c(x)$ becomes linear in $u(x)$.
+  \item BV residual gains an algebraically rearranged log-rate option
+        (\verb|bv_log_rate=True|) that lets the surface $u_i$ enter
+        unclamped.
+\end{itemize}
+
+\textbf{Did not change.}
+\begin{itemize}
+  \item The Poisson PDE structure (only its source uses $e^{u_i}$).
+  \item The BV reaction rate physics, $\Eeq$ values, $\alpha$, $k_0$,
+        stoichiometry, or the meaning of $\eta$.
+  \item The $\eta$-clip $\pm 50$ on $\eta_{\mathrm{scaled}}$, which is
+        floating-point safety on $\exp(\alpha n_e \eta)$ and is structural,
+        not a c-vs-u choice.
+  \item The bulk $u$-clamp $\pm 30$, which is the necessary log-c analog
+        of guarding $\exp(u)$ as a coefficient and \emph{cannot} be
+        eliminated by the log-rate trick (different role: coefficient vs
+        single deferred $\exp$).
+  \item The Boltzmann counterion (\verb|add_boltzmann_counterion_residual|)
+        is added orthogonally to the log-c transform.
+\end{itemize}
+
+\section{Where to read more}
+\begin{itemize}
+  \item \texttt{docs/PNP Equation Formulations.tex} --- original
+        concentration formulation.
+  \item \texttt{Forward/bv\_solver/forms\_logc.py} --- production
+        implementation.
+  \item \texttt{docs/clipping\_conventions.md} --- detailed accounting of
+        the three clips/clamps and why each one stays.
+  \item \texttt{docs/bv\_solver\_unified\_api.md} --- how to call the
+        production stack via config flags.
+\end{itemize}
+
+\end{document}

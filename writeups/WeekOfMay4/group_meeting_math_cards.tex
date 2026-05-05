@@ -1,0 +1,586 @@
+% group_meeting_math_cards.tex
+% Cleanly-typeset math for the May 2026 group meeting slides.
+% Compile with pdflatex; each "card" is a screenshot-friendly box.
+%
+% Sources:
+%   docs/PNP_BV_Analytical_Simplifications.md
+%   docs/clipping_conventions.md
+%   docs/stern_layer_physics_and_next_steps.md
+%   docs/Mangan2025_experimental_alignment.md
+%   Forward/bv_solver/forms_logc.py
+%   Forward/bv_solver/forms_logc_muh.py
+%   Forward/bv_solver/boltzmann.py
+%   writeups/WeekOfApr27/PNP Inverse Solver Revised.tex
+
+\documentclass[11pt]{article}
+\usepackage[margin=0.75in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{xcolor}
+\usepackage[most]{tcolorbox}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{siunitx}
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=*,topsep=2pt,itemsep=2pt}
+
+% Plain black-on-white card style. Title sits on a thin rule above
+% the body; no colored fills or borders.
+\tcbset{
+  cardstyle/.style={
+    enhanced,
+    colback=white,
+    colframe=white,
+    coltitle=black,
+    fonttitle=\bfseries\large,
+    title=#1,
+    boxrule=0pt,
+    frame hidden,
+    arc=0pt,
+    left=4pt, right=4pt, top=4pt, bottom=4pt,
+    attach boxed title to top left={xshift=0pt, yshift=0pt},
+    boxed title style={
+      colback=white,
+      colframe=white,
+      boxrule=0pt,
+      arc=0pt,
+      left=0pt, right=0pt, top=0pt, bottom=2pt,
+    },
+    after title={\par\vspace{2pt}\hrule\vspace{6pt}},
+    breakable=false
+  }
+}
+
+\newcommand{\VT}{V_{T}}
+\newcommand{\Eeq}{E_{\mathrm{eq}}}
+\newcommand{\VRHE}{V_{\mathrm{RHE}}}
+
+\begin{document}
+
+\begin{center}
+  {\Large\bfseries Math Reference Cards --- PNP--BV Solver Updates}\\[2pt]
+  {\small For the May 2026 group meeting slides. Each card is a
+  self-contained block intended to be screenshotted directly into a
+  slide.}
+\end{center}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Baseline: 4-species PNP-BV (pre-rebuild)}]
+\textbf{Bulk Nernst--Planck (one equation per species $i$):}
+\[
+  \frac{\partial c_i}{\partial t}
+   = -\nabla\!\cdot J_i,\qquad
+  J_i = -D_i\!\left(\nabla c_i + \frac{z_i F}{RT}\,c_i\,\nabla\varphi\right)
+\]
+
+\textbf{Poisson:}
+\[
+  -\varepsilon\,\nabla^{2}\varphi \;=\; F\sum_{i} z_i\,c_i
+\]
+
+\textbf{Butler--Volmer flux BC at the electrode for reaction $j$:}
+\[
+  r_j \;=\; k_{0,j}\!\left[\,
+  c_O^{\mathrm{surf}}\,\exp\!\Bigl(-\alpha_j\,\tfrac{n_e F\eta_j}{RT}\Bigr)
+  \;-\;
+  c_R^{\mathrm{surf}}\,\exp\!\Bigl((1-\alpha_j)\,\tfrac{n_e F\eta_j}{RT}\Bigr)
+  \right]
+\]
+
+\textbf{Species (4-species formulation):} \(\mathrm{O_2}\),
+\(\mathrm{H_2O_2}\), \(\mathrm{H^+}\), \(\mathrm{ClO_4^-}\). Charges
+\(z = (0, 0, +1, -1)\). Reactions
+\[
+  \mathrm{R_1}:\;\mathrm{O_2} + 2\mathrm{H^+} + 2e^{-}\!\to\mathrm{H_2O_2},
+  \qquad
+  \mathrm{R_2}:\;\mathrm{H_2O_2} + 2\mathrm{H^+} + 2e^{-}\!\to 2\mathrm{H_2O}.
+\]
+\textbf{Convergence window:} \(\VRHE\in[-0.50,+0.10]\) V (cathodic
+edge only).
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Change 1: 3-species + analytic Boltzmann counterion}]
+Drop \(\mathrm{ClO_4^-}\) as a dynamic Nernst--Planck unknown. Replace
+its contribution to Poisson by an analytic Boltzmann profile in
+local equilibrium with \(\varphi\).
+
+\textbf{Modified Poisson source (nondimensional, ideal mode):}
+\[
+  -\varepsilon\,\nabla^{2}\varphi \;=\;
+  F\!\!\sum_{i\in\{\mathrm{O_2,H_2O_2,H^+}\}}\!\! z_i c_i
+  \;-\; F\,c_{\mathrm{ClO_4}}^{\mathrm{bulk}}\,\exp(-z_{\mathrm{ClO_4}}\,\varphi)
+\]
+
+\textbf{Why it works:} a species in zero-flux equilibrium with the
+field satisfies
+\(\nabla(\ln c_i + z_i\varphi) = 0\), i.e.\
+\(c_i \propto \exp(-z_i\varphi)\). For an inert supporting electrolyte
+this is exact in the chemically active region; the inert co-ion never
+needs to be discretized.
+
+\textbf{Convergence window after Change 1:} cold-starts in
+\(\VRHE\gtrsim -0.20\) V; warm-walk fills the full
+\(\VRHE\in[-0.50,+0.10]\) V grid with sub-\(0.5\%\) agreement to the
+4-species reference (V24 validation, 8/8 PASS).
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Change 2: log-concentration formulation}]
+Switch primary unknowns from \(c_i\) to
+\(\;\boxed{\,u_i = \ln c_i\,}\;\). Reconstruct \(c_i = \exp(u_i)\)
+which is positive by construction.
+
+\textbf{Nernst--Planck flux in log-c form:}
+\[
+  J_i \;=\; -D_i\,c_i\bigl(\nabla u_i + z_i\nabla\varphi\bigr)
+  \;=\; -D_i\,e^{u_i}\bigl(\nabla u_i + z_i\nabla\varphi\bigr)
+\]
+
+\textbf{Backward-Euler weak form:}
+\[
+  \int_\Omega \frac{e^{u_i} - e^{u_i^{\mathrm{old}}}}{\Delta t}\,v\,d\Omega
+  \;+\;
+  \int_\Omega D_i\,e^{u_i}\bigl(\nabla u_i + z_i\nabla\varphi\bigr)\!\cdot\!\nabla v\,d\Omega
+  \;=\; \text{(BV boundary terms)}
+\]
+
+\textbf{Poisson source in log-c form:}
+\[
+  \int_\Omega \varepsilon\,\nabla\varphi\!\cdot\!\nabla w\,d\Omega
+  \;-\;\int_\Omega \rho_{\mathrm{rhs}}\!\sum_{i} z_i\,e^{u_i}\,w\,d\Omega
+  \;=\; 0
+\]
+
+\textbf{Why it helps:} \(c_i = e^{u_i} > 0\) by construction; the
+Debye-layer behavior \(c_i \sim c_{\mathrm{bulk}}\exp(-z_i\varphi/\VT)\)
+becomes approximately linear in \(u_i\); SNES iterates can no longer
+overshoot to negative concentrations.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Change 3: log-rate Butler--Volmer}]
+Inside the BV boundary residual, build the rate \emph{additively in
+log space} and exponentiate once at the end.
+
+\textbf{Cathodic branch of reaction $j$:}
+\begin{align*}
+  \log r_j^{(\text{cat})}
+   &= \ln k_{0,j} \;+\; u_{\mathrm{cat}(j)}
+      \;+\; \sum_{f}\nu_f\bigl(u_{\mathrm{sp}(f)} - \ln c_{\mathrm{ref},f}\bigr)
+      \;-\;\alpha_j\,n_e\,\eta_j/\VT \\[2pt]
+  r_j^{(\text{cat})} &= \exp\!\bigl(\log r_j^{(\text{cat})}\bigr)
+\end{align*}
+
+\textbf{Anodic branch:}
+\[
+  \log r_j^{(\text{anod})}
+   = \ln k_{0,j} + u_{\mathrm{anod}(j)}
+     + (1-\alpha_j)\,n_e\,\eta_j/\VT,\qquad
+  r_j^{(\text{anod})} = \exp\!\bigl(\log r_j^{(\text{anod})}\bigr)
+\]
+
+\textbf{What this fixes:} the legacy form evaluates
+\(c_{\mathrm{surf},i}=\exp(\mathrm{clamp}(u_i,\pm 30))\) before
+multiplying by the BV exponential. At anodic \(\VRHE\), \(u_{\mathrm{H_2O_2}}\)
+becomes very negative; the clamp pins \(c_{\mathrm{surf}}\) at a
+finite floor and the saturated cathodic exponential of \(\mathrm{R_2}\)
+produces a phantom sink. Adding \(u_i\) inside the exponent lets
+\(\log r_j \to -\infty\) smoothly, which is the physically correct
+behavior.
+
+\textbf{Convergence window after Change 3:} the production grid now
+reaches \(\VRHE = +0.60\) V (was \(\le +0.20\) V).
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Stern compact layer (Robin BC)}]
+The legacy no-Stern model imposes
+\(\varphi_s = \varphi_m = \varphi_{\mathrm{applied}}\) at the
+electrode (Dirichlet). Real interfaces split the applied drop:
+\[
+  \varphi_m - \varphi_{\mathrm{bulk}}
+   \;=\; \Delta\varphi_{\mathrm{Stern}} + \Delta\varphi_{\mathrm{Diffuse}}
+\]
+
+\textbf{Compact-layer capacitance law:}
+\[
+  \sigma \;=\; C_S\,(\varphi_m - \varphi_s)
+\]
+
+\textbf{Robin boundary contribution to the Poisson residual} (sign
+matches \texttt{forms\_logc.py}):
+\[
+  F_{\mathrm{res}} \;\mathrel{-}=\;
+   \underbrace{\widetilde{C}_S}_{\text{nondim}}\,
+   (\varphi_{\mathrm{applied}}-\varphi)\,w\;d\Gamma_{\mathrm{electrode}}
+\]
+
+\textbf{Modified BV overpotential under Stern:}
+\[
+  \eta_j \;=\; \varphi_m - \varphi_s - \Eeq^{(j)}
+\]
+
+\textbf{Limiting behavior:}
+\[
+  C_S\to\infty:\;\varphi_m - \varphi_s \to 0
+   \;\;(\text{recovers no-Stern Dirichlet});\qquad
+  C_S\;\text{finite}:\;\varphi_s\;\text{floats; some drop in the
+  compact layer}.
+\]
+
+\textbf{Why it matters:} at \(\VRHE > +0.66\) V the Boltzmann co-ion
+source \(c_{\mathrm{ClO_4}}^{\mathrm{bulk}}\exp(\varphi_s)\) becomes
+catastrophically large under no-Stern. Finite \(C_S\) shifts part of
+the drop into the compact layer, lowering \(\varphi_s\) in the PNP
+domain.
+
+\textbf{May~4 result:} on the production stack
+(3sp + Bikerman counterion + log-c-\(\mu_H\)) with the
+Bikerman-consistent IC, \(C_S = 0.10\,\si{\farad\per\meter\squared}\)
+gives \(15/15\) clean convergence on
+\(\VRHE\in[-0.5, +1.0]\,\)V. At \(\VRHE = +0.65\,\)V the Stern layer
+absorbs \(\approx 12.8\,\)V of the applied potential, keeping
+\(\psi_D\) modest enough that proton supply does not underflow the
+BV cathodic terms.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Bikerman steric correction}]
+Finite ion size penalizes packing. Define the local packing fraction
+\(\theta\) using ion sizes \(a_i\) (nondimensional):
+\[
+  \theta \;=\; 1 - \sum_{i\,\in\,\text{dyn}}\!a_i\,c_i
+   \;-\;\underbrace{a_b\,c_{\mathrm{steric},b}}_{\text{counterion contribution}}
+\]
+
+\textbf{Steric chemical potential added to the species' driving force:}
+\[
+  \mu_i^{\mathrm{steric}} \;=\; -\ln\theta
+  \quad\Longrightarrow\quad
+  J_i \;=\; -D_i\,c_i\bigl(\nabla u_i + z_i\nabla\varphi
+                            + \nabla\mu_i^{\mathrm{steric}}\bigr)
+\]
+
+\textbf{Pre-steric (ideal) Boltzmann counterion} --- the legacy form
+already in use under Change~1 (zero-flux equilibrium in a point-ion
+PNP, no finite-size penalty on the counterion itself):
+\[
+  c_b(x) \;=\; c_b^{\mathrm{bulk}}\,\exp\!\bigl(-z_b\,\varphi(x)\bigr)
+\]
+Contribution to the Poisson residual
+(\texttt{boltzmann.py:add\_boltzmann\_counterion\_residual}):
+\[
+  F_{\mathrm{res}} \;\mathrel{-}=\;
+   \rho_{\mathrm{rhs}}\,z_b\,c_b^{\mathrm{bulk}}\,
+   \exp\!\bigl(-z_b\,\varphi\bigr)\,w\,d\Omega
+\]
+This form is \emph{unbounded} as \(\varphi\to-\infty\) (for \(z_b>0\))
+or \(\varphi\to+\infty\) (for \(z_b<0\)) --- the source of the
+\(\VRHE>+0.66\) V Poisson blow-up before Stern was added.
+
+\textbf{Steric-aware analytic Boltzmann counterion} (the Bikerman
+closure derived in
+\texttt{steric\_analytic\_clo4\_reduction\_handoff.md}):
+\[
+  c_b(x) \;=\;
+   c_b^{\mathrm{bulk}}\,
+   \frac{\bigl(1 - \sum_{j\in\mathrm{dyn}} a_j c_j(x)\bigr)\,
+         \exp(-z_b\,\varphi(x))}
+        {\theta_b + a_b\,c_b^{\mathrm{bulk}}\,\exp(-z_b\,\varphi(x))}
+\]
+where \(\theta_b = 1 - \sum_j a_j c_j^{\mathrm{bulk}} - a_b c_b^{\mathrm{bulk}}\)
+is the bulk packing fraction (must be positive). The denominator
+caps \(c_b\) at \(1/a_b\) so the modified Poisson source stays
+bounded everywhere.
+
+\textbf{Limiting behavior:} \(a\to 0\) recovers the ideal Boltzmann
+profile \(c \propto \exp(-z\,\varphi)\) above.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Debye--Boltzmann analytical IC}]
+Composite outer-electroneutral profile + inner Gouy--Chapman Debye
+layer. Picard-iterate the two-rate algebraic mass balance, then build
+\(\varphi\) and \(u_i\) on the production mesh.
+
+\textbf{Outer linear profiles} (ambipolar diffusion gives the proton
+its effective \(2 D_H\) factor):
+\[
+  O_s = O_b - \tfrac{R_1}{D_O},\quad
+  P_s = P_b + \tfrac{R_1 - R_2}{D_P},\quad
+  H_o = H_b - \tfrac{R_1+R_2}{D_H}
+\]
+
+\textbf{Diffuse-layer Boltzmann correction:}
+\[
+  H_s \;=\; H_o\,\exp(-\psi_D),\qquad
+  \psi_D \;=\; \varphi_{\mathrm{electrode}} - \varphi_o,\qquad
+  \varphi_o \;=\; \ln\!\bigl(H_o / c_{-}^{\mathrm{bulk}}\bigr)
+\]
+
+\textbf{2$\times$2 algebraic BV system (one Picard step):}
+\begin{align*}
+  A_1 &= k_1 (H_s/H_{\mathrm{ref}})^2 \exp(-\alpha_1 n\eta_1), &
+  B_1 &= k_1 \exp\bigl((1-\alpha_1) n\eta_1\bigr),\\
+  A_2 &= k_2 (H_s/H_{\mathrm{ref}})^2 \exp(-\alpha_2 n\eta_2),
+\end{align*}
+\[
+  \begin{bmatrix}
+    1 + A_1/D_O + B_1/D_P & -B_1/D_P\\
+    -A_2/D_P              & 1 + A_2/D_P
+  \end{bmatrix}\!
+  \begin{bmatrix} R_1 \\ R_2 \end{bmatrix}
+   =
+  \begin{bmatrix} A_1 O_b - B_1 P_b \\ A_2 P_b \end{bmatrix}
+\]
+
+\textbf{Gouy--Chapman composite for the potential:}
+\[
+  \lambda_D \;=\; \sqrt{\varepsilon/(2 H_o)},\qquad
+  \psi(y) \;=\; 4\,\mathrm{atanh}\!\Bigl(\tanh(\psi_D/4)\,e^{-y/\lambda_D}\Bigr)
+\]
+\[
+  \varphi_{\mathrm{IC}}(y) = \ln\!\bigl(H_{\mathrm{outer}}(y)/c_{-}^{\mathrm{bulk}}\bigr) + \psi(y),
+  \qquad
+  c_{H,\mathrm{IC}}(y) = H_{\mathrm{outer}}(y)\,e^{-\psi(y)},
+  \qquad
+  u_{i,\mathrm{IC}} = \ln c_{i,\mathrm{IC}}
+\]
+
+\textbf{Result:} 1.7--6.3$\times$ fewer Newton iterations at
+\(\VRHE\ge +0.30\) V; unblocks \(+0.60\) V cold-start where the linear
+IC fails outright. Extended further by the Bikerman-consistent IC
+on the next card.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Bikerman-consistent IC (Option 2b, May 4)}]
+Refines the Debye--Boltzmann IC for the steric (Bikerman) production
+stack. Two pieces:
+
+\textbf{(1) Composite \(\psi\) profile}
+(Bazant--Kilic--Storey--Ajdari matched-asymptotic):
+\[
+  \nu \;=\; 2\,a_{\mathrm{Cl}}\,c_{\mathrm{Cl}}^{\mathrm{bulk}},\qquad
+  \psi_{\mathrm{sat}} \;=\; \ln\!\bigl(2/\nu\bigr),\qquad
+  \alpha \;=\; \sqrt{\frac{2}{\nu\,\lambda_D^{2}}\,
+    \ln\!\bigl(1 + \nu(\cosh\psi_D - 1)\bigr)}
+\]
+\[
+  y_{\mathrm{match}} \;=\; \frac{|\psi_D| - \psi_{\mathrm{sat}}}{\alpha}
+\]
+\[
+  \psi(y) \;=\;
+  \begin{cases}
+    \mathrm{sgn}(\psi_D)\,(|\psi_D| - \alpha\,y)
+       & 0 \le y < y_{\mathrm{match}} \\[3pt]
+    \mathrm{sgn}(\psi_D)\,\psi_{\mathrm{sat}}\,
+        \exp\!\bigl(-(y - y_{\mathrm{match}})/\lambda_D\bigr)
+       & y \ge y_{\mathrm{match}}
+  \end{cases}
+\]
+Falls back to the tanh/Gouy--Chapman expression of the previous card
+when \(|\psi_D| \le \psi_{\mathrm{sat}}\) (linear-Debye limit).
+
+\textbf{(2) Multispecies activity correction \(\gamma\):}
+\[
+  \gamma(y) \;=\;
+  \frac{1}{1 + a_H\,H_{\mathrm{outer}}(y)\,(e^{-\psi(y)} - 1)
+            + a_{\mathrm{Cl}}\,c_{\mathrm{Cl}}^{\mathrm{anchor}}\,
+                              (e^{+\psi(y)} - 1)}
+\]
+(neutral species drop out automatically since \(e^{0}-1=0\)).
+
+\textbf{Seed every species on the saturated steric manifold:}
+\begin{align*}
+  u_{\mathrm{O_2}}^{\mathrm{IC}}   &= \ln c_{\mathrm{O_2}}^{\mathrm{outer}}   + \ln\gamma\\
+  u_{\mathrm{H_2O_2}}^{\mathrm{IC}} &= \ln c_{\mathrm{H_2O_2}}^{\mathrm{outer}} + \ln\gamma\\
+  u_{H}^{\mathrm{IC}}    &= \ln H_{\mathrm{outer}} - \psi(y) + \ln\gamma\\
+  \varphi^{\mathrm{IC}}  &= \ln\!\bigl(H_{\mathrm{outer}} / c_{\mathrm{Cl}}^{\mathrm{bulk}}\bigr) + \psi(y)
+\end{align*}
+
+\textbf{$\mu_H$ form:} same construction; \(\psi\) cancels exactly,
+\(\mu_H^{\mathrm{IC}} = 2\ln H_{\mathrm{outer}} - \ln c_{\mathrm{Cl}}^{\mathrm{bulk}} + \ln\gamma\).
+
+\textbf{Result (3sp+Bikerman+\(\mu_H\), \(N_y=200\), clip 50, \(u\)-clamp 100):}
+\(15/15\) cold/warm convergence on
+\(\VRHE\in\{-0.5,\dots,+1.0\}\,\)V with Stern \(0.10\,\)F/m\(^{2}\);
+\(14/15\) without Stern. Cold ceiling \(+0.60\,\)V (was \(+0.30\,\)V),
+warm-walk reach \(+1.00\,\)V (was \(+0.60\,\)V).
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Electrochemical-potential ($\mu_H$) formulation}]
+Replace the proton primary unknown \(u_H\) with the electrochemical
+potential
+\[
+  \boxed{\,\mu_H \;=\; u_H + z_H\,\varphi\,} \qquad (z_H = +1)
+\]
+so that
+\(\;c_H = \exp(\mu_H - z_H\varphi)\;\) is reconstructed from the muh
+unknown plus the resolved field.
+
+\textbf{Nernst--Planck flux collapses (no separate drift term):}
+\[
+  J_H \;=\; -D_H\,c_H\,\nabla\mu_H
+\]
+
+\textbf{Why it helps in the Debye layer:} when \(\mathrm{H^+}\) is in
+local Boltzmann equilibrium, \(\nabla\mu_H \approx 0\). The primary
+variable \(\mu_H\) is therefore nearly flat in \(y\) even when
+\(u_H\) and \(\varphi\) each vary by tens of log-units across the
+Debye layer. Newton sees a smooth unknown in exactly the regime where
+\(u_H\) is most wild.
+
+\textbf{Cancellation under the Debye-Boltzmann IC:}
+\[
+  \mu_H^{\mathrm{IC}}(y)
+  = u_H^{\mathrm{IC}}(y) + \varphi^{\mathrm{IC}}(y)
+  = \bigl[\ln H_{\mathrm{outer}} - \psi(y)\bigr]
+   +\bigl[\ln(H_{\mathrm{outer}}/c_{-}^{\mathrm{bulk}}) + \psi(y)\bigr]
+  = 2\ln H_{\mathrm{outer}} - \ln c_{-}^{\mathrm{bulk}}
+\]
+The diffuse-layer \(\psi\) cancels exactly --- a clean correctness
+check.
+
+Non-mu species (\(\mathrm{O_2}\), \(\mathrm{H_2O_2}\) --- neutral) are
+unchanged from the log-c stack.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Local pH observable (deck-aligned)}]
+The Mangan/Ruggiero deck reports IrOx-sensed local pH at the disk
+surface. Cheap to derive from the existing surface \(\mathrm{H^+}\)
+field (no new species, no new BC):
+
+\[
+  \mathrm{pH}_{\mathrm{local}}(t)
+   \;=\; -\log_{10}\!\Bigl(c_{H,\mathrm{surf}}(t) \,/\, 1000\Bigr)
+\]
+
+with \(c_{H,\mathrm{surf}}\) in \(\si{\mol\per\meter\cubed}\) (so the
+\(/1000\) converts to \(\si{\mol\per\liter}\)). In the log-c
+formulation this is even cheaper:
+\[
+  \mathrm{pH}_{\mathrm{local}}(t)
+   \;=\; -\frac{1}{\ln 10}\bigl(u_{H,\mathrm{surf}}(t) - \ln 1000\bigr).
+\]
+
+\textbf{Use:} report alongside CD/PC. Compare local-vs-bulk pH
+trajectory against the Ruggiero 2022 RRDE/IrOx data.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={RRDE transport: Levich diffusion length}]
+Tie the abstract reference length \(L_{\mathrm{ref}}\) to a physical
+RRDE rotation rate via the Levich diffusion-layer thickness:
+\[
+  L_{\mathrm{eff}} \;\approx\;
+   1.61\;D_i^{1/3}\,\nu^{1/6}\,\omega^{-1/2}
+\]
+where \(\omega\) is the angular rotation rate
+(\(\si{\radian\per\second}\)), \(\nu\) is the kinematic viscosity of
+the electrolyte
+(\(\si{\meter\squared\per\second}\)), and \(D_i\) is the diffusivity
+of the rate-limiting species
+(\(\si{\meter\squared\per\second}\)).
+
+\textbf{Worked numbers for water at 25\,\textdegree C, O\textsubscript{2}-limited:}
+\[
+  D_{\mathrm{O_2}} = 1.9\times 10^{-9}\,\si{\meter\squared\per\second},\qquad
+  \nu = 8.9\times 10^{-7}\,\si{\meter\squared\per\second}
+\]
+
+\(\omega\) corresponds to \(\Omega \;[\mathrm{rpm}]\) by
+\(\omega = 2\pi\Omega / 60\):
+\begin{center}
+\begin{tabular}{rcc}
+\hline
+\(\Omega\,[\mathrm{rpm}]\) & \(\omega\,[\si{\radian\per\second}]\) & \(L_{\mathrm{eff}}\,[\si{\micro\meter}]\) \\
+\hline
+400  & 41.9  & \(\sim 86\) \\
+1600 & 167.6 & \(\sim 43\) \\
+2500 & 261.8 & \(\sim 35\) \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{Use:} promote \(L_{\mathrm{ref}}\) from a generic
+nondimensionalization scale to an \emph{experimental} parameter so
+that rotation-rate sweeps in the multi-experiment FIM design
+correspond to a real measurable knob.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Where we are vs.\ deck experiment (closure list)}]
+\textbf{Aligned (physics-framework level):} PNP, Bikerman steric,
+finite Stern, two-step BV (R$_1$/R$_2$), peroxide observable, three
+dynamic species + analytic counterion, log-c, log-rate.
+
+\textbf{Not yet aligned (experimental closure):}
+
+\begin{itemize}
+  \item \textbf{Electrolyte identity.} The Ruggiero study uses
+        \(\mathrm{H_2SO_4 + MOH + M_2SO_4}\),
+        \(M\in\{\mathrm{Li,Na,K,Cs}\}\). Our solver carries
+        \(\mathrm{ClO_4^-}\) as a \emph{generic} inert surrogate.
+        Need a sulfate-family balancing-anion path for deck-matched runs.
+  \item \textbf{Cation specificity.} Deck story is ion-specific.
+        Current solver has a generic steric size
+        \(a_{\mathrm{default}} = 0.01\); needs cation-specific radii
+        and an explicit (or analytic) cation species.
+  \item \textbf{Local pH observable.} See card above.
+  \item \textbf{RRDE transport.} See card above.
+  \item \textbf{Ring channel + selectivity.} Post-processing on the
+        existing peroxide-current observable.
+\end{itemize}
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Headline: voltage-window expansion}]
+\begin{center}
+\begin{tabular}{lccc}
+\hline
+& \textbf{Pre-rebuild} & \textbf{Apr 27 stack} & \textbf{May 4 stack} \\
+& \textbf{(4-species)} & \textbf{(3sp+B+log-c+log-rate)} & \textbf{(+ Bikerman-IC + Stern)} \\
+\hline
+Cold-start window & \([-0.50,+0.10]\) & \(\gtrsim -0.20\) & \(\gtrsim -0.20\) \\
+Full grid (warm-walk) & \([-0.50,+0.10]\) & \([-0.50,+0.60]\) & \([-0.50,+1.00]\) \\
+Demonstrated reach
+   & \(+0.10\) V
+   & \(+0.60\) V
+   & \(+1.00\) V (Bikerman-IC, Stern; \(15/15\)) \\
+   &
+   &
+   & \(+2.00\) V (log-c+steric+\texttt{debye\_boltzmann}, warm-walk) \\
+\(\mathrm{R_2}\) unclips at & --- & \(+0.495\) V & \(+0.495\) V \\
+Local FIM \(\mathrm{cond}(F)\) & \(2.0\times 10^{11}\) & \(1.79\times 10^{7}\) & TBD \\
+Weak eigenvector
+   & \(\approx \log k_{0,2}\)
+   & \(\approx \log k_{0,1}\)
+   & TBD\\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{Caveat — kinetic dead zone above \(\sim +0.5\) V.}
+Convergence reaches \(+2.0\) V, but converged currents drop to
+machine epsilon (\(10^{-12}\)--\(10^{-16}\) mA/cm\(^{2}\)) once
+\(c_{H,\mathrm{surf}} \approx \exp(-\psi_D)\) underflows the cathodic
+BV terms. This is real physics, not a clip artefact: the proton
+factor \((c_H/c_{\mathrm{ref}})^{2}\) (R\(_1\)) and \((c_H/c_{\mathrm{ref}})^{2}\)
+(R\(_2\)) underflow at \(\psi_D > 30\). Inverse-relevant signal
+remains in \(\VRHE\in[-0.5, +0.5]\) V.
+
+\textbf{R$_2$ unclip threshold derivation.} The implementation clips
+\(\eta_{\mathrm{scaled}} = (V-\Eeq)/\VT\) to \(\pm 50\) before the
+\(\alpha\,n_e\) multiplication. R$_2$ becomes unclipped when
+\(|V - \Eeq^{(2)}| < 50\,\VT\), i.e.\
+\[
+  V > \Eeq^{(2)} - 50\,\VT
+   = 1.78 - 50\,(0.02569)
+   = +0.495\,\text{V vs RHE}.
+\]
+\end{tcolorbox}
+
+\end{document}

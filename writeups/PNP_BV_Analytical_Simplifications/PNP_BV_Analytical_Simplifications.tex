@@ -1,0 +1,634 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{xcolor}
+
+\setlist[itemize]{leftmargin=*,topsep=2pt,itemsep=2pt}
+\setlist[enumerate]{leftmargin=*,topsep=2pt,itemsep=3pt}
+
+\title{Analytical Simplifications for the Production PNP--BV System}
+\author{Jake Weinstein}
+\date{May 3, 2026}
+
+\newcommand{\OO}{\mathrm{O}_2}
+\newcommand{\PP}{\mathrm{H}_2\mathrm{O}_2}
+\newcommand{\HH}{\mathrm{H}^{+}}
+\newcommand{\ClO}{\mathrm{ClO}_4^{-}}
+\newcommand{\VT}{V_T}
+\newcommand{\Eeq}{E_{\mathrm{eq}}}
+\newcommand{\dd}{\,\mathrm{d}}
+\newcommand{\epshat}{\varepsilon}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The current production forward model solves a three-species log-concentration
+Poisson--Nernst--Planck system with log-rate Butler--Volmer boundary kinetics
+and an analytical Boltzmann \(\ClO\) counterion. A closed-form solution of the
+full two-dimensional steric PNP--BV system is not realistic, but the model
+does contain several exploitable analytical structures. The main simplification
+is a matched-asymptotic reduction: represent the diffuse Debye layer with an
+analytical Poisson--Boltzmann profile, solve only an outer electroneutral
+diffusion--reaction problem, and initialize the full solver with the resulting
+composite state. In the electroneutral outer region, the existing Boltzmann
+\(\ClO\) constraint makes proton transport ambipolar:
+\[
+  J_{\HH} = -2D_{\HH}\nabla c_{\HH}.
+\]
+This collapses the one-dimensional steady outer problem to linear profiles
+coupled to a two-rate Butler--Volmer algebraic system. The resulting
+voltage-specific initial condition directly targets the positive-voltage
+Newton failure mode: the solver must start close to the exponentially depleted
+Boltzmann proton layer rather than discover it from a linear-potential guess.
+\end{abstract}
+
+\section{Production model and question}
+
+The active production stack is the formulation used by
+\texttt{Forward/bv\_solver/forms\_logc.py} and
+\texttt{Forward/bv\_solver/boltzmann.py}. The dynamic species are
+\[
+  [\OO,\PP,\HH],
+  \qquad
+  z = [0,0,+1],
+\]
+while inert \(\ClO\) is removed as a Nernst--Planck unknown and enters
+Poisson's equation analytically as
+\begin{equation}
+  c_-(x) = c_-^b \exp(\phi(x)),
+  \label{eq:clo-boltzmann}
+\end{equation}
+where \(\phi=\Phi/\VT\) is the nondimensional electrostatic potential.
+The remaining concentrations are represented by
+\[
+  u_i = \log c_i,
+  \qquad
+  c_i = \exp(u_i).
+\]
+The electrode reactions are
+\begin{align}
+  R_1:\quad & \OO + 2\HH + 2e^- \rightleftharpoons \PP,
+  &
+  \Eeq^{(1)} &= 0.68~\mathrm{V~vs~RHE}, \\
+  R_2:\quad & \PP + 2\HH + 2e^- \rightarrow 2\mathrm{H}_2\mathrm{O},
+  &
+  \Eeq^{(2)} &= 1.78~\mathrm{V~vs~RHE}.
+\end{align}
+The question is whether this PNP--BV system admits analytical simplifications
+similar to the Boltzmann counterion reduction, whether the whole system can be
+solved analytically, and whether a useful analytical initial condition can be
+constructed for a specified voltage and experimental setup.
+
+\section{Main conclusion}
+
+A closed-form solution of the full production system should not be expected.
+The full problem is nonlinear, singularly perturbed, steric, and
+two-dimensional, with finite reaction fluxes coupled through nonlinear
+Butler--Volmer boundary rates. Even a one-dimensional steady PNP--BV problem
+with nonzero reactive flux generally does not reduce to elementary closed
+form.
+
+The useful analytical object is instead a matched-asymptotic composite state:
+\begin{enumerate}
+  \item Use Poisson--Boltzmann or Gouy--Chapman theory for the charged Debye
+        layer adjacent to the electrode.
+  \item Use an electroneutral outer problem away from that layer.
+  \item In the outer region, use the analytic \(\ClO\) relation to collapse
+        proton electromigration into ambipolar diffusion.
+  \item Couple the resulting linear one-dimensional outer profiles to a small
+        Butler--Volmer algebraic system for \(R_1\) and \(R_2\).
+\end{enumerate}
+This is not a replacement for the full PNP--BV solve. It is a high-quality
+analytical predictor and initial condition, especially at positive voltages
+where the current linear initial potential profile is far from the physical
+Boltzmann layer.
+
+\section{Exact zero-flux simplification}
+
+Ignoring steric terms for the moment, the log-concentration Nernst--Planck
+flux can be written as
+\begin{equation}
+  J_i
+  =
+  -D_i c_i \nabla(u_i + z_i\phi).
+\end{equation}
+Define the electrochemical-potential-like variable
+\begin{equation}
+  \mu_i = u_i + z_i\phi.
+\end{equation}
+Then
+\begin{equation}
+  J_i = -D_i c_i \nabla\mu_i.
+  \label{eq:mu-flux}
+\end{equation}
+Therefore any zero-flux species in a connected region satisfies
+\[
+  \nabla\mu_i = 0,
+  \qquad
+  c_i = C_i \exp(-z_i\phi).
+\]
+Equation~\eqref{eq:clo-boltzmann} is exactly this simplification applied to
+the inert supporting electrolyte counterion. The same argument applies
+locally to \(\HH\) inside the diffuse layer whenever the normal reaction flux
+is small relative to rapid double-layer equilibration:
+\begin{equation}
+  c_{\HH}(y)
+  \approx
+  c_{\HH}^{\mathrm{outer}}
+  \exp[-(\phi(y)-\phi_{\mathrm{outer}})].
+  \label{eq:h-inner-boltzmann}
+\end{equation}
+This is not globally exact because protons are consumed by both reactions, but
+it is precisely the approximation needed in the thin region that currently
+causes Newton failures.
+
+With steric effects active, the zero-flux potential is modified to
+\[
+  \mu_i = u_i + z_i\phi + \mu_{\mathrm{steric}}(c).
+\]
+The Boltzmann factor is then modified by an activity coefficient. For the
+current dilute production cases with \(a=0.01\), the nonsteric formula is the
+right first analytical initial condition. A steric Picard correction can be
+added after the nonsteric profile works.
+
+\section{Analytical Debye layer}
+
+Let \(h_o\) be the outer proton concentration at the edge of the diffuse
+layer. Electroneutrality with the analytic \(\ClO\) ion gives the outer
+potential
+\begin{equation}
+  \phi_o = \log\!\left(\frac{h_o}{c_-^b}\right).
+\end{equation}
+Define the diffuse-layer potential drop
+\begin{equation}
+  \psi(y) = \phi(y)-\phi_o.
+\end{equation}
+For a symmetric monovalent \(\HH/\ClO\) layer, the local Boltzmann profiles
+are
+\begin{equation}
+  c_{\HH} = h_o \exp(-\psi),
+  \qquad
+  c_- = h_o \exp(+\psi).
+  \label{eq:symmetric-boltzmann}
+\end{equation}
+The one-dimensional inner Poisson equation becomes
+\begin{equation}
+  \epshat\,\psi'' = 2h_o\sinh\psi,
+  \qquad
+  \lambda_{D,o} = \sqrt{\frac{\epshat}{2h_o}},
+  \label{eq:pb-inner}
+\end{equation}
+where \(\epshat\) is the nondimensional Poisson coefficient
+\((\lambda_D/L)^2\) in the code.
+
+On a semi-infinite domain, the Gouy--Chapman solution is
+\begin{equation}
+  \tanh\!\left(\frac{\psi(y)}{4}\right)
+  =
+  \tanh\!\left(\frac{\psi_D}{4}\right)
+  \exp\!\left(-\frac{y}{\lambda_{D,o}}\right),
+  \qquad
+  \psi_D = \phi_e-\phi_o,
+  \label{eq:gouy-chapman-tanh}
+\end{equation}
+or equivalently
+\begin{equation}
+  \psi(y)
+  =
+  4\,\operatorname{atanh}
+  \left[
+    \tanh\!\left(\frac{\psi_D}{4}\right)
+    \exp\!\left(-\frac{y}{\lambda_{D,o}}\right)
+  \right].
+  \label{eq:gouy-chapman}
+\end{equation}
+For small voltage, the Debye--Huckel approximation is enough:
+\[
+  \psi(y) \approx \psi_D\exp(-y/\lambda_{D,o}),
+  \qquad
+  c_{\HH} \approx h_o(1-\psi),
+  \qquad
+  c_- \approx h_o(1+\psi).
+\]
+For the production voltage grid, especially on the positive side, the full
+Gouy--Chapman expression is the better default.
+
+\section{Combined Boltzmann--Tafel factor}
+
+Both production reactions contain the cathodic proton factor
+\((c_{\HH}/c_{\HH}^{\mathrm{ref}})^2\). In the diffuse-layer approximation,
+\[
+  c_{\HH,s} = h_o\exp(-\psi_D).
+\]
+Thus each cathodic Butler--Volmer branch contains
+\begin{equation}
+  \left(\frac{c_{\HH,s}}{c_{\HH}^{\mathrm{ref}}}\right)^2
+  \exp(-\alpha_j n\eta_j)
+  =
+  \left(\frac{h_o}{c_{\HH}^{\mathrm{ref}}}\right)^2
+  \exp(-2\psi_D-\alpha_j n\eta_j).
+  \label{eq:boltzmann-tafel}
+\end{equation}
+This compactly explains the positive-voltage conditioning wall. At anodic
+\(\psi_D\gg 1\), the cathodic branches are suppressed not only by the usual
+Tafel factor, but also by two-proton Boltzmann depletion. At
+\(V_{\mathrm{RHE}}=+1.0~\mathrm{V}\), \(\psi_D\) can be \(O(40)\), so a
+physically reasonable initial condition has \(u_{\HH}\) tens of log-units
+below bulk at the electrode.
+
+\section{Outer electroneutral simplification}
+
+Outside the Debye layer, electroneutrality gives
+\begin{equation}
+  c_{\HH} \approx c_-^b\exp(\phi),
+  \qquad
+  \phi = \log\!\left(\frac{c_{\HH}}{c_-^b}\right).
+  \label{eq:outer-electroneutral}
+\end{equation}
+Insert this relation into the proton Nernst--Planck flux:
+\begin{align}
+  J_{\HH}
+  &=
+  -D_{\HH}c_{\HH}\nabla(\log c_{\HH}+\phi) \\
+  &=
+  -D_{\HH}c_{\HH}
+  \nabla\!\left(\log c_{\HH}+\log\!\frac{c_{\HH}}{c_-^b}\right) \\
+  &=
+  -2D_{\HH}\nabla c_{\HH}.
+  \label{eq:ambipolar-h}
+\end{align}
+Therefore the outer proton equation is ordinary diffusion with effective
+diffusivity \(2D_{\HH}\). The neutral species are already ordinary diffusion:
+\[
+  J_{\OO}=-D_{\OO}\nabla c_{\OO},
+  \qquad
+  J_{\PP}=-D_{\PP}\nabla c_{\PP}.
+\]
+In a one-dimensional steady outer approximation, all three outer
+concentrations are linear functions of distance from the electrode.
+
+\section{Two-rate outer algebraic model}
+
+Let \(y=0\) be the electrode and \(y=1\) the bulk. Let \(R_1\) and \(R_2\) be
+positive in the cathodic directions used by the implementation:
+\[
+  R_1:\OO\rightarrow\PP,
+  \qquad
+  R_2:\PP\rightarrow\mathrm{H}_2\mathrm{O}.
+\]
+The production stoichiometries are
+\[
+  s_{R_1}=[-1,+1,-2],
+  \qquad
+  s_{R_2}=[0,-1,-2].
+\]
+For the linear outer profiles, the electrode-side outer concentrations are
+\begin{align}
+  O_s &= O_b - \frac{R_1}{D_{\OO}}, \\
+  P_s &= P_b + \frac{R_1-R_2}{D_{\PP}}, \\
+  h_o &= H_b - \frac{R_1+R_2}{D_{\HH}}.
+  \label{eq:outer-surface}
+\end{align}
+The proton expression uses the ambipolar diffusivity \(2D_{\HH}\) and the
+two-proton stoichiometry, so the factors cancel.
+
+The proton concentration entering the BV rate is the outer proton value
+multiplied by the inner Boltzmann factor:
+\begin{equation}
+  H_s = h_o\exp(-\psi_D),
+  \qquad
+  \psi_D = \phi_e-\phi_o,
+  \qquad
+  \phi_o = \log(h_o/c_-^b).
+  \label{eq:h-surface}
+\end{equation}
+For the current no-Stern production stack, the code evaluates
+\[
+  \eta_j = \phi_{\mathrm{applied}}-\Eeq^{(j)}
+\]
+in the BV exponent. If a Stern/Frumkin formulation is enabled, this should be
+replaced by that formulation's corrected \(\eta_j=\phi_m-\phi_s-\Eeq^{(j)}\).
+
+Holding \(H_s\) fixed for one Picard step, define
+\begin{align}
+  A_1 &=
+  k_1
+  \left(\frac{H_s}{H_{\mathrm{ref}}}\right)^2
+  \exp(-\alpha_1 n\eta_1),
+  &
+  B_1 &=
+  k_1\exp((1-\alpha_1)n\eta_1), \\
+  A_2 &=
+  k_2
+  \left(\frac{H_s}{H_{\mathrm{ref}}}\right)^2
+  \exp(-\alpha_2 n\eta_2).
+\end{align}
+The reduced BV rates are
+\[
+  R_1 = A_1O_s-B_1P_s,
+  \qquad
+  R_2 = A_2P_s.
+\]
+Substituting \eqref{eq:outer-surface} gives a \(2\times 2\) linear system:
+\begin{equation}
+\begin{bmatrix}
+1 + A_1/D_{\OO} + B_1/D_{\PP} & -B_1/D_{\PP} \\
+-A_2/D_{\PP}                  & 1 + A_2/D_{\PP}
+\end{bmatrix}
+\begin{bmatrix} R_1 \\ R_2 \end{bmatrix}
+=
+\begin{bmatrix}
+A_1O_b-B_1P_b \\
+A_2P_b
+\end{bmatrix}.
+\label{eq:two-rate-system}
+\end{equation}
+This algebraic solve gives a voltage-specific approximation to surface rates
+and concentrations. Updating \(h_o\), \(\phi_o\), \(\psi_D\), and the
+coefficients \(A_1,A_2,B_1\) by fixed point yields a cheap nonlinear reduced
+model.
+
+Useful limiting cases follow immediately:
+\begin{itemize}
+  \item If \(R_1\) is one-way cathodic and \(H_s\) is fixed, then
+        \[
+          R_1 = \frac{A_1O_b}{1+A_1/D_{\OO}},
+        \]
+        recovering the transition from kinetic control to the \(\OO\)
+        diffusion limit.
+  \item If \(R_2\) is one-way and \(R_1\) is already estimated, then
+        \[
+          R_2 =
+          \frac{A_2(P_b+R_1/D_{\PP})}{1+A_2/D_{\PP}}.
+        \]
+  \item If anodic \(R_1\) dominates, the same algebraic system enforces
+        peroxide depletion through \(P_s\); the rate cannot exceed the
+        peroxide supply implicit in \(P_s\ge 0\).
+\end{itemize}
+
+\section{Voltage-specific analytical initial condition}
+
+The most practical output is an initial condition for the full log-c PNP--BV
+solver. For a specified voltage and experiment:
+\begin{enumerate}
+  \item Convert voltage to nondimensional potential
+        \(\phi_e=V_{\mathrm{RHE}}/\VT\).
+  \item Initialize \(R_1=R_2=0\), \(h_o=H_b\), \(\phi_o=0\), and
+        \(\psi_D=\phi_e\).
+  \item Compute \(H_s=h_o\exp(-\psi_D)\).
+  \item Build \(A_1\), \(B_1\), and \(A_2\) from the BV parameters.
+  \item Solve \eqref{eq:two-rate-system} for \(R_1,R_2\).
+  \item Update
+        \[
+          O_s=O_b-\frac{R_1}{D_{\OO}},
+          \quad
+          P_s=P_b+\frac{R_1-R_2}{D_{\PP}},
+          \quad
+          h_o=H_b-\frac{R_1+R_2}{D_{\HH}},
+        \]
+        and then
+        \[
+          \phi_o=\log(h_o/c_-^b),
+          \qquad
+          \psi_D=\phi_e-\phi_o.
+        \]
+  \item Under-relax and repeat until the rates stop changing.
+  \item Construct outer linear profiles:
+        \begin{align}
+          O_{\mathrm{out}}(y) &= O_s+(O_b-O_s)y, \\
+          P_{\mathrm{out}}(y) &= P_s+(P_b-P_s)y, \\
+          H_{\mathrm{out}}(y) &= h_o+(H_b-h_o)y.
+        \end{align}
+  \item Construct the Debye correction:
+        \[
+          \lambda_{D,o}=\sqrt{\frac{\epshat}{2\max(h_o,h_{\min})}},
+        \]
+        \[
+          \psi(y)
+          =
+          4\,\operatorname{atanh}
+          \left[
+            \tanh\!\left(\frac{\psi_D}{4}\right)
+            \exp\!\left(-\frac{y}{\lambda_{D,o}}\right)
+          \right].
+        \]
+  \item Build the composite initial condition:
+        \begin{align}
+          \phi_{\mathrm{IC}}(y)
+          &=
+          \log\!\left(\frac{H_{\mathrm{out}}(y)}{c_-^b}\right)
+          + \psi(y), \\
+          H_{\mathrm{IC}}(y)
+          &=
+          H_{\mathrm{out}}(y)\exp[-\psi(y)], \\
+          O_{\mathrm{IC}}(y)
+          &=
+          O_{\mathrm{out}}(y), \\
+          P_{\mathrm{IC}}(y)
+          &=
+          \max(P_{\mathrm{out}}(y),P_{\min}), \\
+          u_{i,\mathrm{IC}}(y)
+          &=
+          \log c_{i,\mathrm{IC}}(y).
+        \end{align}
+\end{enumerate}
+For the two-dimensional rectangle, this is used as a \(y\)-only profile and
+interpolated across \(x\).
+
+This IC places Newton near the correct Debye-layer manifold from the start.
+It also respects the outer reaction-diffusion mass balances instead of
+setting every concentration to its bulk value.
+
+\section{\texorpdfstring{Can \(\HH\) be removed analytically like \(\ClO\)?}{Can H+ be removed analytically like ClO4-?}}
+
+Not exactly in the full model. Protons participate in both BV reactions
+through the \((c_{\HH}/c_{\HH}^{\mathrm{ref}})^2\) factors and have nonzero
+reactive boundary flux. Removing them globally would erase a real transport
+limitation.
+
+There are three controlled reductions:
+\begin{enumerate}
+  \item \textbf{Inner-layer Boltzmann \(\HH\).} Use the proton Boltzmann
+        relation only inside the Debye layer. This is the least invasive and
+        most useful initialization strategy.
+  \item \textbf{Outer ambipolar \(\HH\).} Replace outer proton NP transport
+        with \(J_{\HH}=-2D_{\HH}\nabla c_{\HH}\). This keeps proton depletion
+        while removing outer Poisson stiffness.
+  \item \textbf{All-Boltzmann \(\HH\) surrogate.} Set
+        \(H_s=H_b\exp(-\psi_D)\) directly and drop proton transport. This may
+        be a fast surrogate or diagnostic, but it is a different physical
+        model.
+\end{enumerate}
+The recommended model-development path is the first two together: an outer
+electroneutral diffusion--BV solve plus analytical Debye-layer matching.
+
+\section{Relationship to Stern-layer support}
+
+The current no-Stern production mode imposes Dirichlet
+\(\phi=\phi_{\mathrm{applied}}\) at the electrode. This puts the full applied
+potential into the resolved diffuse layer, making large positive voltages
+extremely stiff.
+
+Physically, this is a strong assumption. It identifies the solution-side
+potential at the reaction plane with the metal potential:
+\[
+  \phi_s = \phi_m = \phi_{\mathrm{applied}}.
+\]
+Real electrode/electrolyte interfaces normally contain a compact Stern layer.
+Ions have a finite closest-approach distance, solvent is structured near the
+surface, and some voltage can drop across this compact region before the
+diffuse PNP layer begins. The applied metal-to-bulk voltage is therefore more
+naturally split as
+\[
+  \phi_m-\phi_{\mathrm{bulk}}
+  =
+  \Delta\phi_{\mathrm{Stern}}
+  +
+  \Delta\phi_{\mathrm{Diffuse}}.
+\]
+The current Dirichlet model effectively sets
+\(\Delta\phi_{\mathrm{Stern}}=0\), so the resolved diffuse layer must absorb
+the whole interfacial potential drop.
+
+A Stern formulation replaces that electrode Dirichlet condition with a
+capacitance relation and evaluates the BV overpotential as
+\[
+  \eta = \phi_m-\phi_s-\Eeq.
+\]
+The capacitance law is
+\[
+  \sigma = C_S(\phi_m-\phi_s),
+\]
+where \(C_S\) is the Stern-layer capacitance. In the PNP weak form this is a
+Robin-type electrostatic boundary condition, not a prescribed-potential
+condition. The comparison is:
+\[
+\begin{array}{ll}
+\text{Dirichlet:} & \text{prescribe the solution potential } \phi_s, \\
+\text{Stern:}     & \text{prescribe the metal potential } \phi_m
+                    \text{ and relate diffuse-layer charge to }
+                    \phi_m-\phi_s.
+\end{array}
+\]
+This is generally more physical for an electrochemical interface, but it
+introduces the additional physical parameter \(C_S\). If \(C_S\) is poorly
+chosen, the model can be structurally more physical while still being less
+predictive.
+
+The limiting behavior is important:
+\[
+  C_S\rightarrow\infty
+  \quad\Longrightarrow\quad
+  \phi_m-\phi_s\rightarrow 0,
+\]
+which recovers the current Dirichlet-like no-Stern behavior. For finite
+\(C_S\), \(\phi_s\) is not pinned to \(\phi_m\); some applied voltage can drop
+in the compact layer. For the positive-voltage solver problem, this matters
+because it can keep the resolved solution-side potential \(\phi_s\) much
+smaller than the metal voltage \(\phi_m\), reducing the extreme Boltzmann
+source \(c_-^b\exp(\phi_s)\) that currently drives the Poisson residual wall.
+
+The same analytical framework applies, but \(\psi_D\) is no longer simply
+\(\phi_e-\phi_o\). It should be solved with a compact capacitance relation:
+\[
+  \sigma_{\mathrm{GC}}(\psi_D)
+  =
+  C_S(\phi_m-\phi_s),
+  \qquad
+  \phi_s=\phi_o+\psi_D.
+\]
+The Gouy--Chapman surface charge follows from the first integral,
+\[
+  \sigma_{\mathrm{GC}}
+  \sim
+  \operatorname{sign}(\psi_D)\sqrt{8\epshat h_o}
+  \sinh\!\left(\frac{|\psi_D|}{2}\right),
+\]
+up to the exact sign convention used by the weak Poisson boundary term. This
+is more than an initializer: it is a route to replacing the explicit Debye
+layer with an algebraic boundary condition.
+
+\section{What is solved vs.\ what is analytical}
+
+The safest first use is not to replace the model. The analytical
+Debye/Stern construction should first be used as an initial condition for the
+existing full PNP--BV solver.
+
+In the current resolved model, the PDE solver computes the outer transport,
+the explicit Debye layer, and the BV surface flux. In the proposed
+analytical-initial-condition workflow, the analytical formula computes only a
+better starting profile for the Debye-layer potential and proton correction;
+the same full PNP--BV equations are still solved afterward.
+
+A later reduced model would make a stronger split:
+\[
+\begin{array}{ll}
+\text{PDE solver:}
+  & \text{outer } \OO,\PP,\HH \text{ transport, and possibly an outer} \\
+  & \text{electroneutral potential relation}, \\
+\text{Analytical boundary map:}
+  & \phi_s \text{ from Stern/diffuse-layer charge balance}, \\
+  & H_s = H_o\exp[-(\phi_s-\phi_o)], \\
+  & O_s\approx O_o,\quad P_s\approx P_o, \\
+\text{BV flux law:}
+  & \OO\text{ flux}=-R_1, \\
+  & \PP\text{ flux}=R_1-R_2, \\
+  & \HH\text{ flux}=-2R_1-2R_2.
+\end{array}
+\]
+Thus the algebraic Debye/Stern relation does not replace the Butler--Volmer
+boundary condition. It only replaces, or initially approximates, the thin
+electrostatic layer that maps outer electrolyte values to reaction-plane
+values. BV remains the reactive flux law.
+
+This distinction is important. As an initial condition, the analytical Debye
+profile cannot change the physical solution if the full solver converges; it
+only improves basin access. As a reduced boundary model, it becomes a modeling
+approximation and must be validated against resolved PNP--BV wherever the
+resolved solver is available.
+
+\section{Implementation recommendation}
+
+The lowest-risk next step is an optional \texttt{debye\_boltzmann}
+initializer for the log-c stack:
+\begin{enumerate}
+  \item Use the current mesh coordinate \(y\), nondimensional scaling, BV
+        reaction config, and Boltzmann counterion config.
+  \item Start with the no-Stern formula above and ignore steric in the IC.
+  \item Floor \(O_s,P_s,h_o,H_s\) only before logarithms and report any floor
+        hit, since that identifies a diffusion-limit regime.
+  \item Test first near and above \(+0.60~\mathrm{V}\), where the current
+        linear IC is far from the Boltzmann layer.
+  \item Compare against already converged voltages by measuring SNES
+        iterations and final observables. The IC should not change the final
+        converged solution; it should only improve basin access.
+\end{enumerate}
+
+\section{Answers to the motivating questions}
+
+\paragraph{Can the whole system be solved analytically?}
+No. Not for the full two-dimensional production PNP--BV model with finite
+reaction fluxes, steric terms, and two coupled nonlinear BV reactions.
+
+\paragraph{Can part of the system be solved analytically?}
+Yes. The zero-flux charged layer has a Boltzmann form; the symmetric
+one-dimensional Debye layer has a Gouy--Chapman solution; the outer
+electroneutral proton equation reduces to ambipolar diffusion; and the
+one-dimensional steady outer reaction-diffusion problem reduces to a
+two-rate algebraic system.
+
+\paragraph{Can we get a good analytical IC for a given voltage?}
+Yes. The matched Debye-layer plus outer algebraic profile is likely the
+highest-value analytical simplification for the current solver. It directly
+targets the failure mode documented in
+\texttt{docs/peroxide\_window\_investigation.md}: Newton starts too far from
+the exponentially depleted proton layer and the exponentially enriched
+counterion layer. The proposed IC starts close to that manifold.
+
+\end{document}
