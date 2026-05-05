@@ -1,25 +1,59 @@
-"""MMS convergence test for 3-species + Boltzmann ClO4- log-c PNP-BV solver.
+"""Production-faithful MMS convergence test for the production PNP-BV solver.
 
-Verifies correctness of the forward solver used in v18/v19 onset inference:
-  - Three dynamic species: O2 (z=0), H2O2 (z=0), H+ (z=+1)
-  - ClO4- replaced by Boltzmann background: c_ClO4 = c_bulk * exp(phi)
-  - Log-concentration transform: unknown is u_i = ln(c_i), c_i = exp(u_i)
+Verifies the *exact* production stack used by ``scripts/plot_iv_curve_unified.py``:
 
-Follows writeups/WeekOfFeb25/mms_butler_volmer.tex. Manufactured solution:
+  - 3 dynamic species (O2, H2O2, H+) + analytic Boltzmann ClO4-
+  - log-concentration primary variables ``u_i = ln(c_i)``
+  - log-rate Butler-Volmer evaluation (``bv_log_rate=True``)
+  - Physical E_eq (R1 = 0.68 V, R2 = 1.78 V vs RHE)
+  - Real D, k0, alpha, c0 from ``scripts/_bv_common.py`` (Mangan2025, pH 4)
+  - Steric (Bikerman) with a_vals = [0.01]*3 (production default)
+  - eta-clip (+/-50) and u-clamp (100, production-widened) left active --
+    inactive *by manufactured-solution design* so MMS verifies the smooth
+    operator without crossing a non-smooth threshold.
 
-  c_i^ex(x,y) = c0_i + A_i * cos(pi*x) * (1 - exp(-beta_i * y))
-  phi^ex(x,y) = eta0 * (1-y) + B * cos(pi*x) * y*(1-y)
-  u_i^ex(x,y) = ln(c_i^ex)     (positive by construction if |A_i| < c0_i)
+The factory call mirrors the production driver
+``scripts/plot_iv_curve_unified.py:139`` exactly.
 
-Volume sources (UFL auto-differentiation):
-  S_c_i = -div[D_i * (grad(c_i^ex) + em * z_i * c_i^ex * grad(phi^ex))]
-  S_phi = -eps_hat * div(grad(phi^ex))
-          - charge_rhs * sum_i(z_i * c_i^ex)
-          + charge_rhs * c_ClO4_bulk * exp(phi^ex)    <- Boltzmann term
+Manufactured solution (in nondim units)::
 
-Boundary correction at electrode (y=0): g_i = flux_outward - sum_j(s_ij * R_j^ex).
+    c_i^ex(x, y) = c0_HAT[i] * (1 + delta_i * cos(pi x) * (1 - y)^2)
+    phi^ex(x, y) = eta_hat * (1 - y) + B_phi * cos(pi x) * y * (1 - y)
 
-Expected: L2 rate -> 2.0, H1 rate -> 1.0 (CG1) for both u_i and phi.
+These exactly satisfy production Dirichlet BCs::
+
+    u_i(x, 1) = ln(c0_HAT[i])    <- production concentration BC
+    phi(x, 1) = 0                 <- production ground BC
+    phi(x, 0) = eta_hat           <- production electrode BC
+
+so no BC overrides are needed.
+
+V_RHE = +0.55 V chosen so:
+
+  - eta_R1 = (V - 0.68) / V_T = -5.06   (clip inactive, |eta| << 50)
+  - eta_R2 = (V - 1.78) / V_T = -47.87  (clip inactive, |eta| < 50)
+  - Inside production warm-walk regime (V_RHE in [+0.50, +1.20] V).
+
+Source generation (term-by-term continuum residual at u_exact):
+
+  Standard MMS pattern: compute the *continuum* residual of each
+  production weak-form term at U=u_exact, inject as forcing on F_res.
+  At u_exact in continuum the residual vanishes; the discrete operator
+  has O(h^p) error vs continuum, so the discrete solution u_h satisfies
+  ||u_h - u_exact||_L2 = O(h^(k+1)) and ||u_h - u_exact||_H1 = O(h^k).
+
+  Important: we deliberately do NOT use ``ufl.replace`` to mirror the
+  discrete F_res at U_manuf -- that would make U_manuf an exact discrete
+  solution by construction, hiding any wiring bug that's symmetric on
+  both sides of the subtraction.  By writing the source against an
+  independent continuum statement of the PDE, any inconsistency in
+  F_res's discrete implementation shows up as a convergence-rate violation.
+
+Mesh: ``UnitSquareMesh(N, N)``.  Departure from production's graded
+rectangle (Nx=8, Ny=200, beta=3): graded refinement breaks h^p
+convergence.  The operator under test is mesh-topology independent.
+
+Expected: L2 rate ~ 2.0, H1 rate ~ 1.0 (CG1) for u_i and phi.
 """
 from __future__ import annotations
 
@@ -42,366 +76,341 @@ os.environ.setdefault("PYOP2_CACHE_DIR", "/tmp/pyop2")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 
 import firedrake as fd
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from Forward.bv_solver.forms_logc import (
-    build_context_logc, build_forms_logc,
+# Production code path: dispatcher -> forms_logc when formulation="logc".
+from Forward.bv_solver import build_context, build_forms, make_graded_rectangle_mesh
+
+from scripts._bv_common import (
+    V_T,
+    K0_HAT_R1, K0_HAT_R2, ALPHA_R1, ALPHA_R2,
+    A_DEFAULT,
+    THREE_SPECIES_LOGC_BOLTZMANN,
+    DEFAULT_CLO4_BOLTZMANN_COUNTERION,
+    SNES_OPTS_CHARGED,
+    make_bv_solver_params,
 )
-from Forward.params import SolverParams
-
-
-SNES_OPTS = {
-    "snes_type":                   "newtonls",
-    "snes_max_it":                 200,
-    "snes_atol":                   1e-12,
-    "snes_rtol":                   1e-12,
-    "snes_stol":                   1e-14,
-    "snes_linesearch_type":        "l2",
-    "snes_linesearch_maxlambda":   1.0,
-    "snes_divergence_tolerance":   1e12,
-    "ksp_type":                    "preonly",
-    "pc_type":                     "lu",
-    "pc_factor_mat_solver_type":   "mumps",
-    "mat_mumps_icntl_14":          100,
-    "mat_mumps_icntl_8":           77,
-}
 
 
 # ---------------------------------------------------------------------------
-# MMS parameters (3 species + Boltzmann ClO4-)
+# Production constants (mirror ``plot_iv_curve_unified.py``)
 # ---------------------------------------------------------------------------
-N_SPECIES = 3
+E_EQ_R1 = 0.68    # V vs RHE
+E_EQ_R2 = 1.78    # V vs RHE
+
+V_RHE_TEST = 0.55                      # V vs RHE; production warm-walk regime
+ETA_HAT_TEST = V_RHE_TEST / V_T        # nondim, ~21.41
+
+# Manufactured-shape parameters.  delta_i < 1 keeps c_i^ex > 0; B_phi
+# small keeps |phi^ex| inside Boltzmann's phi_clamp = 50.
+DELTA_PERTURB = (0.30, 0.30, 0.30)     # one per species (O2, H2O2, H+)
+B_PHI         = 0.5                    # nondim
+
+# Quadrature degree for source-term integration.  CG1 default quadrature
+# is too low for non-polynomial integrands like ln, exp, cos; bump up so
+# the source contributes negligibly to the convergence rate.
+SRC_QUAD_DEGREE = 8
+
+
+# ---------------------------------------------------------------------------
+# SolverParams factory call (mirrors ``plot_iv_curve_unified.py:139``)
+# ---------------------------------------------------------------------------
+def make_sp_production(eta_hat: float, *, counterion_entry=None):
+    """Build SolverParams matching the production driver, with two changes:
+
+    (1) ``eta_hat`` is fixed at the test voltage.
+    (2) ``dt`` is large to neutralize the time term -- we initialise
+        ``U_prev = U_manuf`` so ``(c - c_old)/dt`` is exactly zero.
+    """
+    # Tolerances are looser than the production driver (atol=1e-7) because
+    # the manufactured-solution test problem has large absolute source
+    # magnitude at V_RHE = +0.55 V -- the Boltzmann counterion contributes
+    # ~1e8 to F_res near the electrode (Σz·c_bulk·exp(-z·η) at η ~ 21).
+    # The FP-noise floor on source evaluation is therefore ~1e-8 absolute,
+    # below which Newton spins.  Relative tolerance (rtol=1e-8) is what
+    # actually drives Newton to the discretization-error floor; that's
+    # what verifies the operator.  Initial residual norm reaches O(1e9)
+    # at U_manuf, so rtol=1e-8 means Newton drives residual to O(1e1),
+    # which is below the smallest discretization error of interest at
+    # N=128 (O(h^2) ~ 6e-5).
+    snes_opts = {
+        **SNES_OPTS_CHARGED,
+        "snes_max_it":               60,
+        "snes_atol":                 1e-5,
+        "snes_rtol":                 1e-8,
+        "snes_stol":                 1e-12,
+        "snes_linesearch_type":      "l2",   # production setting
+        "snes_linesearch_maxlambda": 0.3,    # production setting
+        "snes_divergence_tolerance": 1e10,
+    }
+    return make_bv_solver_params(
+        eta_hat=eta_hat,
+        dt=1e15, t_end=1e15,
+        species=THREE_SPECIES_LOGC_BOLTZMANN,
+        snes_opts=snes_opts,
+        formulation="logc",
+        log_rate=True,
+        u_clamp=100.0,
+        boltzmann_counterions=(
+            [counterion_entry] if counterion_entry is not None
+            else [DEFAULT_CLO4_BOLTZMANN_COUNTERION]
+        ),
+        k0_hat_r1=K0_HAT_R1, k0_hat_r2=K0_HAT_R2,
+        alpha_r1=ALPHA_R1,   alpha_r2=ALPHA_R2,
+        E_eq_r1=E_EQ_R1,     E_eq_r2=E_EQ_R2,
+    )
+
+
+def _extract_solver_parameters(sp):
+    """Pull the SNES/KSP/PC/MUMPS options from the SolverParams 11-tuple."""
+    params = sp[10]
+    keep_prefixes = ("snes_", "ksp_", "pc_", "mat_")
+    return {k: v for k, v in params.items() if k.startswith(keep_prefixes)}
+
+
+# ---------------------------------------------------------------------------
+# Manufactured-source construction (term-by-term continuum residual)
+# ---------------------------------------------------------------------------
+def _build_manufactured_source(
+    ctx,
+    c_exact,
+    u_exact,
+    phi_exact,
+    params_for_logging=None,
+    *,
+    clip_source: bool = False,
+    bikerman_counterion=None,
+):
+    """Inject the continuum residual of every production weak-form term at
+    U=u_exact into ``ctx['F_res']`` as a forcing.
+
+    The PDE we mirror in continuum (matching forms_logc.py + boltzmann.py):
+
+      Per species i:
+        d c_i / dt + nabla . J_i  =  0  (interior)
+        J_i . n  =  sum_j s_ij R_j      (electrode)
+        J_i  =  -D_i * c_i * (grad u_i + em*z_i*grad phi + grad mu_steric)
+        mu_steric  =  ln(1 - sum_i a_i * c_i)
+        R_j = exp(log_cathodic_j) - exp(log_anodic_j)  (log-rate form)
+
+      Poisson:
+        -eps * laplacian(phi)  -  charge_rhs * sum_i z_i * c_i
+                                -  z_scale * charge_rhs * sum_k z_k * c_bulk_k * exp(-z_k * phi)
+        =  0
+
+    The corresponding discrete weak form (production):
+        sum_i [ ((c_i - c_old_i)/dt) v_i dx + J_i . grad(v_i) dx
+                - sum_j s_ij R_j v_i ds(electrode) ]
+        + eps * grad(phi) . grad(w) dx
+        - charge_rhs * sum_i z_i c_i w dx
+        - sum_k z_scale * charge_rhs * z_k * c_bulk_k * exp(-z_k phi_clamped) w dx
+        =  0
+
+    Adding the continuum source (subtracting from F_res) makes u_exact a
+    continuum solution; the discrete solver finds u_h that approximates
+    u_exact at the predicted h^(k+1) / h^k rate.
+    """
+    n = ctx["n_species"]
+    mesh = ctx["mesh"]
+    W = ctx["W"]
+
+    # --- Pull production scaling (so D, k0, alpha, em, eps, charge_rhs all
+    # match the dispatched production residual) ---
+    scaling = ctx["nondim"]
+    em = float(scaling["electromigration_prefactor"])
+    eps = float(scaling["poisson_coefficient"])
+    charge_rhs = float(scaling["charge_rhs_prefactor"])
+    D_model = [float(scaling["D_model_vals"][i]) for i in range(n)]
+    z_vals_float = [float(z) for z in THREE_SPECIES_LOGC_BOLTZMANN.z_vals]
+    phi_app_model = float(scaling["phi_applied_model"])  # nondim eta_hat
+    bv_exp_scale = float(scaling["bv_exponent_scale"])
+
+    # Steric (Bikerman) coefficients.  Production a_vals_hat is
+    # [A_DEFAULT]*3 = [0.01]*3.  packing_floor only fires near
+    # close-packing -- our manufactured c_i is well below that.
+    a_vals_float = [float(A_DEFAULT)] * n
+
+    # Steric-aware Boltzmann counterion (bikerman closure) — when
+    # supplied, the manufactured Poisson source uses ``c_steric_manuf``
+    # in place of ideal ``c_b * exp(-z*phi)``, AND the dynamic species'
+    # packing fraction includes the counterion's contribution
+    # (mirroring forms_logc.py's wiring).
+    if bikerman_counterion is not None:
+        z_b_steric = float(bikerman_counterion["z"])
+        c_b_steric = float(bikerman_counterion["c_bulk_nondim"])
+        a_b_steric = float(bikerman_counterion["a_nondim"])
+        # Bulk packing fraction (the helper in boltzmann.py validates this).
+        c0_dyn_bulk = list(scaling.get("c0_model_vals", []))[:n]
+        A_dyn_bulk = sum(a_vals_float[i] * float(c0_dyn_bulk[i])
+                         for i in range(min(n, len(c0_dyn_bulk))))
+        theta_b_steric = 1.0 - A_dyn_bulk - a_b_steric * c_b_steric
+        # Closure expression at the manufactured fields.  The phi clamp
+        # is irrelevant on our smooth manufactured solution (well below
+        # the ±50 limit), so we omit the clamp here.
+        q_manuf = fd.exp(-fd.Constant(z_b_steric) * phi_exact)
+        A_dyn_manuf = sum(
+            fd.Constant(a_vals_float[i]) * c_exact[i] for i in range(n)
+        )
+        c_steric_manuf = (
+            fd.Constant(c_b_steric) * q_manuf
+            * (fd.Constant(1.0) - A_dyn_manuf)
+            / (fd.Constant(theta_b_steric)
+               + fd.Constant(a_b_steric * c_b_steric) * q_manuf)
+        )
+        packing_manuf = (
+            fd.Constant(1.0) - A_dyn_manuf
+            - fd.Constant(a_b_steric) * c_steric_manuf
+        )
+    else:
+        c_steric_manuf = None
+        packing_manuf = fd.Constant(1.0) - sum(
+            fd.Constant(a_vals_float[i]) * c_exact[i] for i in range(n)
+        )
+    mu_steric_manuf = -fd.ln(packing_manuf)
+
+    # --- Manufactured fluxes J_i = D_i * c_i * (grad u + em z grad phi + grad mu_steric) ---
+    # NOTE: forms_logc.py line 287-291 uses the log-c-friendly form
+    #   Jflux = D[i] * c_i * (grad(u_i) + grad(em*z_i*phi) + grad(mu_steric))
+    # mathematically equivalent to D*(grad(c) + em*z*c*grad(phi) + c*grad(mu_steric))
+    # since c*grad(u) = grad(c) and c*grad(em*z*phi) = em*z*c*grad(phi).
+    # Wrap em*z_i as fd.Constant so z_i = 0 species keep mesh-aware UFL terms
+    # (a Python float 0.0 multiplied into a UFL expression simplifies to scalar 0
+    # and fd.grad(0) fails to find the geometric dimension).
+    em_z_const = [fd.Constant(em * z_vals_float[i]) for i in range(n)]
+    J_manuf = [
+        D_model[i] * c_exact[i] * (
+            fd.grad(u_exact[i])
+            + em_z_const[i] * fd.grad(phi_exact)
+            + fd.grad(mu_steric_manuf)
+        )
+        for i in range(n)
+    ]
+
+    # --- Manufactured BV rates (log-rate form, mirror of forms_logc.py:334-366) ---
+    rxns = scaling["bv_reactions"]
+    R_manuf = []
+    for j_idx, rxn in enumerate(rxns):
+        k0 = float(rxn["k0_model"])
+        alpha = float(rxn["alpha"])
+        n_e = float(rxn["n_electrons"])
+        cat_idx = rxn["cathodic_species"]
+        E_eq_j_model = float(rxn.get("E_eq_model", 0.0))
+        # eta is *spatially constant* on the electrode (depends only on
+        # phi_applied_func, not phi).  forms_logc.py line 235-241 uses
+        # use_eta_in_bv=True path: eta_raw = phi_applied_func - E_eq.
+        eta_j = bv_exp_scale * (phi_app_model - E_eq_j_model)
+        if clip_source:
+            # Mirror the production eta-clip so the source assumes the same
+            # numeric eta as the discrete operator -- isolates discrete
+            # truncation error from clip-induced model error.
+            eta_j = max(min(eta_j, 50.0), -50.0)
+
+        log_cath = log(k0) + u_exact[cat_idx] - alpha * n_e * eta_j
+        for f in rxn.get("cathodic_conc_factors", []):
+            sp_idx = f["species"]
+            power = float(f["power"])
+            c_ref_f = max(float(f["c_ref_nondim"]), 1e-12)
+            log_cath = log_cath + power * (u_exact[sp_idx] - log(c_ref_f))
+        cathodic = fd.exp(log_cath)
+
+        if rxn["reversible"] and rxn["anodic_species"] is not None:
+            anod_idx = rxn["anodic_species"]
+            log_anod = log(k0) + u_exact[anod_idx] + (1.0 - alpha) * n_e * eta_j
+            anodic = fd.exp(log_anod)
+        elif rxn["reversible"] and float(rxn.get("c_ref_model", 0.0)) > 1e-30:
+            c_ref_j = float(rxn["c_ref_model"])
+            log_anod = log(k0) + log(c_ref_j) + (1.0 - alpha) * n_e * eta_j
+            anodic = fd.exp(log_anod)
+        else:
+            anodic = fd.Constant(0.0)
+
+        R_manuf.append(cathodic - anodic)
+
+    # --- Test functions and measures (high quadrature for non-polynomial integrands) ---
+    v_tests = fd.TestFunctions(W)
+    v_list = v_tests[:-1]
+    w_test = v_tests[-1]
+    n_vec = fd.FacetNormal(mesh)
+    dx_q = fd.dx(domain=mesh, degree=SRC_QUAD_DEGREE)
+    ds_q = fd.ds(domain=mesh, degree=SRC_QUAD_DEGREE)
+
+    bv_settings = ctx["bv_settings"]
+    electrode_marker = bv_settings["electrode_marker"]
+
+    # --- Inject sources into F_res ---
+    # Pattern: production residual term ``+ ∫ X · v · dx`` requires source
+    # ``- ∫ X_continuum_at_u_exact · v · dx`` to make u_exact a continuum
+    # solution.  We use the divergence theorem to write everything in
+    # divergence form on dx + boundary on ds.
+    F_res = ctx["F_res"]
+
+    for i in range(n):
+        # NP interior source.  Production: +∫ J_i · ∇v_i · dx
+        # IBP:  +∫ J_i · ∇v_i dx  =  -∫ div(J_i) v_i dx + ∫ J_i·n v_i ds_boundary
+        # Continuum residual at u_exact: -div(J_manuf_i) on interior,
+        # J_manuf_i·n - sum_j s_ij R_manuf_j on electrode, J_manuf_i·n on bulk side.
+        # The bulk side has Dirichlet BC so v_i = 0 there; only electrode + bulk
+        # natural-BC sides contribute.  All sides except electrode have zero
+        # natural BC in production (no flux on x-walls; concentration BC on bulk).
+        # Inject sources for interior and electrode only.
+        S_c_i = -fd.div(J_manuf[i])
+        F_res -= S_c_i * v_list[i] * dx_q
+
+        # Electrode boundary correction:
+        #   ∫ J_i·n v_i ds_elec - ∫ Σ s_ij R_j v_i ds_elec  ===> needs
+        # source g_i = J_manuf_i·n - Σ s_ij R_manuf_j on electrode.
+        flux_outward = fd.dot(J_manuf[i], n_vec)
+        bv_sum = sum(
+            float(rxns[j_idx]["stoichiometry"][i]) * R_manuf[j_idx]
+            for j_idx in range(len(rxns))
+            if rxns[j_idx]["stoichiometry"][i] != 0
+        )
+        # If no reaction touches species i, bv_sum is 0; flux_outward source still applies.
+        if isinstance(bv_sum, int) and bv_sum == 0:
+            bv_sum = fd.Constant(0.0)
+        g_i = flux_outward - bv_sum
+        F_res -= g_i * v_list[i] * ds_q(electrode_marker)
+
+    # --- Poisson source ---
+    # Production residual (signs match forms_logc.py + boltzmann.py):
+    #   F_res += eps * grad(phi) . grad(w) * dx
+    #   F_res -= charge_rhs * sum_i z_i * c_i * w * dx
+    #   F_res -= z_scale * charge_rhs * z_C * c_bulk * exp(-z_C * phi_clamped) * w * dx
+    #
+    # IBP first: eps * grad(phi) . grad(w) dx = -eps * lap(phi) * w dx + boundary.
+    # On Dirichlet boundaries (electrode + bulk for phi) w=0; on x-walls natural
+    # BC has grad(phi).n = 0 for our manufactured phi (cos(pi x) vanishes derivatively).
+    # So F_res_phi at u_manuf integrates to:
+    #   ∫ [ -eps*lap(phi_manuf) - charge_rhs*Σ z_i c_i_manuf
+    #       - charge_rhs * Σ_k z_k c_bulk_k * exp(-z_k phi_manuf) ] * w * dx
+    # which we want to make zero by subtracting that integrand as a source.
+    S_phi = (
+        -eps * fd.div(fd.grad(phi_exact))
+        - charge_rhs * sum(z_vals_float[i] * c_exact[i] for i in range(n))
+    )
+    if bikerman_counterion is not None:
+        # Bikerman closure replaces the ideal Boltzmann source.
+        S_phi = S_phi - charge_rhs * fd.Constant(z_b_steric) * c_steric_manuf
+    else:
+        # Ideal Boltzmann counterions (z_scale defaults to 1.0; clamp inactive at our phi).
+        for entry in [DEFAULT_CLO4_BOLTZMANN_COUNTERION]:
+            z_c = float(entry["z"])
+            c_bulk_c = float(entry["c_bulk_nondim"])
+            S_phi = S_phi - charge_rhs * z_c * c_bulk_c * fd.exp(-z_c * phi_exact)
+    F_res -= S_phi * w_test * dx_q
+
+    ctx["F_res"] = F_res
+    return ctx
+
+
+# ---------------------------------------------------------------------------
+# Reporting helpers
+# ---------------------------------------------------------------------------
 SPECIES_NAMES = ["O2", "H2O2", "H+"]
 
-Z_VALS = [0, 0, 1]
-D_VALS = [1.0, 0.85, 4.9]           # nondim (matches production for O2-ref)
-# NOTE: We deliberately DO NOT use the production H2O2 seed of 1e-4 here.
-# With c_0,H2O2=1e-4, u_1 = ln(c_1) has gradients of order 1/c_1 ≈ 1e4,
-# which CG1 cannot resolve; Newton converges to a wrong root.
-# MMS checks the solver's implementation of the log-c PDE -- we want a
-# well-behaved manufactured solution. The seed×physics interaction at
-# small c is a separate physical modeling question, not a solver correctness issue.
-C0_VALS = [1.0, 0.5, 0.2]           # bulk concs (nondim)
-A_VALS = [0.2, 0.1, 0.05]           # amplitudes: |A_i| < C0_i (positivity)
-BETA_VALS = [3.0, 3.0, 3.0]
-
-ETA0 = -2.0                         # moderate cathodic overpotential
-B_VAL = 0.1
-
-# Boltzmann ClO4- parameters
-C_CLO4_BULK = 0.2                   # nondim bulk ClO4- concentration
-
-# BV kinetic parameters (for MMS; generic moderate values)
-K0_1 = 0.5
-ALPHA_1 = 0.5
-C_REF_ANODIC = 1.0
-K0_2 = 0.1
-ALPHA_2 = 0.5
-C_REF_H_PLUS = 0.2                  # matches C0_VALS[2] so H_factor at surface = 1.0
-
-# Stoichiometry: R1 (O2 -> H2O2), R2 (H2O2 -> H2O)
-STOI_R1 = [-1, +1, -2]              # per-species for R1 (consumes O2, produces H2O2, consumes 2 H+)
-STOI_R2 = [ 0, -1, -2]              # per-species for R2
-
-
-# ---------------------------------------------------------------------------
-# Build SolverParams
-# ---------------------------------------------------------------------------
-
-def make_sp_mms(eta_hat: float) -> SolverParams:
-    """3-species SolverParams with nondim coefficients chosen for clean MMS values."""
-    D_REF = 1.9e-9
-    C_SCALE = 0.5
-    L_REF = 1.0e-4
-    R_GAS = 8.314462618
-    F_CONST = 96485.3329
-    T_REF = 298.15
-    V_T = R_GAS * T_REF / F_CONST
-
-    # Target eps_hat ~ 0.01 for moderate Debye length
-    target_eps_hat = 0.01
-    perm_needed = target_eps_hat * F_CONST * C_SCALE * L_REF**2 / V_T
-
-    dt = 1e15
-    t_end = 1e15
-
-    params = dict(SNES_OPTS)
-    params["bv_convergence"] = {
-        "clip_exponent":            False,
-        "exponent_clip":            50.0,
-        "regularize_concentration": False,
-        "conc_floor":               1e-8,
-        "use_eta_in_bv":            True,
-    }
-    params["nondim"] = {
-        "enabled":                              True,
-        "diffusivity_scale_m2_s":               D_REF,
-        "concentration_scale_mol_m3":           C_SCALE,
-        "length_scale_m":                       L_REF,
-        "potential_scale_v":                    V_T,
-        "permittivity_f_m":                     perm_needed,
-        "kappa_inputs_are_dimensionless":       True,
-        "diffusivity_inputs_are_dimensionless": True,
-        "concentration_inputs_are_dimensionless": True,
-        "potential_inputs_are_dimensionless":   True,
-        "time_inputs_are_dimensionless":        True,
-    }
-    params["bv_bc"] = {
-        "reactions": [
-            {
-                "k0": K0_1, "alpha": ALPHA_1,
-                "cathodic_species": 0, "anodic_species": 1,
-                "c_ref": C_REF_ANODIC,
-                "stoichiometry": STOI_R1,
-                "n_electrons": 2, "reversible": True,
-                "cathodic_conc_factors": [
-                    {"species": 2, "power": 2, "c_ref_nondim": C_REF_H_PLUS},
-                ],
-            },
-            {
-                "k0": K0_2, "alpha": ALPHA_2,
-                "cathodic_species": 1, "anodic_species": None,
-                "c_ref": 0.0,
-                "stoichiometry": STOI_R2,
-                "n_electrons": 2, "reversible": False,
-                "cathodic_conc_factors": [
-                    {"species": 2, "power": 2, "c_ref_nondim": C_REF_H_PLUS},
-                ],
-            },
-        ],
-        "k0":            [K0_1] * N_SPECIES,
-        "alpha":         [ALPHA_1] * N_SPECIES,
-        "stoichiometry": STOI_R1,
-        "c_ref":         [1.0] * N_SPECIES,
-        "E_eq_v":        0.0,
-        "electrode_marker":     3,      # bottom y=0
-        "concentration_marker": 4,      # top y=1
-        "ground_marker":        4,
-    }
-
-    sp = SolverParams.from_list([
-        N_SPECIES, 1, dt, t_end,
-        Z_VALS, D_VALS, [0.0] * N_SPECIES,  # no steric
-        eta_hat, C0_VALS, 0.0, params,
-    ])
-    return sp
-
-
-# ---------------------------------------------------------------------------
-# MMS convergence study
-# ---------------------------------------------------------------------------
-
-def run_mms(N_vals: list[int], verbose: bool = True) -> dict:
-    n = N_SPECIES
-    electrode_marker = 3
-    bulk_marker = 4
-
-    print("=" * 80)
-    print("  MMS Convergence: 3-Species + Boltzmann ClO4- log-c PNP-BV")
-    print("=" * 80)
-    print(f"  Species: {SPECIES_NAMES}")
-    print(f"  z = {Z_VALS}, D = {D_VALS}, c0 = {C0_VALS}")
-    print(f"  A  = {A_VALS}, beta = {BETA_VALS}")
-    print(f"  eta0 = {ETA0}, B = {B_VAL}, c_ClO4_bulk = {C_CLO4_BULK}")
-    print(f"  R1: k0={K0_1}, alpha={ALPHA_1}, stoi={STOI_R1}")
-    print(f"  R2: k0={K0_2}, alpha={ALPHA_2}, stoi={STOI_R2}")
-    print(f"  c_ref_H+ = {C_REF_H_PLUS}")
-    print(f"  Mesh sizes: {N_vals}")
-    print("=" * 80)
-
-    results = {"N": [], "h": []}
-    for i in range(n):
-        results[f"u{i}_L2"] = []
-        results[f"u{i}_H1"] = []
-        results[f"c{i}_L2"] = []
-    results["phi_L2"] = []
-    results["phi_H1"] = []
-
-    for N in N_vals:
-        t0 = time.time()
-        h = 1.0 / N
-
-        # Mesh with marker 3 = bottom, 4 = top (use UnitSquareMesh and remap)
-        # forms_logc expects electrode_marker=3 (bottom), concentration_marker=4 (top)
-        # UnitSquareMesh: 1=left, 2=right, 3=bottom, 4=top. That matches.
-        mesh = fd.UnitSquareMesh(N, N)
-        x, y = fd.SpatialCoordinate(mesh)
-
-        # Build forms via the production pipeline
-        sp = make_sp_mms(ETA0)
-        ctx = build_context_logc(sp, mesh=mesh)
-        ctx = build_forms_logc(ctx, sp)
-
-        # Read nondim coefficients actually used by the solver
-        scaling = ctx["nondim"]
-        em = float(scaling["electromigration_prefactor"])
-        eps_hat = float(scaling["poisson_coefficient"])
-        charge_rhs = float(scaling["charge_rhs_prefactor"])
-        D_model = [float(scaling["D_model_vals"][i]) for i in range(n)]
-        z_float = [float(Z_VALS[i]) for i in range(n)]
-
-        if N == N_vals[0]:
-            print(f"\n  [nondim] em={em:.4f}, eps_hat={eps_hat:.4f}, "
-                  f"charge_rhs={charge_rhs:.4f}")
-            print(f"  [nondim] D_model = {D_model}")
-
-        # -- Add Boltzmann ClO4- background to F_res --
-        # Matches add_boltzmann from v19_hybrid_forward:
-        # z_ClO4 = -1, so ρ contribution = -c_bulk*exp(phi). Residual subtracts
-        # (charge_rhs * z * c_ClO4) -> subtract (charge_rhs * (-1) * c_bulk * exp(phi))
-        W = ctx["W"]; U = ctx["U"]
-        phi_sym = fd.split(U)[-1]
-        w_test = fd.TestFunctions(W)[-1]
-        dx = fd.Measure("dx", domain=mesh)
-        ds_m = fd.Measure("ds", domain=mesh)
-        n_vec = fd.FacetNormal(mesh)
-
-        # Note: NO clipping on phi_sym here — MMS uses moderate phi. Clipping would
-        # add a nonlinearity that doesn't match the smooth manufactured phi.
-        ctx["F_res"] -= charge_rhs * fd.Constant(-1.0) * C_CLO4_BULK * fd.exp(phi_sym) * w_test * dx
-
-        # ---- Manufactured solutions ----
-        c_exact = [
-            C0_VALS[i] + A_VALS[i] * fd.cos(pi * x) * (1.0 - fd.exp(-BETA_VALS[i] * y))
-            for i in range(n)
-        ]
-        u_exact = [fd.ln(c_exact[i]) for i in range(n)]
-        phi_exact = ETA0 * (1.0 - y) + B_VAL * fd.cos(pi * x) * y * (1.0 - y)
-
-        # ---- Volume sources ----
-        # NP: S_c_i = -div(D_i * (grad(c_i^ex) + em * z_i * c_i^ex * grad(phi_ex)))
-        S_c = []
-        for i in range(n):
-            J_i = D_model[i] * (
-                fd.grad(c_exact[i]) + em * z_float[i] * c_exact[i] * fd.grad(phi_exact)
-            )
-            S_c.append(-fd.div(J_i))
-
-        # Poisson (with Boltzmann ClO4-):
-        # F_res_phi_residual = -eps * laplacian(phi) - charge_rhs * sum(z_i c_i)
-        #                     + charge_rhs * c_bulk * exp(phi)
-        # S_phi matches this residual at U_manuf so F_res_MMS[U_manuf] = 0:
-        S_phi = (
-            -eps_hat * fd.div(fd.grad(phi_exact))
-            - charge_rhs * sum(z_float[i] * c_exact[i] for i in range(n))
-            + charge_rhs * C_CLO4_BULK * fd.exp(phi_exact)
-        )
-
-        # ---- Manufactured BV rates at electrode surface ----
-        # MUST match forms_logc.py build_forms_logc rate expression:
-        #   cathodic = k0 * c_cat_surf * exp(-alpha * n_e * eta)  [* H_factor if present]
-        #   anodic   = k0 * c_anod_surf * exp((1-alpha) * n_e * eta)   (anodic_species != None)
-        #              OR k0 * c_ref * exp((1-alpha) * n_e * eta)      (anodic_species = None, reversible)
-        #              OR 0                                             (irreversible)
-        # At y=0: c_i^ex(x,0) = C0_VALS[i], phi^ex(x,0) = ETA0.
-        N_E = 2.0
-        H_factor = (C0_VALS[2] / C_REF_H_PLUS) ** 2
-
-        # R1: reversible, anodic_species=1 (H2O2). Anodic uses c_H2O2_surf = C0_VALS[1].
-        R1_exact = (
-            K0_1 * C0_VALS[0] * H_factor * fd.exp(-ALPHA_1 * N_E * ETA0)
-            - K0_1 * C0_VALS[1] * fd.exp((1.0 - ALPHA_1) * N_E * ETA0)
-        )
-        # R2: irreversible (anodic = 0). Cathodic uses c_H2O2_surf = C0_VALS[1] with H_factor.
-        R2_exact = K0_2 * C0_VALS[1] * H_factor * fd.exp(-ALPHA_2 * N_E * ETA0)
-        R_exact = [R1_exact, R2_exact]
-        STOI = [STOI_R1, STOI_R2]      # reactions index
-        # per-species stoichiometric contribution
-        # STOI_PER_SPECIES[i][j] = stoichiometry of species i in reaction j
-        STOI_PER_SPECIES = [[STOI_R1[i], STOI_R2[i]] for i in range(n)]
-
-        # ---- Boundary correction g_i on electrode ----
-        # g_i = [D*(grad(c)+em*z*c*grad(phi))]·n_outward - sum_j(s_ij * R_j^ex)
-        g_corr = []
-        for i in range(n):
-            J_i_exact = D_model[i] * (
-                fd.grad(c_exact[i]) + em * z_float[i] * c_exact[i] * fd.grad(phi_exact)
-            )
-            flux_outward = fd.dot(J_i_exact, n_vec)
-            bv_sum = sum(float(STOI_PER_SPECIES[i][j]) * R_exact[j] for j in range(2))
-            g_corr.append(flux_outward - bv_sum)
-
-        # ---- Inject MMS sources (SUBTRACT from F_res) ----
-        F_res = ctx["F_res"]
-        v_tests = fd.TestFunctions(W)
-        v_list = v_tests[:-1]
-
-        for i in range(n):
-            F_res -= S_c[i] * v_list[i] * dx
-            F_res -= g_corr[i] * v_list[i] * ds_m(electrode_marker)
-        F_res -= S_phi * w_test * dx
-
-        # ---- Replace Dirichlet BCs ----
-        # u_i on bulk = ln(c_i^ex(x,1)) -- space-varying (depends on x)
-        # phi on bulk = 0 (phi_ex(x,1) = 0 by construction)
-        # phi on electrode = ETA0 (phi_ex(x,0) = ETA0 by construction)
-        bcs_new = []
-        for i in range(n):
-            bcs_new.append(fd.DirichletBC(W.sub(i), u_exact[i], bulk_marker))
-        bcs_new.append(fd.DirichletBC(W.sub(n), fd.Constant(ETA0), electrode_marker))
-        bcs_new.append(fd.DirichletBC(W.sub(n), fd.Constant(0.0), bulk_marker))
-        ctx["bcs"] = bcs_new
-
-        # ---- Initial guess at manufactured solution ----
-        for i in range(n):
-            U.sub(i).interpolate(u_exact[i])
-        U.sub(n).interpolate(phi_exact)
-        ctx["U_prev"].assign(U)
-
-        # ---- Solve ----
-        J_form = fd.derivative(F_res, U)
-        problem = fd.NonlinearVariationalProblem(F_res, U, bcs=bcs_new, J=J_form)
-        solver = fd.NonlinearVariationalSolver(problem, solver_parameters=SNES_OPTS)
-        try:
-            solver.solve()
-        except fd.ConvergenceError as e:
-            print(f"  [FAIL] N={N}: Newton failed: {e}")
-            continue
-
-        # ---- Errors ----
-        V_scalar = ctx["V_scalar"]
-        errs_u_L2, errs_u_H1, errs_c_L2 = [], [], []
-        for i in range(n):
-            u_ex_f = fd.Function(V_scalar); u_ex_f.interpolate(u_exact[i])
-            u_L2 = fd.errornorm(u_ex_f, U.sub(i), norm_type="L2")
-            u_H1 = fd.errornorm(u_ex_f, U.sub(i), norm_type="H1")
-            errs_u_L2.append(u_L2); errs_u_H1.append(u_H1)
-            # Also check c = exp(u) L2 error (for interpretability)
-            c_ex_f = fd.Function(V_scalar); c_ex_f.interpolate(c_exact[i])
-            c_h = fd.Function(V_scalar); c_h.interpolate(fd.exp(U.sub(i)))
-            c_L2 = fd.errornorm(c_ex_f, c_h, norm_type="L2")
-            errs_c_L2.append(c_L2)
-
-        phi_ex_f = fd.Function(V_scalar); phi_ex_f.interpolate(phi_exact)
-        phi_L2 = fd.errornorm(phi_ex_f, U.sub(n), norm_type="L2")
-        phi_H1 = fd.errornorm(phi_ex_f, U.sub(n), norm_type="H1")
-
-        elapsed = time.time() - t0
-        results["N"].append(N)
-        results["h"].append(h)
-        for i in range(n):
-            results[f"u{i}_L2"].append(errs_u_L2[i])
-            results[f"u{i}_H1"].append(errs_u_H1[i])
-            results[f"c{i}_L2"].append(errs_c_L2[i])
-        results["phi_L2"].append(phi_L2)
-        results["phi_H1"].append(phi_H1)
-
-        if verbose:
-            parts = [f"N={N:4d}  h={h:.5f}"]
-            for i in range(n):
-                parts.append(f"u{i}_L2={errs_u_L2[i]:.3e}")
-            parts.append(f"phi_L2={phi_L2:.3e}")
-            parts.append(f"({elapsed:.1f}s)")
-            print("  " + "  ".join(parts))
-
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Rate computation + summary
-# ---------------------------------------------------------------------------
 
 def compute_rates(h_list, err_list):
     rates = [None]
@@ -413,15 +422,308 @@ def compute_rates(h_list, err_list):
     return rates
 
 
+# ---------------------------------------------------------------------------
+# MMS convergence study
+# ---------------------------------------------------------------------------
+def _ufl_l2_error(u_ufl, u_h, mesh, degree=SRC_QUAD_DEGREE):
+    """L2 error of u_h vs UFL expression u_ufl, using high-degree quadrature."""
+    dx_q = fd.dx(domain=mesh, degree=degree)
+    return float(fd.sqrt(fd.assemble((u_ufl - u_h) ** 2 * dx_q)))
+
+
+def _ufl_h1_error(u_ufl, u_h, mesh, degree=SRC_QUAD_DEGREE):
+    """H1 error of u_h vs UFL expression u_ufl, using high-degree quadrature."""
+    dx_q = fd.dx(domain=mesh, degree=degree)
+    diff = u_ufl - u_h
+    grad_diff = fd.grad(u_ufl) - fd.grad(u_h)
+    integrand = diff ** 2 + fd.inner(grad_diff, grad_diff)
+    return float(fd.sqrt(fd.assemble(integrand * dx_q)))
+
+
+def _solve_mms_on_mesh(
+    mesh,
+    sp,
+    snes_params,
+    *,
+    eta_hat: float = ETA_HAT_TEST,
+    clip_source: bool = False,
+    bikerman_counterion=None,
+) -> dict:
+    """Set up the MMS problem on a given mesh, solve, and return error dict.
+
+    Returns a dict with per-field L2/H1 errors against the continuum
+    manufactured solution (UFL-based, high quadrature)::
+
+        {"u0_L2", "u0_H1", "u1_L2", ..., "phi_L2", "phi_H1",
+         "c0_L2", "c1_L2", "c2_L2",
+         "newton_converged": bool, "newton_iterations": int}
+
+    Caller is responsible for printing diagnostics; this helper only
+    raises on Newton divergence (sets newton_converged=False and returns
+    NaN errors so the caller can still report).
+    """
+    n = THREE_SPECIES_LOGC_BOLTZMANN.n_species
+    c0_HAT = list(THREE_SPECIES_LOGC_BOLTZMANN.c0_vals_hat)
+
+    x, y = fd.SpatialCoordinate(mesh)
+
+    # ---- Build the production residual via the dispatcher ----
+    ctx = build_context(sp, mesh=mesh)
+    ctx = build_forms(ctx, sp)
+
+    # ---- Manufactured solution as UFL expressions in (x, y) ----
+    c_exact = [
+        c0_HAT[i] * (
+            fd.Constant(1.0)
+            + fd.Constant(DELTA_PERTURB[i]) * fd.cos(pi * x) * (1.0 - y) ** 2
+        )
+        for i in range(n)
+    ]
+    u_exact = [fd.ln(c_exact[i]) for i in range(n)]
+    phi_exact = (
+        fd.Constant(eta_hat) * (1.0 - y)
+        + fd.Constant(B_PHI) * fd.cos(pi * x) * y * (1.0 - y)
+    )
+
+    # ---- Inject continuum source into F_res (term-by-term mirror) ----
+    ctx = _build_manufactured_source(
+        ctx, c_exact, u_exact, phi_exact,
+        clip_source=clip_source,
+        bikerman_counterion=bikerman_counterion,
+    )
+
+    W = ctx["W"]; U = ctx["U"]; U_prev = ctx["U_prev"]
+    F_res = ctx["F_res"]; bcs = ctx["bcs"]
+
+    # ---- Build U_manuf for initial guess ----
+    U_manuf = fd.Function(W)
+    for i in range(n):
+        U_manuf.sub(i).interpolate(u_exact[i])
+    U_manuf.sub(n).interpolate(phi_exact)
+
+    # Production BCs already match U_manuf by manufactured-shape design.
+    U.assign(U_manuf)
+    U_prev.assign(U_manuf)
+
+    # ---- Solve ----
+    J_form  = fd.derivative(F_res, U)
+    problem = fd.NonlinearVariationalProblem(F_res, U, bcs=bcs, J=J_form)
+    solver  = fd.NonlinearVariationalSolver(
+        problem, solver_parameters=snes_params,
+    )
+    out: dict = {"newton_converged": False, "newton_iterations": -1}
+    try:
+        solver.solve()
+        out["newton_converged"] = True
+        out["newton_iterations"] = int(solver.snes.getIterationNumber())
+    except fd.ConvergenceError as exc:
+        out["newton_error"] = str(exc)
+        for i in range(n):
+            out[f"u{i}_L2"] = float("nan")
+            out[f"u{i}_H1"] = float("nan")
+            out[f"c{i}_L2"] = float("nan")
+        out["phi_L2"] = float("nan")
+        out["phi_H1"] = float("nan")
+        return out
+
+    # ---- Errors (UFL-based, high quadrature against continuum manuf) ----
+    for i in range(n):
+        out[f"u{i}_L2"] = _ufl_l2_error(u_exact[i], U.sub(i), mesh)
+        out[f"u{i}_H1"] = _ufl_h1_error(u_exact[i], U.sub(i), mesh)
+        out[f"c{i}_L2"] = _ufl_l2_error(c_exact[i], fd.exp(U.sub(i)), mesh)
+    out["phi_L2"] = _ufl_l2_error(phi_exact, U.sub(n), mesh)
+    out["phi_H1"] = _ufl_h1_error(phi_exact, U.sub(n), mesh)
+    return out
+
+
+def _print_config_banner(
+    *,
+    mesh_sizes_str: str,
+    v_rhe: float = V_RHE_TEST,
+    eta_hat: float = ETA_HAT_TEST,
+    clip_source: bool = False,
+) -> None:
+    n = THREE_SPECIES_LOGC_BOLTZMANN.n_species
+    c0_HAT = list(THREE_SPECIES_LOGC_BOLTZMANN.c0_vals_hat)
+    eta_R1 = (v_rhe - E_EQ_R1) / V_T
+    eta_R2 = (v_rhe - E_EQ_R2) / V_T
+    R1_status = "CLIPPED" if abs(eta_R1) > 50.0 else "unclipped"
+    R2_status = "CLIPPED" if abs(eta_R2) > 50.0 else "unclipped"
+    print("=" * 80)
+    print("  Production-Faithful MMS: 3sp + Boltzmann + log-c + log-rate BV")
+    print("=" * 80)
+    print(f"  V_RHE          = {v_rhe} V vs RHE")
+    print(f"  eta_hat        = {eta_hat:.4f} (nondim)")
+    print(f"  E_eq R1/R2     = {E_EQ_R1}/{E_EQ_R2} V")
+    print(f"  c0_HAT         = {c0_HAT}")
+    print(f"  delta_i        = {DELTA_PERTURB}")
+    print(f"  B_phi          = {B_PHI}")
+    print(f"  log-rate BV    = ON (bv_log_rate=True)")
+    cl04 = DEFAULT_CLO4_BOLTZMANN_COUNTERION
+    print(f"  Boltzmann ClO4-= z={cl04['z']}, c_bulk_hat={cl04['c_bulk_nondim']}")
+    print(f"  steric a_vals  = {[A_DEFAULT]*n}")
+    print(f"  u-clamp        = 100 (active wiring)")
+    print(
+        f"  eta-clip       = +/-50  "
+        f"R1: eta={eta_R1:+.2f} ({R1_status}), "
+        f"R2: eta={eta_R2:+.2f} ({R2_status})"
+    )
+    print(f"  clip_source    = {clip_source}")
+    print(f"  Source quadrature degree = {SRC_QUAD_DEGREE}")
+    print(f"  Mesh           = {mesh_sizes_str}")
+    print("=" * 80)
+
+
+def run_mms(
+    N_vals: list[int],
+    verbose: bool = True,
+    *,
+    eta_hat: float = ETA_HAT_TEST,
+    v_rhe: float = V_RHE_TEST,
+    clip_source: bool = False,
+    bikerman_counterion=None,
+) -> dict:
+    """Run the production-faithful MMS convergence study on a chain of
+    UnitSquareMesh(N, N) meshes for h^p rate verification.
+
+    Parameters
+    ----------
+    eta_hat, v_rhe : float
+        Voltage to test (nondim eta and physical V_RHE; should satisfy
+        ``eta_hat = v_rhe / V_T``). Defaults preserve the legacy
+        V_RHE = +0.55 V test point.
+    clip_source : bool
+        If True, the manufactured BV source applies the same eta-clip
+        (+/-50) as the discrete operator. Useful for isolating discrete
+        truncation error from clip-induced model error when ``v_rhe``
+        falls in the production clipped regime (R2 below +0.495 V).
+
+    For single-mesh recovery on the production graded mesh, see
+    :func:`verify_on_graded_production_mesh`.
+    """
+    n = THREE_SPECIES_LOGC_BOLTZMANN.n_species
+
+    if verbose:
+        _print_config_banner(
+            mesh_sizes_str=f"UnitSquareMesh sweep N={N_vals}",
+            v_rhe=v_rhe,
+            eta_hat=eta_hat,
+            clip_source=clip_source,
+        )
+
+    sp = make_sp_production(eta_hat, counterion_entry=bikerman_counterion)
+    snes_params = _extract_solver_parameters(sp)
+
+    results: dict = {"N": [], "h": []}
+    for i in range(n):
+        results[f"u{i}_L2"] = []
+        results[f"u{i}_H1"] = []
+        results[f"c{i}_L2"] = []
+    results["phi_L2"] = []
+    results["phi_H1"] = []
+
+    for N in N_vals:
+        t0 = time.time()
+        h = 1.0 / N
+        # UnitSquareMesh markers: 3=bottom (electrode), 4=top (bulk).
+        mesh = fd.UnitSquareMesh(N, N)
+        errs = _solve_mms_on_mesh(
+            mesh, sp, snes_params,
+            eta_hat=eta_hat, clip_source=clip_source,
+            bikerman_counterion=bikerman_counterion,
+        )
+        if not errs.get("newton_converged", False):
+            print(f"  [FAIL] N={N}: Newton failed: {errs.get('newton_error', '?')}")
+            continue
+
+        results["N"].append(N)
+        results["h"].append(h)
+        for i in range(n):
+            results[f"u{i}_L2"].append(errs[f"u{i}_L2"])
+            results[f"u{i}_H1"].append(errs[f"u{i}_H1"])
+            results[f"c{i}_L2"].append(errs[f"c{i}_L2"])
+        results["phi_L2"].append(errs["phi_L2"])
+        results["phi_H1"].append(errs["phi_H1"])
+
+        if verbose:
+            elapsed = time.time() - t0
+            parts = [f"N={N:4d}  h={h:.5f}"]
+            for i in range(n):
+                parts.append(f"u{i}_L2={errs[f'u{i}_L2']:.3e}")
+            parts.append(f"phi_L2={errs['phi_L2']:.3e}")
+            parts.append(f"({elapsed:.1f}s)")
+            print("  " + "  ".join(parts))
+
+    return results
+
+
+def verify_on_graded_production_mesh(verbose: bool = True) -> dict:
+    """Single-mesh MMS recovery test on the production graded rectangle.
+
+    Mirrors ``scripts/plot_iv_curve_unified.py:118``: ``Nx=8``, ``Ny=200``,
+    ``beta=3.0`` -- exactly the mesh production solves use.  Sanity check
+    that the solver recovers the manufactured solution to within the
+    expected discretization error of the *production* mesh (not the
+    asymptotic regime).
+
+    The dominant error here is ``h_x = 1/8 = 0.125``: our manufactured
+    solution has cos(pi x) variation in x, and Nx=8 is coarse for it.
+    Expected L2 errors for u_i and phi: O(h_x^2) ~ O(1.6e-2).  Newton
+    should still converge cleanly from the U_manuf initial guess.
+
+    Returns the error dict from :func:`_solve_mms_on_mesh` plus a
+    ``mesh_label`` field.
+    """
+    Nx, Ny, beta = 8, 200, 3.0
+    if verbose:
+        _print_config_banner(
+            mesh_sizes_str=f"graded rectangle Nx={Nx}, Ny={Ny}, beta={beta} (production)"
+        )
+
+    sp = make_sp_production(ETA_HAT_TEST)
+    snes_params = _extract_solver_parameters(sp)
+
+    t0 = time.time()
+    mesh = make_graded_rectangle_mesh(Nx=Nx, Ny=Ny, beta=beta)
+    errs = _solve_mms_on_mesh(mesh, sp, snes_params)
+    elapsed = time.time() - t0
+    errs["mesh_label"] = f"graded Nx={Nx}, Ny={Ny}, beta={beta}"
+    errs["elapsed_seconds"] = float(elapsed)
+
+    if verbose:
+        if errs.get("newton_converged", False):
+            print(
+                f"  [graded {Nx}x{Ny}, beta={beta}]  "
+                f"Newton iterations: {errs['newton_iterations']}  "
+                f"({elapsed:.1f}s)"
+            )
+            n = THREE_SPECIES_LOGC_BOLTZMANN.n_species
+            for i in range(n):
+                print(
+                    f"    {SPECIES_NAMES[i]:>5s} u{i}: "
+                    f"L2={errs[f'u{i}_L2']:.3e}  H1={errs[f'u{i}_H1']:.3e}"
+                )
+            print(
+                f"    {'phi':>5s}   : "
+                f"L2={errs['phi_L2']:.3e}  H1={errs['phi_H1']:.3e}"
+            )
+        else:
+            print(f"  [graded {Nx}x{Ny}] Newton FAILED: {errs.get('newton_error', '?')}")
+
+    return errs
+
+
+# ---------------------------------------------------------------------------
+# Reporting (pretty-print + plot)
+# ---------------------------------------------------------------------------
 def format_summary(results: dict) -> str:
-    lines = []
-    lines.append("")
+    lines = [""]
     lines.append("=" * 80)
-    lines.append("  3-sp + Boltzmann log-c MMS: Convergence Rate Summary")
+    lines.append("  Production-Faithful MMS: Convergence Rate Summary")
     lines.append("=" * 80)
 
     h_list = results["h"]
-    n = N_SPECIES
+    n = THREE_SPECIES_LOGC_BOLTZMANN.n_species
     all_pass = True
 
     for i in range(n):
@@ -439,9 +741,7 @@ def format_summary(results: dict) -> str:
                 f"  {SPECIES_NAMES[i]:>5s} u{i} {norm}: rate = {final:.4f}  "
                 f"(expected ~{expected:.1f})  [{status}]"
             )
-        # Also report c_i L2 rate
-        key = f"c{i}_L2"
-        rates = compute_rates(h_list, results[key])
+        rates = compute_rates(h_list, results[f"c{i}_L2"])
         final = rates[-1] if rates[-1] is not None else 0.0
         lines.append(
             f"  {SPECIES_NAMES[i]:>5s} c{i} L2 (=exp(u)): rate = {final:.4f}"
@@ -473,12 +773,14 @@ def format_table(results: dict) -> str:
     lines.append("  Full Error Table (u_i = ln(c_i) primary unknown)")
     lines.append("=" * 100)
     h_list = results["h"]
-    n = N_SPECIES
+    n = THREE_SPECIES_LOGC_BOLTZMANN.n_species
 
-    fields = []
+    fields: list[str] = []
     for i in range(n):
-        fields.append(f"u{i}_L2"); fields.append(f"u{i}_H1")
-    fields.append("phi_L2"); fields.append("phi_H1")
+        fields.append(f"u{i}_L2")
+        fields.append(f"u{i}_H1")
+    fields.append("phi_L2")
+    fields.append("phi_H1")
 
     header = f"  {'N':>4} {'h':>8}  "
     for fn in fields:
@@ -487,12 +789,12 @@ def format_table(results: dict) -> str:
     lines.append("-" * 100)
 
     rates = {fn: compute_rates(h_list, results[fn]) for fn in fields}
-    for i in range(len(results["N"])):
-        row = f"  {results['N'][i]:>4} {results['h'][i]:>8.4f}  "
+    for k in range(len(results["N"])):
+        row = f"  {results['N'][k]:>4} {results['h'][k]:>8.4f}  "
         for fn in fields:
-            r = rates[fn][i]
+            r = rates[fn][k]
             r_str = f"{r:.2f}" if r is not None else "---"
-            row += f"{results[fn][i]:>10.3e}  {r_str:>5}  "
+            row += f"{results[fn][k]:>10.3e}  {r_str:>5}  "
         lines.append(row)
     lines.append("=" * 100)
     return "\n".join(lines)
@@ -501,37 +803,39 @@ def format_table(results: dict) -> str:
 def plot_convergence(results: dict, out_dir: str) -> str:
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     h = np.array(results["h"])
-    n = N_SPECIES
+    n = THREE_SPECIES_LOGC_BOLTZMANN.n_species
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd"]
 
-    # L2
     ax = axes[0]
     for i in range(n):
         ax.loglog(h, results[f"u{i}_L2"], "o-", color=colors[i], linewidth=1.5,
                   markersize=5, label=f"{SPECIES_NAMES[i]} $u_{i}$ $L^2$")
     ax.loglog(h, results["phi_L2"], "s-", color=colors[3], linewidth=1.5,
-              markersize=5, label="$\\phi$ $L^2$")
+              markersize=5, label=r"$\phi$ $L^2$")
     h_ref = np.array([h[0], h[-1]])
     scale = results["u0_L2"][0] / h[0] ** 2
-    ax.loglog(h_ref, scale * h_ref ** 2, "k:", linewidth=0.8, label="$O(h^2)$")
+    ax.loglog(h_ref, scale * h_ref ** 2, "k:", linewidth=0.8, label=r"$O(h^2)$")
     ax.set_xlabel("$h$"); ax.set_ylabel("$L^2$ error")
-    ax.set_title("$L^2$ Convergence (log-c 3sp + Boltzmann)")
+    ax.set_title("$L^2$ Convergence (production-faithful)")
     ax.legend(fontsize=8); ax.grid(True, alpha=0.3, which="both")
 
-    # H1
     ax = axes[1]
     for i in range(n):
         ax.loglog(h, results[f"u{i}_H1"], "o-", color=colors[i], linewidth=1.5,
                   markersize=5, label=f"{SPECIES_NAMES[i]} $u_{i}$ $H^1$")
     ax.loglog(h, results["phi_H1"], "s-", color=colors[3], linewidth=1.5,
-              markersize=5, label="$\\phi$ $H^1$")
+              markersize=5, label=r"$\phi$ $H^1$")
     scale = results["u0_H1"][0] / h[0] ** 1
-    ax.loglog(h_ref, scale * h_ref ** 1, "k-.", linewidth=0.8, label="$O(h^1)$")
+    ax.loglog(h_ref, scale * h_ref ** 1, "k-.", linewidth=0.8, label=r"$O(h^1)$")
     ax.set_xlabel("$h$"); ax.set_ylabel("$H^1$ error")
-    ax.set_title("$H^1$ Convergence")
+    ax.set_title("$H^1$ Convergence (production-faithful)")
     ax.legend(fontsize=8); ax.grid(True, alpha=0.3, which="both")
 
-    fig.suptitle("MMS: 3sp + Boltzmann ClO4- log-c PNP-BV", fontsize=11)
+    fig.suptitle(
+        f"MMS: 3sp + Boltzmann + log-c + log-rate BV   "
+        f"(V_RHE = {V_RHE_TEST} V, production stack)",
+        fontsize=11,
+    )
     plt.tight_layout()
     png = os.path.join(out_dir, "mms_3sp_logc_boltzmann.png")
     fig.savefig(png, dpi=170, bbox_inches="tight")
@@ -542,7 +846,6 @@ def plot_convergence(results: dict, out_dir: str) -> str:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--Nvals", type=int, nargs="+",
@@ -562,8 +865,8 @@ def main():
 
     summary_path = os.path.join(args.out_dir, "mms_3sp_logc_summary.txt")
     with open(summary_path, "w") as f:
-        f.write(f"3sp + Boltzmann log-c MMS study\n")
-        f.write(f"Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("Production-faithful MMS study\n")
+        f.write(f"Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         f.write(format_table(results) + "\n\n")
         f.write(format_summary(results) + "\n")
     print(f"\n[MMS] Summary saved -> {summary_path}")
