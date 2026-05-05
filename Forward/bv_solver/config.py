@@ -62,7 +62,8 @@ def _get_bv_cfg(params: Any, n_species: int) -> dict:
     }
 
 
-_VALID_FORMULATIONS = ("concentration", "logc")
+_VALID_FORMULATIONS = ("concentration", "logc", "logc_muh")
+_VALID_INITIALIZERS = ("linear_phi", "debye_boltzmann")
 
 
 def _validate_formulation(value: Any) -> str:
@@ -77,19 +78,41 @@ def _validate_formulation(value: Any) -> str:
     return s
 
 
+def _validate_initializer(value: Any) -> str:
+    """Coerce/validate the initializer config field."""
+    if value is None:
+        return "linear_phi"
+    s = str(value).strip().lower()
+    if s not in _VALID_INITIALIZERS:
+        raise ValueError(
+            f"bv_convergence.initializer must be one of {_VALID_INITIALIZERS}; got {value!r}"
+        )
+    return s
+
+
 def _default_bv_convergence_cfg() -> dict:
-    """Default BV convergence config (used when params is missing the block)."""
+    """Default BV convergence config (used when params is missing the block).
+
+    Note on ``exponent_clip = 100.0``: production was ``50.0`` until 2026-05-04;
+    raised to 100.0 because clip=50 sign-flips the peroxide-current observable
+    by 3-4 OOM at V_RHE < -0.1 V (see docs/clip_observable_investigation.md
+    §5.2).  At clip=100 the entire production V grid V_RHE in [-0.5, +0.6] V
+    is unclipped for both reactions, exposing true mass-transport-limited PC.
+    Trade-off: cold-start Newton basin shrinks (10/13 -> 3/13 voltages on a
+    typical sweep), but C+D warm-walk continuation rescues every voltage.
+    """
     return {
         "clip_exponent":            True,
-        "exponent_clip":            50.0,
+        "exponent_clip":            100.0,
         "regularize_concentration": True,
         "conc_floor":               1e-8,
         "use_eta_in_bv":            True,
         "packing_floor":            1e-8,
         "softplus_regularization":  False,
         "bv_log_rate":              False,
-        "u_clamp":                  30.0,
+        "u_clamp":                  100.0,
         "formulation":              "concentration",
+        "initializer":              "linear_phi",
     }
 
 
@@ -100,11 +123,12 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
     raw = params.get("bv_convergence", {})
     if not isinstance(raw, dict):
         return _default_bv_convergence_cfg()
-    exponent_clip = float(raw.get("exponent_clip", 50.0))
+    exponent_clip = float(raw.get("exponent_clip", 100.0))
     conc_floor = float(raw.get("conc_floor", 1e-8))
     packing_floor = float(raw.get("packing_floor", 1e-8))
-    u_clamp = float(raw.get("u_clamp", 30.0))
+    u_clamp = float(raw.get("u_clamp", 100.0))
     formulation = _validate_formulation(raw.get("formulation", "concentration"))
+    initializer = _validate_initializer(raw.get("initializer", "linear_phi"))
     if exponent_clip <= 0:
         raise ValueError(f"exponent_clip must be positive; got {exponent_clip}")
     if conc_floor <= 0:
@@ -124,6 +148,7 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
         "bv_log_rate":                _bool(raw.get("bv_log_rate", False)),
         "u_clamp":                    u_clamp,
         "formulation":                formulation,
+        "initializer":                initializer,
     }
 
 
@@ -149,6 +174,19 @@ def _get_bv_boltzmann_counterions_cfg(params: Any) -> list[dict]:
         z              (int)           — counterion charge number (e.g. -1).
         c_bulk_nondim  (float)         — bulk concentration in nondim units.
         phi_clamp      (float, optional, default 50.0) — exponent clamp.
+        steric_mode    (str, optional, default ``"ideal"``) — one of
+                       ``"ideal"`` (unbounded ``c_b * exp(-z*phi)``) or
+                       ``"bikerman"`` (steric-aware closure that respects
+                       the Bikerman packing fraction; see
+                       ``docs/steric_analytic_clo4_reduction_handoff.md``).
+        a_nondim       (float, required when ``steric_mode='bikerman'``)
+                       — the counterion's Bikerman steric size (nondim).
+                       Ignored when ``steric_mode='ideal'``.
+
+    The ``theta_b > 0`` precondition for the bikerman closure is NOT
+    validated here (this parser does not see the dynamic-species
+    ``a_vals`` or ``c0`` needed to compute it); that validation lives
+    in the helper that constructs the closure expression.
 
     Returns ``[]`` when not configured (no Boltzmann counterions).
     """
@@ -189,10 +227,33 @@ def _get_bv_boltzmann_counterions_cfg(params: Any) -> list[dict]:
             raise ValueError(
                 f"boltzmann_counterions[{j}].phi_clamp must be positive; got {phi_clamp}"
             )
+        steric_mode = str(entry.get("steric_mode", "ideal")).strip().lower()
+        if steric_mode not in ("ideal", "bikerman"):
+            raise ValueError(
+                f"boltzmann_counterions[{j}].steric_mode must be 'ideal' or "
+                f"'bikerman'; got {steric_mode!r}"
+            )
+        a_nondim_raw = entry.get("a_nondim", None)
+        if steric_mode == "bikerman":
+            if a_nondim_raw is None:
+                raise ValueError(
+                    f"boltzmann_counterions[{j}] with steric_mode='bikerman' "
+                    f"requires 'a_nondim'."
+                )
+            a_nondim = float(a_nondim_raw)
+            if a_nondim <= 0:
+                raise ValueError(
+                    f"boltzmann_counterions[{j}].a_nondim must be positive; "
+                    f"got {a_nondim}"
+                )
+        else:
+            a_nondim = float(a_nondim_raw) if a_nondim_raw is not None else None
         out.append({
             "z": z_val,
             "c_bulk_nondim": c_bulk,
             "phi_clamp": phi_clamp,
+            "steric_mode": steric_mode,
+            "a_nondim": a_nondim,
         })
     return out
 

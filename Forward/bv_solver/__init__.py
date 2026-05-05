@@ -65,7 +65,11 @@ from Forward.bv_solver.nondim import (
     _add_bv_scaling_to_transform,
     _add_bv_reactions_scaling_to_transform,
 )
-from Forward.bv_solver.boltzmann import add_boltzmann_counterion_residual
+from Forward.bv_solver.boltzmann import (
+    add_boltzmann_counterion_residual,
+    build_steric_boltzmann_expressions,
+    StericBoltzmannBundle,
+)
 from Forward.bv_solver.dispatch import (
     build_context,
     build_forms,
@@ -73,6 +77,12 @@ from Forward.bv_solver.dispatch import (
     build_context_logc,
     build_forms_logc,
     set_initial_conditions_logc,
+    set_initial_conditions_debye_boltzmann_logc,
+    # Experimental muh backend (formulation="logc_muh"); see forms_logc_muh.py.
+    build_context_logc_muh,
+    build_forms_logc_muh,
+    set_initial_conditions_logc_muh,
+    set_initial_conditions_debye_boltzmann_logc_muh,
 )
 from Forward.bv_solver.grid_per_voltage import (
     solve_grid_per_voltage_cold_with_warm_fallback,
@@ -90,7 +100,14 @@ __all__ = [
     "build_context_logc",
     "build_forms_logc",
     "set_initial_conditions_logc",
+    "set_initial_conditions_debye_boltzmann_logc",
+    "build_context_logc_muh",
+    "build_forms_logc_muh",
+    "set_initial_conditions_logc_muh",
+    "set_initial_conditions_debye_boltzmann_logc_muh",
     "add_boltzmann_counterion_residual",
+    "build_steric_boltzmann_expressions",
+    "StericBoltzmannBundle",
     "solve_grid_per_voltage_cold_with_warm_fallback",
     "PerVoltageContinuationResult",
     "PerVoltagePointResult",

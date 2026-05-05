@@ -53,6 +53,8 @@ def validate_solution_state(
     exponent_clip: float,
     species_names: Optional[Sequence[str]] = None,
     is_logc: bool = False,
+    mu_species: Optional[Sequence[int]] = None,
+    em: float = 1.0,
 ) -> ValidationResult:
     """Validate a Firedrake mixed-space solution.
 
@@ -65,6 +67,18 @@ def validate_solution_state(
     checks run.  ``F1`` (negative concentration) is unreachable in this
     mode since ``exp(u_i) > 0`` exactly.
 
+    Muh formulation (``is_logc=True`` and ``mu_species=[...]``):
+    ``U.dat[i]`` for ``i in mu_species`` carries ``mu_i = u_i + em*z_i*phi``
+    instead of ``u_i``.  The per-dof ``log(c_i)`` is recovered via
+
+        log(c_i) = U.dat[i] - em*z_i*U.dat[n_species]
+
+    before exponentiation.  This matches the proton-electrochemical-
+    potential transform in ``Forward/bv_solver/forms_logc_muh.py``.  The
+    same physics checks then apply unchanged.  Pass ``em`` from
+    ``ctx['nondim']['electromigration_prefactor']`` (= 1.0 in the
+    production scaling).
+
     All checks use numpy on dat data -- no FEM assembly.
     """
     import numpy as np
@@ -72,11 +86,21 @@ def validate_solution_state(
     fails: list[str] = []
     warns: list[str] = []
     names = species_names or [f"species_{i}" for i in range(n_species)]
+    mu_set = frozenset(int(i) for i in mu_species) if mu_species else frozenset()
 
     def _conc_array(i: int):
-        """Return concentration samples for species ``i`` as a numpy array."""
+        """Return concentration samples for species ``i`` as a numpy array.
+
+        For non-mu species this is ``exp(u_i)`` (logc) or ``c_i`` raw
+        (concentration formulation).  For mu species (proton in the muh
+        formulation), recovers ``log(c_i) = mu_i - em*z_i*phi`` first.
+        """
         raw = U.dat[i].data_ro
         if is_logc:
+            if i in mu_set:
+                phi_data = U.dat[n_species].data_ro
+                z_i = float(z_vals[i])
+                return np.exp(raw - em * z_i * phi_data)
             return np.exp(raw)
         return raw
 

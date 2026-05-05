@@ -72,6 +72,7 @@ class PerVoltagePointResult:
     achieved_z_factor: float
     converged: bool              # True iff reached z = 1
     method: str                  # "cold" | f"warm<-{V_anchor:+.3f}" | "missing"
+    diagnostics: Optional[Dict[str, Any]] = None  # populated by collect_diagnostics
 
 
 @dataclasses.dataclass(frozen=True)
@@ -181,8 +182,10 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
     import firedrake as fd
 
     from .dispatch import build_context, build_forms, set_initial_conditions
+    from .forms_logc import set_initial_conditions_logc
     from .observables import _build_bv_observable_form
     from .solvers import _clone_params_with_phi
+    from .diagnostics import collect_diagnostics
     from Forward.params import SolverParams
 
     phi_applied_values = np.asarray(phi_applied_values, dtype=float)
@@ -239,6 +242,7 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
         solver = fd.NonlinearVariationalSolver(
             problem, solver_parameters=solve_opts,
         )
+        ctx["_last_solver"] = solver
         of_cd = _build_bv_observable_form(
             ctx, mode="current_density", reaction_index=None, scale=1.0,
         )
@@ -300,6 +304,18 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
             boltz.assign(float(z_val))
 
     # ------------------------------------------------------------------
+    # Initializer flag (read once for orchestrator-level dispatch).
+    # ------------------------------------------------------------------
+    if isinstance(params, dict):
+        _bv_conv_for_init = params.get("bv_convergence", {})
+        _initializer_flag = (
+            str(_bv_conv_for_init.get("initializer", "linear_phi")).strip().lower()
+            if isinstance(_bv_conv_for_init, dict) else "linear_phi"
+        )
+    else:
+        _initializer_flag = "linear_phi"
+
+    # ------------------------------------------------------------------
     # Phase 1 (C): per-voltage cold-start with internal z-ramp
     # ------------------------------------------------------------------
     def _solve_cold(orig_idx: int, V_target_eta: float):
@@ -307,11 +323,34 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
         run_ss = _make_run_ss(ctx, solver, of_cd)
         U = ctx["U"]
         U_prev = ctx["U_prev"]
-        # IC already linear at V_target_eta from set_initial_conditions.
-        # Belt-and-suspenders: set phi_applied_func explicitly too.
+        # IC already at V_target_eta from set_initial_conditions (linear-phi
+        # or debye_boltzmann depending on params).  Belt-and-suspenders:
+        # set phi_applied_func explicitly too.
         ctx["phi_applied_func"].assign(float(V_target_eta))
 
-        # Step 0: zero all charges, run SS at z=0
+        # Path B: analytical IC -> try direct z=1 SS; the IC already encodes
+        # the depleted-H+/enriched-counterion state, so the z=0 stage that
+        # the linear-phi path needs (to discover charge balance from a
+        # bulk-flat guess) would *erase* the analytical state and is skipped.
+        # Fall back to linear-phi z-ramp on Newton failure.
+        if _initializer_flag != "linear_phi" and not ctx.get(
+            "initializer_fallback", False
+        ):
+            _set_z_factor(ctx, 1.0)
+            if run_ss(max_ss_steps_z):
+                return _snapshot_U(U), 1.0, ctx
+            # Direct z=1 failed -- reset to linear-phi IC and use the
+            # standard z-ramp path below (bypass dispatcher to avoid
+            # routing back to the analytical IC).
+            ctx["initializer_fallback"] = True
+            ctx["initializer_fallback_reason"] = (
+                ctx.get("initializer_fallback_reason", "")
+                + ";cold_z1_diverged"
+            )
+            set_initial_conditions_logc(ctx, _params_with_phi(V_target_eta))
+
+        # Path A: linear-phi (or fallback).  Step 0: zero all charges,
+        # run SS at z=0 to find the neutral-electrolyte fixed point.
         _set_z_factor(ctx, 0.0)
         if not run_ss(max_ss_steps_cold):
             return None, 0.0, ctx
@@ -421,6 +460,16 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
                 f"  [Phase 1] {orig_idx + 1}/{n_points}  "
                 f"eta={eta_target:+8.4f}  {tag}"
             )
+        try:
+            diags = collect_diagnostics(
+                ctx,
+                phase="cold_z_ramp" if converged else "cold_failed",
+                params=params,
+                picard_iters=ctx.get("initializer_picard_iters"),
+            )
+        except Exception as exc:
+            diags = {"phase": "diagnostics_error",
+                     "error": f"{type(exc).__name__}: {exc}"}
         points[orig_idx] = PerVoltagePointResult(
             orig_idx=orig_idx,
             phi_applied=eta_target,
@@ -428,6 +477,7 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
             achieved_z_factor=achieved_z,
             converged=converged,
             method=method,
+            diagnostics=diags,
         )
 
     cold_idxs = sorted(i for i, p in points.items() if p.converged)
@@ -474,6 +524,13 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
             converged = True
             if per_point_callback is not None:
                 per_point_callback(orig_idx, eta_target, ctx)
+            try:
+                diags = collect_diagnostics(
+                    ctx, phase="warm_walk_cathodic", params=params,
+                )
+            except Exception as exc:
+                diags = {"phase": "diagnostics_error",
+                         "error": f"{type(exc).__name__}: {exc}"}
             points[orig_idx] = PerVoltagePointResult(
                 orig_idx=orig_idx,
                 phi_applied=eta_target,
@@ -481,6 +538,7 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
                 achieved_z_factor=1.0,
                 converged=converged,
                 method=method,
+                diagnostics=diags,
             )
             print(
                 f"  [Phase 2 cathodic] {orig_idx + 1}/{n_points}  "
@@ -514,6 +572,13 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
             converged = True
             if per_point_callback is not None:
                 per_point_callback(orig_idx, eta_target, ctx)
+            try:
+                diags = collect_diagnostics(
+                    ctx, phase="warm_walk_anodic", params=params,
+                )
+            except Exception as exc:
+                diags = {"phase": "diagnostics_error",
+                         "error": f"{type(exc).__name__}: {exc}"}
             points[orig_idx] = PerVoltagePointResult(
                 orig_idx=orig_idx,
                 phi_applied=eta_target,
@@ -521,6 +586,7 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
                 achieved_z_factor=1.0,
                 converged=converged,
                 method=method,
+                diagnostics=diags,
             )
             print(
                 f"  [Phase 2 anodic] {orig_idx + 1}/{n_points}  "
