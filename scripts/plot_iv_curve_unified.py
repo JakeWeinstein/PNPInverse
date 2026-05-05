@@ -96,7 +96,12 @@ def _parse_args() -> argparse.Namespace:
         "--exponent-clip",
         type=float,
         default=None,
-        help="Override bv_convergence.exponent_clip. Defaults to the factory value.",
+        help=(
+            "Override bv_convergence.exponent_clip.  Defaults to the factory "
+            "value (100).  WARNING: clip < 100 produces fictitious PC at "
+            "V_RHE < -0.1 V (see docs/clipping_conventions.md).  Use only "
+            "for clip=50 reproduction / chronology."
+        ),
     )
     p.add_argument(
         "--stern-capacitance",
@@ -117,6 +122,22 @@ def _parse_args() -> argparse.Namespace:
 def main():
     args = _parse_args()
     v_rhe_grid = _parse_v_grid(args.v_list)
+
+    # PC-trustworthiness warning: clip < 100 produces fictitious PC at
+    # V_RHE < -0.1 V (sign-flipped, 3-4 OOM off; CD is approximately
+    # correct).  See docs/clipping_conventions.md.
+    if args.exponent_clip is not None and args.exponent_clip < 100.0:
+        sys.stderr.write(
+            "\n"
+            "WARNING: --exponent-clip={:.1f} < 100; PC observables produced\n"
+            "by this run are NOT trustworthy at V_RHE < -0.1 V (sign-flipped\n"
+            "and 3-4 OOM off the true value).  Use clip>=100 for any PC\n"
+            "comparison against experiment or inverse fitting.  CD is\n"
+            "approximately correct under both clips.  See\n"
+            "docs/clipping_conventions.md for the operational rule.\n\n"
+            .format(float(args.exponent_clip))
+        )
+        sys.stderr.flush()
 
     # -----------------------------------------------------------------------
     # 1. Constants, scales, and the production-stack factory

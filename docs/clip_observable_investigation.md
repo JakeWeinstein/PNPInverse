@@ -5,6 +5,19 @@
 for R2), does the clip distort the steady-state observable (CD, PC) compared
 to the true unclipped physical system?
 
+> ## TL;DR / operational rule
+>
+> **CD: yes, approximately physical at clip=50. PC: no, fictitious at
+> clip=50.** Below V_RHE = −0.1 V, PC at clip=50 is sign-flipped and
+> 3–4 OOM off the true (clip=100) value. The full per-voltage table
+> is in §5.2.
+>
+> **Use `exponent_clip = 100` for any PC observable comparison or
+> inverse fit.** v18–v24 inverse runs used clip=50 and therefore have
+> fictitious PC; their PC-based conclusions need re-running at
+> clip=100 before being trusted. CLAUDE.md hard rule 2 codifies this;
+> `docs/clipping_conventions.md` has the same rule in callout form.
+
 This log captures (a) what was learned by extending the MMS test to multiple
 voltages, (b) why that test does **not** answer the SS-observable question,
 (c) the corrected understanding of what the clip is actually protecting in

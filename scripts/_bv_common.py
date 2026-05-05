@@ -266,9 +266,11 @@ def _make_bv_convergence_cfg(*, softplus: bool = False,
     """
     cfg: Dict[str, Any] = {
         "clip_exponent": True,
-        # exponent_clip raised from 50.0 -> 100.0 on 2026-05-04: clip=50
-        # sign-flips PC at V_RHE < -0.1 V (see clip_observable_investigation.md
-        # §5.2).  At clip=100 the production V grid is fully unclipped.
+        # exponent_clip = 100.0 is the only PC-trustworthy setting:
+        # at clip=50 (production until 2026-05-04) PC is fictitious
+        # below V_RHE = -0.1 V (sign-flipped, 3-4 OOM off; CD is OK).
+        # Do not lower this for forward runs whose PC will be compared
+        # against experiment.  See docs/clipping_conventions.md.
         "exponent_clip": 100.0,
         "regularize_concentration": True,
         "conc_floor": 1e-12,

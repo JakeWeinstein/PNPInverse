@@ -93,13 +93,18 @@ def _validate_initializer(value: Any) -> str:
 def _default_bv_convergence_cfg() -> dict:
     """Default BV convergence config (used when params is missing the block).
 
-    Note on ``exponent_clip = 100.0``: production was ``50.0`` until 2026-05-04;
-    raised to 100.0 because clip=50 sign-flips the peroxide-current observable
-    by 3-4 OOM at V_RHE < -0.1 V (see docs/clip_observable_investigation.md
-    §5.2).  At clip=100 the entire production V grid V_RHE in [-0.5, +0.6] V
-    is unclipped for both reactions, exposing true mass-transport-limited PC.
-    Trade-off: cold-start Newton basin shrinks (10/13 -> 3/13 voltages on a
-    typical sweep), but C+D warm-walk continuation rescues every voltage.
+    ``exponent_clip = 100.0`` is the only PC-trustworthy default.  At
+    clip=50 (production until 2026-05-04) the peroxide-current observable
+    is fictitious below V_RHE = -0.1 V (sign-flipped, 3-4 OOM off; CD is
+    approximately correct).  At clip=100 the production V grid
+    V_RHE in [-0.5, +1.0] V is unclipped for both reactions, exposing
+    true mass-transport-limited PC.  Do not lower this below 100 for
+    forward runs whose PC will be compared against experiment or used
+    for inverse fitting.  Trade-off: cold-start Newton basin shrinks
+    (10/13 -> 3/13 voltages on a typical sweep), but C+D warm-walk
+    continuation rescues every voltage.  See
+    ``docs/clip_observable_investigation.md`` §5.2 and
+    ``docs/clipping_conventions.md`` for the operational rule.
     """
     return {
         "clip_exponent":            True,

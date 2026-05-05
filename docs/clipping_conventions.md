@@ -3,6 +3,24 @@
 **Last updated:** 2026-05-03 (corrected η-clip role and CD/PC observable-
 fidelity asymmetry; see `docs/clip_observable_investigation.md`)
 
+> ## Operational rule (read this even if you read nothing else)
+>
+> - **`exponent_clip = 100` is the only setting where PC is
+>   trustworthy.** This is the production default since 2026-05-04.
+> - **`exponent_clip = 50` produces fictitious PC** at V_RHE < −0.1 V
+>   — sign-flipped and 3–4 OOM off the true value. CD is approximately
+>   correct under both clips, but PC is not. See §5.2 of
+>   `docs/clip_observable_investigation.md` for the per-voltage data,
+>   and the "Is the solver non-physical below +0.495 V?" section
+>   below for the mechanism.
+> - **Do not compare clip=50 PC against experimental data**, and
+>   **do not run inverse fits against PC at clip=50** (the v18–v24
+>   inverse runs predate this discovery and used clip=50; their PC-
+>   based conclusions need re-running at clip=100 before being
+>   trusted). Use clip=100 even when it costs cold-start convergence
+>   on a few voltages — recover with C+D warm-walk or Stern, not by
+>   lowering the clip.
+
 A common misreading: "log-rate removed exponent clipping." It did
 not. Log-rate is an algebraic rearrangement that lets the BV residual
 avoid going through `c_surf = exp(clamp(u, ±30))` — it does not

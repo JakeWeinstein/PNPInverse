@@ -166,7 +166,7 @@ Use these as the current source of truth:
 | `docs/4sp_drop_boltzmann_investigation.md` | §11–§13: full investigation log behind the 2b fix. |
 | `docs/steric_analytic_clo4_reduction_handoff.md` | Derivation of the Bikerman analytic-counterion residual closure. |
 | `docs/Mangan2025_experimental_alignment.md` | Gap audit between the current model and the Mangan 2025 deck (sulfate / Cs⁺ / RRDE / IrOx). |
-| `docs/clipping_conventions.md` | Three distinct BV-related clips, including the `exponent_clip` raise from 50 → 100. |
+| `docs/clipping_conventions.md` | Three distinct BV-related clips, the `exponent_clip` raise 50 → 100, and the operational rule that PC is fictitious at clip=50. |
 | `docs/Next Steps After Basin Geometry.md` | Current inverse-problem plan after V20-V22. |
 | `docs/CHATGPT_HANDOFF_10_LM_TIKHONOV_BASIN_GEOMETRY.md` | LM and Tikhonov results; basin-geometry conclusion. |
 | `docs/noise_model_conventions.md` | Current FIM/inverse noise-model convention. |
@@ -217,7 +217,8 @@ solver_options = {
         "initializer": "linear_phi",    # or "debye_boltzmann"
         "bv_log_rate": True,
         "clip_exponent": True,
-        "exponent_clip": 100.0,         # raised from 50.0 on 2026-05-04
+        "exponent_clip": 100.0,         # PC is fictitious at clip=50 (V<-0.1V);
+                                        # 100 is the only PC-trustworthy default.
         "u_clamp": 100.0,               # raised from 30.0 on 2026-05-04
     },
     "bv_bc": {
