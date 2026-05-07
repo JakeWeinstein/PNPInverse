@@ -1,0 +1,611 @@
+% debye_boltzmann_ic_walkthrough.tex
+%
+% A pedagogical walkthrough of the Debye--Boltzmann initial condition
+% used by the PNP--BV forward solver. Written for a reader with strong
+% applied-math / numerical background but limited electrochemistry
+% intuition.
+
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{xcolor}
+\usepackage[most]{tcolorbox}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{siunitx}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{booktabs}
+
+\setlist[itemize]{leftmargin=*,topsep=2pt,itemsep=3pt}
+\setlist[enumerate]{leftmargin=*,topsep=2pt,itemsep=3pt}
+
+\hypersetup{colorlinks=true, linkcolor=blue!50!black, urlcolor=blue!50!black}
+
+\newcommand{\VT}{V_{T}}
+\newcommand{\Eeq}{E_{\mathrm{eq}}}
+\newcommand{\VRHE}{V_{\mathrm{RHE}}}
+\newcommand{\lD}{\lambda_D}
+
+\definecolor{boxgray}{gray}{0.95}
+\tcbset{
+  notebox/.style={
+    enhanced, breakable,
+    colback=boxgray, colframe=black!40,
+    boxrule=0.4pt, arc=2pt,
+    left=8pt, right=8pt, top=6pt, bottom=6pt,
+    fonttitle=\bfseries,
+  }
+}
+
+\title{The Debye--Boltzmann Initial Condition\\[2pt]
+{\large A walkthrough for the electrochemistry-light reader}}
+\author{Jake Weinstein \\ \small PNP--BV forward solver, May 2026}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+This note explains, from electrochemistry first principles, what the
+\texttt{debye\_boltzmann} initial condition does, why it exists, and
+where each formula comes from. It is meant to be read end-to-end
+without prior PNP/electrochemistry background. Equations are given
+where they help, but the goal is to build the picture, not to be
+exhaustive. Code anchor:
+\texttt{Forward/bv\_solver/forms\_logc.py:581--952}.
+\end{abstract}
+
+\tableofcontents
+\vspace{1em}\hrule\vspace{1em}
+
+%% =====================================================================
+\section{What problem is the IC actually solving?}
+
+The forward solver is a Firedrake finite-element discretization of a
+coupled nonlinear PDE system:
+\begin{itemize}
+\item One Nernst--Planck (NP) equation per dynamic species
+      ($\mathrm{O_2}$, $\mathrm{H_2O_2}$, $\mathrm{H^+}$),
+\item One Poisson equation for the electrostatic potential $\varphi$,
+\item Two Butler--Volmer (BV) reaction-rate boundary conditions on the
+      electrode surface (R$_1$: $\mathrm{O_2}\to\mathrm{H_2O_2}$,
+      R$_2$: $\mathrm{H_2O_2}\to\mathrm{H_2O}$).
+\end{itemize}
+
+Steady-state is reached by pseudo-time-stepping with backward Euler
+plus Newton's method (SNES). Newton needs a starting guess. That
+starting guess is the \emph{initial condition} (``IC'') discussed
+here.
+
+\begin{tcolorbox}[notebox, title={A point of vocabulary}]
+``IC'' here is overloaded with the time-evolution sense of initial
+condition. We do not care about transient dynamics --- the only thing
+we want from the IC is for it to be \emph{close enough to the
+steady-state solution that Newton converges}. A bad IC means Newton
+diverges or stalls. A good IC means Newton converges in a handful of
+iterations. That is the entire point.
+\end{tcolorbox}
+
+\subsection{Why a simple IC fails}
+
+The naive IC --- ``set every concentration to its bulk value, set
+$\varphi$ to a linear ramp from $\varphi_{\mathrm{applied}}$ at the
+electrode to $0$ in the bulk'' --- works at low applied voltage but
+fails badly at moderate to high voltage. To see why, you need to
+understand what happens physically near the electrode.
+
+%% =====================================================================
+\section{Two-minute electrochemistry primer}
+
+\subsection{The setup}
+
+Picture a 1D domain. Coordinate $y \in [0, 1]$ (nondimensionalized).
+
+\begin{itemize}
+\item $y = 0$ is the \textbf{electrode} (a metal disk you applied a
+      voltage to).
+\item $y = 1$ is the \textbf{bulk} (well-mixed electrolyte far from
+      the electrode).
+\item In between is the electrolyte: water with dissolved
+      $\mathrm{H^+}$, $\mathrm{ClO_4^-}$ (counterion),
+      $\mathrm{O_2}$, and $\mathrm{H_2O_2}$.
+\end{itemize}
+
+When you hold the electrode at potential $\varphi_{\mathrm{applied}}$,
+two things happen at once:
+\begin{enumerate}
+\item Charges \textbf{rearrange} to screen the field --- positive ions
+      are pushed away from a positive electrode, negative ions are
+      pulled in (and vice-versa). This is purely electrostatic and
+      happens essentially instantaneously.
+\item BV \textbf{reactions} consume $\mathrm{O_2}$ and $\mathrm{H^+}$
+      and produce $\mathrm{H_2O_2}$, then consume $\mathrm{H_2O_2}$
+      and $\mathrm{H^+}$ to make $\mathrm{H_2O}$. This sets up
+      diffusion gradients away from the electrode.
+\end{enumerate}
+
+These two processes happen on \emph{wildly different length scales}.
+
+\subsection{The Debye length: where screening lives}
+
+The screening length is the \emph{Debye length}:
+\begin{equation}
+  \lD \;=\; \sqrt{\frac{\varepsilon \VT}{2 F^2 c_b}},
+\end{equation}
+where $\varepsilon$ is the electrolyte permittivity, $\VT = RT/F
+\approx 25.7$~mV at room temperature, $F$ is the Faraday constant, and
+$c_b$ is the bulk ion concentration.
+
+For pH 4 with a 0.1 M counterion, $\lD \sim 1$~nm. The full domain
+might be \SI{100}{\micro\meter} thick. So the screening region is
+$10^{-4}$ of the domain. The PNP equations are stiff in exactly the
+sense that interesting physics is concentrated in a tiny corner.
+
+\subsection{The Boltzmann distribution: charge follows potential}
+
+Inside the Debye layer, ions reach a local equilibrium: their
+electrochemical potential becomes constant. For species $i$ with
+charge $z_i$,
+\begin{equation}
+  \mu_i \;=\; \ln c_i \,+\, z_i \varphi \;=\; \mathrm{const}
+  \;\;\Longrightarrow\;\;
+  \boxed{\,c_i(y) \;=\; c_i^{\mathrm{bulk}}\,\exp\bigl(-z_i\,\psi(y)\bigr)\,}
+\end{equation}
+where $\psi(y) = \varphi(y) - \varphi^{\mathrm{bulk}}$ is the
+deviation from bulk potential, in units of $\VT$. (All $\varphi$
+quantities in this document are nondimensionalized by $\VT$, so
+factors of $\VT$ vanish.)
+
+This is the \textbf{Boltzmann distribution}. It is the equilibrium
+profile a single charged species takes in an electric field. \emph{The
+entire IC machinery is built around this formula.}
+
+\paragraph{Numerical concern.} If the electrode is held at
+$\psi_D \equiv \varphi_{\mathrm{electrode}} - \varphi^{\mathrm{bulk}}
+= +30$, then for the proton ($z_H = +1$),
+\begin{equation*}
+  c_H^{\mathrm{surface}}
+   \;=\; c_H^{\mathrm{bulk}} \cdot e^{-30}
+   \;\approx\; c_H^{\mathrm{bulk}} \cdot 10^{-13}.
+\end{equation*}
+Thirteen orders of magnitude. A Newton solver starting from
+$c_H = c_H^{\mathrm{bulk}}$ everywhere has to discover this depletion
+in one step, which it cannot.
+
+\subsection{Outer vs.\ inner: two regions, two physics}
+
+Combining the two effects above gives a clean two-region picture:
+
+\begin{tcolorbox}[notebox, title={The two-region picture}]
+\textbf{Outer region} ($y \gtrsim \lD$, the bulk of the domain):
+mass transport dominates. Concentrations are nearly linear in $y$
+(steady-state diffusion under a flux boundary condition is just a
+linear profile). Charge density is negligible
+($\sum_i z_i c_i \approx 0$, electroneutrality).
+\medskip
+
+\textbf{Inner region} ($y \lesssim \lD$, the Debye layer): screening
+dominates. Concentrations follow Boltzmann. Charge density is
+nonzero, and that's exactly what Poisson's equation balances.
+\medskip
+
+\textbf{Outer surface}: the conceptual boundary at $y \approx \lD$
+where the two regions meet. Quantities with subscript $o$ (e.g.
+$H_o$, $\varphi_o$) are evaluated here.
+\end{tcolorbox}
+
+The IC strategy is to build each region separately and glue them
+together at the outer surface.
+
+%% =====================================================================
+\section{Step 1 --- Outer linear profiles}
+
+In the outer region, only diffusion matters. At steady state with a
+constant flux at the electrode and Dirichlet (bulk) at $y = 1$, the
+profile is linear. The species fluxes equal the BV reaction rates:
+\begin{align}
+  J_{\mathrm{O_2}}     &=  R_1                  & \text{(O$_2$ consumed by R$_1$)} \\
+  J_{\mathrm{H_2O_2}}  &= -R_1 + R_2            & \text{(produced by R$_1$, consumed by R$_2$)} \\
+  J_{\mathrm{H^+}}     &=  R_1 + R_2            & \text{(2 protons consumed in each reaction; the 2 cancels, see below)}
+\end{align}
+
+The corresponding linear profiles, written in terms of bulk values
+($O_b$, $P_b$, $H_b$) and outer-surface values ($O_s$, $P_s$, $H_o$),
+are
+\begin{equation}
+  \boxed{\;
+  O_s = O_b - \frac{R_1}{D_O},\qquad
+  P_s = P_b + \frac{R_1 - R_2}{D_P},\qquad
+  H_o = H_b - \frac{R_1 + R_2}{D_H}.\;}
+\end{equation}
+
+\begin{tcolorbox}[notebox, title={Why the proton denominator is $D_H$, not $2 D_H$}]
+The two-proton stoichiometry of each reaction would naively give
+$(R_1+R_2)/(2 D_H) \cdot 2$ in the numerator. But \emph{ambipolar
+transport} doubles the effective proton diffusivity: because
+electroneutrality enforces that $\mathrm{H^+}$ and $\mathrm{ClO_4^-}$
+move together, the slower partner sets the pace, and the field
+drags the faster one. The result is that the effective proton
+diffusivity is $2 D_H$, not $D_H$, and the factor of 2 cancels
+against the stoichiometric 2. The bare $D_H$ in the denominator is
+correct. (Comment in
+\texttt{forms\_logc.py:798--800} explicitly warns: ``do not
+correct''.)
+\end{tcolorbox}
+
+So the outer-region values $(O_s, P_s, H_o)$ are determined as soon as
+we know the rates $(R_1, R_2)$. But the rates depend on the surface
+concentrations, which depend on $\psi_D$, which depends on $H_o$\dots
+
+\section{Step 2 --- The Picard loop}
+
+We have a self-referential algebraic system:
+\begin{itemize}
+\item Rates $R_1, R_2$ depend on the \emph{surface} (inner) value
+      $H_s = H_o \exp(-\psi_D)$.
+\item $H_o$ depends on $R_1, R_2$ via the outer linear profile.
+\item $\psi_D$ depends on $\varphi_o$, which depends on $H_o$.
+\end{itemize}
+This is solved by Picard iteration. The whole loop is closed-form
+algebra --- no PDE solve, no Newton. Each iteration is cheap.
+
+\subsection{The 2$\times$2 system}
+
+Inside the loop, given a current guess for $(R_1, R_2)$:
+\begin{enumerate}
+\item Compute outer values:
+\[
+  H_o = H_b - (R_1 + R_2)/D_H,
+\]
+and from outer-region electroneutrality plus the Boltzmann profile
+of the counterion,
+\[
+  \varphi_o = \ln(H_o / c_{\mathrm{ClO_4}}^{\mathrm{bulk}}),
+  \qquad
+  \psi_D = \varphi_{\mathrm{applied}} - \varphi_o.
+\]
+\item Compute the surface proton concentration:
+\[
+  H_s = H_o \exp(-\psi_D).
+\]
+\item Build BV rate constants. R$_1$ has two branches (cathodic
+``forward'', anodic ``backward''); R$_2$ here keeps only the
+cathodic branch:
+\begin{align*}
+  A_1 &= k_1 \,(H_s/H_{\mathrm{ref}})^2\, \exp(-\alpha_1 n_e \eta_1)
+        & \text{R$_1$ cathodic,}\\
+  B_1 &= k_1 \,\exp\bigl((1-\alpha_1)\, n_e \eta_1\bigr)
+        & \text{R$_1$ anodic,}\\
+  A_2 &= k_2 \,(H_s/H_{\mathrm{ref}})^2\, \exp(-\alpha_2 n_e \eta_2)
+        & \text{R$_2$ cathodic.}
+\end{align*}
+The $H_s$ enters squared because each reaction consumes 2 protons.
+\item Solve the 2$\times$2 system for new rates:
+\begin{equation}
+  \begin{bmatrix}
+    1 + A_1/D_O + B_1/D_P & -B_1/D_P\\
+    -A_2/D_P              & 1 + A_2/D_P
+  \end{bmatrix}
+  \begin{bmatrix} R_1 \\ R_2 \end{bmatrix}
+  =
+  \begin{bmatrix} A_1 O_b - B_1 P_b \\ A_2 P_b \end{bmatrix}.
+\end{equation}
+\item Damped update: $R_j \leftarrow (1-\omega) R_j^{\mathrm{old}} +
+\omega R_j^{\mathrm{new}}$ with $\omega = 0.5$.
+\item Loop until $|\Delta R_1| + |\Delta R_2| < 10^{-6}$, max 50
+iterations.
+\end{enumerate}
+
+\subsection{Where this matrix came from}
+
+The matrix is just a rearrangement of mass balance + the linear-profile
+formulas. Take R$_1$:
+\[
+  R_1 \;=\; A_1\,O_s \,-\, B_1 P_s
+       \;=\; A_1\,(O_b - R_1/D_O) \,-\, B_1\,(P_b + (R_1-R_2)/D_P)
+\]
+Collecting $R_1, R_2$ on the left:
+\[
+  \bigl(1 + A_1/D_O + B_1/D_P\bigr) R_1 \,-\, (B_1/D_P) R_2
+   \;=\; A_1 O_b - B_1 P_b.
+\]
+Same exercise on R$_2$ gives the second row. So this matrix is just
+``write down what each rate equals, substitute the linear profile,
+collect terms''. Nothing fancy.
+
+\subsection{Failure handling}
+
+If the Picard loop diverges, hits NaN, or hits a singular Jacobian,
+the IC silently \textbf{falls back to a trivial linear-$\varphi$ IC}.
+This happens in practice below $\VRHE = +0.20$~V, where the H$^+$
+mass-transport limit makes the loop oscillate. The fallback is
+recorded in
+\texttt{ctx[`initializer\_fallback'] = True}.
+
+%% =====================================================================
+\section{Step 3 --- Inner profile: the Debye layer}
+
+After Picard, we have $(R_1, R_2, H_o, \varphi_o, \psi_D, O_s, P_s)$
+--- all scalar values at the outer surface. We now need to extend
+each field $u_i(y)$ and $\varphi(y)$ over the \emph{whole mesh}, not
+just point values.
+
+The outer region is easy --- linear profiles already given. The hard
+part is the inner Debye layer, where $\psi$ goes from
+$\psi_D$ at the electrode to roughly $0$ at the outer surface, over a
+distance of $\lD$.
+
+\subsection{The Gouy--Chapman profile (linear-Debye limit)}
+
+For a 1:1 symmetric electrolyte, the nonlinear Poisson--Boltzmann
+equation in 1D admits a closed-form solution:
+\begin{equation}
+  \psi_{\mathrm{GC}}(y)
+   \;=\; 4\,\mathrm{atanh}\!\left[\tanh(\psi_D / 4)\,
+                                  e^{-y/\lD}\right].
+\end{equation}
+This is the \emph{Gouy--Chapman profile}. At small $\psi_D$ (the
+linear-Debye limit) it collapses to a pure exponential
+$\psi(y) \approx \psi_D\,e^{-y/\lD}$. For larger $\psi_D$ it stays
+finite but the inner ramp is steeper.
+
+\paragraph{Numerical rewrite.} Direct evaluation of $4\,\mathrm{atanh}$
+overflows when $\psi_D \gtrsim 30$. Use the identity
+\[
+  4\,\mathrm{atanh}(x) \;=\; 2\ln\!\left(\frac{1+x}{1-x}\right),
+\]
+which stays well-behaved as $|x| \to 1$ (just clamp the argument
+slightly inside $\pm 1$). The implementation does exactly this.
+
+\subsection{When linear-Debye is not enough: Bikerman steric}
+
+Pure Boltzmann assumes ions are point charges. At the electrode,
+$\psi_D = +30$ would give a counterion concentration of
+$c_b \cdot e^{30} \approx c_b \cdot 10^{13}$ --- which is physically
+absurd because the ions have a finite volume and can only pack so
+tightly.
+
+\textbf{Bikerman steric} is the simplest fix: penalize the local
+packing fraction in the chemical potential. Ions can pack up to
+$1/a$ where $a$ is the (nondimensional) ion volume. Mathematically,
+the modified Boltzmann distribution becomes
+\begin{equation}
+  c_b(y) \;=\;
+     c_b^{\mathrm{bulk}}
+     \frac{\bigl(1 - \sum_j a_j c_j(y)\bigr)\,
+           \exp(-z_b \psi(y))}
+          {\theta_b + a_b c_b^{\mathrm{bulk}}\exp(-z_b\psi(y))},
+\end{equation}
+which caps $c_b \to 1/a_b$ as $\psi \to -\infty$. This denominator
+is what bounds the Poisson source above
+$\VRHE = +0.66$~V where the unbounded Boltzmann co-ion would have
+made the Poisson residual blow up.
+
+\subsection{The BKSA composite-$\psi$ profile}
+
+Once steric effects matter, the $\psi(y)$ profile changes character.
+Instead of one smooth tanh-like curve, it has \emph{two zones}:
+
+\begin{tcolorbox}[notebox, title={Two-zone Debye structure under steric saturation}]
+\textbf{Saturation zone} (close to electrode): the counterion is at
+close-packing density $c \approx 1/a$. Charge density is roughly
+constant in this zone. Poisson's equation
+$-\varepsilon \nabla^2 \psi = \rho$ with constant $\rho$ gives a
+\emph{linear} $\psi$ profile (think of it like a parallel-plate
+capacitor field):
+\[
+  \psi(y) \;=\; \mathrm{sgn}(\psi_D)\,(|\psi_D| - \alpha y),
+  \qquad 0 \le y < y_{\mathrm{match}}.
+\]
+
+\textbf{Outer Debye zone} (linear-Debye regime): once enough screening
+has happened that $|\psi|$ drops below the saturation threshold
+$\psi_{\mathrm{sat}}$, ions are no longer at close-packing and we
+return to ordinary exponential decay:
+\[
+  \psi(y) \;=\; \mathrm{sgn}(\psi_D)\,\psi_{\mathrm{sat}}\,
+                \exp\!\bigl(-(y - y_{\mathrm{match}})/\lD\bigr),
+  \qquad y \ge y_{\mathrm{match}}.
+\]
+\end{tcolorbox}
+
+The match point $y_{\mathrm{match}}$ and slope $\alpha$ come from
+matched asymptotics (Bazant--Kilic--Storey--Ajdari, BKSA):
+\begin{align}
+  \nu &\;=\; 2\,a_{\mathrm{Cl}}\,c_{\mathrm{Cl}}^{\mathrm{bulk}}
+        & \text{(steric crowding parameter)} \\
+  \psi_{\mathrm{sat}} &\;=\; \ln(2/\nu)
+        & \text{(potential at which counterion close-packs)} \\
+  \alpha &\;=\; \sqrt{\frac{2}{\nu \lD^2}\,
+                       \ln\!\bigl(1 + \nu(\cosh\psi_D - 1)\bigr)}
+        & \text{(slope in the saturated zone)} \\
+  y_{\mathrm{match}} &\;=\; (|\psi_D| - \psi_{\mathrm{sat}})/\alpha
+        & \text{(thickness of the saturated zone)}
+\end{align}
+
+If $|\psi_D| < \psi_{\mathrm{sat}}$, the saturated zone has zero
+thickness and we fall back to the pure linear-Debye exponential
+(or the Gouy--Chapman tanh, depending on regime).
+
+\paragraph{Where this comes from.} The first integral of the
+steric Poisson--Boltzmann equation is
+$\frac{1}{2} \lD^2 (\psi')^2 = (1/\nu) \ln(1 + \nu(\cosh\psi - 1))$.
+Setting $\psi = \psi_{\mathrm{sat}}$ gives $\alpha$ as the slope at
+the saturation boundary, and the linear extrapolation backward to
+$\psi = \pm \psi_D$ gives $y_{\mathrm{match}}$. The exponential outer
+piece is the linearization of Gouy--Chapman in the small-$\psi$
+limit. So the composite profile is just \emph{matched asymptotics
+glued together at the boundary where saturation ends}.
+
+%% =====================================================================
+\section{Step 4 --- The multispecies $\gamma$ correction}
+
+Even with the right $\psi(y)$ in hand, naively writing
+$c_i(y) = c_i^{\mathrm{outer}}(y) \cdot \exp(-z_i \psi(y))$
+\textbf{violates} the Bikerman packing constraint at the surface --- the
+constraint and the simple Boltzmann formula are inconsistent.
+
+The fix is a closed-form multiplicative correction $\gamma(y)$ that
+restores consistency. From multispecies zero-flux equilibrium with
+the steric chemical potential, one derives
+\begin{equation}
+  \boxed{\;
+  \gamma(y) \;=\;
+     \frac{1}{1 + \sum_j a_j\,c_j^{\mathrm{anchor}}(y)\,
+                    \bigl(\exp(-z_j \psi(y)) - 1\bigr)}.
+  \;}
+\end{equation}
+Two convenient features of this expression:
+\begin{itemize}
+\item \textbf{Neutral species drop out} automatically, because
+      $e^{0} - 1 = 0$. Only charged species ($\mathrm{H^+}$ and
+      $\mathrm{ClO_4^-}$) contribute to the denominator.
+\item In the linear-Debye limit ($\psi$ small), $e^{-z\psi} - 1
+      \approx -z \psi$ and $\gamma \to 1$ smoothly. So the correction
+      vanishes in the regime where it shouldn't matter.
+\end{itemize}
+
+The IC then seeds every species on the saturated steric manifold:
+\begin{align}
+  u_{\mathrm{O_2}}^{\mathrm{IC}}(y)    &= \ln O_{\mathrm{outer}}(y)  + \ln \gamma(y), \\
+  u_{\mathrm{H_2O_2}}^{\mathrm{IC}}(y) &= \ln P_{\mathrm{outer}}(y)  + \ln \gamma(y), \\
+  u_{\mathrm{H^+}}^{\mathrm{IC}}(y)    &= \ln H_{\mathrm{outer}}(y) - \psi(y) + \ln \gamma(y),\\
+  \varphi^{\mathrm{IC}}(y)             &= \ln\!\bigl(H_{\mathrm{outer}}(y) / c_{\mathrm{ClO_4}}^{\mathrm{bulk}}\bigr) + \psi(y).
+\end{align}
+
+\begin{tcolorbox}[notebox, title={What the pieces are doing, in plain English}]
+\begin{itemize}
+\item ``$\ln$ outer'' : the bulk-to-outer-surface diffusion ramp.
+\item ``$-\psi(y)$'' on H$^+$ : Boltzmann depletion of the proton in
+      the Debye layer (a $+1$ ion is repelled from a positive
+      electrode, so its concentration drops).
+\item ``$+\psi(y)$'' on $\varphi$ : the actual electrostatic
+      potential profile, going from the bulk-electroneutrality
+      reference up to $\varphi_{\mathrm{applied}}$ at the electrode.
+\item ``$+\ln\gamma$'' on every species : the steric correction
+      that makes the Boltzmann profile obey the packing constraint.
+\end{itemize}
+\end{tcolorbox}
+
+%% =====================================================================
+\section{Step 5 --- Why $\mu_H$ is the Right primary variable}
+
+The production solver does \emph{not} carry $u_H = \ln c_H$ as the
+proton's primary unknown. It carries the
+\textbf{electrochemical potential}
+\[
+  \mu_H \;=\; u_H + z_H \varphi \;=\; u_H + \varphi
+  \qquad (z_H = +1).
+\]
+Concentrations are reconstructed as $c_H = \exp(\mu_H - \varphi)$.
+
+\subsection{Why this helps}
+
+Inside the Debye layer where H$^+$ is in local equilibrium,
+$\nabla \mu_H \approx 0$. So $\mu_H$ is \emph{nearly constant in $y$
+across the Debye layer} --- exactly where $u_H$ and $\varphi$ are
+each varying by tens of log-units. Newton sees a smooth unknown
+in the regime where the alternatives are wildest.
+
+\subsection{Exact cancellation under the Debye--Boltzmann IC}
+
+A clean correctness check: under the IC of Section 4 (ignoring
+$\gamma$ for clarity),
+\begin{align*}
+  \mu_H^{\mathrm{IC}}(y)
+  &= u_H^{\mathrm{IC}}(y) + \varphi^{\mathrm{IC}}(y) \\
+  &= \bigl[\ln H_{\mathrm{outer}}(y) - \psi(y)\bigr]
+   + \bigl[\ln\bigl(H_{\mathrm{outer}}(y)/c_{\mathrm{Cl}}^{\mathrm{bulk}}\bigr) + \psi(y)\bigr]\\
+  &= 2 \ln H_{\mathrm{outer}}(y) - \ln c_{\mathrm{Cl}}^{\mathrm{bulk}}.
+\end{align*}
+The diffuse-layer $\psi$ --- the wildest-varying piece --- cancels
+exactly. The IC for $\mu_H$ contains \emph{only} the slowly-varying
+outer profile of H$^+$ and a constant offset. That is as smooth as
+it gets.
+
+%% =====================================================================
+\section{Putting it all together}
+
+\subsection{Algorithm summary}
+
+\begin{enumerate}
+\item Read bulk values, diffusivities, BV constants, and steric sizes
+      from \texttt{solver\_params}.
+\item Picard-iterate the algebraic 2$\times$2 system to get
+      $(R_1, R_2)$, $(O_s, P_s, H_o)$, and $\psi_D$ at the outer
+      surface. Bail to linear-$\varphi$ on failure.
+\item Build the \textbf{outer linear profiles} $O_{\mathrm{outer}}(y)$,
+      $P_{\mathrm{outer}}(y)$, $H_{\mathrm{outer}}(y)$ as Firedrake
+      expressions on the mesh.
+\item Build the \textbf{inner $\psi(y)$ profile}: pure Gouy--Chapman
+      if the electrolyte is not steric, BKSA composite if it is.
+\item Build the \textbf{multispecies $\gamma(y)$ correction} (when
+      steric).
+\item Interpolate $u_i^{\mathrm{IC}}(y)$ and $\varphi^{\mathrm{IC}}(y)$
+      onto the mesh; copy into \texttt{ctx[`U']} and
+      \texttt{ctx[`U\_prev']}.
+\item Hand to Newton.
+\end{enumerate}
+
+\subsection{What it buys you, in numbers}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Metric} & \textbf{Linear-$\varphi$ IC} & \textbf{Debye--Boltzmann IC} \\
+\midrule
+Newton iters at $\VRHE = +0.30$~V & $\sim 50$ & $\sim 10$--30
+   \;($1.7$--$6.3\times$ fewer) \\
+Cold-start ceiling                & $+0.30$~V & $+0.60$~V \\
+Warm-walk reach (with Stern)      & $+0.60$~V & $+1.00$~V (15/15) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The Bikerman-consistent IC alone (composite-$\psi$ + multispecies-$\gamma$,
+``Option 2b'') accounts for the +0.4 V gain from $+0.60$ to $+1.00$ V on
+the production stack.
+
+\subsection{Soft spots to be aware of}
+
+\begin{itemize}
+\item \textbf{Picard can fail silently.} The fallback to linear-$\varphi$
+      is automatic but is a no-op below $\VRHE = +0.20$~V (the
+      H$^+$ mass-transport limit makes the outer loop oscillate).
+\item \textbf{The IC is not on the adjoint tape.} The whole body
+      runs under \texttt{firedrake.adjoint.stop\_annotating()}.
+      The IC is an initial \emph{guess}, not a control --- you don't
+      want pyadjoint to think the Picard iterations are part of the
+      gradient computation.
+\item \textbf{It is still a guess.} If the production-stack residual
+      changes (e.g.\ a different counterion model, a different BV
+      formulation), the IC can become inconsistent with what Newton
+      is converging to, and convergence degrades. The IC and the
+      residual must agree about what the saturated steric manifold
+      looks like; this is hard rule \#3 in
+      \texttt{CLAUDE.md}.
+\end{itemize}
+
+%% =====================================================================
+\section{One-paragraph explainer for the meeting}
+
+\begin{tcolorbox}[notebox, title={The version to say out loud}]
+The Debye--Boltzmann IC is an analytical sketch of the steady-state
+solution that we hand to Newton as a starting guess. It builds the
+solution in two pieces: an outer linear-diffusion profile from bulk
+to a fictitious ``outer surface'' just outside the Debye layer, and
+an inner Boltzmann-style screening profile from the outer surface
+down to the electrode. The two are stitched together using a
+self-consistent algebraic 2$\times$2 Picard solve for the BV reaction
+rates, a Gouy--Chapman or BKSA composite $\psi(y)$ profile inside the
+Debye layer, and a multispecies activity correction $\gamma(y)$ that
+keeps the Bikerman packing constraint satisfied. With the IC,
+Newton converges 1.7--6.3$\times$ faster, and unblocks cold starts
+that the linear IC could not reach. It is not part of the residual
+and not on the adjoint tape --- it is a guess, optimized to be
+right almost everywhere.
+\end{tcolorbox}
+
+\end{document}

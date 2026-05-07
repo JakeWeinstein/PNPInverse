@@ -1,0 +1,242 @@
+% steric_sign_dcdt_walkthrough.tex
+%
+% Walk-through of how the steric chemical-potential term in the
+% modified Nernst--Planck equation acts on dc_i/dt as the local
+% concentration grows -- with the sign as written in
+% docs/PNP Equation Formulations.tex (line 152), and the same
+% calculation with the corrected Borukhov / Bazant sign.
+
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{xcolor}
+\usepackage[most]{tcolorbox}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{booktabs}
+
+\setlist[itemize]{leftmargin=*,topsep=2pt,itemsep=3pt}
+\setlist[enumerate]{leftmargin=*,topsep=2pt,itemsep=3pt}
+
+\hypersetup{colorlinks=true, linkcolor=blue!50!black, urlcolor=blue!50!black}
+
+\newcommand{\Deff}{D_{\mathrm{eff}}}
+\newcommand{\steric}{\mathrm{steric}}
+
+\title{What the steric term does to $\partial c_i/\partial t$\\
+\large A walk-through of eq.~(15) of \texttt{PNP Equation Formulations.tex}}
+\author{}
+\date{2026-05-07}
+
+\begin{document}
+\maketitle
+
+\section*{Setup}
+
+The spec writes the modified Nernst--Planck equation
+(\texttt{docs/PNP Equation Formulations.tex}, line 159) as
+\begin{equation}
+\label{eq:NPmod}
+  \frac{\partial c_i}{\partial t}
+  \;=\; \nabla\!\cdot\!\Bigl\{\, D_i \Bigl[\, \nabla c_i
+        + c_i\, \nabla\!\Bigl(\tfrac{z_i F}{RT}\,\phi
+                              + \mu^{\steric}(c)\Bigr)\Bigr]\Bigr\},
+\end{equation}
+with the steric chemical potential at line 152
+\begin{equation}
+\label{eq:muspec}
+  \mu^{\steric}(c) \;=\; k_{B}T\, \ln\!\bigl(1 - \textstyle\sum_j a_j\, c_j\bigr).
+\end{equation}
+
+Two simplifications first:
+\begin{itemize}
+  \item Define the local packing fraction
+        $\Phi \;\equiv\; \sum_j a_j\, c_j$.
+  \item Switch to the dimensionless drift potential
+        $\tilde\mu^{\steric} \equiv \mu^{\steric}/(k_{B}T) = \ln(1-\Phi)$.
+        The units in \eqref{eq:muspec} are sloppy: what actually goes
+        inside the gradient in \eqref{eq:NPmod} has to be dimensionless
+        (it is added to $z_iF\phi/RT$), so it is $\tilde\mu^{\steric}$
+        that enters, not $\mu^{\steric}$ as written. The qualitative
+        story is identical.
+\end{itemize}
+
+The question we will answer is: \emph{as $c_i$ rises (and so $\Phi$
+rises), what does the steric term do to $\partial c_i/\partial t$?}
+
+\section{Step 1 -- write \eqref{eq:NPmod} as a drift--diffusion flux}
+
+Writing \eqref{eq:NPmod} as $\partial c_i/\partial t = -\nabla\!\cdot J_i$
+gives
+\begin{align}
+  J_i &= -D_i\Bigl[\nabla c_i
+              + c_i\, \nabla\!\bigl(\tfrac{z_i F}{RT}\phi
+                                   + \tilde\mu^{\steric}\bigr)\Bigr]
+                                                       \nonumber \\[2pt]
+      &= -D_i\, c_i\, \nabla\!\Bigl[\, \ln c_i
+              + \tfrac{z_i F}{RT}\phi
+              + \tilde\mu^{\steric}\,\Bigr].
+  \label{eq:Jform}
+\end{align}
+The flux is $-D_i c_i$ times the gradient of a total drift potential.
+The steric piece of that potential is just $\tilde\mu^{\steric} =
+\ln(1-\Phi)$.
+
+\section{Step 2 -- gradient of the steric potential}
+
+Chain rule:
+\begin{equation}
+  \nabla \tilde\mu^{\steric}
+   \;=\; \nabla\, \ln(1-\Phi)
+   \;=\; \frac{1}{1-\Phi}\, \nabla(1-\Phi)
+   \;=\; -\,\frac{\nabla\Phi}{1-\Phi}.
+  \label{eq:gradmu}
+\end{equation}
+The steric \emph{contribution} to the flux of species $i$ is
+\begin{equation}
+  \Delta J_i^{\steric}
+   \;=\; -D_i\, c_i\, \nabla\tilde\mu^{\steric}
+   \;=\; +\, D_i\, c_i\, \frac{\nabla\Phi}{1-\Phi}.
+  \label{eq:DeltaJ}
+\end{equation}
+
+Read the sign carefully. With the spec's $+\ln(1-\Phi)$, the steric flux
+of species $i$ points \emph{up} the packing gradient -- toward whichever
+side already has more counterion piled up. As $\Phi \to 1$ the prefactor
+$1/(1-\Phi)$ diverges, so the up-gradient pump becomes infinitely
+strong. This is already wrong before we put it back into
+$\partial c_i/\partial t$.
+
+\section{Step 3 -- collapse to a single-species effective diffusivity}
+
+To see what \eqref{eq:NPmod} actually does to $\partial c_i/\partial t$
+as $c_i$ grows, switch off electromigration for a moment and assume one
+dominant counterion, so $\Phi = a_i\, c_i$ and $\nabla\Phi = a_i\, \nabla
+c_i$. Combining the Fickian term and \eqref{eq:DeltaJ},
+\begin{align}
+  J_i &= -D_i\,\nabla c_i
+        + D_i\, c_i\, \frac{a_i\, \nabla c_i}{1 - a_i c_i}
+                                                       \nonumber \\[2pt]
+      &= -D_i\,\nabla c_i\,
+         \Bigl[\, 1 - \frac{a_i c_i}{1 - a_i c_i}\,\Bigr]
+                                                       \nonumber \\[2pt]
+      &= -D_i\,\nabla c_i\, \cdot \frac{1 - 2\Phi}{1 - \Phi}.
+  \label{eq:Jspec}
+\end{align}
+So \eqref{eq:NPmod}, with the spec sign and electromigration off,
+collapses to a nonlinear heat equation
+\begin{equation}
+\boxed{\;
+  \frac{\partial c_i}{\partial t}
+   \;=\; \nabla\!\cdot\!\bigl(\, \Deff(\Phi)\, \nabla c_i\,\bigr),
+   \qquad
+   \Deff(\Phi) \;=\; D_i\, \frac{1 - 2\Phi}{1 - \Phi}.
+\;}
+  \label{eq:DeffSpec}
+\end{equation}
+That $\Deff(\Phi)$ is the whole story.
+
+\section{Step 4 -- what $\Deff$ does as $c_i$ grows}
+
+Tabulate \eqref{eq:DeffSpec} versus packing fraction:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+$\Phi = a_i c_i$ & $\Deff(\Phi)$ & what eq.~(15) does \\
+\midrule
+$0$                  & $D_i$               & ordinary Fickian diffusion \\
+$0 < \Phi < 1/2$     & $0 < \Deff < D_i$   & diffusion damped -- already a small artifact \\
+$\Phi = 1/2$         & $0$                 & diffusion freezes -- no spatial relaxation \\
+$1/2 < \Phi < 1$     & \textbf{negative}   & \textbf{backward heat equation} -- ill-posed \\
+$\Phi \to 1$         & $-\infty$           & runaway: gradients amplified arbitrarily fast \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The pathology starts at $\Phi = 1/2$, \emph{not} at $\Phi = 1$. Anywhere
+the counterion piles past half-packing, the spec's eq.~(15) is locally
+a backward heat equation: the diffusive term \emph{amplifies} small
+bumps in $c_i$ instead of smoothing them. There is no steady state for
+it to find -- and that is exactly why Newton cannot solve the 4sp
+warm-walk above $\psi_D \approx 4.83$ (nondim, $\approx +0.124$~V vs
+RHE), which is where the ClO$_4^{-}$ EDL crosses $\Phi \approx 0.5$.
+The solver is not failing for numerical reasons -- the PDE itself stops
+being well-posed.
+
+\section{Step 5 -- contrast with the corrected sign $-\ln(1-\Phi)$}
+
+Repeat Steps 2--3 with $\tilde\mu^{\steric} = -\ln(1-\Phi)$
+(Borukhov--Andelman--Orland 1997 eq.~(3); Bazant--Kilic--Storey--Ajdari
+2009 eq.~(20)). Then $\nabla\tilde\mu^{\steric} = +\nabla\Phi/(1-\Phi)$
+and
+\begin{align}
+  J_i &= -D_i\,\nabla c_i
+        - D_i\, c_i\, \frac{a_i\,\nabla c_i}{1 - a_i c_i}
+                                                       \nonumber \\[2pt]
+      &= -D_i\,\nabla c_i\,
+         \Bigl[\,1 + \frac{a_i c_i}{1 - a_i c_i}\,\Bigr]
+                                                       \nonumber \\[2pt]
+      &= -D_i\,\nabla c_i\, \cdot \frac{1}{1-\Phi}.
+  \label{eq:Jcorrected}
+\end{align}
+Equivalently,
+\begin{equation}
+\boxed{\;
+   \Deff(\Phi) \;=\; \frac{D_i}{1-\Phi}\;\;\;(\text{Borukhov sign}).
+\;}
+\end{equation}
+Always positive, monotonically growing, and $\to +\infty$ as $\Phi \to
+1$. Diffusion gets \emph{stronger} the closer the layer is to
+saturation, which is precisely what enforces the Bikerman cap
+$c_i \le 1/a_i$ (Borukhov 1997 eq.~(5)).
+
+\section*{Summary}
+
+\begin{itemize}
+\item With the spec sign $+\ln(1-\Phi)$, the steric piece of the
+      Nernst--Planck flux pumps mass \emph{up} the packing gradient.
+      In the single-species reduction this gives
+      $\Deff(\Phi) = D_i (1-2\Phi)/(1-\Phi)$, which is negative for
+      $\Phi > 1/2$. Eq.~(15) then becomes a backward heat equation in
+      the saturation skin -- ill-posed, no steady state, Newton
+      diverges.
+\item With the corrected Borukhov/Bazant sign $-\ln(1-\Phi)$, the
+      steric piece of the flux pushes mass \emph{down} the packing
+      gradient. The single-species reduction gives
+      $\Deff(\Phi) = D_i/(1-\Phi)$, monotonically growing and
+      diverging at saturation. The PDE is well-posed and produces the
+      Bikerman cap $c_i \le 1/a_i$.
+\end{itemize}
+
+\paragraph{Caveats.} Two simplifications I papered over:
+(i) the cross-species term in $\Phi = \sum_j a_j c_j$ produces
+off-diagonal $c_i\,\nabla c_j/(1-\Phi)$ contributions that do not show
+up in the single-species reduction, but they have the same sign
+structure and do not rescue the spec form;
+(ii) electromigration adds $c_i z_i F\,\nabla\phi/RT$ to the flux,
+which does not enter $\Deff$. It only shifts \emph{where} $\Phi$ first
+crosses $1/2$ -- it does not change that the equation goes ill-posed
+once it does.
+
+\paragraph{Where the fix lives in code.}
+\begin{itemize}
+  \item \texttt{Forward/bv\_solver/forms\_logc.py:303} ---
+        \verb|mu_steric = -fd.ln(packing)|
+  \item \texttt{Forward/bv\_solver/forms\_logc\_muh.py:347} --- same.
+  \item Gated by \texttt{steric\_active} (line 283 / 335), which is
+        \texttt{True} only when some $a_i \ne 0$ or a Bikerman
+        counterion is configured. The 3sp+Boltzmann ideal preset
+        ($a_{\mathrm{vals\_hat}} = [0,0,0]$, no
+        \texttt{steric\_mode='bikerman'}) is unaffected.
+\end{itemize}
+
+The code is now consistent with the corrected sign; the spec doc at
+\texttt{docs/PNP Equation Formulations.tex:152} still has the original
+sign and disagrees with the code. The plan in
+\texttt{docs/steric\_sign\_correction\_plan.md} flags this as needing
+explicit advisor sign-off before the spec edit ships.
+
+\end{document}
