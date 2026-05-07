@@ -55,6 +55,9 @@ def validate_solution_state(
     is_logc: bool = False,
     mu_species: Optional[Sequence[int]] = None,
     em: float = 1.0,
+    reaction_e_eq: Optional[Sequence[float]] = None,
+    bv_exp_scale: float = 1.0,
+    w1_margin: float = 1.0,
 ) -> ValidationResult:
     """Validate a Firedrake mixed-space solution.
 
@@ -79,7 +82,16 @@ def validate_solution_state(
     ``ctx['nondim']['electromigration_prefactor']`` (= 1.0 in the
     production scaling).
 
-    All checks use numpy on dat data -- no FEM assembly.
+    All checks use numpy on dat data plus a single coordinate-interpolation
+    in W5 (so the y-mask aligns with each species' DOF layout for any
+    element order).
+
+    W1 (clip saturation) fires when ``|η_scaled_j|`` for any reaction ``j``
+    reaches within ``w1_margin`` of ``exponent_clip`` somewhere in the
+    domain, where ``η_scaled_j = bv_exp_scale * (phi_applied - phi - E_eq_j)``.
+    Pass ``reaction_e_eq = [r["E_eq_model"] for r in scaling["bv_reactions"]]``
+    and ``bv_exp_scale = scaling["bv_exponent_scale"]`` from the live
+    scaling dict.  When ``reaction_e_eq`` is ``None``, W1 is skipped.
     """
     import numpy as np
 
@@ -178,13 +190,63 @@ def validate_solution_state(
             f"W3: phi overshoot, max={phi_max:.4g} > {phi_hi:.4g}"
         )
 
+    # --- W1: BV exponent saturates the clip ---
+    # eta_scaled_j = bv_exp_scale * (phi_applied - phi - E_eq_j) is the
+    # quantity actually fed to the BV exponent before the alpha*n_e
+    # multiplication.  forms_logc[*]._build_eta_clipped clips it to
+    # [-exponent_clip, +exponent_clip].  If |eta_scaled| reaches within
+    # w1_margin of exponent_clip *anywhere* phi varies in the domain, the
+    # BV form is locally saturated and the partial current at that
+    # reaction is artefacted.  Use (phi_min, phi_max) as the bounding box
+    # for the per-DOF eta range -- O(1) numpy work, no FEM assembly.
+    if reaction_e_eq is not None and exponent_clip > 0:
+        phi_min_dof = float(phi_data.min())
+        phi_max_dof = float(phi_data.max())
+        threshold = float(exponent_clip) - float(w1_margin)
+        for j, e_eq_j in enumerate(reaction_e_eq):
+            e_eq_f = float(e_eq_j)
+            eta_at_phi_min = bv_exp_scale * (phi_applied - phi_min_dof - e_eq_f)
+            eta_at_phi_max = bv_exp_scale * (phi_applied - phi_max_dof - e_eq_f)
+            max_abs_eta = max(abs(eta_at_phi_min), abs(eta_at_phi_max))
+            if max_abs_eta >= threshold:
+                warns.append(
+                    f"W1: clip near saturation in rxn {j} "
+                    f"(|eta_scaled|>={max_abs_eta:.3g}, "
+                    f"clip-margin={threshold:.3g})"
+                )
+
     # --- W5: cation depletion in bulk region ---
-    for i in range(n_species):
-        if z_vals[i] > 0 and c_bulk[i] > 0:
-            coords = U.function_space().mesh().coordinates.dat.data_ro
-            y_coords = coords[:, -1] if coords.ndim == 2 else coords
-            y_median = float(np.median(y_coords))
+    # The species' DOF layout is the layout of U.dat[i].data_ro, which
+    # equals the mesh-vertex count for CG1 but exceeds it for CG2+.
+    # Interpolate y onto each species' subspace so the mask aligns with
+    # the DOF count of c_data for any element order.
+    if any(z_vals[i] > 0 and c_bulk[i] > 0 for i in range(n_species)):
+        import firedrake as fd
+
+        V_full = U.function_space()
+        mesh = V_full.mesh()
+        ydim = mesh.geometric_dimension() - 1
+        for i in range(n_species):
+            if not (z_vals[i] > 0 and c_bulk[i] > 0):
+                continue
+            try:
+                V_i = V_full.sub(i).collapse()
+                y_fn = fd.Function(V_i)
+                y_fn.interpolate(fd.SpatialCoordinate(mesh)[ydim])
+                y_coords = y_fn.dat.data_ro
+            except Exception:
+                # Fallback for unusual function-space configurations:
+                # use mesh vertex coordinates (correct for CG1 only).
+                coords = mesh.coordinates.dat.data_ro
+                y_coords = coords[:, ydim] if coords.ndim == 2 else coords
             c_data = _conc_array(i)
+            if y_coords.shape != c_data.shape:
+                warns.append(
+                    f"W5: skipped for {names[i]} (DOF/coord shape mismatch: "
+                    f"y={y_coords.shape} vs c={c_data.shape})"
+                )
+                continue
+            y_median = float(np.median(y_coords))
             top_mask = y_coords >= y_median
             if np.any(top_mask):
                 c_top_min = float(c_data[top_mask].min())

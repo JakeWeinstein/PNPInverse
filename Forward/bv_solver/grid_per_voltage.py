@@ -599,6 +599,102 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
             )
             break
 
+    # ------- Phase 2 (interior): fill cold-failed gaps between anchors -------
+    # The outer cathodic / anodic walks only visit indices outside
+    # [anchor_lo, anchor_hi].  Cold-failed points *between* non-contiguous
+    # cold successes (e.g. cold succeeded at idx 2 and idx 7 but failed
+    # at 3-6) need their own pass.  For each interior failure, warm-walk
+    # from the nearest already-converged neighbour (closer side first;
+    # fall back to the further side).  Iterate so that just-converged
+    # interior points can serve as anchors for further interior fills,
+    # and so a longer-distance anchor is retried only after a closer one
+    # becomes available.
+    if anchor_hi - anchor_lo > 1:
+        print(
+            f"[per-voltage Phase 2 interior] filling cold-failed gaps "
+            f"between anchor_lo={anchor_lo} and anchor_hi={anchor_hi}"
+        )
+        # Track (j_lo, j_hi) anchor pairs that already failed for each
+        # orig_idx.  Skip a retry on a subsequent pass if the anchors
+        # haven't changed (no new information available).
+        failed_with_anchors: Dict[int, tuple] = {}
+        made_progress = True
+        while made_progress:
+            made_progress = False
+            for orig_idx in range(anchor_lo + 1, anchor_hi):
+                if points[orig_idx].converged:
+                    continue
+                # Nearest converged neighbour on each side.
+                j_lo: Optional[int] = orig_idx - 1
+                while j_lo is not None and j_lo >= 0 and not points[j_lo].converged:
+                    j_lo -= 1
+                if j_lo is None or j_lo < 0:
+                    j_lo = None
+                j_hi: Optional[int] = orig_idx + 1
+                while (j_hi is not None and j_hi < n_points
+                       and not points[j_hi].converged):
+                    j_hi += 1
+                if j_hi is None or j_hi >= n_points:
+                    j_hi = None
+                if j_lo is None and j_hi is None:
+                    continue
+                anchor_key = (j_lo, j_hi)
+                if failed_with_anchors.get(orig_idx) == anchor_key:
+                    # Same anchors as last failed attempt; nothing to gain.
+                    continue
+                # Sort by index distance to orig_idx (closer first).
+                candidates: list[tuple[int, int]] = []
+                if j_lo is not None:
+                    candidates.append((orig_idx - j_lo, j_lo))
+                if j_hi is not None:
+                    candidates.append((j_hi - orig_idx, j_hi))
+                candidates.sort(key=lambda x: x[0])
+                eta_target = float(phi_applied_values[orig_idx])
+                converged_this_attempt = False
+                for _, j in candidates:
+                    eta_anchor = float(phi_applied_values[j])
+                    snap, ctx = _solve_warm(
+                        orig_idx, eta_target, eta_anchor,
+                        snapshots[j],  # type: ignore[arg-type]
+                    )
+                    if snap is None:
+                        continue
+                    snapshots[orig_idx] = snap
+                    method = f"warm<-{phi_applied_values[j]:+.3f}"
+                    if per_point_callback is not None:
+                        per_point_callback(orig_idx, eta_target, ctx)
+                    try:
+                        diags = collect_diagnostics(
+                            ctx, phase="warm_walk_interior", params=params,
+                        )
+                    except Exception as exc:
+                        diags = {"phase": "diagnostics_error",
+                                 "error": f"{type(exc).__name__}: {exc}"}
+                    points[orig_idx] = PerVoltagePointResult(
+                        orig_idx=orig_idx,
+                        phi_applied=eta_target,
+                        U_data=snap,
+                        achieved_z_factor=1.0,
+                        converged=True,
+                        method=method,
+                        diagnostics=diags,
+                    )
+                    failed_with_anchors.pop(orig_idx, None)
+                    print(
+                        f"  [Phase 2 interior] {orig_idx + 1}/{n_points}  "
+                        f"eta={eta_target:+8.4f}  {method}"
+                    )
+                    made_progress = True
+                    converged_this_attempt = True
+                    break
+                if not converged_this_attempt:
+                    failed_with_anchors[orig_idx] = anchor_key
+                    print(
+                        f"  [Phase 2 interior] {orig_idx + 1}/{n_points}  "
+                        f"eta={eta_target:+8.4f}  warm-walk FAILED "
+                        f"from anchors {anchor_key}"
+                    )
+
     n_total_ok = sum(1 for p in points.values() if p.converged)
     print(
         f"[per-voltage] {n_total_ok}/{n_points} converged "

@@ -306,7 +306,13 @@ def _solve_cached_fast_path(
         _z_vals_v = [float(zc) for zc in ctx["z_consts"]]
         _conv_cfg_v = ctx.get("bv_convergence", {})
         _eps_c_v = float(_conv_cfg_v.get("conc_floor", 1e-8))
-        _exp_clip_v = float(_conv_cfg_v.get("exponent_clip", 50.0))
+        _exp_clip_v = float(_conv_cfg_v.get("exponent_clip", 100.0))
+        _rxns_v = _scaling_v.get("bv_reactions", []) or []
+        _rxn_e_eq_v = (
+            [float(r.get("E_eq_model", 0.0)) for r in _rxns_v]
+            if _rxns_v else None
+        )
+        _bv_exp_scale_v = float(_scaling_v.get("bv_exponent_scale", 1.0))
         _sol_vr = validate_solution_state(
             U,
             n_species=_n_sp_v,
@@ -316,6 +322,10 @@ def _solve_cached_fast_path(
             eps_c=_eps_c_v,
             exponent_clip=_exp_clip_v,
             is_logc=bool(ctx.get("logc_transform", False)),
+            mu_species=ctx.get("mu_species"),
+            em=float(_scaling_v.get("electromigration_prefactor", 1.0)),
+            reaction_e_eq=_rxn_e_eq_v,
+            bv_exp_scale=_bv_exp_scale_v,
         )
         for _w in _sol_vr.warnings:
             _warnings.warn(

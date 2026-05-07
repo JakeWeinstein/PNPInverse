@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 from Nondim.transform import _as_list, _bool
@@ -24,6 +25,18 @@ def _get_bv_cfg(params: Any, n_species: int) -> dict:
     alpha_val = float(alpha) if not isinstance(alpha, (list, tuple)) else None
     if alpha_val is not None and not (0.0 < alpha_val <= 1.0):
         raise ValueError(f"alpha must be in (0, 1]; got {alpha_val}")
+    if alpha_val is None:
+        for k, a in enumerate(alpha):
+            try:
+                a_f = float(a)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"bv_bc.alpha[{k}] must be a float; got {a!r}"
+                ) from exc
+            if not (0.0 < a_f <= 1.0):
+                raise ValueError(
+                    f"bv_bc.alpha[{k}] must be in (0, 1]; got {a_f}"
+                )
     stoichiometry = raw.get("stoichiometry", [-1] * n_species)
     c_ref = raw.get("c_ref", raw.get("c_inf", 1.0))
     E_eq_v = float(raw.get("E_eq_v", 0.0))
@@ -67,13 +80,27 @@ _VALID_INITIALIZERS = ("linear_phi", "debye_boltzmann")
 
 
 def _validate_formulation(value: Any) -> str:
-    """Coerce/validate the formulation config field."""
+    """Coerce/validate the formulation config field.
+
+    The ``"concentration"`` backend was removed in the May 2026 cleanup;
+    the dispatcher silently falls through to ``"logc"`` for that value to
+    keep old configs parseable.  Emit a deprecation warning so callers
+    know they are getting the log-c backend rather than the named one.
+    """
     if value is None:
-        return "concentration"
+        return "logc"
     s = str(value).strip().lower()
     if s not in _VALID_FORMULATIONS:
         raise ValueError(
             f"bv_convergence.formulation must be one of {_VALID_FORMULATIONS}; got {value!r}"
+        )
+    if s == "concentration":
+        warnings.warn(
+            "bv_convergence.formulation='concentration' refers to a backend "
+            "removed in the May 2026 cleanup; the dispatcher will use 'logc' "
+            "instead.  Update the config to 'logc' or 'logc_muh' explicitly.",
+            DeprecationWarning,
+            stacklevel=2,
         )
     return s
 
@@ -116,7 +143,7 @@ def _default_bv_convergence_cfg() -> dict:
         "softplus_regularization":  False,
         "bv_log_rate":              False,
         "u_clamp":                  100.0,
-        "formulation":              "concentration",
+        "formulation":              "logc",
         "initializer":              "linear_phi",
     }
 
@@ -132,7 +159,7 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
     conc_floor = float(raw.get("conc_floor", 1e-8))
     packing_floor = float(raw.get("packing_floor", 1e-8))
     u_clamp = float(raw.get("u_clamp", 100.0))
-    formulation = _validate_formulation(raw.get("formulation", "concentration"))
+    formulation = _validate_formulation(raw.get("formulation", "logc"))
     initializer = _validate_initializer(raw.get("initializer", "linear_phi"))
     if exponent_clip <= 0:
         raise ValueError(f"exponent_clip must be positive; got {exponent_clip}")
@@ -286,6 +313,22 @@ def _get_bv_reactions_cfg(params: Any, n_species: int) -> list[dict] | None:
         anod = rxn.get("anodic_species")
         if cat is None:
             raise ValueError(f"Reaction {j}: 'cathodic_species' is required")
+        cat_idx = int(cat)
+        if cat_idx < 0 or cat_idx >= n_species:
+            raise ValueError(
+                f"Reaction {j}: cathodic_species {cat_idx} out of range "
+                f"[0, {n_species})"
+            )
+        anod_idx: int | None
+        if anod is None:
+            anod_idx = None
+        else:
+            anod_idx = int(anod)
+            if anod_idx < 0 or anod_idx >= n_species:
+                raise ValueError(
+                    f"Reaction {j}: anodic_species {anod_idx} out of range "
+                    f"[0, {n_species})"
+                )
         stoi = rxn.get("stoichiometry")
         if stoi is None:
             raise ValueError(f"Reaction {j}: 'stoichiometry' is required")
@@ -322,8 +365,8 @@ def _get_bv_reactions_cfg(params: Any, n_species: int) -> list[dict] | None:
         reactions.append({
             "k0": float(rxn.get("k0", 1e-5)),
             "alpha": alpha_val,
-            "cathodic_species": int(cat),
-            "anodic_species": int(anod) if anod is not None else None,
+            "cathodic_species": cat_idx,
+            "anodic_species": anod_idx,
             "c_ref": float(rxn.get("c_ref", 1.0)),
             "stoichiometry": [int(s) for s in stoi],
             "n_electrons": n_e,
