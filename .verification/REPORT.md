@@ -1,31 +1,27 @@
-# Verification Report — `plot_iv_curve_unified.py` Codepath
+# Verification Report — BV Forward-Solver Codepath
 
-**Target:** Every file live on the `scripts/plot_iv_curve_unified.py` codepath (mapped in `docs/plot_iv_curve_codepath.md`).
-**Date:** 2026-05-02
+**Target:** Production logc_muh BV forward-solver codepath
+**Date:** 2026-05-05
 **Level:** 1 (Sonnet only)
-**Scope:** 15 files, ~4337 lines, 3 subsystems (`scripts/`, `Forward/`, `Nondim/`).
-**Agents:** 5 Sonnet agents (chunked by cohesion).
+**Scope:** 15 files, 5,267 lines, 2 subsystems (`Forward/bv_solver/`, `scripts/`)
+**Agents:** Sonnet × 6 (run in parallel)
 **Chunking:**
-1. `plot_iv_curve_unified.py`, `_bv_common.py`, `Forward/params.py`
-2. `bv_solver/__init__.py`, `dispatch.py`, `forms_logc.py`
-3. `bv_solver/config.py`, `nondim.py`, `boltzmann.py`
-4. `bv_solver/grid_per_voltage.py`, `observables.py`, `mesh.py`, `solvers.py` (just `_clone_params_with_phi`)
-5. `Nondim/transform.py`, `Nondim/constants.py`
+- Chunk 1: `forms_logc_muh.py` (1044 lines)
+- Chunk 2: `forms_logc.py` + `boltzmann.py` (1336 lines)
+- Chunk 3: `grid_per_voltage.py` + `sweep_order.py` + `dispatch.py` (911 lines)
+- Chunk 4: `config.py` + `nondim.py` + `mesh.py` + `solvers.py` (588 lines)
+- Chunk 5: `validation.py` + `diagnostics.py` + `observables.py` + `__init__.py` (826 lines)
+- Chunk 6: `scripts/_bv_common.py` (562 lines)
 
-**Verdict:** **ISSUES FOUND** — 2 critical bugs, 1 major, plus 2 major validation gaps and several minor/question items. Both critical bugs are independently confirmed by direct source inspection.
+**Verdict:** **PASS with caveats.** The production logc_muh forward-solver math is correct end-to-end. No bug was found that produces wrong physics on the canonical production call path (`make_bv_solver_params(...formulation='logc_muh', initializer='debye_boltzmann', boltzmann_counterions=[DEFAULT_CLO4_BOLTZMANN_COUNTERION_STERIC]...)` → `solve_grid_per_voltage_cold_with_warm_fallback`). All 12 warnings are either latent (require non-standard caller patterns), live in adjacent diagnostic/validator code that does not feed back into the solver, or affect callers that already pass the right values.
 
 ---
 
 ## Summary
 
-The production 3-species + analytic Boltzmann counterion + log-c + log-rate Butler–Volmer stack is wired correctly end-to-end at the **physics** level: sign conventions, dimensionless prefactors (electromigration_prefactor=1.0, poisson_coefficient=(λ_D/L)²≈3.7e-8, charge_rhs_prefactor=1.0), Boltzmann residual sign, log-rate ↔ non-log-rate algebraic equivalence, BC routing, mesh-marker chain, I_SCALE units (0.1833 mA/cm²), z-ramp invariant, and adjoint-tape suppression all check out.
+The mu_H bookkeeping (`mu_H = u_H + em·z_H·phi` reconstructed at every c_H touch site, `c_H_old` using `phi_prev` for transient correctness), the log-rate Butler–Volmer form, the `exponent_clip=100` clip-on-η-before-α·n_e convention, the analytic Bikerman ClO4⁻ counterion + Stern Robin BC, the C+D continuation orchestrator, and the flag wiring through `_bv_common.py` → `config.py` → dispatcher → `forms_logc_muh.py` are all internally consistent. The two backends share their BV-rate form byte-for-byte except for the documented `_u_expr` substitution. The Bikerman closure formula matches `docs/steric_analytic_clo4_reduction_handoff.md` and the IC/residual sides share the same `c_steric` UFL expression (no double-counting).
 
-The two **critical** issues live in the C+D **orchestrator** (`grid_per_voltage.py`):
-
-1. **Bisection in `_march` is degenerate** — `_restore_U` restores `U` and `U_prev` but not `phi_applied_func`, so on substep failure the recursion midpoint collapses to the failed voltage and the bisection cannot make progress. Any warm-walk substep that misses on first try is unrecoverable.
-2. **SNES non-convergence is silently accepted** — the orchestrator deliberately omits `snes_error_if_not_converged=True` and relies on `try/except Exception` in `run_ss`. Firedrake does not raise on SNES divergence by default, so a non-converged Newton iterate can be accepted, time-stepped, and ultimately declared "steady" by the plateau detector if the divergent state happens to be flat.
-
-Both fixes are one-liners.
+The findings below are real, but every one of them either (a) sits behind a fallback path that the production caller chain never hits, (b) lives in diagnostic/validator code rather than in the residual, or (c) is a defensive-validation gap rather than a bug in the math.
 
 ---
 
@@ -33,110 +29,78 @@ Both fixes are one-liners.
 
 | # | Severity | Location | Issue | Found By |
 |---|----------|----------|-------|----------|
-| 1 | **critical** | `Forward/bv_solver/grid_per_voltage.py:355-356` (`_march` inside `_solve_warm`) | After substep failure, `_restore_U` does NOT restore `paf = ctx["phi_applied_func"]` (a separate R-space `Function`, not inside `U.dat`). Line 355 reads `v_prev = float(paf.dat.data_ro[0])`, which still equals `v_sub` (the just-failed value), making `v_mid = 0.5·(v_sub + v_sub) = v_sub`. The recursive `_march(v_sub, v_sub, depth+1)` calls produce zero-width intervals and immediately re-fail at the same voltage, exhausting `bisect_depth_warm` without progress. **Bisection is non-functional.** | Sonnet ch.4 |
-| 2 | **critical** | `Forward/bv_solver/grid_per_voltage.py:228-234` (`_build_for_voltage`) | `solve_opts` deliberately omits `snes_error_if_not_converged=True` (the comment claims "the orchestrator handles non-convergence via checkpoint+rollback"). But Firedrake's default does **not** raise on SNES divergence — `solver.solve()` returns silently on a non-converged iterate. The `try/except Exception` in `run_ss` (line 256-259) only catches PETSc-level errors, not graceful SNES non-convergence. A divergent Newton step can be accepted as a successful time step, and a flat-but-wrong state can be declared "steady" by the plateau detector. Compare with `solvers.forsolve_bv` (line 69) which does `solve_opts.setdefault("snes_error_if_not_converged", True)`. | Sonnet ch.4 |
-| 3 | **major** | `Forward/bv_solver/grid_per_voltage.py:228` (`_build_for_voltage`) and `Forward/bv_solver/solvers.py:68` (`forsolve_bv`) | `solve_opts = dict(params)` shallow-copies the full `solver_options` dict including the nested sub-dicts `bv_bc`, `bv_convergence`, `nondim`. Passing nested dicts as `solver_parameters` produces flattened keys like `bv_bc_reactions_0_k0` that PETSc does not recognize. Empirically the codebase works (PETSc warns rather than errors), but the noise hides real config issues and the dict mutation could break in newer PETSc versions. | Sonnet ch.4 |
-| 4 | **major** | `Forward/bv_solver/config.py:24-26` (`_get_bv_cfg`) | When `alpha` is a list/tuple, `alpha_val=None` and the `(0,1]` range check is skipped entirely. Per-reaction validation (line 250-252) catches this for the multi-reaction path, but the legacy `_get_bv_cfg` path is unguarded. Not exercised by `plot_iv_curve_unified.py` (the multi-reaction path is taken), but a regression-trap if anything ever falls back to the legacy path. | Sonnet ch.3 |
-| 5 | **major** | `Forward/bv_solver/config.py:259-260` (`_get_bv_reactions_cfg`) | `cathodic_species` and `anodic_species` indices are not range-checked against `[0, n_species)`, even though `cathodic_conc_factors.species` IS range-checked at line 239-243. A misconfigured reaction would only fail at UFL assembly with a confusing error. | Sonnet ch.3 |
-| 6 | minor | `scripts/plot_iv_curve_unified.py:220` | CSV writer formats missing `z_factor` as the literal string `"nan"` rather than empty (`cd_mA_cm2`/`pc_mA_cm2` use `""` for missing). In normal operation all indices are populated; manifests only as a presentation inconsistency for failed voltages. | Sonnet ch.1 |
-| 7 | minor | `Forward/params.py:90-100` | `__setitem__` bypasses `@dataclass(frozen=True)` via `object.__setattr__`. Production path uses `with_phi_applied`, but the escape hatch silently permits mutation of supposedly-frozen objects. Annotate or remove once legacy callers are migrated. | Sonnet ch.1 |
-| 8 | minor | `Forward/bv_solver/forms_logc.py:349-357` | In the log-rate branch, the `else: anodic = Constant(0.0)` clause covers BOTH irreversible reactions and reversibles with `c_ref_model ≤ 1e-30`. The non-log-rate branch (line 375) has no such guard. Production R2 is irreversible so this is benign; a reversible reaction with `c_ref=0` would silently degrade to irreversible without a config-time error. | Sonnet ch.2 |
-| 9 | minor | `Forward/bv_solver/forms_logc.py:448-473` | `ctx.update` omits diagnostic keys `_diag_E_eq_per_reaction`, `_diag_alpha_per_reaction`, `_diag_n_e_per_reaction` that `forms.py` exposes. Any downstream validation reading these from a logc context raises `KeyError`. Not in scope here, but a cross-formulation footgun. | Sonnet ch.2 |
-| 10 | minor | `Forward/bv_solver/config.py:80-93` (`_default_bv_convergence_cfg`) | `conc_floor=1e-8` in defaults vs `1e-12` in `_make_bv_convergence_cfg` (the production factory). Callers that omit the key get a different value than the production preset uses. | Sonnet ch.3 |
-| 11 | minor | `Forward/bv_solver/forms_logc.py:319` | `if E_eq_j_val is not None and E_eq_j_val != 0.0` is an exact-equality float comparison. Fine for production (E_eq is derived from a literal `0.0`), but fragile if a caller passes a tiny nonzero E_eq intended as "no correction". Use `abs(E_eq_j_val) > 1e-12`. | Sonnet ch.3 |
-| 12 | question | `Forward/bv_solver/forms_logc.py:365-367` | Non-log-rate path uses Python `int` for `power` in UFL exponentiation; log-rate path wraps in `fd.Constant(float(...))`. Both work, but they may differ under pyadjoint annotation. Not exercised by this script (log-rate is on, and `adj.stop_annotating()` wraps the whole run). | Sonnet ch.2 |
-| 13 | question | `Forward/bv_solver/dispatch.py:55-57` | If `SolverParams.solver_options` is `None` or non-dict, `_params_dict` returns `{}` and formulation silently defaults to `"concentration"` — could mask a misconfigured `SolverParams`. Add a warning. | Sonnet ch.2 |
-
-### Items explicitly cleared
-
-- **Sign conventions** on CD and PC (cathodic ORR is negative via the script's `scale=-I_SCALE`): correct.
-- **Boltzmann residual sign** (`-z_scale·charge_rhs·z·c_bulk·exp(-z·φ)·w·dx`) matches the dynamic-species Poisson source convention. Anion accumulation near positive electrode is correctly captured.
-- **z-ramp invariant** (`_set_z_factor` zeroes both `z_consts[i]` and `boltzmann_z_scale`): no other charge term escapes.
-- **Log-rate ↔ non-log-rate equivalence**: algebraically identical (chunk 2 walked the derivation).
-- **Nondim prefactors**: `electromigration_prefactor=1.0` exactly (since potential_scale=V_T); `poisson_coefficient = ε·V_T/(F·c·L²) = (λ_D/L)² ≈ 3.7e-8`; `charge_rhs_prefactor=1.0`. (Singularly perturbed problem — explains why the graded mesh + log-c primary variable matter.)
-- **I_SCALE = 0.1833 mA/cm²** confirmed numerically with the standard physical constants and scales.
-- **E_eq nondimensionalization**: `E_eq_model = E_eq_v / V_T` matches `eta = phi_applied - E_eq_model` in `_build_eta_clipped`.
-- **Mesh marker chain**: `_make_bv_bc_cfg` 3/4/4 matches `make_graded_rectangle_mesh` (3=bottom electrode, 4=top bulk).
-- **`SolverParams.with_phi_applied`** path is taken in the orchestrator's `_params_with_phi`; the list-fallback `_clone_params_with_phi` is unreachable on this script's path.
-- **`adj.stop_annotating()`** cleanly suppresses the tape — no internal solver path calls `continue_annotating`.
-- **Steric (Bikerman)** path is well-posed at the bulk: `Σ a_i c_i ≈ 0.012`, far above any floor.
-- **Snapshot/restore for U and U_prev** is correct; the bug is specifically that `phi_applied_func` is not in `U.dat` and is missed by `_restore_U`.
+| 1 | warning | `forms_logc.py:702`, `forms_logc_muh.py:800` | Stale `conv_cfg.get("exponent_clip", 50.0)` fallback in `_try_debye_boltzmann_ic[_muh]`. Authoritative default is 100.0. Unreachable on the normal `_get_bv_convergence_cfg` path (which always populates the key); fires only if a test or helper passes a partial `conv_cfg`. clip=50 produces fictitious peroxide currents per `docs/clipping_conventions.md`. | Chunks 1, 2, 4 |
+| 2 | warning | `forms_logc.py:211`, `forms_logc_muh.py:262` | Stale `conv_cfg.get("u_clamp", 30.0)` fallback in main build-forms. Authoritative default is 100.0. Same unreachable-in-production story as #1, but the inline doc at `forms_logc.py:198–202` warns "widen to u_clamp=100 for V_RHE > +0.30 V" — so the fallback would actively bind right where production runs. | Chunks 1, 2, 4 |
+| 3 | warning | `FluxCurve/bv_point_solve/__init__.py:723`, `bv_point_solve/forward.py:318` | These callers of `validate_solution_state` pass `is_logc=True` but **omit** `mu_species=ctx.get('mu_species')` and `em=ctx['nondim'].get('electromigration_prefactor', 1.0)`. For a `logc_muh` context the validator reads raw `mu_H` DoFs and exponentiates without the phi correction → reported H⁺ concentration off by `exp(em·z_H·phi)` (many decades inside the Debye layer). Affects diagnostic checks only; the residual itself is correct. CLAUDE.md explicitly flags this gotcha. | Chunk 5 |
+| 4 | warning | `validation.py:53` | `exponent_clip` is a declared keyword arg but **never read** in the 202-line function body. The W1 ("clip saturation") check listed in the docstring is unimplemented. All callers faithfully pass the value from `ctx["_diag_exponent_clip"]`; nothing consumes it. | Chunk 5 |
+| 5 | warning | `validation.py:181–195` | W5 cation-depletion mask: applies a coordinate-derived boolean mask (sized to vertex count) to a concentration DOF array. Sizes agree only for CG1. Latent for the production stack (CG1) but breaks if `order > 1` is ever used. | Chunk 5 |
+| 6 | warning | `config.py:65, 72, 119, 135` | `_VALID_FORMULATIONS` still lists `"concentration"` and `_default_bv_convergence_cfg`/`_get_bv_convergence_cfg` default to it. The concentration backend was removed in the May 2026 cleanup. Dispatcher silently falls through to `logc` for unknown formulations, so this never errors — but the stored config can claim a backend that no longer exists. | Chunk 4 |
+| 7 | warning | `config.py:24–26` | `_get_bv_cfg` skips per-element range validation when `alpha` is supplied as a `list`/`tuple`. `_get_bv_reactions_cfg:316–318` does validate each entry — inconsistent. Could accept `alpha=[0.5, 1.5]` on the legacy single-reaction path. | Chunk 4 |
+| 8 | warning | `config.py:285–326` | `cathodic_species` and `anodic_species` parsed via bare `int(...)` with no `[0, n_species)` bounds check (the `cathodic_conc_factors` indices DO get bounds-checked). Out-of-range index would surface as an obscure UFL `IndexError` at form-assembly time. | Chunk 4 |
+| 9 | warning | `config.py:224` | `_get_bv_boltzmann_counterions_cfg` accepts `z=0` silently. Would produce `exp(0·phi)=1`, a constant Poisson source — physically meaningless. Bikerman closure was derived for `z<0`; even `z>0` should at minimum warn. | Chunk 4 |
+| 10 | warning | `grid_per_voltage.py` Phase 2 (lines 503–600) | Phase 2 warm-walk uses `anchor_lo=cold_idxs[0]`, `anchor_hi=cold_idxs[-1]`. Cold-failed interior points (`anchor_lo < k < anchor_hi`) are never visited by either the cathodic or anodic walk and remain `method="cold-failed"` silently. Practical risk low for the production grid (failures cluster above `anchor_hi`); behavior is silent and undocumented. | Chunk 3 |
+| 11 | warning | `_bv_common.py:407–411, 421` | `DEFAULT_CLO4_BOLTZMANN_COUNTERION{,_STERIC}` uses `phi_clamp=50.0`. Doesn't bite at `V_RHE ≤ +1.0 V` (clamp activates ~+1.28 V physical), but inconsistent with the raised `exponent_clip=100`/`u_clamp=100`. | Chunk 6 |
+| 12 | warning | `_bv_common.py:313–314, 444–445` | Factory defaults `E_eq_r1=0.0`, `E_eq_r2=0.0`. Most production-relevant scripts (e.g. `peroxide_window_3sp_bikerman_muh.py`, `peroxide_window_stern_test.py`, `anodic_cold_start.py`, `ic_refinement_study.py`) omit these kwargs and silently run with `E_eq=0`. CLAUDE.md Hard Rule 4: "Use physical `E_eq` (R1 = 0.68 V, R2 = 1.78 V vs RHE), never `E_eq = 0`." Factory should export `E_EQ_R1=0.68`/`E_EQ_R2=1.78` as named constants and/or warn when omitted with a non-zero formulation. | Chunk 6 |
+| 13 | note | `forms_logc.py:310` vs 329/332 | Sign convention in inline comments: line 310 writes physical flux `J_i = -D·c·(∇u + z∇φ)` (with leading minus); lines 329/332 label `Jflux = D·c·(...)` as `J` (no minus). Code is correct (`Jflux = −J_i` physically and `F_res += dot(Jflux, ∇v) dx` is the right IBP form), but the inconsistent labeling could mislead a future maintainer modifying the steric or migration term. | Chunk 2 |
+| 14 | note | `boltzmann.py:360–362` (called from `forms_logc_muh.py:589`) | When all counterions are `bikerman` and `skip_bikerman=True`, the loop skips every entry but still re-derives `J_form` from an unchanged `F_res`. Wasted Jacobian computation at form-build time (not solve time). Harmless. | Chunk 1 |
+| 15 | note | `grid_per_voltage.py` (entire body) | Adjoint tape annotation suppression is caller-controlled, not internal. Production driver wraps the call in `with adj.stop_annotating():`. The debye_boltzmann ICs self-suppress; the linear-phi IC and z-ramp solves do not. By design but easy to miss if a new caller forgets the wrapper. | Chunk 3 |
+| 16 | note | `grid_per_voltage.py:66–76` | `PerVoltagePointResult` stores `U_data` and `diagnostics` but no assembled observables (current density, peroxide current). Production driver pulls them via `per_point_callback`. Future-facing improvement, not a current bug. | Chunk 3 |
+| 17 | note | `grid_per_voltage.py:379–388` (`_solve_warm`) | `_build_for_voltage` computes an IC at `V_target` immediately overwritten by `_restore_U(anchor_snap)`. For the debye_boltzmann IC (a Picard solve) this is non-trivial wasted work per warm-walked voltage. No correctness impact. | Chunk 3 |
+| 18 | note | `Forward/bv_solver/sweep_order.py` (whole file) | Neither `_build_sweep_order` nor `_apply_predictor` is used by the C+D path; they are re-exported only by `FluxCurve/bv_point_solve/predictor.py`. Both are correctly implemented. | Chunk 3 |
+| 19 | note | `config.py:323` (also legacy path) | `k0` parsed as `float(...)` with no nonnegative check. Negative k0 would yield a negative BV flux — physically meaningless. | Chunk 4 |
+| 20 | note | `nondim.py:8–101` | No idempotency guard on `_add_bv_scaling_to_transform`. If the function were ever called twice on the same scaling dict, it would re-scale `bv_k0_model_vals`. Currently called exactly once per build path; latent risk if call graph changes. | Chunk 4 |
+| 21 | note | `nondim.py:30` | `thermal_voltage_v` fallback `0.02569` (RT/F at ~297.8 K) is a magic literal. Production `build_model_scaling` always populates the key from `temperature_k`; fallback is unreachable in production but stale at non-standard temperatures. | Chunk 4 |
+| 22 | note | `Forward/bv_solver/solvers.py` (entire 21-line stub) | After the May 2026 cleanup, the actual PETSc/SNES options live in `scripts/_bv_common.py` (`DEFAULT_SOLVER_PARAMS` — SNES newtonls + L2 line search + direct LU/MUMPS, tolerances reasonable). The `solvers.py` stub is misleading as a scope entry point. | Chunk 4 |
+| 23 | note | `diagnostics.py` (whole file) | Mass balance (`∫_Ω r_i dx − ∫_∂Ω_electrode J_i·n dA`) and Stern surface-charge consistency (`σ = C_S·(φ_metal − φ_solution)`) checks are not implemented. The file's docstring accurately scopes itself to "failure-mode information"; the planned checks live in `docs/physics_validation_plan.md`. Scope gap, not incorrect logic. | Chunk 5 |
+| 24 | note | `__init__.py:58–67` | Six private `_get_bv_*` / `_add_bv_*` helpers imported into `__init__.py` but not in `__all__`. Accessible as `Forward.bv_solver._get_bv_cfg` etc. Looks like a leftover from before logic was split into submodules. | Chunk 5 |
+| 25 | note | `validation.py` (NaN/Inf coverage) | NaN DoFs are not detected by any check inside `validate_solution_state` (`NaN < threshold` and `NaN > threshold` both evaluate False). SNES upstream catches NaN before the validator runs in practice; defense-in-depth gap only. | Chunk 5 |
+| 26 | note | `_bv_common.py:276` vs `config.py:113, 132` | Factory `_make_bv_convergence_cfg` writes `conc_floor=1e-12`; `_default_bv_convergence_cfg`/`_get_bv_convergence_cfg` fallback is `1e-8`. Factory always wins through the params dict; mismatch only matters for tests passing manual params. | Chunk 6 |
 
 ---
 
 ## Agreement Analysis
 
-Single-tier review (Level 1, Sonnet only). No cross-tier agreement to assess. **However**, both critical findings were verified by direct source inspection by the orchestrator before promotion (see `grid_per_voltage.py:101-108, 343-363, 224-238` in this conversation). The bisection bug is structural and unambiguous; the SNES bug depends on Firedrake-version behavior but is consistent with the explicit comment in the code that documents the omission of `snes_error_if_not_converged`.
+- **Agreed on (all chunks):** The production logc_muh stack is mathematically correct on the canonical call path. mu_H bookkeeping, log-rate BV form, `exponent_clip=100` convention, Stern Robin BC, Bikerman analytic ClO4⁻ counterion (no double-count, shared `c_steric` between Poisson and NP saturation), debye_boltzmann IC with composite-ψ + multispecies-γ cancellation, C+D orchestrator (cold + warm-walk, NaN-safe per-voltage isolation, deterministic seeding), and flag wiring through `_bv_common.py → config.py → dispatch.py → forms_logc_muh.py` are all consistent.
 
-If the criticals warrant higher confidence, re-run at Level 2 (adds Opus) on chunk 4 specifically — that's the only chunk with critical findings, and the rest of the codepath has only minor/question-level items.
+- **Disagreement: severity of the IC `exponent_clip=50.0` fallback.**
+  - Chunks 1 (forms_logc_muh) and 2 (forms_logc + boltzmann) classified the stale literal as **note** because the fallback is unreachable on the normal `_get_bv_convergence_cfg` path (which always populates the key).
+  - Chunk 4 (config) classified it as **critical**, arguing the IC sets Newton's starting iterate and a wrong value would directly corrupt the cold-start solve.
+  - **Resolution:** Reconciled to **warning** (Issue 1 above). Chunks 1 and 2 are right that production is unaffected because `build_forms_logc[_muh]` always passes a fully populated `conv_cfg`; chunk 4 is right that the magic literal is dangerous if a test or helper builds `conv_cfg` manually. The fix is one-line and should be done — but it is not currently producing wrong production output.
 
----
-
-## Suggested fix snippets (smallest diff)
-
-**Bug 1 — `_march` bisection (`grid_per_voltage.py:343-363`):**
-
-Track the previous-substep voltage explicitly and reset `paf` after `_restore_U`. One way:
-
-```python
-def _march(v0: float, v1: float, depth: int) -> bool:
-    substeps = np.linspace(v0, v1, n_substeps_warm + 1)[1:]
-    ckpt_outer = _snapshot_U(U)
-    v_prev_substep = float(v0)
-    for v_sub in substeps:
-        ckpt_inner = _snapshot_U(U)
-        paf.assign(float(v_sub))
-        if run_ss(max_ss_steps_warm):
-            v_prev_substep = float(v_sub)
-            continue
-        _restore_U(ckpt_inner, U, U_prev)
-        paf.assign(v_prev_substep)              # <-- reset paf to last good
-        if depth >= bisect_depth_warm:
-            _restore_U(ckpt_outer, U, U_prev)
-            paf.assign(float(v0))
-            return False
-        v_mid = 0.5 * (v_prev_substep + float(v_sub))
-        if not _march(v_prev_substep, v_mid, depth + 1):
-            _restore_U(ckpt_outer, U, U_prev)
-            paf.assign(float(v0))
-            return False
-        if not _march(v_mid, float(v_sub), depth + 1):
-            _restore_U(ckpt_outer, U, U_prev)
-            paf.assign(float(v0))
-            return False
-        v_prev_substep = float(v_sub)
-    return True
-```
-
-**Bug 2 — SNES non-convergence (`grid_per_voltage.py:228-234`):**
-
-```python
-solve_opts = dict(params) if isinstance(params, dict) else {}
-solve_opts.setdefault("snes_error_if_not_converged", True)
-solver = fd.NonlinearVariationalSolver(
-    problem, solver_parameters=solve_opts,
-)
-```
-
-The orchestrator's existing `try/except Exception` in `run_ss` will then actually catch divergent solves. Remove the misleading comment.
-
-**Bug 3 — solve_opts pollution (`grid_per_voltage.py:228` and `solvers.py:68`):**
-
-Filter out the BV/nondim sub-dicts before passing as `solver_parameters`:
-
-```python
-NON_PETSC_KEYS = {"bv_bc", "bv_convergence", "nondim", "robin_bc"}
-solve_opts = {k: v for k, v in (params or {}).items() if k not in NON_PETSC_KEYS}
-```
-
-Same change in `forsolve_bv`. Eliminates noisy "unknown PETSc option" warnings and is forward-compatible with stricter PETSc versions.
+- **No other tier-internal disagreements.** Chunks generally complemented each other; cross-chunk interface checks (dispatcher imports vs. forms function names, factory keys vs. config parser keys, NP/Poisson saturation agreement, observable surface marker vs. residual surface marker) all aligned.
 
 ---
 
-## Pointers
+## Recommended Fixes (Priority Ordered)
 
-- Codepath map: `docs/plot_iv_curve_codepath.md`
-- Per-chunk reports: `.verification/sonnet-chunk-{1..5}-report.md`
-- Apr 27 production-rebuild writeup: `writeups/WeekOfApr27/PNP Inverse Solver Revised.tex`
-- Continuation-strategy rationale: `docs/CONTINUATION_STRATEGY_HANDOFF.md`
-- Unified API surface: `docs/bv_solver_unified_api.md`
+1. **Issue 12 (factory `E_eq_r1/r2=0.0` defaults)** — Highest impact. Most production-relevant scripts run with unphysical `E_eq=0` because they omit the kwargs. Either change the factory defaults to the physical values, or export `E_EQ_R1=0.68`/`E_EQ_R2=1.78` as named constants and add a warning when omitted. **CLAUDE.md Hard Rule 4 explicitly requires this.**
+
+2. **Issues 1, 2 (stale 50.0 / 30.0 fallbacks in `forms_logc[_muh].py`)** — One-line fixes per file. Either bump fallbacks to match `_default_bv_convergence_cfg` (100.0 / 100.0) or drop the `.get(..., default)` and use `conv_cfg["..."]` so missing keys fail loudly the same way the rest of the build path does.
+
+3. **Issue 3 (validator omits `mu_species`/`em` for muh contexts)** — Two-line fix at each caller in `FluxCurve/bv_point_solve/`. CLAUDE.md already documents this footgun. Without the fix, validator-flagged H⁺ violations in muh runs are physically meaningless.
+
+4. **Issue 4 (`exponent_clip` is a dead parameter on validator)** — Either implement W1 (clip-saturation warning) or remove the parameter from the signature so it stops misleading callers.
+
+5. **Issue 9 (Boltzmann counterion `z=0` silently accepted)** — One-line guard.
+
+6. **Issues 7, 8 (alpha-list and species-index bounds checks)** — Defensive validation gaps. Easy to add.
+
+7. **Issue 6 (`"concentration"` still in formulation whitelist)** — Drop it, change defaults to `"logc"`. The dispatcher's silent fallthrough hides the inconsistency today.
+
+8. **Issue 11 (factory `phi_clamp=50.0`)** — Bump to 100.0 for consistency with `exponent_clip` and `u_clamp`.
+
+9. **Issue 10 (interior cold-failed gap in Phase 2)** — Document the behavior, or extend Phase 2 to walk gaps from the nearest-converged neighbor in either direction.
+
+Issues 5, 13–26 are notes — fix opportunistically, no rush.
+
+---
+
+## Per-Chunk Reports
+
+Detailed findings, evidence, and correctness arguments are in:
+- `.verification/sonnet-chunk-1-muh-report.md`
+- `.verification/sonnet-chunk-2-logc-bz-report.md`
+- `.verification/sonnet-chunk-3-orchestrator-report.md`
+- `.verification/sonnet-chunk-4-config-report.md`
+- `.verification/sonnet-chunk-5-obs-diag-report.md`
+- `.verification/sonnet-chunk-6-factory-report.md`
