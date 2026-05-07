@@ -354,35 +354,85 @@ Gotchas (see CLAUDE.md for the full list):
   z=0 hands bisection a mismatched species IC on the
   logc+counterion stack.
 
-## Environment
+## Setup
 
-Run from the repository root:
+The forward solver depends on Firedrake, which is not pip-installable
+from PyPI — it has its own installer that builds PETSc, MPI,
+PyOP2/TSFC kernels, and friends. The supported workflow is:
 
-```bash
-cd /path/to/PNPInverse
-```
+1. **Install Firedrake into its own virtual environment.**
+   Follow the official instructions at
+   [firedrakeproject.org/install.html](https://www.firedrakeproject.org/install.html).
+   The installer creates a venv (the path is up to you) with
+   Firedrake, `firedrake.adjoint` (Pyadjoint), PETSc, MPI, NumPy,
+   SciPy, and matplotlib already wired up. Conda environments are
+   not supported by the Firedrake installer at the time of writing
+   — use the venv path.
 
-Firedrake is installed separately. The local development convention in this
-workspace is a Firedrake virtual environment in the parent directory:
+2. **Activate the Firedrake venv and install this package on top.**
+   From the `PNPInverse/` directory:
 
-```bash
-source ../venv-firedrake/bin/activate
-python -m pip install -e ".[dev]"
-```
+   ```bash
+   source /path/to/firedrake-venv/bin/activate
+   python -m pip install -e ".[dev]"
+   ```
 
-Useful cache settings for Firedrake/PyOP2 runs:
+   `pyproject.toml` declares NumPy, SciPy, matplotlib, and h5py as
+   runtime deps and pytest/pytest-cov as `[dev]` extras; Firedrake
+   itself is intentionally *not* in the dependency list because it
+   must come from its own installer.
 
-```bash
-export MPLCONFIGDIR=/tmp
-export XDG_CACHE_HOME=/tmp
-export PYOP2_CACHE_DIR=/tmp/pyop2
-export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=/tmp/firedrake-tsfc
-export OMP_NUM_THREADS=1
-```
+3. **(Optional) Install surrogate-stack dependencies.** The
+   surrogate pipeline (`Surrogate/`) is paused, but if you want to
+   run its scripts you'll additionally need PyTorch/GPyTorch (NN +
+   GP work), ChaosPy (PCE), imageio, and Pillow. Install them into
+   the same venv with `pip install`.
 
-Core dependencies are Firedrake, `firedrake.adjoint`, NumPy, SciPy,
-Matplotlib, h5py, imageio, and Pillow. Surrogate models additionally need
-PyTorch/GPyTorch for NN/GP work and ChaosPy for PCE.
+4. **Set Firedrake / PyOP2 cache paths and thread count.** PyOP2 and
+   TSFC cache compiled kernels on disk; matplotlib also wants a
+   writable config directory. The defaults can collide with each
+   other on multi-user systems, so this project standardises on:
+
+   ```bash
+   export MPLCONFIGDIR=/tmp
+   export XDG_CACHE_HOME=/tmp
+   export PYOP2_CACHE_DIR=/tmp/pyop2
+   export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=/tmp/firedrake-tsfc
+   export OMP_NUM_THREADS=1
+   ```
+
+   Add these to your shell profile or set them per-session before
+   running PDE work. `OMP_NUM_THREADS=1` matters: PETSc + MPI +
+   OpenMP threading interact badly in this configuration and a
+   single OMP thread per MPI rank is what the production sweep is
+   tuned against.
+
+5. **Verify the install.** Run the lightweight tests (no Firedrake
+   needed):
+
+   ```bash
+   python -m pytest -m "not slow"
+   ```
+
+   then the slow tests (Firedrake required):
+
+   ```bash
+   python -m pytest -m slow
+   ```
+
+   and finally a smoke test of the production sweep on a few
+   voltages:
+
+   ```bash
+   python scripts/studies/peroxide_window_3sp_bikerman_muh.py
+   ```
+
+   The full sweep takes minutes-to-hours; see
+   `scripts/profile/profile_production_sweep.py` for a profile-only
+   variant.
+
+All commands in this README assume the Firedrake venv is active and
+the working directory is `PNPInverse/`.
 
 ## Common Commands
 
@@ -435,8 +485,8 @@ See `docs/noise_model_conventions.md`.
 ## Known Gotchas
 
 - Run scripts from `PNPInverse/` (this directory), not from
-  `Forward/` or `scripts/`. The Firedrake venv is in the parent
-  directory: `source ../venv-firedrake/bin/activate`.
+  `Forward/` or `scripts/`. The Firedrake venv must be active —
+  see the Setup section above.
 - Forward studies are expensive — minutes to hours depending on
   mesh, voltage grid, and Phase-2 fill behaviour.
   `StudyResults/` is part of the working research record, not a
