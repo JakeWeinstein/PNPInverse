@@ -546,7 +546,15 @@ def set_initial_conditions_logc(ctx: dict[str, Any], solver_params: Any) -> None
     """Set initial conditions in log-concentration space.
 
     Sets u_i = ln(c0_i) for species, linear phi profile.
+
+    When the residual is Stern-aware, the linear phi anchors at the
+    OHP-side surface potential ``phi_applied - psi_S`` rather than
+    ``phi_applied`` -- otherwise every fallback row sees the residual
+    eta collapse to ``-E_eq`` (handoff #12 §6, Codex's Fix 3).
     """
+    import math
+    from .picard_ic import solve_stern_split
+
     try:
         n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0, phi0, params = solver_params
     except Exception as exc:
@@ -561,6 +569,50 @@ def set_initial_conditions_logc(ctx: dict[str, Any], solver_params: Any) -> None
     c0_model = scaling.get("c0_model_vals", c0_raw)
     phi_applied_model = scaling.get("phi_applied_model", float(phi_applied))
 
+    # Stern-aware anchoring (Phase F).  When use_stern is active, solve
+    # for ``psi_S`` at bulk outer values so the linear phi profile does
+    # not collapse to phi(0) = phi_applied (which would give residual
+    # eta = -E_eq for every fallback row).
+    stern_capacitance_model = scaling.get("bv_stern_capacitance_model")
+    use_stern_at_ic = (
+        stern_capacitance_model is not None
+        and float(stern_capacitance_model) > 0
+    )
+    phi_surface = phi_applied_model
+    if use_stern_at_ic and n >= 3 and len(c0_model) >= 3:
+        # Bulk outer reference: phi_o_bulk = log(H_b / c_clo4_bulk).
+        # Need a counterion bulk concentration estimate.  Pull from the
+        # config (analytic boltzmann_counterions or synthesised 4sp).
+        counterions = _get_bv_boltzmann_counterions_cfg(params)
+        c_clo4_bulk = None
+        a_cl_bulk = 0.0
+        if counterions:
+            c_clo4_bulk = max(float(counterions[0]["c_bulk_nondim"]), 1e-300)
+            for e in counterions:
+                if e.get("steric_mode", "ideal") == "bikerman":
+                    a_cl_bulk = float(e.get("a_nondim", 0.0))
+                    break
+        elif n == 4 and len(c0_model) >= 4:
+            c_clo4_bulk = max(float(c0_model[3]), 1e-300)
+            a_vals_full = list(solver_params[6])
+            if len(a_vals_full) >= 4:
+                a_cl_bulk = float(a_vals_full[3])
+        if c_clo4_bulk is not None:
+            H_b = max(float(c0_model[2]), 1e-300)
+            phi_o_bulk = math.log(H_b / c_clo4_bulk)
+            poisson_coefficient = float(scaling.get("poisson_coefficient", 1.0))
+            lambda_D_bulk = math.sqrt(max(poisson_coefficient, 1e-300))
+            psi_S, _, phi_surface_split = solve_stern_split(
+                phi_applied_model=float(phi_applied_model),
+                phi_o=phi_o_bulk,
+                lambda_D=lambda_D_bulk,
+                c_clo4_bulk=c_clo4_bulk,
+                a_cl=a_cl_bulk,
+                stern_coeff_nondim=float(stern_capacitance_model),
+                eps_nondim=poisson_coefficient,
+            )
+            phi_surface = phi_surface_split
+
     coords = fd.SpatialCoordinate(mesh)
     ndim = mesh.geometric_dimension()
 
@@ -574,7 +626,7 @@ def set_initial_conditions_logc(ctx: dict[str, Any], solver_params: Any) -> None
         spatial_var = coords[0]
     else:
         spatial_var = coords[1]
-    U_prev.sub(n).interpolate(fd.Constant(float(phi_applied_model)) * (1.0 - spatial_var))
+    U_prev.sub(n).interpolate(fd.Constant(float(phi_surface)) * (1.0 - spatial_var))
     ctx["U"].assign(U_prev)
 
 
@@ -630,10 +682,18 @@ def _try_debye_boltzmann_ic(
 ) -> tuple[bool, str, int]:
     """Picard + Gouy-Chapman IC body. Returns (success, reason, picard_iters).
 
-    On failure the caller should fall back to linear-phi.  Must be called
-    inside ``firedrake.adjoint.stop_annotating()``.
+    Wraps the shared scalar Picard outer loop in
+    ``Forward.bv_solver.picard_ic.picard_outer_loop``.  This function
+    handles config unpacking, counterion detection, mesh / coordinate
+    setup, and the post-Picard FE interpolation (Bikerman composite-psi
+    + multispecies-gamma seed, or legacy ideal-counterion GC).  All
+    scalar Picard algebra lives in ``picard_ic``.
+
+    On Picard failure the caller should fall back to linear-phi.  Must
+    be called inside ``firedrake.adjoint.stop_annotating()``.
     """
     import math
+    from .picard_ic import picard_outer_loop
 
     mesh = ctx["mesh"]
     U_prev = ctx["U_prev"]
@@ -694,12 +754,21 @@ def _try_debye_boltzmann_ic(
     D_O = max(D_model_vals[0], 1e-30)
     D_P = max(D_model_vals[1], 1e-30)
     D_H = max(D_model_vals[2], 1e-30)
-    P_FLOOR = max(P_b, 1e-30)
+    # P_FLOOR: small absolute floor to prevent log(0) underflow.  The
+    # legacy ``max(P_b, 1e-30)`` was too aggressive -- in the diffusion-
+    # limited regime (large A2), the matched-asymptotic balance
+    # ``P_s = R2 / A2`` gives ``P_s << P_b`` (e.g. ~1e-16 at V=+0.5 V
+    # with Stern + bikerman).  Clamping at P_b broke residual rate
+    # consistency for R2 (cathodic_R2 in residual ~ A2 * c_P(IC) =
+    # A2 * P_s_clamped * gamma, which is many orders of magnitude
+    # larger than Picard's R2 = A2 * P_s_unclamped).  A pure 1e-30
+    # numerical floor preserves the diffusion-limited consistency.
+    P_FLOOR = 1e-30
 
     c_clo4_bulk = max(float(counterions[0]["c_bulk_nondim"]), 1e-300)
 
     bv_exp_scale = float(scaling.get("bv_exponent_scale", 1.0))
-    exponent_clip = float(conv_cfg.get("exponent_clip", 50.0))
+    exponent_clip = float(conv_cfg.get("exponent_clip", 100.0))
     clip_exponent = bool(conv_cfg.get("clip_exponent", True))
 
     rxn1 = bv_reactions[0]
@@ -715,103 +784,88 @@ def _try_debye_boltzmann_ic(
     h_factor1 = rxn1.get("cathodic_conc_factors", [])
     h_factor2 = rxn2.get("cathodic_conc_factors", [])
 
-    def _eta_clipped(E: float) -> float:
-        eta = bv_exp_scale * (phi_applied_model - E)
-        if clip_exponent:
-            return max(min(eta, exponent_clip), -exponent_clip)
-        return eta
+    # Two paths reach the bikerman-consistent IC.
+    bikerman_in_counterions = bool(counterions) and any(
+        e.get("steric_mode", "ideal") == "bikerman" for e in counterions
+    )
+    apply_bikerman_ic = synthesised_4sp_counterion or bikerman_in_counterions
 
-    eta1 = _eta_clipped(E1)
-    eta2 = _eta_clipped(E2)
+    # Bikerman size parameters for the Picard's surface gamma.  For
+    # ``a_h = a_cl = 0`` (ideal counterion) the loop reduces to the
+    # legacy gamma-free Picard.
+    if apply_bikerman_ic:
+        a_vals_full_for_picard = list(solver_params[6])
+        a_h_picard = float(a_vals_full_for_picard[2])
+        if synthesised_4sp_counterion:
+            # 4sp dynamic ClO4-: a_cl is the dynamic ClO4- size; outer
+            # anchor is H_o (electroneutrality with the proton).
+            a_cl_picard = float(a_vals_full_for_picard[3])
+            c_cl_anchor_kind = "synthesised_4sp"
+        else:
+            # 3sp + analytic bikerman counterion: a_cl is the
+            # ``a_nondim`` of the bikerman entry; anchor = c_clo4_bulk.
+            bikerman_entry_for_picard = next(
+                e for e in counterions
+                if e.get("steric_mode", "ideal") == "bikerman"
+            )
+            a_cl_picard = float(bikerman_entry_for_picard["a_nondim"])
+            c_cl_anchor_kind = "bulk"
+    else:
+        a_h_picard = 0.0
+        a_cl_picard = 0.0
+        c_cl_anchor_kind = "bulk"
 
-    def _h_factor_log(H_val: float, factors: list) -> float:
-        """sum(power * (ln H_val - ln c_ref)) over H+ cathodic factors."""
-        total = 0.0
-        H_log = math.log(max(H_val, 1e-300))
-        for f in factors:
-            if int(f["species"]) != 2:
-                continue
-            power = float(f["power"])
-            c_ref_log = math.log(max(float(f["c_ref_nondim"]), 1e-30))
-            total += power * (H_log - c_ref_log)
-        return total
+    # Stern split for Phase E (Bug #1 fix).  When the residual is
+    # Stern-aware (``bv_stern_capacitance_model > 0``), the Picard's eta
+    # must use ``eta_drop = psi_S`` instead of ``phi_applied`` to match
+    # the residual ``eta_raw = phi_applied - phi - E_eq``.  The returned
+    # ``psi_D`` is the post-Stern-split diffuse-layer drop, which the FE
+    # composite-psi profile picks up automatically (so phi(y=0) =
+    # phi_applied - psi_S after the IC interpolation).
+    stern_capacitance_model = scaling.get("bv_stern_capacitance_model")
+    use_stern_at_ic = (
+        stern_capacitance_model is not None
+        and float(stern_capacitance_model) > 0
+    )
+    if use_stern_at_ic:
+        stern_split_picard = {
+            "lambda_D": lambda_D,
+            "stern_coeff": float(stern_capacitance_model),
+            "eps": poisson_coefficient,
+        }
+    else:
+        stern_split_picard = None
 
-    def _safe_exp(x: float) -> float:
-        if not math.isfinite(x):
-            return float("inf") if x > 0 else 0.0
-        if x > 700.0:
-            return math.exp(700.0)
-        if x < -700.0:
-            return 0.0
-        return math.exp(x)
+    # ----- Run shared scalar Picard outer loop -------------------------
+    ok, reason, picard_iters, picard_state = picard_outer_loop(
+        H_b=H_b, O_b=O_b, P_b=P_b,
+        D_O=D_O, D_P=D_P, D_H=D_H, P_FLOOR=P_FLOOR,
+        c_clo4_bulk=c_clo4_bulk,
+        k1=k1, k2=k2, a1=a1, a2=a2, n_e=n_e, E1=E1, E2=E2,
+        h_factor1=h_factor1, h_factor2=h_factor2,
+        phi_applied_model=phi_applied_model,
+        bv_exp_scale=bv_exp_scale,
+        exponent_clip=exponent_clip,
+        clip_exponent=clip_exponent,
+        a_h=a_h_picard,
+        a_cl=a_cl_picard,
+        c_cl_anchor_kind=c_cl_anchor_kind,
+        stern_split=stern_split_picard,
+    )
+    # Stash converged scalar state for downstream diagnostics
+    # (rate-consistency check; see scripts/diagnose_db_ic_distance.py
+    # and Codex's verification protocol in handoff #13 response).
+    ctx["initializer_picard_state"] = picard_state
 
-    # ----- Picard outer loop -------------------------------------------
-    OMEGA = 0.5
-    MAX_ITERS = 50
-    TOL = 1e-6
+    if not ok:
+        return False, reason, picard_iters
 
-    R1 = 0.0
-    R2 = 0.0
-    H_o = H_b
-    phi_o = 0.0
-    psi_D = phi_applied_model - phi_o
-    O_s = O_b
-    P_s = P_b
-
-    delta = float("inf")
-    converged = False
-    picard_iters = 0
-    for k in range(1, MAX_ITERS + 1):
-        R1_old, R2_old = R1, R2
-
-        H_s = max(H_o * _safe_exp(-psi_D), 1e-300)
-
-        log_h_factor1 = _h_factor_log(H_s, h_factor1)
-        log_h_factor2 = _h_factor_log(H_s, h_factor2)
-        log_A1 = math.log(k1) + log_h_factor1 - a1 * n_e * eta1
-        log_B1 = math.log(k1) + (1.0 - a1) * n_e * eta1
-        log_A2 = math.log(k2) + log_h_factor2 - a2 * n_e * eta2
-
-        A1 = _safe_exp(log_A1)
-        B1 = _safe_exp(log_B1)
-        A2 = _safe_exp(log_A2)
-
-        m11 = 1.0 + A1 / D_O + B1 / D_P
-        m12 = -B1 / D_P
-        m21 = -A2 / D_P
-        m22 = 1.0 + A2 / D_P
-        rhs1 = A1 * O_b - B1 * P_b
-        rhs2 = A2 * P_b
-        det = m11 * m22 - m12 * m21
-        if not math.isfinite(det) or abs(det) < 1e-300:
-            return False, f"singular_jacobian_iter_{k}_det={det:.3g}", k
-        R1_new = (m22 * rhs1 - m12 * rhs2) / det
-        R2_new = (-m21 * rhs1 + m11 * rhs2) / det
-        if not (math.isfinite(R1_new) and math.isfinite(R2_new)):
-            return False, f"non_finite_R_iter_{k}", k
-
-        R1 = (1.0 - OMEGA) * R1 + OMEGA * R1_new
-        R2 = (1.0 - OMEGA) * R2 + OMEGA * R2_new
-
-        O_s = max(O_b - R1 / D_O, 1e-300)
-        P_s = max(P_b + (R1 - R2) / D_P, P_FLOOR)
-        # Ambipolar 2*D_H factor and -2 proton stoichiometry cancel
-        # (PNP_BV_Analytical_Simplifications.md lines 240-244).  The
-        # denominator is bare D_H, NOT 2*D_H; do not "correct".
-        H_o = max(H_b - (R1 + R2) / D_H, 1e-300)
-        phi_o = math.log(H_o / c_clo4_bulk)
-        psi_D = phi_applied_model - phi_o
-
-        denom1 = max(abs(R1), 1e-30)
-        denom2 = max(abs(R2), 1e-30)
-        delta = abs(R1 - R1_old) / denom1 + abs(R2 - R2_old) / denom2
-        picard_iters = k
-        if delta < TOL:
-            converged = True
-            break
-
-    if not converged:
-        return False, f"picard_max_iters_delta={delta:.4g}", picard_iters
+    R1 = picard_state["R1"]
+    R2 = picard_state["R2"]
+    O_s = picard_state["O_s"]
+    P_s = picard_state["P_s"]
+    H_o = picard_state["H_o"]
+    psi_D = picard_state["psi_D"]
 
     # ----- Numerically-safe Gouy-Chapman psi baseline (always built) ---
     # psi_gc(y) = 4*atanh(tanh(psi_D/4)*exp(-y/lambda_D))
@@ -850,11 +904,7 @@ def _try_debye_boltzmann_ic(
     # entry (the 3sp+bikerman production target).  Both share the same
     # closed-form gamma + composite-psi seeding; they differ only in the
     # outer-anchor for the analytic counterion in the gamma denominator.
-    bikerman_in_counterions = bool(counterions) and any(
-        e.get("steric_mode", "ideal") == "bikerman" for e in counterions
-    )
-    apply_bikerman_ic = synthesised_4sp_counterion or bikerman_in_counterions
-
+    # ``apply_bikerman_ic`` was already computed above.
     if apply_bikerman_ic:
         a_vals_full = list(solver_params[6])
         a_h = float(a_vals_full[2])

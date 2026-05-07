@@ -601,17 +601,19 @@ def set_initial_conditions_logc_muh(ctx: dict[str, Any], solver_params: Any) -> 
 
       non-mu species:   u_i(y) = ln(c0_i)              (constant, same as logc)
       mu species:       mu_H(y) = ln(c0_H) + em*z_H*phi_init(y)
-      phi:              phi_init(y) = phi_applied * (1 - y)
+      phi:              phi_init(y) = phi_surface * (1 - y)
 
     Pointwise reconstruction of c_H from these IC fields recovers
-    c_H_bulk exactly:
+    c_H_bulk exactly when phi_o_bulk = 0:
 
-      exp(mu_H(y) - em*z_H*phi(y)) = c_H_bulk
+      exp(mu_H(y) - em*z_H*phi(y)) = c_H_bulk * exp(-em*z_H*(phi(y) - phi_init(y)))
 
-    so the initial concentration is bulk-uniform, identical to the
-    ``set_initial_conditions_logc`` initial state but stored in muh
-    coordinates.
+    For Stern-aware configs, ``phi_surface = phi_applied - psi_S``
+    instead of ``phi_applied`` (Phase F fix; see forms_logc.py
+    counterpart for full rationale).
     """
+    from .picard_ic import solve_stern_split
+
     try:
         n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0, phi0, params = solver_params
     except Exception as exc:
@@ -630,6 +632,43 @@ def set_initial_conditions_logc_muh(ctx: dict[str, Any], solver_params: Any) -> 
     mu_h_idx = _resolve_mu_h_index(list(z_vals))
     mu_species = {mu_h_idx}
 
+    # Stern-aware anchoring (Phase F).
+    stern_capacitance_model = scaling.get("bv_stern_capacitance_model")
+    use_stern_at_ic = (
+        stern_capacitance_model is not None
+        and float(stern_capacitance_model) > 0
+    )
+    phi_surface = float(phi_applied_model)
+    if use_stern_at_ic and n >= 3 and len(c0_model) >= 3:
+        counterions = _get_bv_boltzmann_counterions_cfg(params)
+        c_clo4_bulk = None
+        a_cl_bulk = 0.0
+        if counterions:
+            c_clo4_bulk = max(float(counterions[0]["c_bulk_nondim"]), 1e-300)
+            for e in counterions:
+                if e.get("steric_mode", "ideal") == "bikerman":
+                    a_cl_bulk = float(e.get("a_nondim", 0.0))
+                    break
+        elif n == 4 and len(c0_model) >= 4:
+            c_clo4_bulk = max(float(c0_model[3]), 1e-300)
+            a_vals_full = list(solver_params[6])
+            if len(a_vals_full) >= 4:
+                a_cl_bulk = float(a_vals_full[3])
+        if c_clo4_bulk is not None:
+            H_b = max(float(c0_model[2]), 1e-300)
+            phi_o_bulk = math.log(H_b / c_clo4_bulk)
+            poisson_coefficient = float(scaling.get("poisson_coefficient", 1.0))
+            lambda_D_bulk = math.sqrt(max(poisson_coefficient, 1e-300))
+            _, _, phi_surface = solve_stern_split(
+                phi_applied_model=float(phi_applied_model),
+                phi_o=phi_o_bulk,
+                lambda_D=lambda_D_bulk,
+                c_clo4_bulk=c_clo4_bulk,
+                a_cl=a_cl_bulk,
+                stern_coeff_nondim=float(stern_capacitance_model),
+                eps_nondim=poisson_coefficient,
+            )
+
     coords = fd.SpatialCoordinate(mesh)
     ndim = mesh.geometric_dimension()
     if ndim == 1:
@@ -637,14 +676,14 @@ def set_initial_conditions_logc_muh(ctx: dict[str, Any], solver_params: Any) -> 
     else:
         spatial_var = coords[1]
 
-    phi_init_expr = fd.Constant(float(phi_applied_model)) * (1.0 - spatial_var)
+    phi_init_expr = fd.Constant(phi_surface) * (1.0 - spatial_var)
 
     _C_FLOOR = 1e-20
     for i in range(n):
         c0_i = max(float(c0_model[i]), _C_FLOOR)
         if i in mu_species:
             # mu_H_init(y) = ln(c0_H) + em*z_H*phi_init(y)
-            # -> reconstructs c_H = c0_H pointwise.
+            # -> reconstructs c_H = c0_H pointwise (when bulk phi=0).
             U_prev.sub(i).interpolate(
                 fd.Constant(np.log(c0_i))
                 + fd.Constant(em * float(z_vals[i])) * phi_init_expr
@@ -715,11 +754,10 @@ def _try_debye_boltzmann_ic_muh(
     should fall back to the muh linear-phi IC.  Must be called inside
     ``firedrake.adjoint.stop_annotating()``.
 
-    The Picard outer loop and analytic Debye-layer profile mirror the
-    logc variant exactly -- the Picard iteration is in scalar/python
-    space and produces the same converged ``H_o``, ``psi_D``, ``O_s``,
-    ``P_s``, ``c_clo4_bulk``.  Only the final FE assignment line for the
-    proton species differs:
+    Wraps the shared scalar Picard outer loop in
+    ``Forward.bv_solver.picard_ic.picard_outer_loop`` -- the scalar
+    Picard algebra is byte-identical to the logc variant.  This wrapper
+    handles muh-specific FE assignment for the proton species:
 
         logc:   U_prev.sub(mu_h_idx).interpolate(ln(H_outer) - psi)        # u_H
         muh:    U_prev.sub(mu_h_idx).interpolate(
@@ -730,6 +768,8 @@ def _try_debye_boltzmann_ic_muh(
     With em*z_H = 1, ``psi`` cancels and ``mu_H_init = 2*ln(H_outer) -
     ln(c_clo4_bulk)``.
     """
+    from .picard_ic import picard_outer_loop
+
     mesh = ctx["mesh"]
     U_prev = ctx["U_prev"]
     n = ctx["n_species"]
@@ -792,12 +832,14 @@ def _try_debye_boltzmann_ic_muh(
     D_O = max(D_model_vals[0], 1e-30)
     D_P = max(D_model_vals[1], 1e-30)
     D_H = max(D_model_vals[2], 1e-30)
-    P_FLOOR = max(P_b, 1e-30)
+    # P_FLOOR: 1e-30 (numerical floor only).  See forms_logc.py
+    # counterpart for the rate-consistency rationale.
+    P_FLOOR = 1e-30
 
     c_clo4_bulk = max(float(counterions[0]["c_bulk_nondim"]), 1e-300)
 
     bv_exp_scale = float(scaling.get("bv_exponent_scale", 1.0))
-    exponent_clip = float(conv_cfg.get("exponent_clip", 50.0))
+    exponent_clip = float(conv_cfg.get("exponent_clip", 100.0))
     clip_exponent = bool(conv_cfg.get("clip_exponent", True))
 
     rxn1 = bv_reactions[0]
@@ -813,99 +855,80 @@ def _try_debye_boltzmann_ic_muh(
     h_factor1 = rxn1.get("cathodic_conc_factors", [])
     h_factor2 = rxn2.get("cathodic_conc_factors", [])
 
-    def _eta_clipped(E: float) -> float:
-        eta = bv_exp_scale * (phi_applied_model - E)
-        if clip_exponent:
-            return max(min(eta, exponent_clip), -exponent_clip)
-        return eta
+    # Two paths reach the bikerman-consistent IC.
+    bikerman_in_counterions = bool(counterions) and any(
+        e.get("steric_mode", "ideal") == "bikerman" for e in counterions
+    )
+    apply_bikerman_ic = synthesised_4sp_counterion or bikerman_in_counterions
 
-    eta1 = _eta_clipped(E1)
-    eta2 = _eta_clipped(E2)
+    # Bikerman size parameters for the Picard's surface gamma; same
+    # branching as forms_logc.py.  ``a_h = a_cl = 0`` -> legacy
+    # gamma-free Picard.
+    if apply_bikerman_ic:
+        a_vals_full_for_picard = list(solver_params[6])
+        a_h_picard = float(a_vals_full_for_picard[2])
+        if synthesised_4sp_counterion:
+            a_cl_picard = float(a_vals_full_for_picard[3])
+            c_cl_anchor_kind = "synthesised_4sp"
+        else:
+            bikerman_entry_for_picard = next(
+                e for e in counterions
+                if e.get("steric_mode", "ideal") == "bikerman"
+            )
+            a_cl_picard = float(bikerman_entry_for_picard["a_nondim"])
+            c_cl_anchor_kind = "bulk"
+    else:
+        a_h_picard = 0.0
+        a_cl_picard = 0.0
+        c_cl_anchor_kind = "bulk"
 
-    def _h_factor_log(H_val: float, factors: list) -> float:
-        total = 0.0
-        H_log = math.log(max(H_val, 1e-300))
-        for f in factors:
-            if int(f["species"]) != 2:
-                continue
-            power = float(f["power"])
-            c_ref_log = math.log(max(float(f["c_ref_nondim"]), 1e-30))
-            total += power * (H_log - c_ref_log)
-        return total
+    # Stern split (Bug #1 fix); see forms_logc.py counterpart for the
+    # rationale.  The post-Stern psi_D returned by picard_outer_loop
+    # automatically gets picked up by the BKSA composite-psi profile,
+    # so phi(y=0) = phi_applied - psi_S after IC interpolation.  The
+    # muh formulation's mu_h_init = u_h_init + em*z_H*phi_init inherits
+    # the shift via phi_init (psi cancellation algebra still holds).
+    stern_capacitance_model = scaling.get("bv_stern_capacitance_model")
+    use_stern_at_ic = (
+        stern_capacitance_model is not None
+        and float(stern_capacitance_model) > 0
+    )
+    if use_stern_at_ic:
+        stern_split_picard = {
+            "lambda_D": lambda_D,
+            "stern_coeff": float(stern_capacitance_model),
+            "eps": poisson_coefficient,
+        }
+    else:
+        stern_split_picard = None
 
-    def _safe_exp(x: float) -> float:
-        if not math.isfinite(x):
-            return float("inf") if x > 0 else 0.0
-        if x > 700.0:
-            return math.exp(700.0)
-        if x < -700.0:
-            return 0.0
-        return math.exp(x)
+    # ----- Run shared scalar Picard outer loop -------------------------
+    ok, reason, picard_iters, picard_state = picard_outer_loop(
+        H_b=H_b, O_b=O_b, P_b=P_b,
+        D_O=D_O, D_P=D_P, D_H=D_H, P_FLOOR=P_FLOOR,
+        c_clo4_bulk=c_clo4_bulk,
+        k1=k1, k2=k2, a1=a1, a2=a2, n_e=n_e, E1=E1, E2=E2,
+        h_factor1=h_factor1, h_factor2=h_factor2,
+        phi_applied_model=phi_applied_model,
+        bv_exp_scale=bv_exp_scale,
+        exponent_clip=exponent_clip,
+        clip_exponent=clip_exponent,
+        a_h=a_h_picard,
+        a_cl=a_cl_picard,
+        c_cl_anchor_kind=c_cl_anchor_kind,
+        stern_split=stern_split_picard,
+    )
+    ctx["initializer_picard_state"] = picard_state
 
-    # ----- Picard outer loop -------------------------------------------
-    OMEGA = 0.5
-    MAX_ITERS = 50
-    TOL = 1e-6
+    if not ok:
+        return False, reason, picard_iters
 
-    R1 = 0.0
-    R2 = 0.0
-    H_o = H_b
-    phi_o = 0.0
-    psi_D = phi_applied_model - phi_o
-    O_s = O_b
-    P_s = P_b
-
-    delta = float("inf")
-    converged = False
-    picard_iters = 0
-    for k in range(1, MAX_ITERS + 1):
-        R1_old, R2_old = R1, R2
-
-        H_s = max(H_o * _safe_exp(-psi_D), 1e-300)
-
-        log_h_factor1 = _h_factor_log(H_s, h_factor1)
-        log_h_factor2 = _h_factor_log(H_s, h_factor2)
-        log_A1 = math.log(k1) + log_h_factor1 - a1 * n_e * eta1
-        log_B1 = math.log(k1) + (1.0 - a1) * n_e * eta1
-        log_A2 = math.log(k2) + log_h_factor2 - a2 * n_e * eta2
-
-        A1 = _safe_exp(log_A1)
-        B1 = _safe_exp(log_B1)
-        A2 = _safe_exp(log_A2)
-
-        m11 = 1.0 + A1 / D_O + B1 / D_P
-        m12 = -B1 / D_P
-        m21 = -A2 / D_P
-        m22 = 1.0 + A2 / D_P
-        rhs1 = A1 * O_b - B1 * P_b
-        rhs2 = A2 * P_b
-        det = m11 * m22 - m12 * m21
-        if not math.isfinite(det) or abs(det) < 1e-300:
-            return False, f"singular_jacobian_iter_{k}_det={det:.3g}", k
-        R1_new = (m22 * rhs1 - m12 * rhs2) / det
-        R2_new = (-m21 * rhs1 + m11 * rhs2) / det
-        if not (math.isfinite(R1_new) and math.isfinite(R2_new)):
-            return False, f"non_finite_R_iter_{k}", k
-
-        R1 = (1.0 - OMEGA) * R1 + OMEGA * R1_new
-        R2 = (1.0 - OMEGA) * R2 + OMEGA * R2_new
-
-        O_s = max(O_b - R1 / D_O, 1e-300)
-        P_s = max(P_b + (R1 - R2) / D_P, P_FLOOR)
-        H_o = max(H_b - (R1 + R2) / D_H, 1e-300)
-        phi_o = math.log(H_o / c_clo4_bulk)
-        psi_D = phi_applied_model - phi_o
-
-        denom1 = max(abs(R1), 1e-30)
-        denom2 = max(abs(R2), 1e-30)
-        delta = abs(R1 - R1_old) / denom1 + abs(R2 - R2_old) / denom2
-        picard_iters = k
-        if delta < TOL:
-            converged = True
-            break
-
-    if not converged:
-        return False, f"picard_max_iters_delta={delta:.4g}", picard_iters
+    R1 = picard_state["R1"]
+    R2 = picard_state["R2"]
+    O_s = picard_state["O_s"]
+    P_s = picard_state["P_s"]
+    H_o = picard_state["H_o"]
+    psi_D = picard_state["psi_D"]
 
     # ----- Numerically-safe Gouy-Chapman psi baseline (always built) ---
     EPS_TANH = 1e-15
@@ -941,11 +964,7 @@ def _try_debye_boltzmann_ic_muh(
     # forms_logc.py:_try_debye_boltzmann_ic; the only muh-specific bit is
     # the proton stored as mu_H = u_H + em*z_H*phi (psi cancels with em*z_H = 1,
     # log_gamma propagates through u_H into mu_H).
-    bikerman_in_counterions = bool(counterions) and any(
-        e.get("steric_mode", "ideal") == "bikerman" for e in counterions
-    )
-    apply_bikerman_ic = synthesised_4sp_counterion or bikerman_in_counterions
-
+    # ``apply_bikerman_ic`` was already computed above.
     if apply_bikerman_ic:
         a_vals_full = list(solver_params[6])
         a_h = float(a_vals_full[2])
