@@ -59,13 +59,23 @@ INITIALIZER = "debye_boltzmann"
 FORMULATION = "logc_muh"
 OUT_SUBDIR = "peroxide_window_3sp_bikerman_muh_2b"
 
+# Mangan 2025 alignment — M1 RRDE post-processing.  ``N_COLLECTION`` is
+# the geometric collection efficiency Ruggiero et al. cite at
+# ``N = 0.224``; pending M0 verification against the actual cell, the
+# emitted ``experiment_metadata`` block records the source authority as
+# ``"memory"`` and the comparison status as ``"internal_baseline_only"``.
+# See ``memory/project_mangan_m1_deferred_parameters.md`` for the
+# placeholder convention before promoting either field.
+N_COLLECTION = 0.224
+H_SPECIES_INDEX = 2  # Index of H+ in THREE_SPECIES_LOGC_BOLTZMANN
+
 
 def _run_one_pass(
     label: str, cs: Optional[float], *, v_rhe_grid,
 ) -> dict[str, Any]:
     from scripts._bv_common import (
         setup_firedrake_env,
-        V_T, I_SCALE,
+        V_T, I_SCALE, C_SCALE,
         K0_HAT_R1, K0_HAT_R2, ALPHA_R1, ALPHA_R2,
         THREE_SPECIES_LOGC_BOLTZMANN,
         DEFAULT_CLO4_BOLTZMANN_COUNTERION,
@@ -92,6 +102,7 @@ def _run_one_pass(
         solve_grid_per_voltage_cold_with_warm_fallback,
     )
     from Forward.bv_solver.observables import _build_bv_observable_form
+    from Forward.bv_solver.rrde_observables import assemble_rrde_observables
 
     mesh = make_graded_rectangle_mesh(Nx=8, Ny=int(MESH_NY), beta=3.0)
 
@@ -151,6 +162,40 @@ def _run_one_pass(
         )
     elapsed = time.time() - t0
 
+    # M1 RRDE post-processing: compute surface-pH proxy, model ring
+    # current, selectivity, and apparent electron count per voltage from
+    # already-assembled (cd, pc) plus the H+ surface-mean published by
+    # ``collect_diagnostics``.  Failed solves (NaN cd/pc) propagate to
+    # NaN RRDE values, which are serialised as ``null`` in the JSON.
+    surface_pH_arr = np.full(NV, np.nan)
+    j_ring_arr = np.full(NV, np.nan)
+    s_h2o2_arr = np.full(NV, np.nan)
+    n_e_arr = np.full(NV, np.nan)
+    c_H_surf_arr = np.full(NV, np.nan)
+    h_diag_key = f"c{H_SPECIES_INDEX}_surface_mean"
+    for i in range(NV):
+        diag_i = result.points[i].diagnostics or {}
+        c_H_i = diag_i.get(h_diag_key)
+        if c_H_i is None or not np.isfinite(c_H_i):
+            continue
+        c_H_surf_arr[i] = float(c_H_i)
+        if not (np.isfinite(cd[i]) and np.isfinite(pc[i])):
+            continue
+        rrde = assemble_rrde_observables(
+            j_disk=float(cd[i]),
+            j_h2o2_disk=float(pc[i]),
+            c_H_surface_nondim=float(c_H_i),
+            C_scale_mol_m3=float(C_SCALE),
+            N_collection=float(N_COLLECTION),
+        )
+        surface_pH_arr[i] = rrde.surface_pH_proxy
+        j_ring_arr[i] = rrde.j_ring_model
+        s_h2o2_arr[i] = rrde.S_H2O2_percent
+        n_e_arr[i] = rrde.n_e_rrde
+
+    def _to_json_list(arr):
+        return [float(x) if np.isfinite(x) else None for x in arr]
+
     return {
         "label": label,
         "cs_f_m2": cs,
@@ -159,6 +204,17 @@ def _run_one_pass(
         "phi_applied_hat": [float(x) for x in phi_hat_grid.tolist()],
         "cd_mA_cm2": [float(x) if np.isfinite(x) else None for x in cd],
         "pc_mA_cm2": [float(x) if np.isfinite(x) else None for x in pc],
+        # M1 RRDE-style observables.  Sign/range conventions:
+        #   surface_pH_proxy in dimensionless pH units (no IrOx calibration).
+        #   j_ring_mA_cm2 is anodic-positive (= N * |pc|).
+        #   S_H2O2_percent in [0, 100] for physical inputs.
+        #   n_e_rrde in [2, 4] for physical inputs.
+        "surface_pH_proxy": _to_json_list(surface_pH_arr),
+        "j_ring_mA_cm2": _to_json_list(j_ring_arr),
+        "S_H2O2_percent": _to_json_list(s_h2o2_arr),
+        "n_e_rrde": _to_json_list(n_e_arr),
+        "c_H_surface_nondim": _to_json_list(c_H_surf_arr),
+        "N_collection_used": float(N_COLLECTION),
         "converged": [bool(result.points[i].converged) for i in range(NV)],
         "method": [result.points[i].method for i in range(NV)],
         "z_achieved": [float(result.points[i].achieved_z_factor) for i in range(NV)],
@@ -244,8 +300,32 @@ def _make_plot(reports: list[dict], png_path: str) -> Optional[str]:
 
 
 def main() -> None:
+    import dataclasses
+    from scripts._bv_common import make_experiment_metadata
+
     out_dir = os.path.join(_ROOT, "StudyResults", OUT_SUBDIR)
     os.makedirs(out_dir, exist_ok=True)
+
+    # M1 experiment metadata: pH-countercharge surrogate, no real cation,
+    # no rotation, no IrOx calibration.  ``source_authority="memory"``
+    # and ``comparison_status="internal_baseline_only"`` flag the run as
+    # not-yet-deck-comparable until M0 extraction lands.
+    experiment_metadata = make_experiment_metadata(
+        catalyst="generic_carbon",
+        geometry="stagnant_film",
+        pH_bulk=4.0,
+        cation=None,
+        anion_model="ClO4_protonic_surrogate",
+        rotation_rate_rpm=None,
+        L_eff_m=None,
+        N_collection=N_COLLECTION,
+        electrolyte_model="pH_countercharge_surrogate",
+        comparison_status="internal_baseline_only",
+        source_authority="memory",
+        target_curve=None,
+        acceptance_tier="trend",
+    )
+    metadata_dict = dataclasses.asdict(experiment_metadata)
 
     print("=" * 78)
     print("  3sp + bikerman analytic ClO4- + muh — extended V grid sweep")
@@ -256,6 +336,9 @@ def main() -> None:
     print(f"  exponent_clip = {EXPONENT_CLIP}")
     print(f"  initializer   = {INITIALIZER}")
     print(f"  formulation   = {FORMULATION}")
+    print(f"  N_collection  = {N_COLLECTION}")
+    print(f"  comparison    = {experiment_metadata.comparison_status}")
+    print(f"  source        = {experiment_metadata.source_authority}")
     print(f"  output        = {out_dir}")
     print()
 
@@ -290,6 +373,7 @@ def main() -> None:
     iv_path = os.path.join(out_dir, "iv_curve.json")
     with open(iv_path, "w") as f:
         json.dump({
+            "experiment_metadata": metadata_dict,
             "v_rhe": list(V_TEST),
             "passes": [p[0] for p in PASSES],
             "cs_f_m2": [None if p[1] is None else float(p[1]) for p in PASSES],
@@ -309,6 +393,7 @@ def main() -> None:
     diag_path = os.path.join(out_dir, "diagnostics.json")
     with open(diag_path, "w") as f:
         json.dump({
+            "experiment_metadata": metadata_dict,
             "v_rhe": list(V_TEST),
             "reports": [
                 {

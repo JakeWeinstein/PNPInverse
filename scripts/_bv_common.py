@@ -87,6 +87,11 @@ ALPHA_R1 = 0.627
 K0_PHYS_R2 = 1e-9    # m/s, H₂O₂ → H₂O (irreversible)
 ALPHA_R2 = 0.5
 
+# Physical equilibrium potentials (V vs RHE).  CLAUDE.md Hard Rule 4:
+# "Use physical E_eq (R1 = 0.68 V, R2 = 1.78 V vs RHE), never E_eq = 0."
+E_EQ_R1_V = 0.68
+E_EQ_R2_V = 1.78
+
 
 # ---------------------------------------------------------------------------
 # Reference scales
@@ -310,8 +315,8 @@ def _make_bv_bc_cfg(
     k0_hat_r2: float = K0_HAT_R2,
     alpha_r1: float = ALPHA_R1,
     alpha_r2: float = ALPHA_R2,
-    E_eq_r1: float = 0.0,
-    E_eq_r2: float = 0.0,
+    E_eq_r1: float = E_EQ_R1_V,
+    E_eq_r2: float = E_EQ_R2_V,
     c_hp_hat: float = C_HP_HAT,
     electrode_marker: int = 3,
     concentration_marker: int = 4,
@@ -441,8 +446,8 @@ def make_bv_solver_params(
     k0_hat_r2: float = K0_HAT_R2,
     alpha_r1: float = ALPHA_R1,
     alpha_r2: float = ALPHA_R2,
-    E_eq_r1: float = 0.0,
-    E_eq_r2: float = 0.0,
+    E_eq_r1: float = E_EQ_R1_V,
+    E_eq_r2: float = E_EQ_R2_V,
     electrode_marker: int = 3,
     concentration_marker: int = 4,
     ground_marker: int = 4,
@@ -559,4 +564,108 @@ def make_bv_solver_params(
         params,
     ])
 
+
+# ---------------------------------------------------------------------------
+# Mangan 2025 alignment — experiment metadata (M1)
+# ---------------------------------------------------------------------------
+#
+# Every Mangan-aligned study output JSON carries a top-level
+# ``experiment_metadata`` block describing how the run maps onto the deck.
+# Fields that depend on M0 extraction (target curve, source authority,
+# RRDE collection efficiency, acceptance tier) default to honest
+# placeholders so downstream consumers can cleanly distinguish
+# internal-baseline runs from deck-comparable ones.
+#
+# The placeholder convention is anchored in
+# ``memory/project_mangan_m1_deferred_parameters.md`` and gates promotion
+# of ``comparison_status`` past ``"internal_baseline_only"`` -- see that
+# memory entry before overriding any default here in a study script.
+
+@dataclass(frozen=True)
+class ExperimentMetadata:
+    """Provenance + comparison-status metadata for one study run.
+
+    Sentinel values
+    ---------------
+    - ``source_authority="memory"`` and ``comparison_status="internal_baseline_only"``
+      together flag a run as not-yet-deck-comparable.  Promotion past
+      these values requires M0 extraction (digitised target curves,
+      acceptance-tier decision, source citations).
+    - ``N_collection`` and ``target_curve`` default to ``None``: the
+      study script must set them explicitly, and a ``None`` after the
+      run finishes indicates an unresolved M0 dependency.
+    """
+
+    catalyst: str                       # e.g. "generic_carbon", "CMK-3"
+    geometry: str                       # "RRDE" | "RDE" | "stagnant_film"
+    pH_bulk: float
+    cation: Optional[str]               # None for protonic-only solvers
+    anion_model: str                    # "ClO4_protonic_surrogate" | "sulfate_effective_z2" | ...
+    rotation_rate_rpm: Optional[float]
+    L_eff_m: Optional[float]            # Levich effective transport length
+    N_collection: Optional[float]       # RRDE collection efficiency, (0, 1]
+    electrolyte_model: str              # "pH_countercharge_surrogate" | "ideal_salt_pair" | ...
+    comparison_status: str              # "internal_baseline_only" | "deck_proxy" | "deck_quantitative_candidate"
+    source_authority: str               # "Mangan2025_deck" | "Ruggiero_manuscript" | "memory"
+    target_curve: Optional[str]         # filled in M0 (digitised target identifier)
+    acceptance_tier: Optional[str]      # "trend" | "semi_quant" | "quant"
+
+
+def make_experiment_metadata(
+    *,
+    catalyst: str = "generic_carbon",
+    geometry: str = "stagnant_film",
+    pH_bulk: float = 4.0,
+    cation: Optional[str] = None,
+    anion_model: str = "ClO4_protonic_surrogate",
+    rotation_rate_rpm: Optional[float] = None,
+    L_eff_m: Optional[float] = None,
+    N_collection: Optional[float] = None,
+    electrolyte_model: str = "pH_countercharge_surrogate",
+    comparison_status: str = "internal_baseline_only",
+    source_authority: str = "memory",
+    target_curve: Optional[str] = None,
+    acceptance_tier: Optional[str] = "trend",
+) -> ExperimentMetadata:
+    """Construct an ExperimentMetadata describing how a study maps to deck.
+
+    Defaults reflect the *current* solver's actual configuration:
+    pH-countercharge surrogate (no real cation, no real supporting anion),
+    stagnant-film geometry (no rotation, no Levich correction), no IrOx
+    calibration applied to the surface-pH proxy.  Fields that depend on
+    M0 extraction default to honest placeholders so downstream consumers
+    can cleanly distinguish internal-baseline runs from deck-comparable
+    ones.  See ``memory/project_mangan_m1_deferred_parameters.md`` for
+    the placeholder convention and how it gates promotion of
+    ``comparison_status``.
+    """
+    if pH_bulk < 0.0:
+        raise ValueError(f"pH_bulk must be non-negative, got {pH_bulk}")
+    if N_collection is not None and not (0.0 < N_collection <= 1.0):
+        raise ValueError(
+            f"N_collection must be in (0, 1] when set, got {N_collection}"
+        )
+    if rotation_rate_rpm is not None and rotation_rate_rpm < 0.0:
+        raise ValueError(
+            f"rotation_rate_rpm must be non-negative when set, got {rotation_rate_rpm}"
+        )
+    if L_eff_m is not None and L_eff_m <= 0.0:
+        raise ValueError(
+            f"L_eff_m must be positive when set, got {L_eff_m}"
+        )
+    return ExperimentMetadata(
+        catalyst=str(catalyst),
+        geometry=str(geometry),
+        pH_bulk=float(pH_bulk),
+        cation=cation,
+        anion_model=str(anion_model),
+        rotation_rate_rpm=(None if rotation_rate_rpm is None else float(rotation_rate_rpm)),
+        L_eff_m=(None if L_eff_m is None else float(L_eff_m)),
+        N_collection=(None if N_collection is None else float(N_collection)),
+        electrolyte_model=str(electrolyte_model),
+        comparison_status=str(comparison_status),
+        source_authority=str(source_authority),
+        target_curve=target_curve,
+        acceptance_tier=acceptance_tier,
+    )
 
