@@ -399,6 +399,13 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
             alpha_j = fd.Function(R_space, name=f"bv_alpha_rxn{j}")
             alpha_j.assign(float(rxn["alpha"]))
             bv_alpha_funcs.append(alpha_j)
+
+            # k0 <= 0 means disabled; skip to avoid fd.ln(0) in log-rate branch.
+            if float(rxn["k0_model"]) <= 0.0:
+                R_j = fd.Constant(0.0)
+                bv_rate_exprs.append(R_j)
+                continue
+
             n_e_j = fd.Constant(float(rxn["n_electrons"]))
             cat_idx = rxn["cathodic_species"]
 
@@ -768,7 +775,7 @@ def _try_debye_boltzmann_ic_muh(
     With em*z_H = 1, ``psi`` cancels and ``mu_H_init = 2*ln(H_outer) -
     ln(c_clo4_bulk)``.
     """
-    from .picard_ic import picard_outer_loop
+    from .picard_ic import picard_outer_loop_general
 
     mesh = ctx["mesh"]
     U_prev = ctx["U_prev"]
@@ -780,8 +787,35 @@ def _try_debye_boltzmann_ic_muh(
         return False, f"n_species_lt_3 (n={n})", 0
 
     bv_reactions = scaling.get("bv_reactions", [])
-    if len(bv_reactions) < 2:
-        return False, f"fewer_than_2_reactions ({len(bv_reactions)})", 0
+    if len(bv_reactions) < 1:
+        return False, f"empty_reactions ({len(bv_reactions)})", 0
+
+    # M3a.3 topology dispatch (per
+    # ``docs/picard_general_topology_derivation.md`` v3): see
+    # ``forms_logc.py:_try_debye_boltzmann_ic`` for the rationale.
+    # Sequential template uses the legacy closed-form P_s/O_s
+    # reconstruction (byte-equivalent to the pre-M3a.3 2x2 path);
+    # parallel and other N-reaction topologies use the naive signed
+    # flux balance (v3 §2/§8).
+    rxn1_stoich = list(bv_reactions[0].get("stoichiometry", []))
+    rxn2_stoich = (
+        list(bv_reactions[1].get("stoichiometry", []))
+        if len(bv_reactions) >= 2 else []
+    )
+    rxn2_reversible = (
+        bool(bv_reactions[1].get("reversible", False))
+        if len(bv_reactions) >= 2 else False
+    )
+    is_sequential_template = (
+        len(bv_reactions) == 2
+        and len(rxn1_stoich) >= 2 and len(rxn2_stoich) >= 2
+        and int(rxn1_stoich[1]) > 0
+        and int(rxn2_stoich[1]) < 0
+        and not rxn2_reversible
+    )
+    topology_hint_picard = (
+        "sequential_2e_h2o2" if is_sequential_template else "general"
+    )
 
     # ----- Read scalar inputs ------------------------------------------
     phi_applied_model = float(scaling.get("phi_applied_model", float(phi_applied)))
@@ -842,18 +876,9 @@ def _try_debye_boltzmann_ic_muh(
     exponent_clip = float(conv_cfg.get("exponent_clip", 100.0))
     clip_exponent = bool(conv_cfg.get("clip_exponent", True))
 
-    rxn1 = bv_reactions[0]
-    rxn2 = bv_reactions[1]
-    k1 = float(rxn1["k0_model"])
-    k2 = float(rxn2["k0_model"])
-    a1 = float(rxn1["alpha"])
-    a2 = float(rxn2["alpha"])
-    n_e = float(rxn1["n_electrons"])
-    E1 = float(rxn1.get("E_eq_model", 0.0))
-    E2 = float(rxn2.get("E_eq_model", 0.0))
-
-    h_factor1 = rxn1.get("cathodic_conc_factors", [])
-    h_factor2 = rxn2.get("cathodic_conc_factors", [])
+    # Per-reaction scalars are read directly from ``bv_reactions`` by
+    # ``picard_outer_loop_general``; M3a.2 unpacking removed (per v3
+    # §9 contract item 2).  See ``forms_logc.py`` counterpart.
 
     # Two paths reach the bikerman-consistent IC.
     bikerman_in_counterions = bool(counterions) and any(
@@ -903,16 +928,23 @@ def _try_debye_boltzmann_ic_muh(
         stern_split_picard = None
 
     # ----- Run shared scalar Picard outer loop -------------------------
-    ok, reason, picard_iters, picard_state = picard_outer_loop(
-        H_b=H_b, O_b=O_b, P_b=P_b,
-        D_O=D_O, D_P=D_P, D_H=D_H, P_FLOOR=P_FLOOR,
+    # Generalized N-reaction loop with topology_hint dispatch.  See
+    # forms_logc.py counterpart and v3 §9 for the contract.
+    bulk_concs = [O_b, P_b, H_b]
+    diffusivities = [D_O, D_P, D_H]
+    species_floors = [1e-300, P_FLOOR, 1e-300]
+    ok, reason, picard_iters, picard_state = picard_outer_loop_general(
+        reactions=bv_reactions,
+        bulk_concs=bulk_concs,
+        diffusivities=diffusivities,
+        species_floors=species_floors,
+        h_idx=2,
         c_clo4_bulk=c_clo4_bulk,
-        k1=k1, k2=k2, a1=a1, a2=a2, n_e=n_e, E1=E1, E2=E2,
-        h_factor1=h_factor1, h_factor2=h_factor2,
         phi_applied_model=phi_applied_model,
         bv_exp_scale=bv_exp_scale,
         exponent_clip=exponent_clip,
         clip_exponent=clip_exponent,
+        topology_hint=topology_hint_picard,
         a_h=a_h_picard,
         a_cl=a_cl_picard,
         c_cl_anchor_kind=c_cl_anchor_kind,

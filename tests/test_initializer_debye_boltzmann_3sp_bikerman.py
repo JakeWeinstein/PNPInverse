@@ -47,12 +47,14 @@ if _ROOT not in sys.path:
 
 from conftest import skip_without_firedrake
 
+from scripts._bv_common import A_DEFAULT, C_CLO4_HAT
+
 
 # Canonical bikerman counterion entry for tests below.
 _BIKERMAN_CLO4 = {
     "z": -1,
-    "c_bulk_nondim": 0.2,    # = C_CLO4_HAT
-    "a_nondim": 0.01,        # = A_DEFAULT
+    "c_bulk_nondim": C_CLO4_HAT,
+    "a_nondim": A_DEFAULT,
     "steric_mode": "bikerman",
     "phi_clamp": 50.0,
 }
@@ -137,7 +139,8 @@ class Test3spBikermanLogc:
         U = ctx["U"]
         u_h = U.dat[2].data_ro
 
-        c_h_bulk = 0.2  # C_HP_HAT
+        from scripts._bv_common import C_HP_HAT
+        c_h_bulk = C_HP_HAT
         u_h_bulk = float(np.log(c_h_bulk))
 
         # log_gamma at electrode is ~ -12.78 for V=+0.5 V (psi_D ~ 19).
@@ -202,7 +205,8 @@ class Test3spBikermanLogc:
         ctx, _ = _build_ctx_3sp(0.5, formulation="logc", bikerman=True)
         U = ctx["U"]
         u_h = U.dat[2].data_ro
-        c_h_bulk = 0.2
+        from scripts._bv_common import C_HP_HAT
+        c_h_bulk = C_HP_HAT
         u_h_bulk = float(np.log(c_h_bulk))
         # H+ is z=+1, so deeply depleted at positive psi_D.
         assert u_h.min() < u_h_bulk - 15.0
@@ -284,8 +288,9 @@ class Test3spBikermanMuh:
         U = ctx["U"]
         mu_h = U.dat[2].data_ro
 
-        c_h_bulk = 0.2
-        c_clo4_bulk = 0.2
+        from scripts._bv_common import C_HP_HAT, C_CLO4_HAT
+        c_h_bulk = C_HP_HAT
+        c_clo4_bulk = C_CLO4_HAT
         # Pre-gamma baseline at the electrode: 2*ln(c_h_bulk) - ln(c_clo4_bulk).
         baseline = 2.0 * math.log(c_h_bulk) - math.log(c_clo4_bulk)
         # log_gamma at psi_D=19 ~ -12.8; mu_H surface should be at least
@@ -365,7 +370,8 @@ class TestRegression3spIdealStillWorks:
         #   phi(y)   = ln(H_outer/c_clo4_bulk) + psi
         # In particular u_H bulk = ln(c_H_bulk) exactly (no offset).
         u_h = U.dat[2].data_ro
-        c_h_bulk = 0.2
+        from scripts._bv_common import C_HP_HAT
+        c_h_bulk = C_HP_HAT
         u_h_bulk = float(np.log(c_h_bulk))
         assert abs(u_h.max() - u_h_bulk) < 1e-6, (
             f"3sp+ideal u_H bulk must equal ln(c_h_bulk)={u_h_bulk:.4f} "
@@ -390,11 +396,12 @@ class TestRegression3spIdealStillWorks:
         # Pre-2b 3sp+ideal in muh:
         #   mu_H_init = (ln H_outer - psi) + (ln(H_outer/c_clo4_bulk) + psi)
         #             = 2*ln(H_outer) - ln(c_clo4_bulk)        (no gamma)
-        # At bulk (y=1) H_outer = c_h_bulk, so mu_H_bulk = 2*ln(0.2) - ln(0.2)
-        # = ln(0.2) ~ -1.61.
+        # At bulk (y=1) H_outer = c_h_bulk, so mu_H_bulk = 2*ln(C_HP_HAT)
+        # - ln(C_CLO4_HAT) = ln(C_HP_HAT) when C_HP_HAT == C_CLO4_HAT.
         mu_h = U.dat[2].data_ro
-        c_h_bulk = 0.2
-        c_clo4_bulk = 0.2
+        from scripts._bv_common import C_HP_HAT, C_CLO4_HAT
+        c_h_bulk = C_HP_HAT
+        c_clo4_bulk = C_CLO4_HAT
         baseline_bulk = 2.0 * math.log(c_h_bulk) - math.log(c_clo4_bulk)
         # Bulk mu_H must hit the baseline within FE interpolation slack.
         assert abs(mu_h.max() - baseline_bulk) < 0.1, (

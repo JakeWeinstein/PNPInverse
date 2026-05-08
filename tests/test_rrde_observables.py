@@ -25,14 +25,17 @@ import pytest
 # ---------------------------------------------------------------------------
 
 def test_surface_pH_proxy_at_pH4():
-    """C_scale = 0.5 mol/m^3, c_H_nondim = 0.2 → c_H = 1e-4 mol/L → pH 4.0.
+    """At the production scaling, the bulk H+ surface mean rounds to pH 4.
 
-    These are the production scaling constants (``C_SCALE = 0.5``,
-    ``C_HP_HAT = 0.2``) so the bulk H+ surface mean rounds to pH 4.
+    Pulls C_SCALE and C_HP_HAT from ``scripts._bv_common`` so the
+    assertion tracks the source-of-truth bulk concentrations
+    (post-2026-05-07 C_O2 fix: C_SCALE = 1.2 mol/m³, C_HP_HAT ≈ 0.0833,
+    product = 0.1 mol/m³ = 1e-4 mol/L → pH 4.0).
     """
     from Forward.bv_solver.rrde_observables import compute_surface_pH_proxy
+    from scripts._bv_common import C_HP_HAT, C_SCALE
 
-    pH = compute_surface_pH_proxy(0.2, 0.5)
+    pH = compute_surface_pH_proxy(C_HP_HAT, C_SCALE)
     assert pH == pytest.approx(4.0, abs=1e-12)
 
 

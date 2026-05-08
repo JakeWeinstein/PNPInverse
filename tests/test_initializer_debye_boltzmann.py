@@ -11,8 +11,8 @@ Two tests, both ``@pytest.mark.slow`` (Firedrake required):
   instead and must produce finite values everywhere.
 
 * ``test_ic_steric_warning`` -- at V_RHE = +0.5 V, surface c_ClO4 from
-  the analytical Gouy-Chapman profile is ~0.2 * exp(19) ~ 4e7, far above
-  the Bikerman steric cap (~100 nondim).  The
+  the analytical Gouy-Chapman profile is ~C_CLO4_HAT * exp(19) ~ 1e7,
+  far above the Bikerman steric cap (~100 nondim).  The
   ``check_steric_saturation`` helper must emit a ``UserWarning`` flagging
   the converged state as non-physical despite Newton convergence.
 """
@@ -93,7 +93,8 @@ class TestDebyeBoltzmannInitializer:
         assert np.all(np.isfinite(phi)), "phi has non-finite entries"
 
         # u_H should be depleted at the electrode (y=0) by ~psi_D ~ 19 nondim.
-        c_h_bulk = 0.2  # C_HP_HAT
+        from scripts._bv_common import C_HP_HAT
+        c_h_bulk = C_HP_HAT
         u_h_bulk = float(np.log(c_h_bulk))
         assert u_h.min() < u_h_bulk - 15.0, (
             f"H+ should be depleted by ~19 nondim at electrode; "
@@ -101,7 +102,7 @@ class TestDebyeBoltzmannInitializer:
         )
         # u_H at bulk (y=1) should match the Dirichlet bulk value.
         assert abs(u_h.max() - u_h_bulk) < 1e-6, (
-            f"u_H bulk should be ln(0.2)={u_h_bulk:.4f}; got max={u_h.max():.4f}"
+            f"u_H bulk should be ln(C_HP_HAT)={u_h_bulk:.4f}; got max={u_h.max():.4f}"
         )
 
         # phi should reach phi_applied at the electrode and ~0 at bulk.
@@ -137,7 +138,8 @@ class TestDebyeBoltzmannInitializer:
             )
 
         # u_H at electrode should be deeply depleted (~ -40 nondim).
-        c_h_bulk = 0.2
+        from scripts._bv_common import C_HP_HAT
+        c_h_bulk = C_HP_HAT
         u_h_bulk = float(np.log(c_h_bulk))
         assert u_h.min() < u_h_bulk - 30.0, (
             f"H+ should be deeply depleted at V=+1.0 V; got "
@@ -147,7 +149,7 @@ class TestDebyeBoltzmannInitializer:
     def test_ic_steric_warning_at_v05(self):
         """Surface c_ClO4 from analytical IC exceeds steric cap at V=+0.5 V.
 
-        c_ClO4_surf ~ 0.2 * exp(19) ~ 4e7 >> 100 (Bikerman cap).  The
+        c_ClO4_surf ~ C_CLO4_HAT * exp(19) ~ 1e7 >> 100 (Bikerman cap).  The
         ``check_steric_saturation`` helper must emit a UserWarning.
         """
         from Forward.bv_solver.diagnostics import check_steric_saturation

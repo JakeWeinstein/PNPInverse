@@ -28,12 +28,12 @@ import numpy as np
 import pytest
 
 
-# Parameters matching the production setup (a = 0.01, c_b = 0.2).
-A_NONDIM = 0.01
-C_BULK_NONDIM = 0.2
+# Parameters matching the production setup (a = A_DEFAULT, c_b = C_CLO4_HAT).
+from scripts._bv_common import A_DEFAULT as A_NONDIM, C_CLO4_HAT as C_BULK_NONDIM
+
 LAMBDA_D = 0.05  # nondim Debye length; representative production value
-NU = 2.0 * A_NONDIM * C_BULK_NONDIM      # = 0.004
-PSI_SAT = math.log(2.0 / NU)             # = ln(500) ~ 6.2146
+NU = 2.0 * A_NONDIM * C_BULK_NONDIM       # 2 * 0.01 * C_CLO4_HAT
+PSI_SAT = math.log(2.0 / NU)              # ln(2/NU) -- saturation threshold
 
 
 def composite_psi(y: float, psi_D: float, *, lam_D: float = LAMBDA_D, nu: float = NU) -> float:

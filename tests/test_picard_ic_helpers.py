@@ -36,12 +36,11 @@ from Forward.bv_solver.picard_ic import (
 
 
 # ---------------------------------------------------------------------------
-# Production-stack constants (mirror scripts/_bv_common.py)
+# Production-stack constants (sourced from scripts/_bv_common.py)
 # ---------------------------------------------------------------------------
 
-A_DEFAULT = 0.01
-C_HP_HAT = 0.2          # bulk H+ (nondim)
-C_CLO4_HAT = 0.2        # bulk ClO4- (nondim)
+from scripts._bv_common import A_DEFAULT, C_HP_HAT, C_CLO4_HAT
+
 LAMBDA_D = 0.05         # representative production Debye length (nondim)
 EPS = LAMBDA_D ** 2     # poisson_coefficient
 

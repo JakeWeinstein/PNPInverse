@@ -51,6 +51,8 @@ mature enough for a clean re-entry. When it resumes, start from
 | `docs/steric_analytic_clo4_reduction_handoff.md` | Derivation of the Bikerman analytic-counterion residual closure |
 | `docs/clipping_conventions.md` | The three distinct BV-related clips and the `exponent_clip` 50 → 100 raise |
 | `docs/Mangan2025_experimental_alignment.md` | Gap audit between the model and the Mangan 2025 deck |
+| `docs/Ruggiero2022_JCatal_source_paper.md` | Peer-reviewed source paper underlying the Mangan deck (Mangan is co-author). Load-bearing experimental constants (sulfate not perchlorate, N=0.224, 1600 rpm, I=0.3 M) and the structural finding that the deck uses parallel 2e/4e ORR, not sequential R₀/R₁. PDF at `docs/Ruggiero2022_JCatal_manuscript.pdf` |
+| `docs/seitz_mangan_data_folder_audit_2026-05-08.md` | Deep audit of the real experimental data drop at `data/EChem Reactor Modeling-Seitz-Mangan/`. Multi-document (2019→2025) confirmation: K₂SO₄ not ClO₄⁻, parallel 2e⁻ (0.67 V) + 4e⁻ (1.23 V) not sequential R₀+R₁, pH 1–6 sweep. Catalogues raw RRDE LSV / CP datasets, Yash's parallel 6-species PNP+BV reference code, and the missing `Tafel slope analysis cation-pH-Li-K-Cs.xlsx` to request |
 | `docs/CONTINUATION_STRATEGY_HANDOFF.md` | Why C+D over A/B for the logc+counterion stack |
 | `docs/forward_solver_test_coverage.md` | What the bv_solver test suite covers |
 

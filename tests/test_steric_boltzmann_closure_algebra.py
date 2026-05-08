@@ -97,12 +97,14 @@ def _theta_b(*, a_dyn_bulk: list[float], c0_dyn_bulk: list[float],
 # Production parameters (mirror scripts/_bv_common.py constants)
 # ---------------------------------------------------------------------------
 
-A_DEFAULT = 0.01
-C_O2_HAT = 1.0
-C_H2O2_HAT = 0.0
-C_HP_HAT = 0.2
-C_CLO4_HAT = 0.2
-H2O2_SEED_NONDIM = 1e-4
+from scripts._bv_common import (
+    A_DEFAULT,
+    C_O2_HAT,
+    C_H2O2_HAT,
+    C_HP_HAT,
+    C_CLO4_HAT,
+    H2O2_SEED_NONDIM,
+)
 
 # Three dynamic species: O2, H2O2, H+
 A_DYN_BULK_PROD = [A_DEFAULT, A_DEFAULT, A_DEFAULT]
@@ -342,8 +344,9 @@ def test_theta_b_positive_for_production_setup():
         a_b=A_DEFAULT,
         c_b=C_CLO4_HAT,
     )
-    # 1 - 0.01*(1.0 + 1e-4 + 0.2) - 0.01*0.2 = 1 - 0.012001 - 0.002 = 0.985999
-    assert theta_b > 0.98, f"expected theta_b ~0.986 for production; got {theta_b}"
+    # theta_b = 1 - A_DEFAULT*(C_O2_HAT + H2O2_SEED + C_HP_HAT) - A_DEFAULT*C_CLO4_HAT
+    # ~= 1 - 0.011 (post-2026-05-07 C_O2 fix; was 0.014 at C_HP_HAT=0.2)
+    assert theta_b > 0.98, f"expected theta_b > 0.98 for production; got {theta_b}"
 
 
 def test_theta_b_negative_when_overpacked():
@@ -351,7 +354,7 @@ def test_theta_b_negative_when_overpacked():
     theta_b is non-positive — the validator caller must reject this config."""
     # Pathological: 100x larger steric size than production
     a_dyn_bulk = [1.0, 1.0, 1.0]
-    c0_dyn_bulk = [C_O2_HAT, C_H2O2_HAT, C_HP_HAT]  # sum ~1.2
+    c0_dyn_bulk = [C_O2_HAT, C_H2O2_HAT, C_HP_HAT]  # sum ~ C_O2_HAT + C_HP_HAT
     a_b = 1.0
     c_b = C_CLO4_HAT
     theta_b = _theta_b(
@@ -359,7 +362,8 @@ def test_theta_b_negative_when_overpacked():
         c0_dyn_bulk=c0_dyn_bulk,
         a_b=a_b, c_b=c_b,
     )
-    # 1 - (1.0 + 0 + 0.2) - 1.0*0.2 = 1 - 1.2 - 0.2 = -0.4
+    # theta_b = 1 - sum(c0_dyn_bulk) - a_b*c_b; with a_b=1.0 (100x prod) the
+    # bulk overpacks even at the lower post-fix C_HP_HAT=C_CLO4_HAT=0.0833.
     assert theta_b < 0.0, f"expected negative theta_b for overpacked config; got {theta_b}"
 
 

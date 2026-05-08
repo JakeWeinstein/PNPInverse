@@ -101,7 +101,8 @@ class TestDebyeBoltzmann4spMuhExtension:
             f"c_ClO4 should approach saturation; got {c_clo4.max():.4f}"
         )
 
-        c_clo4_bulk = 0.2  # = C_CLO4_HAT
+        from scripts._bv_common import C_CLO4_HAT
+        c_clo4_bulk = C_CLO4_HAT
         assert abs(c_clo4.min() - c_clo4_bulk) / c_clo4_bulk < 0.05
 
     def test_mu_h_propagates_log_gamma(self):
@@ -112,15 +113,16 @@ class TestDebyeBoltzmann4spMuhExtension:
                       = 2*ln(H_outer) - ln(c_clo4_bulk) + log_gamma
               (em*z_H = 1, psi cancels)
 
-        At bulk (y=1) log_gamma ~ 0 so mu_H_bulk ~ ln(0.2) ~ -1.61.
-        At electrode log_gamma ~ -12.78 so mu_H_surf ~ -14.4.
+        At bulk (y=1) log_gamma ~ 0 so mu_H_bulk ~ ln(C_HP_HAT).
+        At electrode log_gamma ~ -12.78 so mu_H_surf ~ ln(C_HP_HAT) - 12.78.
         """
         ctx, _ = _build_ctx_4sp_muh(0.5)
         U = ctx["U"]
 
         mu_h = U.dat[2].data_ro
-        c_h_bulk = 0.2
-        c_clo4_bulk = 0.2
+        from scripts._bv_common import C_HP_HAT, C_CLO4_HAT
+        c_h_bulk = C_HP_HAT
+        c_clo4_bulk = C_CLO4_HAT
         baseline = 2.0 * math.log(c_h_bulk) - math.log(c_clo4_bulk)
         # Pre-2b muh (no gamma): mu_H_surf ~ baseline (no offset).
         # Post-2b muh: mu_H_surf < baseline - 8 (clear offset).

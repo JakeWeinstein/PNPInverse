@@ -76,7 +76,15 @@ D_HP = 9.311e-9     # H⁺
 D_CLO4 = 1.792e-9   # ClO₄⁻
 
 # Bulk concentrations (mol/m³)
-C_O2 = 0.5
+# C_O2 = 1.2 mol/m³ is the Ruggiero 2022 §2.4 deck-correct value at pH 5-13
+# (1.1 at pH 2).  Migrated 2026-05-07 from the legacy 0.5 (M3a.2.1 in
+# `docs/ruggiero_realignment_plan.md`).  Because C_SCALE = C_O2, the flip
+# rescales C_HP_HAT and C_CLO4_HAT (0.2 → 0.0833) and lifts I_SCALE by
+# 2.4× (0.183 → 0.44 mA/cm²).  Studies anchored at the legacy value
+# (Run C, m3a0 audit) are pre-fix references; the legacy constant is
+# retained below for those comparison plots only.
+C_O2 = 1.2
+C_O2_PHYS_LEGACY = 0.5  # mol/m³ — pre-M3a.2.1 value; do not use for new runs
 C_H2O2 = 0.0        # product, initially absent
 C_HP = 0.1           # pH 4 → 1e-4 mol/L = 0.1 mol/m³
 C_CLO4 = 0.1         # electroneutrality partner
@@ -84,13 +92,36 @@ C_CLO4 = 0.1         # electroneutrality partner
 # BV kinetics
 K0_PHYS_R1 = 2.4e-8  # m/s, O₂ → H₂O₂
 ALPHA_R1 = 0.627
-K0_PHYS_R2 = 1e-9    # m/s, H₂O₂ → H₂O (irreversible)
+K0_PHYS_R2 = 1e-9    # m/s, H₂O₂ → H₂O (irreversible peroxide reduction; legacy
+                     # sequential-topology rate. Per Ruggiero 2022 the deck
+                     # uses parallel 2e/4e ORR — see K0_PHYS_R4E below for the
+                     # parallel 4e direct-to-water rate that replaces R_2.)
 ALPHA_R2 = 0.5
+
+# Parallel 2e/4e ORR kinetics (Ruggiero 2022, M3a.2 — 2026-05-07).
+# R_2e: O₂ + 2H⁺ + 2e⁻ → H₂O₂ (peroxide-producing 2e channel).
+# R_4e: O₂ + 4H⁺ + 4e⁻ → 2H₂O (direct 4e-to-water channel).  Both
+# pathways consume O₂ and H⁺ but only R_2e produces free H₂O₂; the 4e
+# channel proceeds via adsorbed *-OOH → *-OH → H₂O without releasing
+# free peroxide (Ruggiero §1).
+K0_PHYS_R2E = K0_PHYS_R1     # same rate as legacy R_1 (the 2e channel)
+ALPHA_R2E = ALPHA_R1
+K0_PHYS_R4E = K0_PHYS_R1     # PRIOR-SELECTED placeholder (= K0_PHYS_R1).  Per
+                              # H18 V4: k0_4e is weakly identified from page-15
+                              # peroxide alone; calibrate against disk current
+                              # / selectivity / Tafel slope in M4.  Sweep
+                              # K0_PHYS_R4E ∈ {1, 5, 10} × K0_PHYS_R1 in
+                              # M3a.2 if magnitude is far off experimental.
+ALPHA_R4E = 0.5              # default placeholder; revisit in M4 with Tafel.
 
 # Physical equilibrium potentials (V vs RHE).  CLAUDE.md Hard Rule 4:
 # "Use physical E_eq (R1 = 0.68 V, R2 = 1.78 V vs RHE), never E_eq = 0."
 E_EQ_R1_V = 0.68
 E_EQ_R2_V = 1.78
+# Ruggiero §1 Eqs 1-2 — parallel 2e/4e equilibrium potentials.
+# Refines the legacy E_EQ_R1_V = 0.68 V to 0.695 V for the 2e channel.
+E_EQ_R2E_V = 0.695   # V vs RHE, Ruggiero 2022 §1 (2e: O₂ + 2H⁺ + 2e⁻ → H₂O₂)
+E_EQ_R4E_V = 1.23    # V vs RHE, Ruggiero 2022 §1 (4e: O₂ + 4H⁺ + 4e⁻ → 2H₂O)
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +150,9 @@ C_CLO4_HAT = C_CLO4 / C_SCALE
 
 K0_HAT_R1 = K0_PHYS_R1 / K_SCALE
 K0_HAT_R2 = K0_PHYS_R2 / K_SCALE
+# Parallel 2e/4e ORR nondimensional rate constants.
+K0_HAT_R2E = K0_PHYS_R2E / K_SCALE
+K0_HAT_R4E = K0_PHYS_R4E / K_SCALE
 
 # Steric (Bikerman) parameters
 A_DEFAULT = 0.01
@@ -324,6 +358,7 @@ def _make_bv_bc_cfg(
     boltzmann_counterions: Optional[Sequence[Dict[str, Any]]] = None,
     stern_capacitance_f_m2: Optional[float] = None,
     include_h_factor: Optional[bool] = None,
+    bv_reactions: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Build the ``bv_bc`` config sub-dict for 2-reaction BV.
 
@@ -351,44 +386,76 @@ def _make_bv_bc_cfg(
         reaction's ``cathodic_conc_factors``.  Defaults to True for
         ``species.n_species >= 3`` (works for both the 4sp charged preset
         and the 3sp logc+Boltzmann preset).
+    bv_reactions:
+        Optional list of fully-specified reaction dicts.  When set, takes
+        precedence over the legacy ``k0_hat_r{1,2}, alpha_r{1,2},
+        E_eq_r{1,2}`` keyword bundle and the species ``stoichiometry_r{1,2}``
+        fields — the BV residual loop iterates over this list directly.
+        Each entry must provide ``k0`` (nondim), ``alpha``, ``n_electrons``,
+        ``E_eq_v`` (V vs RHE), ``cathodic_species``, ``anodic_species``
+        (or None), ``stoichiometry`` (per-species int list of length
+        ``n_species``), ``c_ref``, ``reversible``, and optionally
+        ``cathodic_conc_factors``.  Used by the parallel-2e/4e topology
+        (M3a.2, 2026-05-07) to bypass the hardcoded sequential R_1/R_2
+        construction; see ``PARALLEL_2E_4E_REACTIONS`` below.
     """
-    reaction_1: Dict[str, Any] = {
-        "k0": k0_hat_r1,
-        "alpha": alpha_r1,
-        "cathodic_species": 0,
-        "anodic_species": 1,
-        "c_ref": 1.0,
-        "stoichiometry": list(species.stoichiometry_r1),
-        "n_electrons": N_ELECTRONS,
-        "reversible": True,
-        "E_eq_v": E_eq_r1,
-    }
-    reaction_2: Dict[str, Any] = {
-        "k0": k0_hat_r2,
-        "alpha": alpha_r2,
-        "cathodic_species": 1,
-        "anodic_species": None,
-        "c_ref": 0.0,
-        "stoichiometry": list(species.stoichiometry_r2),
-        "n_electrons": N_ELECTRONS,
-        "reversible": False,
-        "E_eq_v": E_eq_r2,
-    }
-
-    # H+ stoichiometric concentration factor.  Apply automatically when the
-    # species set has at least 3 species (i.e. tracks H+ explicitly), unless
-    # the caller overrides via include_h_factor.
-    if include_h_factor is None:
-        attach_h = species.n_species >= 3
+    if bv_reactions is not None:
+        # Caller-supplied reactions list takes precedence over the legacy
+        # R_1/R_2 keyword construction.  Deep-copy each entry so internal
+        # mutation (e.g. nondimensionalization in
+        # ``_add_bv_reactions_scaling_to_transform``) does not leak
+        # back to the caller's literal.
+        reactions_out = []
+        for rxn in bv_reactions:
+            rxn_copy = dict(rxn)
+            # Deep-copy nested factor lists so they cannot share state.
+            if "cathodic_conc_factors" in rxn_copy and rxn_copy["cathodic_conc_factors"]:
+                rxn_copy["cathodic_conc_factors"] = [
+                    dict(f) for f in rxn_copy["cathodic_conc_factors"]
+                ]
+            if "stoichiometry" in rxn_copy:
+                rxn_copy["stoichiometry"] = list(rxn_copy["stoichiometry"])
+            reactions_out.append(rxn_copy)
     else:
-        attach_h = bool(include_h_factor)
-    if attach_h:
-        h_factor = [{"species": 2, "power": 2, "c_ref_nondim": c_hp_hat}]
-        reaction_1["cathodic_conc_factors"] = h_factor
-        reaction_2["cathodic_conc_factors"] = [dict(f) for f in h_factor]
+        reaction_1: Dict[str, Any] = {
+            "k0": k0_hat_r1,
+            "alpha": alpha_r1,
+            "cathodic_species": 0,
+            "anodic_species": 1,
+            "c_ref": 1.0,
+            "stoichiometry": list(species.stoichiometry_r1),
+            "n_electrons": N_ELECTRONS,
+            "reversible": True,
+            "E_eq_v": E_eq_r1,
+        }
+        reaction_2: Dict[str, Any] = {
+            "k0": k0_hat_r2,
+            "alpha": alpha_r2,
+            "cathodic_species": 1,
+            "anodic_species": None,
+            "c_ref": 0.0,
+            "stoichiometry": list(species.stoichiometry_r2),
+            "n_electrons": N_ELECTRONS,
+            "reversible": False,
+            "E_eq_v": E_eq_r2,
+        }
+
+        # H+ stoichiometric concentration factor.  Apply automatically when the
+        # species set has at least 3 species (i.e. tracks H+ explicitly), unless
+        # the caller overrides via include_h_factor.
+        if include_h_factor is None:
+            attach_h = species.n_species >= 3
+        else:
+            attach_h = bool(include_h_factor)
+        if attach_h:
+            h_factor = [{"species": 2, "power": 2, "c_ref_nondim": c_hp_hat}]
+            reaction_1["cathodic_conc_factors"] = h_factor
+            reaction_2["cathodic_conc_factors"] = [dict(f) for f in h_factor]
+
+        reactions_out = [reaction_1, reaction_2]
 
     cfg: Dict[str, Any] = {
-        "reactions": [reaction_1, reaction_2],
+        "reactions": reactions_out,
         # Legacy per-species fallback (used by _get_bv_cfg for markers)
         "k0": list(species.k0_legacy),
         "alpha": list(species.alpha_legacy),
@@ -430,6 +497,63 @@ DEFAULT_CLO4_BOLTZMANN_COUNTERION_STERIC: Dict[str, Any] = {
 
 
 # ---------------------------------------------------------------------------
+# Parallel 2e/4e ORR reaction set (Ruggiero 2022, M3a.2 — 2026-05-07)
+# ---------------------------------------------------------------------------
+#
+# Used by passing ``bv_reactions=PARALLEL_2E_4E_REACTIONS`` to
+# ``make_bv_solver_params`` to override the legacy sequential R_1 + R_2
+# topology with the deck/paper-aligned parallel 2e + 4e topology.
+#
+# Stoichiometry conventions (per-species int list, length n_species=3):
+#   index 0 = O₂, index 1 = H₂O₂, index 2 = H⁺
+#   negative = consumed at cathode, positive = produced at cathode
+#
+# R_2e: O₂ + 2H⁺ + 2e⁻ → H₂O₂        stoichiometry [-1, +1, -2], n_e = 2
+# R_4e: O₂ + 4H⁺ + 4e⁻ → 2H₂O        stoichiometry [-1,  0, -4], n_e = 4
+#
+# H+ stoichiometric concentration factor is included on each reaction
+# with ``power = n_electrons`` (acid-form ORR consumes one H+ per electron).
+# Ruggiero §1 also lists alkaline-form rate laws; not modeled here.
+#
+# k0_R4e is a PRIOR-SELECTED placeholder (= K0_HAT_R2E) — not calibrated
+# to any data.  Per H18 V4: k0_4e is weakly identified from page-15
+# peroxide alone; calibrate against disk current / selectivity / Tafel
+# slope in M4.  Sweep K0_HAT_R4E ∈ {1, 5, 10} × K0_HAT_R2E in M3a.2 if
+# magnitude is far off experimental.
+
+PARALLEL_2E_4E_REACTIONS: List[Dict[str, Any]] = [
+    {
+        "k0": K0_HAT_R2E,
+        "alpha": ALPHA_R2E,
+        "cathodic_species": 0,           # O₂
+        "anodic_species": 1,             # H₂O₂ (reverse direction)
+        "c_ref": 1.0,
+        "stoichiometry": [-1, +1, -2],   # O₂ consumed, H₂O₂ produced, 2 H⁺ consumed
+        "n_electrons": 2,
+        "reversible": True,
+        "E_eq_v": E_EQ_R2E_V,            # 0.695 V vs RHE
+        "cathodic_conc_factors": [
+            {"species": 2, "power": 2, "c_ref_nondim": C_HP_HAT},
+        ],
+    },
+    {
+        "k0": K0_HAT_R4E,
+        "alpha": ALPHA_R4E,
+        "cathodic_species": 0,           # O₂
+        "anodic_species": None,          # irreversible to water
+        "c_ref": 0.0,
+        "stoichiometry": [-1,  0, -4],   # O₂ consumed, H₂O₂ untouched, 4 H⁺ consumed
+        "n_electrons": 4,
+        "reversible": False,
+        "E_eq_v": E_EQ_R4E_V,            # 1.23 V vs RHE
+        "cathodic_conc_factors": [
+            {"species": 2, "power": 4, "c_ref_nondim": C_HP_HAT},
+        ],
+    },
+]
+
+
+# ---------------------------------------------------------------------------
 # SolverParams factory
 # ---------------------------------------------------------------------------
 
@@ -458,6 +582,7 @@ def make_bv_solver_params(
     u_clamp: float = 100.0,
     initializer: str = "linear_phi",
     include_h_factor: Optional[bool] = None,
+    bv_reactions: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> "SolverParams":
     """Build SolverParams for multi-species BV with graded rectangle mesh markers.
 
@@ -510,6 +635,13 @@ def make_bv_solver_params(
         Symmetric clamp on ``u_i = ln(c_i)`` in the log-c bulk forms.
     include_h_factor:
         Override the auto-detection in :func:`_make_bv_bc_cfg`.
+    bv_reactions:
+        Optional fully-specified reactions list.  When set, takes
+        precedence over the legacy ``k0_hat_r{1,2}, alpha_r{1,2},
+        E_eq_r{1,2}`` keyword bundle and the species ``stoichiometry_r{1,2}``
+        fields.  Used by the parallel-2e/4e topology (M3a.2,
+        2026-05-07) — pass ``PARALLEL_2E_4E_REACTIONS`` for the
+        Ruggiero-aligned parallel set.
 
     Returns
     -------
@@ -538,6 +670,7 @@ def make_bv_solver_params(
         boltzmann_counterions=boltzmann_counterions,
         stern_capacitance_f_m2=stern_capacitance_f_m2,
         include_h_factor=include_h_factor,
+        bv_reactions=bv_reactions,
     )
 
     c0 = list(species.c0_vals_hat)

@@ -638,3 +638,673 @@ def _state_dict_failure(
         "gamma_s": gamma_s,
         "eta1": eta1, "eta2": eta2,
     }
+
+
+# ---------------------------------------------------------------------------
+# Generalized N-reaction Picard outer loop (M3a.3, ORR-class topologies)
+#
+# See ``docs/picard_general_topology_derivation.md`` v3 for the full
+# derivation.  This implements:
+#
+#   - §3 three-branch BV rate model (anodic surface-species linear,
+#     anodic constant, irreversible).
+#   - §4 affine matrix system M·R = b with per-species transport
+#     coefficient λ_i (1/D_i for ordinary species; 1/(2 D_H) for H⁺).
+#   - §7 outer Picard with explicit raw-vs-relaxed rate disambiguation
+#     (R_solve / R_old / R) and δ on the relaxed state.
+#   - §8 post-loop surface reconstruction with topology-hint dispatch
+#     (sequential closed-form P_s for "sequential_2e_h2o2"; naive flux
+#     balance otherwise).
+#   - §9 contract: legacy-compatible floors before failure classification;
+#     reject H⁺ as a linear substrate at adapter sites (item 11).
+# ---------------------------------------------------------------------------
+
+def _eta_list_from_drop(
+    *,
+    eta_drop: float,
+    reactions: list,
+    bv_exp_scale: float,
+    exponent_clip: float,
+    clip_exponent: bool,
+) -> list[float]:
+    """Per-reaction clipped η vector ``η_j = clip(scale·(η_drop − E_j))``."""
+    return [
+        _eta_clipped(
+            eta_drop=eta_drop,
+            E=float(rxn.get("E_eq_model", 0.0)),
+            bv_exp_scale=bv_exp_scale,
+            exponent_clip=exponent_clip,
+            clip=clip_exponent,
+        )
+        for rxn in reactions
+    ]
+
+
+def _build_picard_prefactors(
+    *,
+    reactions: list,
+    log_gamma: float,
+    log_by_species: list[float],
+    eta_list: list[float],
+) -> tuple[list[float], list[float], list[float]]:
+    """Per-reaction ``(α̂_j, β̂_j, Ĉ_j)`` per derivation v3 §3.
+
+    Three-branch anodic dispatch:
+
+      - branch 1 (surface-species linear): ``reversible AND anodic_species
+        is not None`` → ``β̂_j ≠ 0``, ``Ĉ_j = 0``.
+      - branch 2 (affine constant): ``reversible AND anodic_species is
+        None AND c_ref_model > 1e-30`` → ``Ĉ_j ≠ 0``, ``β̂_j = 0``.
+      - branch 3 (irreversible): ``reversible == False`` (or both above
+        fail) → ``β̂_j = Ĉ_j = 0``.
+
+    γ-power: ``α̂_j ∝ γ^{1 + Σ_f power_f}``; ``β̂_j ∝ γ^1``;
+    ``Ĉ_j ∝ γ^0`` (residual does not multiply ``c_ref_model`` by activity).
+
+    Computed in log-space (mirrors ``picard_outer_loop`` line 481-487).
+    """
+    alpha_hat = []
+    beta_hat = []
+    c_hat = []
+    for j, rxn in enumerate(reactions):
+        k_j = float(rxn["k0_model"])
+        a_j = float(rxn["alpha"])
+        n_e_j = float(rxn["n_electrons"])
+        eta_j = eta_list[j]
+        factors_j = rxn.get("cathodic_conc_factors", [])
+        log_h_factor_j = _factor_log_from_species_logs(log_by_species, factors_j)
+        # α̂_j: cathodic prefactor with γ^{1 + Σ_f power_f} embedded via
+        # log_gamma + log_h_factor (which carries one log_gamma per H⁺
+        # power because log_by_species is γ-shifted).
+        log_alpha = (
+            math.log(max(k_j, 1e-300))
+            + log_gamma
+            + log_h_factor_j
+            - a_j * n_e_j * eta_j
+        )
+        alpha_hat.append(_safe_exp(log_alpha))
+
+        reversible = bool(rxn.get("reversible", False))
+        anod_sp = rxn.get("anodic_species", None)
+        c_ref = float(rxn.get("c_ref_model", 0.0))
+
+        if reversible and anod_sp is not None:
+            # Branch 1: surface-species linear (γ¹).
+            log_beta = (
+                math.log(max(k_j, 1e-300))
+                + log_gamma
+                + (1.0 - a_j) * n_e_j * eta_j
+            )
+            beta_hat.append(_safe_exp(log_beta))
+            c_hat.append(0.0)
+        elif reversible and anod_sp is None and c_ref > 1e-30:
+            # Branch 2: affine constant (γ⁰; no log_gamma).
+            log_c = (
+                math.log(max(k_j, 1e-300))
+                + math.log(max(c_ref, 1e-300))
+                + (1.0 - a_j) * n_e_j * eta_j
+            )
+            beta_hat.append(0.0)
+            c_hat.append(_safe_exp(log_c))
+        else:
+            # Branch 3: irreversible.
+            beta_hat.append(0.0)
+            c_hat.append(0.0)
+    return alpha_hat, beta_hat, c_hat
+
+
+def _lambda_for_species(
+    *, species_idx: int, h_idx: int, diffusivities: list[float]
+) -> float:
+    """``λ_i = 1/D_i`` for ordinary species; ``λ_H = 1/(2 D_H)`` for H⁺.
+
+    Per derivation v3 §4 sub-note + §9 contract item 11.  Adapter sites
+    must reject configs that put H⁺ as ``cathodic_species`` or
+    ``anodic_species`` BEFORE calling this function (this helper only
+    dispatches the divisor; it does not validate).
+    """
+    D_i = max(diffusivities[species_idx], 1e-30)
+    if species_idx == h_idx:
+        return 1.0 / (2.0 * D_i)
+    return 1.0 / D_i
+
+
+def _assemble_n_reaction_system(
+    *,
+    reactions: list,
+    alpha_hat: list[float],
+    beta_hat: list[float],
+    c_hat: list[float],
+    bulk_concs: list[float],
+    diffusivities: list[float],
+    h_idx: int,
+):
+    """Assemble M (N×N) and b (N) per derivation v3 §4.
+
+    ``M[j,k] = δ_{j,k} − α̂_j · s_{cathsub_j, k} · λ_{cathsub_j}
+              + β̂_j · s_{anodsub_j, k} · λ_{anodsub_j}``  (β̂_j=0 ⇒ second
+              term gone)
+
+    ``b[j] = α̂_j · c_{cathsub_j}_b − β̂_j · c_{anodsub_j}_b − Ĉ_j``
+
+    where ``λ_i = 1/D_i`` for ordinary species and ``1/(2 D_H)`` for H⁺
+    (substrate, not the H⁺ flux balance which doesn't enter M).
+
+    Returns ``(M, b)`` as lists-of-lists / list (so the caller can
+    convert to numpy arrays for the linear solve, keeping this helper
+    importable without numpy at module load).
+    """
+    N = len(reactions)
+    # Initialize M = identity, b = zeros.
+    M = [[(1.0 if j == k else 0.0) for k in range(N)] for j in range(N)]
+    b = [0.0 for _ in range(N)]
+    for j, rxn_j in enumerate(reactions):
+        cs = int(rxn_j["cathodic_species"])
+        lambda_cs = _lambda_for_species(
+            species_idx=cs, h_idx=h_idx, diffusivities=diffusivities
+        )
+        c_cs_b = float(bulk_concs[cs])
+        for k, rxn_k in enumerate(reactions):
+            stoich_k = list(rxn_k.get("stoichiometry", []))
+            if cs >= len(stoich_k):
+                continue
+            s_cs_k = float(stoich_k[cs])
+            if s_cs_k == 0.0:
+                continue
+            M[j][k] -= alpha_hat[j] * s_cs_k * lambda_cs
+        b[j] += alpha_hat[j] * c_cs_b
+
+        if beta_hat[j] != 0.0:
+            anod = rxn_j.get("anodic_species", None)
+            if anod is not None:
+                anod = int(anod)
+                lambda_as = _lambda_for_species(
+                    species_idx=anod, h_idx=h_idx, diffusivities=diffusivities
+                )
+                c_as_b = float(bulk_concs[anod])
+                for k, rxn_k in enumerate(reactions):
+                    stoich_k = list(rxn_k.get("stoichiometry", []))
+                    if anod >= len(stoich_k):
+                        continue
+                    s_as_k = float(stoich_k[anod])
+                    if s_as_k == 0.0:
+                        continue
+                    M[j][k] += beta_hat[j] * s_as_k * lambda_as
+                b[j] -= beta_hat[j] * c_as_b
+
+        b[j] -= c_hat[j]
+    return M, b
+
+
+def _solve_2x2(M: list, b: list) -> tuple[float, float, float]:
+    """Direct 2×2 solve preserving legacy ordering for byte-equivalence.
+
+    Returns ``(R0, R1, det)``.  Caller checks ``det`` for singularity.
+    Mirrors ``picard_outer_loop`` lines 496-502.
+    """
+    m11, m12 = M[0][0], M[0][1]
+    m21, m22 = M[1][0], M[1][1]
+    rhs1, rhs2 = b[0], b[1]
+    det = m11 * m22 - m12 * m21
+    if not math.isfinite(det) or abs(det) < 1e-300:
+        return float("nan"), float("nan"), det
+    r0 = (m22 * rhs1 - m12 * rhs2) / det
+    r1 = (-m21 * rhs1 + m11 * rhs2) / det
+    return r0, r1, det
+
+
+def _solve_linear_system(M: list, b: list) -> tuple[list[float], float]:
+    """Solve M·R = b with size-aware fast path.
+
+    Returns ``(R_list, det_or_nan)`` where ``det_or_nan`` is the 2×2
+    determinant for N=2 (used for the byte-equivalent singular-Jacobian
+    check) and ``float('nan')`` for N != 2 (callers use np.linalg.solve
+    failure modes for those).
+    """
+    N = len(b)
+    if N == 0:
+        return [], float("nan")
+    if N == 1:
+        m = M[0][0]
+        if not math.isfinite(m) or abs(m) < 1e-300:
+            return [float("nan")], m
+        return [b[0] / m], m
+    if N == 2:
+        r0, r1, det = _solve_2x2(M, b)
+        return [r0, r1], det
+    # N ≥ 3: numpy.linalg.solve.  Imported lazily so that the
+    # 2-reaction sequential path (which is byte-equivalence sensitive)
+    # never depends on numpy.
+    import numpy as _np
+    M_np = _np.asarray(M, dtype=float)
+    b_np = _np.asarray(b, dtype=float)
+    try:
+        R = _np.linalg.solve(M_np, b_np)
+    except _np.linalg.LinAlgError:
+        return [float("nan")] * N, 0.0
+    return [float(v) for v in R], float("nan")
+
+
+def _surface_concs_from_rates(
+    *,
+    R: list[float],
+    reactions: list,
+    bulk_concs: list[float],
+    diffusivities: list[float],
+    h_idx: int,
+    species_floors: list[float],
+) -> list[float]:
+    """Signed flux balance per derivation v3 §2 with per-species floors.
+
+    ``c_{i,s} = max(c_{i,b} + Σ_j s_{i,j}·R_j · λ_i, floor_i)``  for
+    ordinary species (``λ_i = 1/D_i``); H⁺ uses the ambipolar
+    ``λ_H = 1/(2 D_H)``.
+    """
+    n_species = len(bulk_concs)
+    out = [float(bulk_concs[i]) for i in range(n_species)]
+    for i in range(n_species):
+        lam = _lambda_for_species(
+            species_idx=i, h_idx=h_idx, diffusivities=diffusivities
+        )
+        delta = 0.0
+        for j, rxn in enumerate(reactions):
+            stoich_j = list(rxn.get("stoichiometry", []))
+            if i >= len(stoich_j):
+                continue
+            s_ij = float(stoich_j[i])
+            if s_ij == 0.0:
+                continue
+            delta += s_ij * R[j] * lam
+        out[i] = max(out[i] + delta, species_floors[i])
+    return out
+
+
+def _validate_no_h_substrate(
+    *, reactions: list, h_idx: int
+) -> tuple[bool, str]:
+    """v3 §9 item 11: reject H⁺ as cathodic_species or anodic_species.
+
+    Returns ``(ok, reason)``; ``reason = ''`` on pass.  Adapter sites
+    should call this before invoking ``picard_outer_loop_general`` and
+    fall back to linear-phi IC on rejection.
+    """
+    for j, rxn in enumerate(reactions):
+        cs = rxn.get("cathodic_species", None)
+        anod = rxn.get("anodic_species", None)
+        if cs is not None and int(cs) == h_idx:
+            return False, f"h_plus_as_linear_substrate (cathodic, reaction {j})"
+        if anod is not None and int(anod) == h_idx:
+            return False, f"h_plus_as_linear_substrate (anodic, reaction {j})"
+    return True, ""
+
+
+def picard_outer_loop_general(
+    *,
+    reactions: list,
+    bulk_concs: list[float],
+    diffusivities: list[float],
+    species_floors: list[float],
+    h_idx: int,
+    c_clo4_bulk: float,
+    phi_applied_model: float,
+    bv_exp_scale: float,
+    exponent_clip: float,
+    clip_exponent: bool,
+    a_h: float = 0.0,
+    a_cl: float = 0.0,
+    c_cl_anchor_kind: str = "bulk",
+    stern_split: dict | None = None,
+    omega: float = 0.5,
+    max_iters: int = 50,
+    tol: float = 1e-6,
+    topology_hint: str = "general",
+) -> tuple[bool, str, int, dict]:
+    """Generalized N-reaction Picard outer loop (v3 §7-§9).
+
+    See ``docs/picard_general_topology_derivation.md`` v3 for the
+    derivation and the implementation contract (§9).
+
+    Parameters
+    ----------
+    reactions : list of dict
+        Per-reaction config.  Required keys: ``k0_model``, ``alpha``,
+        ``n_electrons``, ``E_eq_model``, ``cathodic_species``,
+        ``stoichiometry``.  Optional: ``anodic_species``, ``reversible``,
+        ``c_ref_model``, ``cathodic_conc_factors``.  See ``picard_ic``
+        module docstring + v3 §1.
+    bulk_concs, diffusivities, species_floors : lists of float
+        Per dynamic species (length n_species).  ``species_floors[i]`` is
+        the lower clamp on ``c_{i,s}`` (e.g. ``1e-300`` for O₂/H⁺;
+        ``P_FLOOR`` for H₂O₂).
+    h_idx : int
+        Index of H⁺ in the species ordering.  Used by the ambipolar
+        ``1/(2 D_H)`` flux-balance correction (v3 §2).
+    c_clo4_bulk, phi_applied_model, bv_exp_scale, exponent_clip,
+    clip_exponent, a_h, a_cl, c_cl_anchor_kind, stern_split, omega,
+    max_iters, tol :
+        Same semantics as ``picard_outer_loop``; see that function's
+        docstring.
+    topology_hint : str, optional
+        Selects the post-loop surface reconstruction (v3 §8):
+
+        - ``"sequential_2e_h2o2"``: legacy closed-form
+          ``P_s = (D_P·P_b + R_1)/(D_P + A_2_post)`` and
+          ``O_s = (D_O·O_b + B_1_post·P_s)/(D_O + A_1_post)``.  REQUIRED
+          for byte-equivalence with the legacy 2x2 ``picard_outer_loop``.
+        - ``"general"`` (default): naive signed flux balance per §2.
+
+    Returns
+    -------
+    (ok, reason, n_iters, picard_state) : tuple
+        ``picard_state`` includes ``R_list``, ``eta_list``,
+        ``alpha_hat_list``, ``beta_hat_list``, ``c_hat_list`` for
+        diagnostics.  When ``len(reactions) >= 2`` the dict ALSO carries
+        legacy keys ``R1, R2, eta1, eta2`` aliased to the first two
+        entries — preserves the existing wrapper/test/diagnostic API.
+        ``c_i_s`` per dynamic species lives under both the per-species
+        key (e.g. ``O_s, P_s, H_o``) for the standard ORR ordering AND
+        a generic ``c_s_list`` for arbitrary species lists.
+    """
+    n_species = len(bulk_concs)
+    if not (
+        len(diffusivities) == n_species
+        and len(species_floors) == n_species
+    ):
+        return False, "species_arity_mismatch", 0, {}
+    if h_idx < 0 or h_idx >= n_species:
+        return False, f"h_idx_out_of_range ({h_idx})", 0, {}
+
+    ok_h, reason_h = _validate_no_h_substrate(reactions=reactions, h_idx=h_idx)
+    if not ok_h:
+        return False, reason_h, 0, {}
+
+    N = len(reactions)
+    if N == 0:
+        return False, "empty_reactions", 0, {}
+
+    # --- Picard state ---
+    R = [0.0] * N
+    H_o = float(bulk_concs[h_idx])
+    phi_o = 0.0
+    c_s = [float(c) for c in bulk_concs]   # working surface concs
+    gamma_s = 1.0
+
+    # Initialize Stern + eta_drop for iter 1 (matches legacy ordering).
+    if stern_split is not None:
+        psi_S, psi_D, phi_surface = solve_stern_split(
+            phi_applied_model=phi_applied_model,
+            phi_o=phi_o,
+            lambda_D=stern_split["lambda_D"],
+            c_clo4_bulk=c_clo4_bulk,
+            a_cl=a_cl,
+            stern_coeff_nondim=stern_split["stern_coeff"],
+            eps_nondim=stern_split["eps"],
+        )
+        eta_drop = psi_S
+    else:
+        psi_S = 0.0
+        psi_D = phi_applied_model - phi_o
+        phi_surface = phi_applied_model
+        eta_drop = phi_applied_model
+
+    eta_list = _eta_list_from_drop(
+        eta_drop=eta_drop,
+        reactions=reactions,
+        bv_exp_scale=bv_exp_scale,
+        exponent_clip=exponent_clip,
+        clip_exponent=clip_exponent,
+    )
+
+    delta = float("inf")
+    converged = False
+    picard_iters = 0
+    alpha_hat: list[float] = [0.0] * N
+    beta_hat: list[float] = [0.0] * N
+    c_hat: list[float] = [0.0] * N
+
+    for k in range(1, max_iters + 1):
+        R_old = list(R)
+
+        c_cl_anchor = H_o if c_cl_anchor_kind == "synthesised_4sp" else c_clo4_bulk
+        gamma_s = compute_surface_gamma(
+            H_o, c_clo4_bulk, psi_D, a_h, a_cl, c_cl_anchor
+        )
+        log_gamma = math.log(max(gamma_s, 1e-300))
+
+        # γ-shifted log-concentrations at the OHP.
+        log_by_species: list[float] = []
+        for i in range(n_species):
+            base = math.log(max(c_s[i], 1e-300))
+            if i == h_idx:
+                # H⁺ at OHP is post-Boltzmann shifted by -psi_D.
+                log_by_species.append(base - psi_D + log_gamma)
+            else:
+                log_by_species.append(base + log_gamma)
+
+        alpha_hat, beta_hat, c_hat = _build_picard_prefactors(
+            reactions=reactions,
+            log_gamma=log_gamma,
+            log_by_species=log_by_species,
+            eta_list=eta_list,
+        )
+
+        M_mat, b_vec = _assemble_n_reaction_system(
+            reactions=reactions,
+            alpha_hat=alpha_hat,
+            beta_hat=beta_hat,
+            c_hat=c_hat,
+            bulk_concs=bulk_concs,
+            diffusivities=diffusivities,
+            h_idx=h_idx,
+        )
+
+        R_solve, det = _solve_linear_system(M_mat, b_vec)
+        if N == 2:
+            singular = (
+                not math.isfinite(det) or abs(det) < 1e-300
+            )
+        else:
+            singular = any(not math.isfinite(v) for v in R_solve)
+        if singular:
+            return (
+                False,
+                f"singular_jacobian_iter_{k}_det={det:.3g}",
+                k,
+                _state_dict_failure_general(
+                    R, c_s, H_o, phi_o, psi_D, psi_S, phi_surface,
+                    gamma_s, eta_list, h_idx,
+                ),
+            )
+        if any(not math.isfinite(v) for v in R_solve):
+            return (
+                False,
+                f"non_finite_R_iter_{k}",
+                k,
+                _state_dict_failure_general(
+                    R, c_s, H_o, phi_o, psi_D, psi_S, phi_surface,
+                    gamma_s, eta_list, h_idx,
+                ),
+            )
+
+        # Per-reaction relaxation on raw solve.
+        R = [(1.0 - omega) * R_old[j] + omega * R_solve[j] for j in range(N)]
+
+        # Surface concentrations from signed flux balance + per-species floors.
+        c_s = _surface_concs_from_rates(
+            R=R,
+            reactions=reactions,
+            bulk_concs=bulk_concs,
+            diffusivities=diffusivities,
+            h_idx=h_idx,
+            species_floors=species_floors,
+        )
+        H_o = c_s[h_idx]
+        phi_o = math.log(max(H_o, 1e-300) / max(c_clo4_bulk, 1e-300))
+
+        # Reject post-update non-finite state (v3 §9 item 8 (iii)).
+        if not all(math.isfinite(v) for v in c_s) or not math.isfinite(phi_o):
+            return (
+                False,
+                f"non_finite_state_iter_{k}",
+                k,
+                _state_dict_failure_general(
+                    R, c_s, H_o, phi_o, psi_D, psi_S, phi_surface,
+                    gamma_s, eta_list, h_idx,
+                ),
+            )
+
+        # Stern split + eta_drop update (matches legacy post-update ordering).
+        if stern_split is not None:
+            psi_S, psi_D, phi_surface = solve_stern_split(
+                phi_applied_model=phi_applied_model,
+                phi_o=phi_o,
+                lambda_D=stern_split["lambda_D"],
+                c_clo4_bulk=c_clo4_bulk,
+                a_cl=a_cl,
+                stern_coeff_nondim=stern_split["stern_coeff"],
+                eps_nondim=stern_split["eps"],
+            )
+            eta_drop = psi_S
+        else:
+            psi_S = 0.0
+            psi_D = phi_applied_model - phi_o
+            phi_surface = phi_applied_model
+            eta_drop = phi_applied_model
+
+        eta_list = _eta_list_from_drop(
+            eta_drop=eta_drop,
+            reactions=reactions,
+            bv_exp_scale=bv_exp_scale,
+            exponent_clip=exponent_clip,
+            clip_exponent=clip_exponent,
+        )
+
+        delta = sum(
+            abs(R[j] - R_old[j]) / max(abs(R[j]), 1e-30) for j in range(N)
+        )
+        picard_iters = k
+        if delta < tol:
+            converged = True
+            break
+
+    if not converged:
+        return (
+            False,
+            f"picard_max_iters_delta={delta:.4g}",
+            picard_iters,
+            _state_dict_failure_general(
+                R, c_s, H_o, phi_o, psi_D, psi_S, phi_surface,
+                gamma_s, eta_list, h_idx,
+            ),
+        )
+
+    # Post-converged γ_s aligned with the post-iter (psi_D, H_o) tuple.
+    c_cl_anchor_post = (
+        H_o if c_cl_anchor_kind == "synthesised_4sp" else c_clo4_bulk
+    )
+    gamma_s = compute_surface_gamma(
+        H_o, c_clo4_bulk, psi_D, a_h, a_cl, c_cl_anchor_post
+    )
+    log_gamma_post = math.log(max(gamma_s, 1e-300))
+    log_by_species_post: list[float] = []
+    for i in range(n_species):
+        base = math.log(max(c_s[i], 1e-300))
+        if i == h_idx:
+            log_by_species_post.append(base - psi_D + log_gamma_post)
+        else:
+            log_by_species_post.append(base + log_gamma_post)
+    alpha_hat_post, beta_hat_post, c_hat_post = _build_picard_prefactors(
+        reactions=reactions,
+        log_gamma=log_gamma_post,
+        log_by_species=log_by_species_post,
+        eta_list=eta_list,
+    )
+
+    # Topology-hint dispatch for post-loop surface reconstruction.
+    if topology_hint == "sequential_2e_h2o2" and N == 2:
+        # Legacy closed-form (v3 §8): P_s = (D_P·P_b + R_1)/(D_P + A_2_post)
+        # then O_s = (D_O·O_b + B_1_post·P_s)/(D_O + A_1_post).
+        # Hard-coded species order: O=0, P=1, H=2.
+        D_O_loc = max(diffusivities[0], 1e-30)
+        D_P_loc = max(diffusivities[1], 1e-30)
+        P_FLOOR_loc = species_floors[1]
+        O_FLOOR_loc = species_floors[0]
+        P_b_loc = float(bulk_concs[1])
+        O_b_loc = float(bulk_concs[0])
+        A1_p, B1_p, A2_p = alpha_hat_post[0], beta_hat_post[0], alpha_hat_post[1]
+        P_s_post = max((D_P_loc * P_b_loc + R[0]) / (D_P_loc + A2_p), P_FLOOR_loc)
+        O_s_post = max(
+            (D_O_loc * O_b_loc + B1_p * P_s_post) / (D_O_loc + A1_p), O_FLOOR_loc
+        )
+        c_s = list(c_s)
+        c_s[0] = O_s_post
+        c_s[1] = P_s_post
+        # H_o from the loop's signed flux balance is preserved.
+
+    state: dict = {
+        "R_list": list(R),
+        "c_s_list": list(c_s),
+        "eta_list": list(eta_list),
+        "alpha_hat_list": list(alpha_hat_post),
+        "beta_hat_list": list(beta_hat_post),
+        "c_hat_list": list(c_hat_post),
+        "H_o": H_o,
+        "phi_o": phi_o,
+        "psi_D": psi_D, "psi_S": psi_S,
+        "phi_surface": phi_surface,
+        "gamma_s": gamma_s,
+    }
+    # Standard ORR per-species aliases (when species 0=O, 1=P, 2=H).
+    if n_species >= 3:
+        state["O_s"] = c_s[0]
+        state["P_s"] = c_s[1]
+        # ``H_o`` already set above.
+    if N >= 1:
+        state["R1"] = R[0]
+        state["eta1"] = eta_list[0]
+    if N >= 2:
+        state["R2"] = R[1]
+        state["eta2"] = eta_list[1]
+
+    return True, "", picard_iters, state
+
+
+def _state_dict_failure_general(
+    R: list[float],
+    c_s: list[float],
+    H_o: float,
+    phi_o: float,
+    psi_D: float,
+    psi_S: float,
+    phi_surface: float,
+    gamma_s: float,
+    eta_list: list[float],
+    h_idx: int,
+) -> dict:
+    """Partial state dict on Picard failure for the generalized loop.
+
+    Mirrors ``_state_dict_failure`` but parametrized by the per-reaction
+    R / eta lists.  Includes legacy R1/R2/eta1/eta2 aliases when
+    applicable so diagnostic tooling that grew up against the 2x2
+    interface keeps working.
+    """
+    state: dict = {
+        "R_list": list(R),
+        "c_s_list": list(c_s),
+        "eta_list": list(eta_list),
+        "H_o": H_o,
+        "phi_o": phi_o,
+        "psi_D": psi_D, "psi_S": psi_S,
+        "phi_surface": phi_surface,
+        "gamma_s": gamma_s,
+    }
+    if len(c_s) >= 3:
+        state["O_s"] = c_s[0]
+        state["P_s"] = c_s[1]
+    if len(R) >= 1:
+        state["R1"] = R[0]
+        state["eta1"] = eta_list[0]
+    if len(R) >= 2:
+        state["R2"] = R[1]
+        state["eta2"] = eta_list[1]
+    return state

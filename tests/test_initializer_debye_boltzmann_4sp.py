@@ -123,7 +123,8 @@ class TestDebyeBoltzmann4spExtension:
         )
         # Bulk recovery: at y=1 (top of unit square) γ → 1, ψ → 0,
         # H_outer → c_H_bulk = c_ClO4_bulk, so c_ClO4 → c_ClO4_bulk.
-        c_clo4_bulk = 0.2  # C_CLO4_HAT
+        from scripts._bv_common import C_CLO4_HAT
+        c_clo4_bulk = C_CLO4_HAT
         assert abs(c_clo4.min() - c_clo4_bulk) / c_clo4_bulk < 0.05, (
             f"c_ClO4 bulk min should recover c_ClO4_bulk={c_clo4_bulk}; "
             f"got min={c_clo4.min():.4f}"
@@ -190,7 +191,8 @@ class TestDebyeBoltzmann4spExtension:
         ctx, _ = _build_ctx_4sp(0.5)
         U = ctx["U"]
         u_h = U.dat[2].data_ro
-        c_h_bulk = 0.2  # C_HP_HAT
+        from scripts._bv_common import C_HP_HAT
+        c_h_bulk = C_HP_HAT
         u_h_bulk = float(np.log(c_h_bulk))
         assert u_h.min() < u_h_bulk - 15.0, (
             f"H+ should be depleted by ~19 nondim at electrode at "
