@@ -98,77 +98,50 @@ def build_steric_boltzmann_expressions(
     z_dyn: list[int],
     phi: Any,
     R_space: Any,
-) -> StericBoltzmannBundle | None:
-    """Build the UFL closure expressions for steric-aware Boltzmann counterions.
+) -> list[StericBoltzmannBundle]:
+    """Build UFL closure expressions for steric-aware Boltzmann counterions.
 
-    Returns ``None`` when no entries have ``steric_mode='bikerman'``.
+    Returns an empty list when no entries have ``steric_mode='bikerman'``.
+    The legacy single-counterion case (len == 1) reduces to the same
+    UFL algebra it always built; the bundle list contains exactly one
+    element. The multi-counterion shared-theta closure (plan §2.1)
+    extends this:
+
+    .. code-block:: text
+
+        For each analytic ion k (steric):
+          c_k(φ) = c_b_k · exp(-z_k·φ) · (1 - A_dyn(φ))
+                       / (θ_b + Σ_k' a_k' · c_b_k' · exp(-z_k'·φ))
+
+        with A_dyn(φ) = Σ_dyn a_i · c_i_dyn(φ)
+             θ_b      = 1 - A_dyn_bulk - Σ_k a_k · c_b_k
+
+    The denominator is the same for every steric ion (shared theta);
+    no coupled local NL solve needed.
 
     Validates:
-        - Exactly one bikerman entry (multi-counterion case raises
-          ``NotImplementedError``).
-        - ``theta_b > 0`` for the production setup; raises ``ValueError``
-          with a descriptive message otherwise.
-        - No double-counting: the bikerman entry's (z, c_bulk) cannot
+        - ``θ_b > 0`` for the bulk (sum over ALL bikerman entries);
+          raises ``ValueError`` with a descriptive message otherwise.
+        - No double-counting: no bikerman entry's (z, c_bulk) may
           duplicate any dynamic species' (z, c_bulk) within ``1e-9``
           relative tolerance.
 
     The (re)used ``ctx['boltzmann_z_scale']`` Function is the same
     R-space scaling used by the legacy ideal path; both ideal and
     bikerman counterions share it on the same ctx, so a single
-    ``_set_z_factor`` call ramps both contributions.
-
-    Parameters
-    ----------
-    ctx
-        Build context produced by ``build_forms_logc``.  Mutated to
-        publish ``boltzmann_z_scale`` if it isn't already there.
-    params
-        Solver params dict (``solver_params[10]``).  Read via
-        ``_get_bv_boltzmann_counterions_cfg``.
-    ci
-        UFL expressions for dynamic species concentrations
-        (``[exp(u_i) for u_i in ui]`` in the log-c forms).
-    a_dyn_funcs
-        R-space Bikerman size Functions for the dynamic species
-        (forms_logc.py builds these as ``steric_a_funcs``).
-    a_dyn_floats
-        Plain ``float`` values mirroring ``a_dyn_funcs`` (used for
-        bulk-side validation; UFL Functions can't be evaluated as
-        floats during form build).
-    c0_dyn
-        Bulk concentrations of dynamic species (``c0_model_vals`` in
-        the log-c forms).  Plain floats.
-    z_dyn
-        Charge numbers of dynamic species (``z_vals``).  Plain ints.
-    phi
-        UFL ``Function`` for the electrostatic potential.
-    R_space
-        FunctionSpace used to (re)create ``boltzmann_z_scale``.
+    ``_set_z_factor`` call ramps every contribution.
 
     Returns
     -------
-    StericBoltzmannBundle | None
-        Bundle with the UFL closure expressions and the shared z_scale
-        Function, or ``None`` if no bikerman entries.
+    list[StericBoltzmannBundle]
+        Empty list when no bikerman entries.  Otherwise one bundle per
+        bikerman counterion.  All bundles share the same z_scale.
     """
     counterions = _get_bv_boltzmann_counterions_cfg(params)
     bikerman = [(j, e) for j, e in enumerate(counterions)
                 if e.get("steric_mode", "ideal") == "bikerman"]
     if not bikerman:
-        return None
-    if len(bikerman) > 1:
-        raise NotImplementedError(
-            "multi-counterion bikerman closure not supported: when more than "
-            "one counterion is steric-aware the closure algebra couples "
-            "(each appears in the others' denominator).  See "
-            "docs/steric_analytic_clo4_reduction_handoff.md caveats."
-        )
-
-    j, entry = bikerman[0]
-    z_b = int(entry["z"])
-    c_b = float(entry["c_bulk_nondim"])
-    a_b = float(entry["a_nondim"])
-    phi_clamp_val = float(entry["phi_clamp"])
+        return []
 
     if not (len(a_dyn_floats) == len(c0_dyn) == len(z_dyn) == len(ci) == len(a_dyn_funcs)):
         raise ValueError(
@@ -177,58 +150,97 @@ def build_steric_boltzmann_expressions(
             f"z_dyn={len(z_dyn)}, ci={len(ci)}, a_dyn_funcs={len(a_dyn_funcs)})"
         )
 
-    # Validate theta_b > 0 (parser doesn't see dynamic species)
+    # ----- bulk-side validation across ALL bikerman entries -----
     A_dyn_bulk = sum(a * c for a, c in zip(a_dyn_floats, c0_dyn))
-    theta_b = 1.0 - A_dyn_bulk - a_b * c_b
+    A_an_bulk = sum(
+        float(e["a_nondim"]) * float(e["c_bulk_nondim"]) for _, e in bikerman
+    )
+    theta_b = 1.0 - A_dyn_bulk - A_an_bulk
     if theta_b <= 0.0:
+        bm_str = ", ".join(
+            f"a={float(e['a_nondim']):.4g}*c_b={float(e['c_bulk_nondim']):.4g}"
+            for _, e in bikerman
+        )
         raise ValueError(
-            f"boltzmann_counterions[{j}] bikerman closure requires theta_b > 0, "
-            f"but got theta_b = 1 - A_dyn_bulk - a_b*c_b "
-            f"= 1 - {A_dyn_bulk:.6g} - {a_b:.6g}*{c_b:.6g} = {theta_b:.6g}; "
-            f"reduce dynamic species' bulk fractions, a_b, or c_b."
+            f"bikerman multi-counterion closure requires theta_b > 0, but got "
+            f"theta_b = 1 - A_dyn_bulk - sum(a_k*c_b_k) "
+            f"= 1 - {A_dyn_bulk:.6g} - {A_an_bulk:.6g} = {theta_b:.6g}; "
+            f"bikerman entries: [{bm_str}]; reduce dynamic-species packing, "
+            f"per-ion a_nondim, or per-ion c_bulk_nondim."
         )
 
-    # Double-counting guard: bikerman entry must not duplicate a dynamic species
+    # Double-counting guard against EVERY dynamic species AND
+    # within-bikerman duplication (e.g. user lists Cs+ twice).
     rel_tol = 1e-9
-    for i in range(len(c0_dyn)):
-        same_z = z_dyn[i] == z_b
-        denom = max(abs(c0_dyn[i]), abs(c_b), 1e-300)
-        same_c = abs(c0_dyn[i] - c_b) <= rel_tol * denom
-        if same_z and same_c:
-            raise ValueError(
-                f"boltzmann_counterions[{j}] (z={z_b}, c_bulk={c_b}) "
-                f"duplicates dynamic species[{i}] (z={z_dyn[i]}, c_bulk={c0_dyn[i]}); "
-                f"remove from one or the other to avoid double-counting in "
-                f"Poisson and steric packing."
-            )
+    for k_idx, (j, entry) in enumerate(bikerman):
+        z_k = int(entry["z"])
+        c_k = float(entry["c_bulk_nondim"])
+        for i in range(len(c0_dyn)):
+            same_z = z_dyn[i] == z_k
+            denom = max(abs(c0_dyn[i]), abs(c_k), 1e-300)
+            same_c = abs(c0_dyn[i] - c_k) <= rel_tol * denom
+            if same_z and same_c:
+                raise ValueError(
+                    f"boltzmann_counterions[{j}] (z={z_k}, c_bulk={c_k}) "
+                    f"duplicates dynamic species[{i}] (z={z_dyn[i]}, "
+                    f"c_bulk={c0_dyn[i]}); remove from one or the other to "
+                    f"avoid double-counting in Poisson and steric packing."
+                )
+        for k2_idx, (j2, entry2) in enumerate(bikerman):
+            if k2_idx <= k_idx:
+                continue
+            z_k2 = int(entry2["z"])
+            c_k2 = float(entry2["c_bulk_nondim"])
+            denom = max(abs(c_k), abs(c_k2), 1e-300)
+            if z_k == z_k2 and abs(c_k - c_k2) <= rel_tol * denom:
+                raise ValueError(
+                    f"boltzmann_counterions[{j}] and [{j2}] duplicate "
+                    f"(z={z_k}, c_bulk={c_k}); remove one to avoid "
+                    f"double-counting."
+                )
 
-    # UFL expressions
-    phi_clamped = fd.min_value(
-        fd.max_value(phi, fd.Constant(-phi_clamp_val)),
-        fd.Constant(phi_clamp_val),
-    )
-    z_b_const = fd.Constant(float(z_b))
-    a_b_const = fd.Constant(a_b)
-    c_b_const = fd.Constant(c_b)
+    # ----- shared UFL pieces (denominator + dynamic packing factor) -----
+    A_dyn_local = sum(a_dyn_funcs[i] * ci[i] for i in range(len(ci)))
+    free_dyn_floor = fd.Constant(1e-10)   # FE-interpolation safety on coarse meshes
+    free_dyn = fd.max_value(fd.Constant(1.0) - A_dyn_local, free_dyn_floor)
     theta_b_const = fd.Constant(theta_b)
 
-    q = fd.exp(-z_b_const * phi_clamped)
-    A_dyn_local = sum(a_dyn_funcs[i] * ci[i] for i in range(len(ci)))
+    # Per-bikerman exponent uses each ion's OWN phi_clamp (each entry
+    # may set its own conservative clamp).  The SHARED denominator sums
+    # a_k * c_b_k * exp(-z_k * phi_clamped_k) — using each ion's clamp
+    # for its own term inside the sum is consistent with the closure
+    # derivation (the clamp only ever appears multiplied by that ion's
+    # z_k anyway, so the per-ion clamp is the right cap).
+    per_ion_q = []
+    for k_idx, (j, entry) in enumerate(bikerman):
+        z_k = int(entry["z"])
+        c_k = float(entry["c_bulk_nondim"])
+        a_k = float(entry["a_nondim"])
+        phi_clamp_k = float(entry["phi_clamp"])
+        z_k_const = fd.Constant(float(z_k))
+        c_k_const = fd.Constant(c_k)
+        a_k_const = fd.Constant(a_k)
+        phi_clamped_k = fd.min_value(
+            fd.max_value(phi, fd.Constant(-phi_clamp_k)),
+            fd.Constant(phi_clamp_k),
+        )
+        q_k = fd.exp(-z_k_const * phi_clamped_k)
+        per_ion_q.append({
+            "z_const": z_k_const,
+            "c_const": c_k_const,
+            "a_const": a_k_const,
+            "q": q_k,
+            "z": z_k,
+            "c_bulk": c_k,
+            "a_nondim": a_k,
+            "phi_clamp": phi_clamp_k,
+            "config_index": j,
+        })
 
-    # Numerator (1 - A_dyn) is mathematically positive in the physical
-    # regime; floor it for FE-interpolation safety on coarse meshes
-    # where the nodal interpolant of (1 - A_dyn) can dip below 0 even
-    # when the symbolic expression doesn't.
-    free_dyn_floor = fd.Constant(1e-10)
-    free_dyn = fd.max_value(fd.Constant(1.0) - A_dyn_local, free_dyn_floor)
+    denom = theta_b_const + sum(p["a_const"] * p["c_const"] * p["q"]
+                                for p in per_ion_q)
 
-    c_steric = c_b_const * q * free_dyn / (theta_b_const + a_b_const * c_b_const * q)
-
-    packing_contribution = a_b_const * c_steric
-    charge_density = z_b_const * c_steric
-
-    # (Re)use the shared z_scale Function.  Match the legacy key name
-    # so grid_per_voltage._set_z_factor ramps both contributions.
+    # Shared z_scale Function — single producer / single consumer.
     if "boltzmann_z_scale" in ctx:
         z_scale = ctx["boltzmann_z_scale"]
     else:
@@ -236,20 +248,24 @@ def build_steric_boltzmann_expressions(
         z_scale.assign(1.0)
         ctx["boltzmann_z_scale"] = z_scale
 
-    return StericBoltzmannBundle(
-        c_steric_expr=c_steric,
-        packing_contribution=packing_contribution,
-        charge_density=charge_density,
-        z_scale=z_scale,
-        metadata={
-            "config_index": j,
-            "z": z_b,
-            "c_bulk_nondim": c_b,
-            "a_nondim": a_b,
-            "phi_clamp": phi_clamp_val,
-            "theta_b": theta_b,
-        },
-    )
+    bundles: list[StericBoltzmannBundle] = []
+    for p in per_ion_q:
+        c_steric_k = p["c_const"] * p["q"] * free_dyn / denom
+        bundles.append(StericBoltzmannBundle(
+            c_steric_expr=c_steric_k,
+            packing_contribution=p["a_const"] * c_steric_k,
+            charge_density=p["z_const"] * c_steric_k,
+            z_scale=z_scale,
+            metadata={
+                "config_index": p["config_index"],
+                "z": p["z"],
+                "c_bulk_nondim": p["c_bulk"],
+                "a_nondim": p["a_nondim"],
+                "phi_clamp": p["phi_clamp"],
+                "theta_b": theta_b,
+            },
+        ))
+    return bundles
 
 
 def add_boltzmann_counterion_residual(

@@ -70,6 +70,14 @@ from Forward.bv_solver.boltzmann import (
     build_steric_boltzmann_expressions,
     StericBoltzmannBundle,
 )
+from Forward.bv_solver.multi_ion import (
+    CounterionConfig,
+    build_counterion_ctx,
+    solve_outer_phi_multiion,
+    compute_surface_gamma_multiion,
+    effective_debye_length_local,
+    per_ion_outer_concs,
+)
 from Forward.bv_solver.dispatch import (
     build_context,
     build_forms,
@@ -108,6 +116,12 @@ __all__ = [
     "add_boltzmann_counterion_residual",
     "build_steric_boltzmann_expressions",
     "StericBoltzmannBundle",
+    "CounterionConfig",
+    "build_counterion_ctx",
+    "solve_outer_phi_multiion",
+    "compute_surface_gamma_multiion",
+    "effective_debye_length_local",
+    "per_ion_outer_concs",
     "solve_grid_per_voltage_cold_with_warm_fallback",
     "PerVoltageContinuationResult",
     "PerVoltagePointResult",

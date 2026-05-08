@@ -280,22 +280,23 @@ def build_forms_logc(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
         R_space=R_space,
     )
 
-    steric_active = any(v != 0.0 for v in a_vals_list) or (steric_boltz is not None)
+    steric_active = any(v != 0.0 for v in a_vals_list) or bool(steric_boltz)
     if steric_active:
         packing_floor = float(conv_cfg.get("packing_floor", 1e-8))
         A_dyn = sum(steric_a_funcs[j] * ci[j] for j in range(n))
-        if steric_boltz is not None:
-            # Multiply the bikerman counterion's packing contribution
+        if steric_boltz:
+            # Multiply each bikerman counterion's packing contribution
             # by the same ``boltzmann_z_scale`` Function the Poisson
             # source uses, so Strategy-B / C+D z-ramps zero out BOTH
             # contributions consistently at z=0.  Without this, at z=0
             # with a high-phi IC the closure saturates locally near the
             # electrode and ``packing_floor`` activates with a huge
             # gradient ``a/packing ~ 1e6``, breaking Newton at the
-            # first ramp step.
+            # first ramp step.  All bundles share the same z_scale.
+            z_scale_shared = steric_boltz[0].z_scale
+            packing_total = sum(b.packing_contribution for b in steric_boltz)
             theta_inner = (
-                fd.Constant(1.0) - A_dyn
-                - steric_boltz.z_scale * steric_boltz.packing_contribution
+                fd.Constant(1.0) - A_dyn - z_scale_shared * packing_total
             )
         else:
             theta_inner = fd.Constant(1.0) - A_dyn
@@ -363,8 +364,10 @@ def build_forms_logc(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
             alpha_j.assign(float(rxn["alpha"]))
             bv_alpha_funcs.append(alpha_j)
 
-            # k0 <= 0 means disabled; skip to avoid fd.ln(0) in log-rate branch.
-            if float(rxn["k0_model"]) <= 0.0:
+            # k0 <= 0 OR enabled=False means disabled; skip to avoid fd.ln(0)
+            # in log-rate branch. bv_k0_funcs/bv_alpha_funcs are populated
+            # above so Stage-4 k0-continuation can still .assign(...) them.
+            if float(rxn["k0_model"]) <= 0.0 or bool(rxn.get("enabled", True)) is False:
                 R_j = fd.Constant(0.0)
                 bv_rate_exprs.append(R_j)
                 continue
@@ -475,18 +478,19 @@ def build_forms_logc(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
     F_res += eps_coeff * fd.dot(fd.grad(phi), fd.grad(w)) * dx
     if not suppress_poisson_source:
         F_res -= charge_rhs * sum(z[i] * ci[i] * w for i in range(n)) * dx
-        if steric_boltz is not None:
+        if steric_boltz:
             # Steric-aware analytic counterion contribution to Poisson.
             # Mirrors the ideal-path expression in
             # add_boltzmann_counterion_residual but uses the closure
-            # ``c_steric`` (bounded at 1/a_b) instead of the unbounded
-            # ``c_b * exp(-z*phi)``.  Multiplied by the shared
-            # ``boltzmann_z_scale`` so Strategy-B z-ramps continue to
-            # zero out both ideal and bikerman counterion charges
-            # together.
+            # ``c_steric`` (bounded by 1/a_b in the single-counterion
+            # case; bounded by the multi-ion shared-theta denominator
+            # otherwise).  Multiplied by the shared ``boltzmann_z_scale``
+            # so Strategy-B z-ramps continue to zero out every
+            # counterion charge (ideal + every bikerman) together.
+            z_scale_shared = steric_boltz[0].z_scale
+            charge_density_total = sum(b.charge_density for b in steric_boltz)
             F_res -= (
-                steric_boltz.z_scale * charge_rhs
-                * steric_boltz.charge_density * w * dx
+                z_scale_shared * charge_rhs * charge_density_total * w * dx
             )
 
     # Stern layer Robin BC
@@ -941,6 +945,120 @@ def _try_debye_boltzmann_ic(
         fd.Constant(H_o) + (fd.Constant(H_b) - fd.Constant(H_o)) * y,
         fd.Constant(1e-300),
     )
+
+    # ----- Multi-ion IC branch (plan §2.4) -------------------------------
+    # When 2+ bikerman counterions are configured (Cs⁺ + SO₄²⁻ etc.), the
+    # 1:1 BKSA composite-psi closure no longer applies; use the multi-ion
+    # shared-theta machinery in ``Forward.bv_solver.multi_ion``.  The
+    # legacy single-counterion path below is preserved byte-equivalent
+    # for the production ClO₄⁻ runs.
+    bikerman_entries_in_counterions = [
+        e for e in counterions
+        if e.get("steric_mode", "ideal") == "bikerman"
+    ]
+    multi_ion_mode = len(bikerman_entries_in_counterions) > 1
+    if multi_ion_mode:
+        from .multi_ion import (
+            build_counterion_ctx, solve_outer_phi_multiion,
+            effective_debye_length_local,
+        )
+        a_vals_full_mion = list(solver_params[6])
+        a_dyn_for_ctx = [float(v) for v in a_vals_full_mion[:n]]
+        c_dyn_bulk_for_ctx = [float(O_b), float(P_b), float(H_b)]
+        z_dyn_for_ctx = [int(v) for v in z_vals_full[:n]]
+        ctx_mion = build_counterion_ctx(
+            counterions=counterions,
+            a_dyn=a_dyn_for_ctx,
+            c_dyn_bulk=c_dyn_bulk_for_ctx,
+            z_dyn=z_dyn_for_ctx,
+        )
+        c_dyn_outer_at_ohp = [float(O_s), float(P_s), float(H_o)]
+        # Override Picard's 1:1-derived phi_o with the multi-ion solve.
+        try:
+            phi_o_local = solve_outer_phi_multiion(
+                ctx=ctx_mion, c_dyn_outer=c_dyn_outer_at_ohp,
+            )
+        except ValueError as e:
+            return False, f"multi_ion_phi_o_solve_failed: {e}", picard_iters
+        lambda_eff = effective_debye_length_local(
+            phi_o=phi_o_local, ctx=ctx_mion,
+            c_dyn_outer=c_dyn_outer_at_ohp,
+            poisson_coeff=poisson_coefficient,
+        )
+        # Linear-Debye Stern matching with multi-ion λ_eff (plan §2.4).
+        # Falls back to "no Stern" psi_D = full_drop when stern is absent.
+        full_drop = float(phi_applied_model) - phi_o_local
+        if use_stern_at_ic:
+            stern_coeff_val = float(stern_capacitance_model)
+            psi_D_local = (
+                stern_coeff_val * full_drop * lambda_eff
+                / (poisson_coefficient + stern_coeff_val * lambda_eff)
+            )
+        else:
+            psi_D_local = full_drop
+
+        # ψ profile decays from psi_D_local at OHP to 0 at bulk on
+        # λ_eff scale (linear-Debye, NOT BKSA composite — multi-ion BKSA
+        # is plan §5g escalation if Newton struggles at high-|V_RHE|).
+        psi = fd.Constant(psi_D_local) * fd.exp(-y / fd.Constant(lambda_eff))
+        # Outer-region φ profile: linear from phi_o_local at OHP to 0
+        # at bulk.  Conservative IC; Newton repairs.
+        phi_outer = fd.Constant(phi_o_local) * (
+            fd.Constant(1.0) - fd.min_value(y, fd.Constant(1.0))
+        )
+        phi_init_expr = phi_outer + psi
+
+        # Multi-ion γ_psi(y) = θ(y) / θ_outer per plan §2.4.  Uses
+        # phi(y) = phi_outer(y) + psi(y) inside the closure.
+        A_dyn_outer = sum(
+            a * c for a, c in zip(a_dyn_for_ctx, c_dyn_outer_at_ohp)
+        )
+        denom_outer = ctx_mion["theta_b"] + sum(
+            ion["a_nondim"] * ion["c_bulk_nondim"]
+            * math.exp(-ion["z"] * phi_o_local)
+            for ion in ctx_mion["ions"]
+            if ion.get("steric_mode", "ideal") == "bikerman"
+        )
+        theta_outer_const = max(
+            (1.0 - A_dyn_outer) * ctx_mion["theta_b"] / max(denom_outer, 1e-300),
+            1e-30,
+        )
+        # UFL spatial profile for theta(y) using c_outer_i(y) =
+        # linear interp from Picard surface to bulk (the existing
+        # O_outer/P_outer/H_outer Functions above).
+        c_outer_y_list = [O_outer, P_outer, H_outer]
+        A_dyn_y = sum(
+            fd.Constant(a) * c_y for a, c_y in zip(a_dyn_for_ctx, c_outer_y_list)
+        )
+        # Use phi_outer + psi as the local potential for the closure.
+        denom_y = fd.Constant(ctx_mion["theta_b"]) + sum(
+            fd.Constant(ion["a_nondim"] * ion["c_bulk_nondim"])
+            * fd.exp(fd.Constant(-float(ion["z"])) * (phi_outer + psi))
+            for ion in ctx_mion["ions"]
+            if ion.get("steric_mode", "ideal") == "bikerman"
+        )
+        theta_y = (
+            (fd.Constant(1.0) - A_dyn_y)
+            * fd.Constant(ctx_mion["theta_b"]) / denom_y
+        )
+        gamma_psi = theta_y / fd.Constant(theta_outer_const)
+        log_gamma = fd.ln(fd.max_value(gamma_psi, fd.Constant(1e-30)))
+
+        # log_c_i_seed(y) = log(c_outer_i(y)) - z_i·psi(y) + log_gamma_psi
+        # Neutrals (z=0) only get gamma_psi factor; H+ (z=+1) gets
+        # both the -psi shift and gamma_psi.
+        z_dyn_int = [int(v) for v in z_vals_full[:n]]
+        for i in range(n):
+            log_c_outer_i = fd.ln(c_outer_y_list[i])
+            shifted = (
+                log_c_outer_i
+                - fd.Constant(float(z_dyn_int[i])) * psi
+                + log_gamma
+            )
+            U_prev.sub(i).interpolate(shifted)
+        U_prev.sub(n).interpolate(phi_init_expr)
+        ctx["U"].assign(U_prev)
+        return True, "", picard_iters
 
     # Two paths reach the bikerman-consistent IC: the legacy synthesised
     # 4sp dynamic ClO4- (z=-1, no explicit counterion config) and an

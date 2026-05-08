@@ -799,6 +799,14 @@ def _assemble_n_reaction_system(
     M = [[(1.0 if j == k else 0.0) for k in range(N)] for j in range(N)]
     b = [0.0 for _ in range(N)]
     for j, rxn_j in enumerate(reactions):
+        # Disabled rxns get a trivial row M[j,j]=1, b[j]=0 ⇒ R_j=0.
+        # Avoids accumulating numerically-tiny alpha_hat[j] (from k0=0
+        # short-circuited to 1e-300 in _build_picard_prefactors) into M
+        # off-diagonals where it could amplify in poorly-conditioned
+        # matrices.  Topology classification is unaffected — the row
+        # exists, R_j is just identically zero.
+        if _is_reaction_disabled(rxn_j):
+            continue
         cs = int(rxn_j["cathodic_species"])
         lambda_cs = _lambda_for_species(
             species_idx=cs, h_idx=h_idx, diffusivities=diffusivities
@@ -938,6 +946,67 @@ def _validate_no_h_substrate(
     return True, ""
 
 
+def _is_reaction_disabled(rxn: dict) -> bool:
+    """A reaction is disabled if ``enabled=False`` or ``k0 <= 0``.
+
+    Mirrors the disabled-reaction guard added to ``forms_logc.py`` /
+    ``forms_logc_muh.py``.  Used both at adapter sites for safety asserts
+    AND inside ``_assemble_n_reaction_system`` to produce trivial rows
+    (``M[j,j] = 1, b[j] = 0 ⇒ R_j = 0``) for disabled reactions.
+
+    Reads the SCALED key ``k0_model`` when present (after nondim) and
+    falls back to the raw ``k0`` for adapter-site classification (before
+    nondim).  Never raises; missing keys are treated as enabled with
+    ``k0 = 0`` (i.e. disabled).
+    """
+    if not bool(rxn.get("enabled", True)):
+        return True
+    k0 = float(rxn.get("k0_model", rxn.get("k0", 0.0)))
+    return k0 <= 0.0
+
+
+def _is_parallel_2e_4e(reactions: list, h_idx: int) -> bool:
+    """Strict predicate for the parallel-2e/4e ORR topology.
+
+    Classifies from NOMINAL config — disabled reactions don't change
+    topology (so the pure-2e probe is "parallel + R_4e disabled" rather
+    than "1-rxn sequential"; this preserves topology dispatch in the
+    Picard).
+
+    Required topology (per Ruggiero 2022 §1):
+      R_2e:  O₂ + 2H⁺ + 2e⁻ → H₂O₂   stoich [-1, +1, -2]   reversible
+      R_4e:  O₂ + 4H⁺ + 4e⁻ → 2H₂O   stoich [-1,  0, -4]   irreversible
+    """
+    if len(reactions) != 2:
+        return False
+    r2e, r4e = reactions
+    if int(r2e.get("n_electrons", -1)) != 2:
+        return False
+    if int(r4e.get("n_electrons", -1)) != 4:
+        return False
+    s2 = r2e.get("stoichiometry", [])
+    s4 = r4e.get("stoichiometry", [])
+    if len(s2) < 3 or len(s4) < 3:
+        return False
+    if int(s2[1]) != +1:    # R_2e produces H2O2
+        return False
+    if int(s4[1]) != 0:     # R_4e doesn't touch H2O2
+        return False
+    if int(s2[0]) != -1 or int(s4[0]) != -1:    # both consume O2
+        return False
+    if h_idx >= len(s2) or h_idx >= len(s4):
+        return False
+    if int(s2[h_idx]) != -2:    # R_2e: -2 H+
+        return False
+    if int(s4[h_idx]) != -4:    # R_4e: -4 H+
+        return False
+    if not bool(r2e.get("reversible", False)):    # R_2e reversible
+        return False
+    if bool(r4e.get("reversible", False)):        # R_4e irreversible
+        return False
+    return True
+
+
 def picard_outer_loop_general(
     *,
     reactions: list,
@@ -958,6 +1027,7 @@ def picard_outer_loop_general(
     max_iters: int = 50,
     tol: float = 1e-6,
     topology_hint: str = "general",
+    verbose: bool = False,
 ) -> tuple[bool, str, int, dict]:
     """Generalized N-reaction Picard outer loop (v3 §7-§9).
 
@@ -1183,6 +1253,16 @@ def picard_outer_loop_general(
             abs(R[j] - R_old[j]) / max(abs(R[j]), 1e-30) for j in range(N)
         )
         picard_iters = k
+        if verbose:
+            R_str = " ".join(f"{x:+.3e}" for x in R)
+            cs_str = " ".join(f"{x:+.3e}" for x in c_s)
+            eta_str = " ".join(f"{x:+.3e}" for x in eta_list)
+            print(
+                f"[picard k={k:3d}] delta={delta:.3e}  R=[{R_str}]  "
+                f"c_s=[{cs_str}]  phi_o={phi_o:+.3e}  psi_D={psi_D:+.3e}  "
+                f"psi_S={psi_S:+.3e}  gamma_s={gamma_s:.3e}  eta=[{eta_str}]",
+                flush=True,
+            )
         if delta < tol:
             converged = True
             break

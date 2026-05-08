@@ -308,18 +308,19 @@ def test_theta_b_negative_rejected():
 
 
 @skip_without_firedrake
-def test_multi_bikerman_rejected():
-    """Two bikerman entries should raise ``NotImplementedError`` since
-    the closure algebra couples in that case."""
+def test_multi_bikerman_double_counting_rejected():
+    """Multi-counterion is now SUPPORTED via the shared-theta closure
+    (plan §2.1).  Two bikerman entries with identical (z, c_bulk) still
+    raise ``ValueError`` from the within-bikerman double-counting guard."""
     from Forward.bv_solver.boltzmann import build_steric_boltzmann_expressions
 
     e1 = {"z": -1, "c_bulk_nondim": 0.2, "phi_clamp": 50.0,
           "steric_mode": "bikerman", "a_nondim": 0.01}
-    e2 = {"z": -1, "c_bulk_nondim": 0.1, "phi_clamp": 50.0,
+    e2 = {"z": -1, "c_bulk_nondim": 0.2, "phi_clamp": 50.0,
           "steric_mode": "bikerman", "a_nondim": 0.005}
     params = {"bv_bc": {"boltzmann_counterions": [e1, e2]}}
 
-    with pytest.raises(NotImplementedError, match="multi-counterion bikerman"):
+    with pytest.raises(ValueError, match="duplicate"):
         build_steric_boltzmann_expressions(
             ctx={}, params=params,
             ci=[None] * 3, a_dyn_funcs=[None] * 3,
@@ -331,9 +332,9 @@ def test_multi_bikerman_rejected():
 
 
 @skip_without_firedrake
-def test_no_bikerman_returns_none():
-    """If no entry has steric_mode='bikerman', the helper returns
-    ``None`` and the caller falls back to the legacy ideal path."""
+def test_no_bikerman_returns_empty_list():
+    """If no entry has steric_mode='bikerman', the helper returns an
+    empty list and the caller falls back to the legacy ideal path."""
     from Forward.bv_solver.boltzmann import build_steric_boltzmann_expressions
 
     params = {"bv_bc": {"boltzmann_counterions": [
@@ -347,7 +348,7 @@ def test_no_bikerman_returns_none():
         z_dyn=[0, 0, 1],
         phi=None, R_space=None,
     )
-    assert out is None
+    assert out == []
 
 
 # ---------------------------------------------------------------------------

@@ -497,6 +497,55 @@ DEFAULT_CLO4_BOLTZMANN_COUNTERION_STERIC: Dict[str, Any] = {
 
 
 # ---------------------------------------------------------------------------
+# Cs+ / SO4²⁻ multi-ion analytic counterion entries (fast-realignment plan
+# §2.2, 2026-05-08).  Production-target electrolyte per Ruggiero 2022 §2 and
+# the Seitz/Mangan data-folder audit (K₂SO₄ → CsSO₄ in the Linsey deck;
+# never ClO₄⁻).
+# ---------------------------------------------------------------------------
+#
+# Hard-sphere ``a_phys = (4/3) π r³ N_A`` in m³/mol; ``a_nondim = a_phys * C_SCALE``.
+# Hydrated radii from Linsey 2025 ACS-CATL deck slide 13:
+#     Li⁺ 3.4 Å, Na⁺ 2.8 Å, K⁺ 2.3 Å, Cs⁺ 2.2 Å.
+# SO₄²⁻ at r = 2.4 Å (Marcus, placeholder pending Linsey-deck check).
+#
+# Bulk concentrations per Ruggiero §2 (I = 0.3 M, K₂SO₄ baseline; the
+# realignment uses Cs⁺ since that's the deck's fast-realignment target):
+#   c_SO4²⁻ = 100 mol/m³ ; electroneutrality fixes c_Cs⁺ = 199.9 mol/m³
+#   (with H⁺ = 0.1 mol/m³ from pH 4 contributing the remaining +1).
+# Verify ionic strength: I = ½ Σ z²c = ½(199.9 + 0.1 + 4·100) = 300 mol/m³
+#                       = 0.3 M ✓
+# Verify bulk packing: a_Cs · c_Cs_HAT + a_SO4 · c_SO4_HAT
+#                    = 3.23e-5 · 166.58 + 4.20e-5 · 83.33
+#                    = 5.38e-3 + 3.50e-3 ≈ 8.88e-3 ⇒ θ_b ≈ 0.991 ✓
+A_CSPLUS_HAT = 3.23e-5    # Cs⁺ at r = 2.2 Å, scaled by C_SCALE = 1.2 mol/m³
+A_SO4_HAT    = 4.20e-5    # SO₄²⁻ at r = 2.4 Å, scaled by C_SCALE
+
+C_CSPLUS = 199.9          # mol/m³ — electroneutrality with H⁺ + SO₄²⁻
+C_SO4    = 100.0          # mol/m³ — Ruggiero §2 K₂SO₄ baseline
+C_CSPLUS_HAT = C_CSPLUS / C_SCALE
+C_SO4_HAT    = C_SO4 / C_SCALE
+
+
+DEFAULT_CSPLUS_BOLTZMANN_COUNTERION_STERIC: Dict[str, Any] = {
+    "z": +1,
+    "c_bulk_nondim": C_CSPLUS_HAT,
+    "phi_clamp": 50.0,
+    "steric_mode": "bikerman",
+    "a_nondim": A_CSPLUS_HAT,
+    "label": "Cs+",
+}
+
+DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC: Dict[str, Any] = {
+    "z": -2,
+    "c_bulk_nondim": C_SO4_HAT,
+    "phi_clamp": 50.0,
+    "steric_mode": "bikerman",
+    "a_nondim": A_SO4_HAT,
+    "label": "SO4--",
+}
+
+
+# ---------------------------------------------------------------------------
 # Parallel 2e/4e ORR reaction set (Ruggiero 2022, M3a.2 — 2026-05-07)
 # ---------------------------------------------------------------------------
 #
@@ -583,6 +632,7 @@ def make_bv_solver_params(
     initializer: str = "linear_phi",
     include_h_factor: Optional[bool] = None,
     bv_reactions: Optional[Sequence[Dict[str, Any]]] = None,
+    multi_ion_enabled: bool = False,
 ) -> "SolverParams":
     """Build SolverParams for multi-species BV with graded rectangle mesh markers.
 
@@ -642,12 +692,46 @@ def make_bv_solver_params(
         fields.  Used by the parallel-2e/4e topology (M3a.2,
         2026-05-07) — pass ``PARALLEL_2E_4E_REACTIONS`` for the
         Ruggiero-aligned parallel set.
+    multi_ion_enabled:
+        Opt-in flag for the multi-ion analytic-counterion path
+        (fast-realignment plan §2.2-§2.4, 2026-05-08).  When False
+        (default), at most ONE bikerman counterion entry is allowed —
+        the legacy single-counterion ClO₄⁻ path is byte-equivalent.
+        When True, multiple bikerman entries are accepted and the
+        shared-theta closure (boltzmann.py multi-ion path) wires every
+        entry into Poisson and the dynamic-species packing.  Hard-
+        validated here so a missing flag fails LOUDLY at solver-params
+        construction rather than silently at solve time.
 
     Returns
     -------
     SolverParams
     """
     from Forward.params import SolverParams
+
+    # Multi-ion opt-in validation: count bikerman entries up front so
+    # a stale single-counterion driver paired with a multi-ion config
+    # raises LOUDLY at params construction.
+    if boltzmann_counterions:
+        n_bikerman = sum(
+            1 for e in boltzmann_counterions
+            if e.get("steric_mode", "ideal") == "bikerman"
+        )
+        if n_bikerman > 1 and not multi_ion_enabled:
+            raise ValueError(
+                f"make_bv_solver_params: {n_bikerman} bikerman counterion "
+                f"entries provided but multi_ion_enabled=False.  Pass "
+                f"multi_ion_enabled=True to opt into the multi-ion "
+                f"analytic-counterion shared-theta closure (fast-realignment "
+                f"plan §2.2).  Legacy single-counterion ClO₄⁻ runs require "
+                f"exactly one bikerman entry."
+            )
+        if multi_ion_enabled and n_bikerman == 0:
+            raise ValueError(
+                "make_bv_solver_params: multi_ion_enabled=True but no "
+                "bikerman counterion entries provided.  The multi-ion path "
+                "requires at least one counterion with steric_mode='bikerman'."
+            )
 
     params = dict(snes_opts or SNES_OPTS)
     params["bv_convergence"] = _make_bv_convergence_cfg(
