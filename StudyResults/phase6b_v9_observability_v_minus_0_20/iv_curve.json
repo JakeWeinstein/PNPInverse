@@ -1,0 +1,194 @@
+{
+  "stack": "phase6b_v9_gate4_finite_hydrolysis",
+  "v_anchor": 0.55,
+  "v_lambda_target": -0.2,
+  "v_rhe_grid_primary": [
+    0.55,
+    0.5,
+    0.4,
+    0.3,
+    0.2,
+    0.1,
+    0.0,
+    -0.1,
+    -0.2
+  ],
+  "lambda_ladder_default": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+  ],
+  "k0_initial_scales": [
+    1e-12,
+    1e-09,
+    1e-06,
+    0.001,
+    1.0
+  ],
+  "kw_eff_ladder": [
+    0.0,
+    6.944444444444445e-15,
+    6.944444444444445e-12,
+    6.944444444444446e-10,
+    6.944444444444445e-09
+  ],
+  "mesh_ny": 80,
+  "l_eff_m": 1.6e-05,
+  "stern_baseline_f_m2": 0.1,
+  "r_H_El_baseline_pm": 200.98,
+  "k_des_baseline_nondim": 1.0,
+  "k_hyd_baseline_nondim": 0.001,
+  "k_prot_baseline_nondim": 0.001,
+  "quick_mode": true,
+  "use_cache": true,
+  "args": {
+    "quick": false,
+    "lambda_only": true,
+    "k_hyd_ramp": false,
+    "voltage": -0.2,
+    "out_subdir": null,
+    "no_cache": false
+  },
+  "baseline_walk": {
+    "label": "baseline_cache",
+    "anchor_converged": true,
+    "anchor_error": null,
+    "wall_anchor": 50.04290294647217,
+    "wall_walk": 356.3514931201935,
+    "v_rhe": [
+      0.55,
+      0.5,
+      0.4,
+      0.3,
+      0.2,
+      0.1,
+      0.0,
+      -0.1,
+      -0.2
+    ],
+    "cd_mA_cm2": [
+      -0.5828807164955436,
+      -0.618128363708606,
+      -0.9372966375632721,
+      -2.5613619732204342,
+      -5.467715632376648,
+      -5.531697646279021,
+      -5.531715496600326,
+      -5.5317154012779035,
+      -5.531715077711988
+    ],
+    "pc_mA_cm2": [
+      0.2914403586722854,
+      0.3090641818328063,
+      0.4686483183286184,
+      1.2806809850343075,
+      2.733857815324725,
+      2.765848823102849,
+      2.7658577482987208,
+      2.765857700638897,
+      2.765857538855992
+    ],
+    "gamma_per_v": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "n_converged": 9,
+    "n_total": 9,
+    "target_idx": 8,
+    "target_converged": true
+  },
+  "combinations": [
+    {
+      "label": "baseline",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "k_hyd_nondim": 0.001,
+      "k_prot_nondim": 0.001,
+      "converged": true,
+      "error": null,
+      "wall": 31.535407066345215,
+      "cd_mA_cm2": -5.5317183809202755,
+      "pc_mA_cm2": 2.7658591904601355,
+      "gamma_final": 0.3055272268190587,
+      "rungs": [
+        {
+          "rung_label": "warm_reconverge",
+          "snes_converged": true,
+          "wall_seconds": 1.7495732307434082
+        },
+        {
+          "rung_label": "lambda=0.0",
+          "lambda_hydrolysis": 0.0,
+          "snes_converged": true,
+          "wall_seconds": 1.702707052230835
+        },
+        {
+          "rung_label": "lambda=2.500e-01",
+          "scale": 0.25,
+          "lambda_hydrolysis": 0.25,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.07639157771206585,
+            0.07639157771401214
+          ],
+          "gamma_final": 0.07639157771401214,
+          "cd_observable": 12.572849749522968,
+          "wall_seconds": 6.755507946014404
+        },
+        {
+          "rung_label": "lambda=5.000e-01",
+          "scale": 0.5,
+          "lambda_hydrolysis": 0.5,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.1527766415373906,
+            0.152776641545203
+          ],
+          "gamma_final": 0.152776641545203,
+          "cd_observable": 12.572851628193117,
+          "wall_seconds": 7.255313158035278
+        },
+        {
+          "rung_label": "lambda=7.500e-01",
+          "scale": 0.75,
+          "lambda_hydrolysis": 0.75,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.2291551912923874,
+            0.22915519131001685
+          ],
+          "gamma_final": 0.22915519131001685,
+          "cd_observable": 12.572853502603921,
+          "wall_seconds": 6.552922964096069
+        },
+        {
+          "rung_label": "lambda=1.000e+00",
+          "scale": 1.0,
+          "lambda_hydrolysis": 1.0,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.3055272267875949,
+            0.3055272268190587
+          ],
+          "gamma_final": 0.3055272268190587,
+          "cd_observable": 12.57285537299242,
+          "wall_seconds": 7.452821969985962
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,281 @@
+{
+  "stack": "phase6b_v9_gate4_finite_hydrolysis",
+  "v_anchor": 0.55,
+  "v_lambda_target": -0.2,
+  "v_rhe_grid_primary": [
+    0.55,
+    0.5,
+    0.4,
+    0.3,
+    0.2,
+    0.1,
+    0.0,
+    -0.1,
+    -0.2
+  ],
+  "lambda_ladder_default": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+  ],
+  "k0_initial_scales": [
+    1e-12,
+    1e-09,
+    1e-06,
+    0.001,
+    1.0
+  ],
+  "kw_eff_ladder": [
+    0.0,
+    6.944444444444445e-15,
+    6.944444444444445e-12,
+    6.944444444444446e-10,
+    6.944444444444445e-09
+  ],
+  "mesh_ny": 80,
+  "l_eff_m": 1.6e-05,
+  "stern_baseline_f_m2": 0.1,
+  "r_H_El_baseline_pm": 200.98,
+  "k_des_baseline_nondim": 1.0,
+  "k_hyd_baseline_nondim": 0.001,
+  "k_prot_baseline_nondim": 0.001,
+  "quick_mode": true,
+  "use_cache": true,
+  "args": {
+    "quick": false,
+    "lambda_only": false,
+    "k_hyd_ramp": true,
+    "voltage": -0.2,
+    "out_subdir": null,
+    "no_cache": false
+  },
+  "baseline_walk": {
+    "loaded_from_disk": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_v9_k_hyd_ramp/u_warmstart_at_v_-0.200.npz",
+    "n_arrays": 5
+  },
+  "combinations": [
+    {
+      "label": "k_hyd=1e-03",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "k_hyd_nondim": 0.001,
+      "k_prot_nondim": 0.001,
+      "converged": true,
+      "error": null,
+      "wall": 35.04461097717285,
+      "cd_mA_cm2": -5.5317183809202755,
+      "pc_mA_cm2": 2.7658591904601355,
+      "gamma_final": 0.3055272268190587,
+      "rungs": [
+        {
+          "rung_label": "warm_reconverge",
+          "snes_converged": true,
+          "wall_seconds": 4.970557928085327
+        },
+        {
+          "rung_label": "lambda=0.0",
+          "lambda_hydrolysis": 0.0,
+          "snes_converged": true,
+          "wall_seconds": 1.6822869777679443
+        },
+        {
+          "rung_label": "lambda=2.500e-01",
+          "scale": 0.25,
+          "lambda_hydrolysis": 0.25,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.07639157771206585,
+            0.07639157771401214
+          ],
+          "gamma_final": 0.07639157771401214,
+          "cd_observable": 12.572849749522968,
+          "wall_seconds": 6.749880075454712
+        },
+        {
+          "rung_label": "lambda=5.000e-01",
+          "scale": 0.5,
+          "lambda_hydrolysis": 0.5,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.1527766415373906,
+            0.152776641545203
+          ],
+          "gamma_final": 0.152776641545203,
+          "cd_observable": 12.572851628193117,
+          "wall_seconds": 7.18976092338562
+        },
+        {
+          "rung_label": "lambda=7.500e-01",
+          "scale": 0.75,
+          "lambda_hydrolysis": 0.75,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.2291551912923874,
+            0.22915519131001685
+          ],
+          "gamma_final": 0.22915519131001685,
+          "cd_observable": 12.572853502603921,
+          "wall_seconds": 6.58898401260376
+        },
+        {
+          "rung_label": "lambda=1.000e+00",
+          "scale": 1.0,
+          "lambda_hydrolysis": 1.0,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.3055272267875949,
+            0.3055272268190587
+          ],
+          "gamma_final": 0.3055272268190587,
+          "cd_observable": 12.57285537299242,
+          "wall_seconds": 7.552901029586792
+        }
+      ]
+    },
+    {
+      "label": "k_hyd=1e-02",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "k_hyd_nondim": 0.01,
+      "k_prot_nondim": 0.001,
+      "converged": true,
+      "error": null,
+      "wall": 42.61149311065674,
+      "cd_mA_cm2": -5.531733540598985,
+      "pc_mA_cm2": 2.765866770299491,
+      "gamma_final": 3.050655519034037,
+      "rungs": [
+        {
+          "rung_label": "warm_reconverge",
+          "snes_converged": true,
+          "wall_seconds": 2.096169948577881
+        },
+        {
+          "rung_label": "lambda=0.0",
+          "lambda_hydrolysis": 0.0,
+          "snes_converged": true,
+          "wall_seconds": 1.6908550262451172
+        },
+        {
+          "rung_label": "lambda=2.500e-01",
+          "scale": 0.25,
+          "lambda_hydrolysis": 0.25,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.763626925740969,
+            0.7636269259416332
+          ],
+          "gamma_final": 0.7636269259416332,
+          "cd_observable": 12.572866224479732,
+          "wall_seconds": 9.443217039108276
+        },
+        {
+          "rung_label": "lambda=5.000e-01",
+          "scale": 0.5,
+          "lambda_hydrolysis": 0.5,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            1.526611442920381,
+            1.5266114437514267
+          ],
+          "gamma_final": 1.5266114437514267,
+          "cd_observable": 12.572876123665042,
+          "wall_seconds": 10.77803897857666
+        },
+        {
+          "rung_label": "lambda=7.500e-01",
+          "scale": 0.75,
+          "lambda_hydrolysis": 0.75,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            2.28895414365397,
+            2.288954145592546
+          ],
+          "gamma_final": 2.288954145592546,
+          "cd_observable": 12.572882163305591,
+          "wall_seconds": 8.816753149032593
+        },
+        {
+          "rung_label": "lambda=1.000e+00",
+          "scale": 1.0,
+          "lambda_hydrolysis": 1.0,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            3.050655515456066,
+            3.050655519034037
+          ],
+          "gamma_final": 3.050655519034037,
+          "cd_observable": 12.572889828912768,
+          "wall_seconds": 9.469377994537354
+        }
+      ]
+    },
+    {
+      "label": "k_hyd=1e-01",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "k_hyd_nondim": 0.1,
+      "k_prot_nondim": 0.001,
+      "converged": false,
+      "error": "LadderExhausted: \u03bb_hydrolysis ramp exhausted at \u03bb=2.500e-01; history=[(0.25, 'fail')]",
+      "wall": 5.126911878585815
+    },
+    {
+      "label": "k_hyd=1e+00",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "k_hyd_nondim": 1.0,
+      "k_prot_nondim": 0.001,
+      "converged": false,
+      "error": "LadderExhausted: \u03bb_hydrolysis ramp exhausted at \u03bb=2.500e-01; history=[(0.25, 'fail')]",
+      "wall": 3.846388101577759
+    },
+    {
+      "label": "k_hyd=1e+01",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "k_hyd_nondim": 10.0,
+      "k_prot_nondim": 0.001,
+      "converged": false,
+      "error": "LadderExhausted: \u03bb_hydrolysis ramp exhausted at \u03bb=2.500e-01; history=[(0.25, 'fail')]",
+      "wall": 3.8444159030914307
+    },
+    {
+      "label": "k_hyd=1e+02",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "k_hyd_nondim": 100.0,
+      "k_prot_nondim": 0.001,
+      "converged": false,
+      "error": "LadderExhausted: \u03bb_hydrolysis ramp exhausted at \u03bb=2.500e-01; history=[(0.25, 'fail')]",
+      "wall": 3.8434529304504395
+    },
+    {
+      "label": "k_hyd=1e+03",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "k_hyd_nondim": 1000.0,
+      "k_prot_nondim": 0.001,
+      "converged": false,
+      "error": "LadderExhausted: \u03bb_hydrolysis ramp exhausted at \u03bb=2.500e-01; history=[(0.25, 'fail')]",
+      "wall": 3.9714269638061523
+    }
+  ]
+}

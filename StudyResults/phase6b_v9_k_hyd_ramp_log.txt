@@ -1,0 +1,41 @@
+
+[gate4] Loading cached U snapshot from /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_v9_k_hyd_ramp/u_warmstart_at_v_-0.200.npz
+
+
+[gate4] === k_hyd=1e-03: r_H_El=200.98, C_S=0.1, k_des=1.0, k_hyd=0.001, k_prot=0.001 ===
+
+[k_hyd=1e-03] λ ramp at V=-0.200 V from cached snapshot (r_H_El=200.98 pm, C_S=0.100, k_des=1e+00, k_hyd=1e-03, k_prot=1e-03)
+
+[gate4] === k_hyd=1e-02: r_H_El=200.98, C_S=0.1, k_des=1.0, k_hyd=0.01, k_prot=0.001 ===
+
+[k_hyd=1e-02] λ ramp at V=-0.200 V from cached snapshot (r_H_El=200.98 pm, C_S=0.100, k_des=1e+00, k_hyd=1e-02, k_prot=1e-03)
+
+[gate4] === k_hyd=1e-01: r_H_El=200.98, C_S=0.1, k_des=1.0, k_hyd=0.1, k_prot=0.001 ===
+
+[k_hyd=1e-01] λ ramp at V=-0.200 V from cached snapshot (r_H_El=200.98 pm, C_S=0.100, k_des=1e+00, k_hyd=1e-01, k_prot=1e-03)
+
+[gate4] === k_hyd=1e+00: r_H_El=200.98, C_S=0.1, k_des=1.0, k_hyd=1.0, k_prot=0.001 ===
+
+[k_hyd=1e+00] λ ramp at V=-0.200 V from cached snapshot (r_H_El=200.98 pm, C_S=0.100, k_des=1e+00, k_hyd=1e+00, k_prot=1e-03)
+
+[gate4] === k_hyd=1e+01: r_H_El=200.98, C_S=0.1, k_des=1.0, k_hyd=10.0, k_prot=0.001 ===
+
+[k_hyd=1e+01] λ ramp at V=-0.200 V from cached snapshot (r_H_El=200.98 pm, C_S=0.100, k_des=1e+00, k_hyd=1e+01, k_prot=1e-03)
+
+[gate4] === k_hyd=1e+02: r_H_El=200.98, C_S=0.1, k_des=1.0, k_hyd=100.0, k_prot=0.001 ===
+
+[k_hyd=1e+02] λ ramp at V=-0.200 V from cached snapshot (r_H_El=200.98 pm, C_S=0.100, k_des=1e+00, k_hyd=1e+02, k_prot=1e-03)
+
+[gate4] === k_hyd=1e+03: r_H_El=200.98, C_S=0.1, k_des=1.0, k_hyd=1000.0, k_prot=0.001 ===
+
+[k_hyd=1e+03] λ ramp at V=-0.200 V from cached snapshot (r_H_El=200.98 pm, C_S=0.100, k_des=1e+00, k_hyd=1e+03, k_prot=1e-03)
+
+[gate4] DONE.  7 combinations.
+[gate4]      use_cache=True
+[gate4]      out_dir=/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_v9_k_hyd_ramp
+[gate4]      v_lambda_target=-0.200
+WARNING! There are options you set that were not used!
+WARNING! could be spelling mistake, etc!
+There are 2 unused database options. They are:
+Option left: name:--k-hyd-ramp (no value) source: command line
+Option left: name:--voltage value: -0.20 source: command line

@@ -1,0 +1,27 @@
+1. **WHAT:** Re point 4 has the wrong Singh/Cu surface charge scale. `51 µF/cm² * 4.437 V ≈ 226 µC/cm²`, not `~19 µC/cm²`. **WHY:** This is a 12x error and makes the proposed “match deck σ_S” calibration target potentially unreachable with your `C_S=0.10 F/m² = 10 µF/cm²`. Matching 226 µC/cm² would require ~22.6 V Stern drop. **WHAT TO DO:** Recompute the deck σ target from Singh Table S3 and decide whether the model should match Singh’s charge density, voltage drop, or pKa table. Those are not interchangeable.
+
+2. **WHAT:** Re point 3’s neutral fraction formula has the sign flipped. For `M+ ⇌ MOH + H+`, `[MOH]/[M+] = Ka/[H+] = 10^(pH - pKa)`, so neutral fraction is `1/(1 + 10^(pKa - pH))`, not `1/(1 + 10^(pH - pKa))`. **WHY:** The current formula predicts more neutral MOH at lower pH, which is backwards. **WHAT TO DO:** Fix before using neutral fraction as a derived observable.
+
+3. **WHAT:** Re point 2 still describes `peroxide_current` incorrectly. In the parallel topology, `R0` is the 2e branch and `R1` is the 4e branch; `peroxide_current = R0 - R1`, not “total O₂ consumption minus H₂O₂ destruction.” **WHY:** The qualitative interpretation is still legacy-contaminated. **WHAT TO DO:** Delete all interpretation of old `pc`; only discuss assembled `R_2e`, `R_4e`, and `gross_h2o2_current`.
+
+4. **WHAT:** Re point 6’s finer λ ladder still has a first-positive-rung problem. If `λ=0.05` fails, the current `AdaptiveLadder` still has no previous positive success and cannot insert below it. **WHY:** This does not actually solve the original pathfinding failure for stiff cases. **WHAT TO DO:** Start with `1e-4` or modify the ladder to use λ=0 as a valid previous floor for geometric/linear inserts.
+
+5. **WHAT:** Re point 7’s Langmuir cap likely makes hydrolysis net flux tiny under current `k_des=1`. With `Γ_max ≈ 0.047` nondim, steady net `R_net = k_des Γ ≤ 0.047`, equivalent to roughly `0.01 mA/cm²`, far below the previous `0.67 mA/cm²`. **WHY:** Adding the physically necessary cap may erase the intended effect unless `k_des` or the Γ scaling is recalibrated. **WHAT TO DO:** Before implementation, compute the maximum possible acid flux from `Γ_max*k_des` and decide whether `k_des` must be physical/calibrated.
+
+6. **WHAT:** The proposed common ratio `ρ = r_H_El_carbon / r_H_El_Cu` is a fragile transfer rule. Eq. (4) is controlled by the tiny gap between `r_H_El` and `r_M-O`, not by absolute `r_H_El`. **WHY:** A common ratio can flip the sign for Li/Na or distort ordering for reasons unrelated to cation physics. **WHAT TO DO:** Predeclare and test alternatives: scale the gap `(r_M-O - r_H_El)`, scale σ/capacitance, or use the ratio rule only as a falsifiable baseline with explicit caveat.
+
+7. **WHAT:** Re point 10 calls the new test “manufactured-source” but then proposes `k_hyd=1.0`. That is not manufactured; it exercises the physical Singh/Picard path and may fail for legitimate stiffness/capacity reasons. **WHY:** The plumbing test remains brittle. **WHAT TO DO:** Use `manufactured_R_inj` for the unit plumbing test; use synthetic-large physical `k_hyd` only as an integration diagnostic.
+
+8. **WHAT:** Re point 11 A1 says manufactured `R_inj` enters proton residual only, but current code applies the same `R_net` to both H and K residuals with opposite signs. **WHY:** The proposed source-only ablation is not what the code will run. **WHAT TO DO:** Add explicit switches like `apply_h_source` and `apply_k_sink`, or call it coupled manufactured exchange.
+
+9. **WHAT:** Re point 11 A3 “Stern off” will also set `σ_S_expr=0`, so physical Singh hydrolysis is clamped off. **WHY:** That ablation cannot test whether Stern redistributes the H source unless the source is manufactured or σ is supplied independently. **WHAT TO DO:** Separate “no Stern electrostatics” from “fixed external σ/pKa driver.”
+
+10. **WHAT:** Re point 12’s water-ionization mass-balance term is wrong. The current Phase 6α closure is not a kinetic volume source `k_w_eff(c_H c_OH - Kw)`; it is a proton-condition formulation with `c_OH = Kw/c_H`. **WHY:** The proposed balance check would fail or pass for the wrong reason. **WHAT TO DO:** Derive the balance from the actual weak residual, including the `E = c_H - c_OH` flux terms.
+
+11. **WHAT:** The H flux balance formula is underspecified for `logc_muh`. “`D_H ∂c_H/∂n + electromigration`” is not the actual flux expression when μ_H is the primary variable and steric terms exist. **WHY:** A hand-derived flux diagnostic can disagree with the residual even when the solve is correct. **WHAT TO DO:** Reuse the same UFL flux expressions from the form builder or add residual-level boundary bookkeeping.
+
+12. **WHAT:** The plan now mixes two incompatible tracks: diagnose current v9 behavior and redesign Γ with Langmuir capacity. **WHY:** If you change capacity before the V=kinetic rerun, you lose comparability with Phase A/B. **WHAT TO DO:** Sequence it explicitly: first instrument current architecture and rerun; then run a capacity branch as v10/Phase B2.
+
+13. **WHAT:** The O₂ Levich calculation uses `D_O2=2e-9` in the text, while the code uses `1.9e-9`. **WHY:** It changes the “within X% of Levich” claim. Minor, but avoid two baselines. **WHAT TO DO:** Use code constants consistently: `4 F D_O2 C_O2/L ≈ 5.50 mA/cm²`, essentially identical to observed `5.53`.
+
+VERDICT: ISSUES_REMAIN

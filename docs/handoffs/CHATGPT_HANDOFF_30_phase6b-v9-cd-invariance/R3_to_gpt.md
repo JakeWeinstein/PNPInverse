@@ -1,0 +1,282 @@
+# R3 — counterreply
+
+## Section 1: Per-issue responses
+
+### **Re point 1** (R_net = 12 % of BV H⁺, not 50 %) — **Accept**
+Recomputed: BV H⁺ consumption (4e branch dominant on plateau) =
+|j|/F = 55.31/96485 = 5.73e-4 mol/m²/s. R_net (corrected) =
+3.05·1.2·1.9e-9/1e-4 = 6.95e-5 mol/m²/s. Ratio: 6.95e-5 / 5.73e-4
+= 0.121 → **12.1 %**. Equivalent current F·R_net = 6.7 A/m² =
+0.67 mA/cm² out of cd ≈ 5.5 mA/cm².
+
+**Concrete fix:** artifact will report R_net as "≈ 12 % of BV H⁺
+consumption at the plateau, equivalent current 0.67 mA/cm²".
+Even on a kinetic-region voltage where cd is not Levich-limited,
+a 12 % shift would be at the edge of what's robustly detectable
+above numerical noise — confirming why "smoke kinetics + small
+relative ΔpKa" gives essentially-zero cd shift.
+
+### **Re point 2** (`pc/cd ≈ -0.5·cd` ≠ 50 % H₂O₂ selectivity) — **Accept**
+You're right.  Legacy `peroxide_current = R_0 - R_1` cancels the
+O₂-consumption-on-2e-branch-half against the legacy R_1's H₂O₂
+consumption; for parallel 2e/4e the R_0/R_1 mapping is meaningless.
+The observed pc ≈ 0.5·|cd| in the V_RHE walk is consistent with
+R_4e dominance + nearly-zero gross R_2e (the legacy formula's
+"R_0" maps to *total* O₂ consumption, "R_1" to H₂O₂ destruction —
+R_0 with R_4e dominant ≈ 1·j_4e, R_1 ≈ 0, so pc ≈ R_0 ≈ 0.5·cd
+when R_4e produces twice the electrons of R_2e).
+
+**Concrete fix:** before any branch-selectivity claim, compute
+`gross_h2o2_current` (R_2e production) and `R_4e` separately.
+Update the artifact to retract the "50 % peroxide selectivity"
+inference and record the correct branch fractions from the
+re-instrumented driver run.
+
+### **Re point 3** (surface pH ≠ cation pKa) — **Accept**
+You're right.  Linsey deck slide 27 lists per-cation `pKa_eff`
+near the cathode, which is `pKa_bulk + ΔpKa(σ_S)`.  This is the
+acid dissociation constant of the M(H₂O)ₙ⁺ → MOH⁰ + H⁺
+equilibrium at the surface charge state; it's NOT the surface
+pH.  The model's surface pH at the same σ_S is set by the H⁺
+mass balance at the electrode (BV consumption + hydrolysis
+source + transport), and reaches `pKa_eff` only when the
+dissociation is at equilibrium AND the local pH matches the
+cation's effective pKa (Henderson-Hasselbalch midpoint).
+
+**Concrete fix (revised Phase D target):** calibrate by direct
+comparison of model `pKa_eff(K⁺, σ_S_model)` to the deck's
+K⁺ pKa = 8.49.  This is computed via Singh Eq. (4):
+`pKa_eff = pKa_bulk + ΔpKa(σ_S) = 14.5 + ΔpKa(σ_S)`.  Set
+r_H_El_pm so the model's ΔpKa at the production σ_S range
+gives 8.49 - 14.5 = -6.01 within 30 %.  This sidesteps the
+surface-pH equilibrium question entirely.  The neutral fraction
+γ_MOH = 1/(1 + 10^(pH−pKa_eff)) becomes a derived quantity.
+
+### **Re point 4** (Phase D target's deck-equivalence) — **Accept**
+You're right that Singh's K⁺=8.49 is a Cu *strong-bias* near-cathode
+value — applying it directly as a model target at our
+arbitrary V=+0.30 V (kinetic regime, weaker σ_S) is mismatched.
+
+**Concrete fix:** calibrate at the σ_S that matches the deck's
+strong-cathodic-bias condition (Singh's Cu σ_S ≈ −19 µC/cm² per
+the slide-27 footnote — to verify), not at our convenient
+kinetic voltage.  Two-step:
+1. Find V_model such that |σ_S_model(V_model)| matches Singh's
+   deck-cited σ_S.
+2. At that V_model, fit r_H_El so ΔpKa(σ_S) = -6.01 within 30 %.
+
+If V_model is in the O₂-Levich regime, that's fine — we're
+calibrating the *parameter* r_H_El, not the cd observable.
+
+### **Re point 5** (σ_S sign at V=+0.30 V) — **Accept**
+You're right that Singh ΔpKa is anode-clamped to 0 when σ_S ≥ 0,
+so a kinetic voltage with σ_S ≥ 0 is uninformative.  The σ_S
+zero-crossing voltage in the model depends on the bulk-cation
+balance (K⁺ + H⁺ vs SO₄²⁻) and is not coincident with V=0 V vs
+RHE.
+
+**Concrete fix:** before the Phase A re-do, instrument the V_RHE
+walk to record σ_S, ΔpKa, c_H(0), c_K(0), surface pH at every V
+in the walk.  Pick the least-saturated voltage with σ_S < 0 (and
+ΔpKa < 0 → forward hydrolysis active).  Likely candidate:
+V ∈ [+0.10, +0.30] depending on σ_S(V).
+
+### **Re point 6** (finer λ ladder may help) — **Accept**
+You're right; my speculation was unjustified.  Path following
+can change which Γ basin Newton lands in.
+
+**Concrete fix:** replace the current λ ladder
+`(0.0, 0.25, 0.50, 0.75, 1.0)` with a finer first-positive-rung
+ladder `(0.0, 0.05, 0.10, 0.20, 0.40, 0.70, 1.0)`.  This actually
+exercises the Picard machinery's adaptive ladder properly — the
+0.05 first rung gives the orchestrator something to insert
+midpoints below if 0.10 fails.  Test on the previously failing
+k_hyd=1e-1 to see if the finer ladder gets through.
+
+### **Re point 7** (Γ capacity is unphysical without saturation) — **Accept**
+You're right.  Γ neutral, uncapped by steric Bikerman, growing
+linearly in k_hyd → many monolayers' inventory is unphysical.
+At Γ=3 nondim, with a_MOH ≈ a_K = 4.27e-5 nondim and δ_OHP_HAT
+= 4e-6: Γ_phys / a_MOH_phys (per area) is ~ Γ·δ_OHP / a_MOH ≈
+3·4e-6 / 4.27e-5 = 0.28 monolayers.  Hmm — that's actually less
+than a monolayer.  Let me redo this: the relevant ratio is
+``Γ_phys`` (mol/m²) ÷ ``c_max`` (mol/m³) ÷ ``δ_OHP`` (m).
+
+Looking at the architecture: Γ in the residual is a 2D quantity
+(area concentration, mol/m² physical).  Γ/δ_OHP gives the 3D
+volumetric concentration in the OHP shell.  At Γ=3 nondim:
+Γ_phys = Γ·C_SCALE·L_REF = 3·1.2·1e-4 = 3.6e-4 mol/m².
+A monolayer of MOH at radius 138 pm: ~1/(π·(138e-12)²·N_A)
+= 5.6e-6 mol/m².
+**Γ_phys = 3.6e-4 / 5.6e-6 = ~64 monolayers worth.**
+That's clearly unphysical.
+
+**Concrete fix:** add a Langmuir saturation term to the forward
+rate: `forward = k_hyd · c_M(0) · 10^(−ΔpKa) · (1 − θ)` where
+`θ = Γ / Γ_max` and `Γ_max` is one monolayer (5.6e-6 mol/m²
+physical, ≈ 0.047 nondim).  Saturating Γ → Γ_max bounds the
+backward branch and prevents Γ-explosion in the high-k_hyd
+regime.  This is a 1-week scope: edit the residual in
+`Forward/bv_solver/cation_hydrolysis.py` and the Picard formula
+in `update_gamma_from_solution`.  Add a regression test that
+Γ_max sets the saturation ceiling.
+
+### **Re point 8** (LadderExhausted has no `result`) — **Accept**
+You're right; the orchestrator throws before returning, so my
+"persist result.rungs" fix doesn't compile.
+
+**Concrete fix:** modify `solve_lambda_ramp_from_warm_start` (and
+`solve_anchor_with_continuation`) to attach the partial rungs
+list to the LadderExhausted exception (`exc.partial_rungs =
+rungs`), and have the gate4 driver read it on except.  Or
+alternatively: change the orchestrator to return a result with
+`converged=False` and a `failure_reason` string instead of
+throwing.  Both are clean; the exception-attribute approach is
+smaller.
+
+### **Re point 9** (per-cation r_H_El destroys holdout) — **Accept**
+You're right; if Cs/Na/Li each get fitted to their own deck
+values, Phase E is no longer a predictive holdout.
+
+**Concrete fix:** Phase E's mapping rule:
+1. Fit r_H_El_K_carbon at K⁺ deck pKa_eff = 8.49.
+2. Compute the K⁺ Cu→carbon ratio: ρ = r_H_El_K_carbon /
+   r_H_El_K_pm_Cu = r_H_El_K_carbon / 200.98.
+3. Apply ρ to all other cations: r_H_El_X_carbon = ρ ·
+   r_H_El_X_pm_Cu, for X ∈ {Cs, Na, Li, Rb}.
+4. Phase E *predicts* per-cation pKa_eff via Singh Eq. (4) with
+   per-cation Singh-Cu r_H_El * ρ.  No per-cation refit.
+
+This freezes the transferability rule from a single K⁺
+calibration.  If Phase E predicts the deck cation series
+within 30 %, Singh+ρ is validated.  If not, Cu→carbon transfer
+is more complex than a single ratio (point 16 of R1's question
+about cation-specific transferability).
+
+### **Re point 10** (regression test should not depend on smoke
+magnitude) — **Accept**
+You're right.  A test "physical hydrolysis at λ=1 moves surface
+pH at V=+0.30" is brittle if the smoke kinetics happen to give
+a sub-noise shift.
+
+**Concrete fix:** the production positive-effect test is a
+**manufactured-source test**: set k_hyd to a deliberately large
+value (e.g. 1.0 nondim, well above smoke baseline) that
+guarantees a large Γ and a large H+ source.  Verify surface c_H
+shifts by ≥ 5 % vs baseline.  This is unit-scale, not
+deck-scale, and tests plumbing not magnitude.  Production smoke
+runs are diagnostic, not pass/fail tests.
+
+### **Re point 11** (ablation matrix invalid controls) — **Accept**
+You're right; my ablation list mixes physical disabling with
+the architecture's actual switching.
+
+**Concrete fix:** a corrected ablation matrix (each at V_kin
+with σ_S < 0):
+1. **A1 — Source-only via manufactured R_inj:** set
+   `manufactured_R_inj` = X (constant), with `k_hyd`,
+   `k_prot`, `k_des` ALL = 0.  R_inj enters the proton residual
+   only.  Surface c_H must rise by f(X).
+2. **A2 — Sink-only via manufactured Γ_inj:** set
+   `manufactured_Gamma_inj` = Γ_const (would need new
+   architecture), `k_hyd` = 0, `k_prot` > 0.  c_K(0) must fall
+   if the K-sink is correctly plumbed.  *Note:* this requires
+   a new ctx flag; might be a Gate-4 follow-up rather than an
+   ablation we can run now.
+3. **A3 — Stern off via the architecture's actual no-Stern
+   path:** `stern_capacitance_f_m2 = 0.0` (the code's documented
+   no-Stern setting), not `1e10`.  Tests whether Stern φ-drop
+   absorbs c_H source.
+4. **A4 — Sulfate analytic disabled with controlled background:**
+   replace the analytic SO₄²⁻ entry with an inert background
+   counterion at the same charge to preserve electroneutrality.
+   Tests whether the SO₄²⁻ analytic closure is re-routing the
+   cation source.
+5. **A5 — Physical Singh hydrolysis at large k_hyd (1e0):**
+   the production path with synthetic-large kinetics.  A1
+   verifies plumbing; A5 verifies the production-path's chain
+   reaches surface c_H at a regime where Newton stiffness
+   (not architecture invalidity) is the only known failure mode.
+
+### **Re point 12** (mass balance acceptance check missing) — **Accept**
+You're right; surface pH shifts could be electrostatic artifacts
+absent a mass-balance integrity check.
+
+**Concrete fix:** for every λ rung (in the rung_callback), assemble:
+- BV H⁺ flux (from `_build_bv_observable_form` over electrode):
+  ``F_BV = ∫ (n_e · R_2e + n_e · R_4e + ...) ds_e``
+- Bulk transport flux of H⁺ through the inlet boundary:
+  ``F_transp = ∫ (D_H ∂c_H/∂n + electromigration) ds_inlet``
+- Hydrolysis source contribution (λ·R_net integrated):
+  ``F_hyd = λ · ∫ R_net ds_e``
+- Water-ionization contribution (when enabled):
+  ``F_w = ∫ k_w_eff · (c_H · c_OH − Kw_eff_hat) dx``
+
+Acceptance: `F_BV ≈ F_transp + F_hyd + F_w` within 1e-4 relative.
+Failure → flag as numerical issue or residual-plumbing bug.
+
+### **Re point 13** (overcorrected V=−0.20 finding) — **Accept**
+You're right; my R2 overcorrection threw away the legitimate
+Γ/Picard data we have.  V=−0.20 produced converged-Γ values for
+k_hyd ≤ 1e-2 — those values still tell us the *architecture's*
+behavior even if cd cannot move.
+
+**Concrete fix:** rephrase artifact's Phase A finding as: "cd
+cannot move on the O₂ Levich plateau, regardless of hydrolysis
+strength.  Γ scales linearly with k_hyd up to 1e-2, then
+diverges with the σ_S-dependent ΔpKa factor.  The O₂-plateau
+choice was uninformative for cd-observability but produced
+valid Picard machinery data."
+
+---
+
+## Section 2: Updated artifact (synthesized changes)
+
+I'll apply the synthesis to
+`docs/phase6/PHASE_6B_V9_PHASES_A_B_RESULTS_2026-05-10.md`
+once converged.  The structure of the updated artifact:
+
+* **Executive summary:** cd plateau at V≤+0.20 V is the O₂
+  Levich limit (5.79 mA/cm² for 4e ORR; observed −5.531 within
+  4 %).  Phase A's V=−0.20 V choice was inside the plateau and
+  cannot test cd-observability for hydrolysis.  Re-do at a
+  kinetic voltage with σ_S < 0.
+* **Re-do scope:** add full surface-field diagnostics
+  (σ_S, ΔpKa, c_H(0), c_K(0), surface pH, R_forward, R_backward,
+  R_net), V-walk recording at all 9 points, then Phase A re-run
+  at the σ_S < 0 kinetic voltage.
+* **Architectural debt list:**
+   1. Γ has no Langmuir capacity → unphysical at high k_hyd
+      (R3 point 7); fix via `(1 − θ)` factor.
+   2. LadderExhausted loses partial rung diagnostics (R3
+      point 8); fix via exception attribute.
+   3. λ ladder structurally lacks a sub-rung-1 floor (R3 point
+      6); fix via finer first ladder.
+* **Phase 6β reframing:** Phase D's calibration target is
+  `pKa_eff = pKa_bulk + ΔpKa(σ_S)` matching deck slide 27 K⁺=8.49,
+  AT the σ_S that matches Singh's deck-cited Cu surface charge
+  (R3 point 4).  Surface pH is NOT the calibration target
+  (R3 point 3).
+* **Phase E's transferability rule:** single K-fitted ratio
+  ρ = r_H_El_K_carbon / r_H_El_K_Cu, applied to all cations
+  (R3 point 9).  No per-cation refit.
+* **5-experiment ablation matrix** (R3 point 11) at the
+  σ_S < 0 kinetic voltage.
+* **Mass balance acceptance check** (R3 point 12) added to the
+  rung callback.
+* **Test gap:** add a manufactured-source test (R3 point 10)
+  that surface c_H shifts by ≥ 5 % at large synthetic k_hyd —
+  unit-scale plumbing test, not a deck-magnitude regression.
+
+---
+
+## Section 3: Continued critique prompt
+
+Review the updated plan and my responses to your earlier issues.
+Push back on responses where I defended poorly — name which point.
+Raise any new issues the updated plan creates. Re-issue any earlier
+issue you don't think I addressed. Same numbered format and same
+verdict line at the end:
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN

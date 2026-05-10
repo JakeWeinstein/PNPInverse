@@ -1,0 +1,31 @@
+
+[gate4] Caching baseline anchor + warm-walk → V=-0.200 V (~10–15 min)
+
+[baseline_cache] Step 1: anchor at V=+0.550 V (kw ladder, λ=0)
+[baseline_cache] anchor done in 50.0s; warm-walking 9 V_RHE points
+[solve_grid_with_anchor] grid of 9 points; anchor at phi_eta=+21.4070
+  [1/9] eta=+21.4070 src=+21.4070 warm<-+21.407 OK
+  [2/9] eta=+19.4609 src=+21.4070 warm<-+21.407 OK
+  [3/9] eta=+15.5687 src=+19.4609 warm<-+19.461 OK
+  [4/9] eta=+11.6765 src=+15.5687 warm<-+15.569 OK
+  [5/9] eta= +7.7843 src=+11.6765 warm<-+11.677 OK
+  [6/9] eta= +3.8922 src= +7.7843 warm<-+7.784 OK
+  [7/9] eta= +0.0000 src= +3.8922 warm<-+3.892 OK
+  [8/9] eta= -3.8922 src= +0.0000 warm<-+0.000 OK
+  [9/9] eta= -7.7843 src= -3.8922 warm<--3.892 OK
+[solve_grid_with_anchor] 9/9 converged
+[gate4] Persisted U snapshot to /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_v9_observability_v_minus_0_20/u_warmstart_at_v_-0.200.npz (5 arrays).
+
+[gate4] === baseline: r_H_El=200.98, C_S=0.1, k_des=1.0, k_hyd=0.001, k_prot=0.001 ===
+
+[baseline] λ ramp at V=-0.200 V from cached snapshot (r_H_El=200.98 pm, C_S=0.100, k_des=1e+00, k_hyd=1e-03, k_prot=1e-03)
+
+[gate4] DONE.  1 combinations.
+[gate4]      use_cache=True
+[gate4]      out_dir=/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_v9_observability_v_minus_0_20
+[gate4]      v_lambda_target=-0.200
+WARNING! There are options you set that were not used!
+WARNING! could be spelling mistake, etc!
+There are 2 unused database options. They are:
+Option left: name:--lambda-only (no value) source: command line
+Option left: name:--voltage value: -0.20 source: command line
