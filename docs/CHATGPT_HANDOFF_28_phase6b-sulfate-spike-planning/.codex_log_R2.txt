@@ -1,0 +1,1072 @@
+OpenAI Codex v0.129.0 (research preview)
+--------
+workdir: /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/jakeweinstein/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e0fc7-5460-7790-abf5-7b81d5e49cb6
+--------
+user
+# R2 — counterreply
+
+Two pieces of new ground truth landed between R1 and R2:
+
+(A) The Phase 6α sweep **finished** while R1 was in flight. 8/8 combos
+× 13/13 V_RHE points, 58.5 min wall. `summary.json` and `verdict.json`
+are now coherent.
+
+(B) Handoff 26 was updated with the full result and a load-bearing
+new physical claim that materially reshapes the spike's purpose. I
+work with that ground truth below; numbers and quotes are from
+`docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md` §3-4.
+
+---
+
+## 1. Per-issue response
+
+**Re point 1 (Phase 6α evidence basis).** Accept on the symptom,
+reject on the conclusion. The JSON config field IS wrong — every
+per-combo `iv_curve.json` records `enable_water_ionization: false`
+and `kw_eff_hat_target: 0.0`. But this is a cosmetic logging bug
+isolated to `_config_dict`, *not* a physics-disabling bug. Two
+independent sources confirm the physics:
+
+* Run log (`l_eff_transport_sweep_phase6a_run.log`) shows for every
+  combo `enable_water_ionization=True (Kw_eff target = 6.944e-09)`
+  followed by `kw=…` heartbeats: e.g. for L100µm × 1e-18:
+  `kw=6.944e-15 k0=1e-6 ok` … `kw=6.944e-09 k0=1.0 ok`. The
+  Kw_eff continuation ladder fired all 4 rungs.
+* Top-level `summary.json` (timestamp 21:51) correctly records
+  `enable_water_ionization: true`, `kw_eff_hat_target: 6.944e-9`.
+  Same call site, same arg, but `_config_dict` was called with
+  `enable_water_ionization=enable_water_ionization` here whereas
+  the per-combo write site at line 519 was called *without* the
+  argument before the in-flight bug-fix. Handoff 26 §2.1 explicitly
+  flags this:
+
+  > "The success-path `_config_dict` call in
+  > `scripts/studies/l_eff_transport_sweep_csplus_so4.py` line 519
+  > omitted `enable_water_ionization`, so combo-1's `iv_curve.json`
+  > config block shows `enable_water_ionization: False` even though
+  > the residual *is* using it. Fixed in-tree but the in-flight
+  > sweep is reading the old script. The actual physics is correct;
+  > only the JSON label is wrong."
+
+* The cd values themselves are the strongest evidence: at
+  V_RHE = −0.40 V, L = 100 µm, ratio 1e-18, cd = −0.737 mA/cm² vs
+  the no-water-ionization baseline cd = −0.090 mA/cm² (an 8.2×
+  break of the H⁺ Levich ceiling). At ratio 1e-30 the same V_RHE
+  gives cd = −0.440 mA/cm² vs baseline −0.090. The H⁺ Levich-only
+  model cannot produce |cd| > 0.09 mA/cm² at this L_eff; the
+  observed |cd| can only come from the OH⁻ removal pathway that
+  Kw_eff enables.
+
+So: data is trustworthy. Action: regenerate `iv_curve.json` is **not**
+required — the values are correct. But fix the cosmetic bug so future
+runs aren't ambiguous, and add an explicit assertion in
+`score_l_eff_sweep.py` that cross-checks `summary.json.enable_water_ionization`
+against the per-combo `config` field and raises if they disagree.
+
+**Re point 2 (I vs [SO4]_T conflation).** Accept. For 0.1 M K₂SO₄:
+[K⁺] = 0.2 M, [SO₄²⁻]_total = 0.1 M, ionic strength
+I = ½·(0.2·1² + 0.1·2²) = 0.3 M. The plan said "[SO4]_T = 0.3 M";
+that's wrong by 3×. The correct bracket for the spike is
+`[SO4]_T = 0.1 M` (matching the 8-15-19 K₂SO₄ workbook) and
+`I = 0.3 M`.
+
+**Re point 3 (closure underdetermined).** Accept. `Ka` plus
+total-sulfate gives the *speciation* at a fixed c_H but doesn't
+*determine* c_H. The closure has to come from electroneutrality at
+the surface plus the proton condition (the same E = c_H − c_OH the
+existing Phase 6α residual uses, extended). For the spike:
+
+```
+E_total(y) = c_H(y) + c_HSO4(y) − c_OH(y)
+          + (Bikerman steric correction terms)
+```
+
+is the conserved acid-base coordinate; total sulfate
+`c_T = c_SO4 + c_HSO4` and total cation `c_Cs⁺` are conserved
+species inventories with their own profiles. I'll have the spike
+solve a 1D ODE (or local algebraic system at each grid voltage)
+that satisfies E_total balance, the speciation `Ka` constraint, and
+the existing surface c_H from 6α as the *only* observed-state input
+(via E_total_old at the surface = c_H_old − c_OH_old).
+
+**Re point 4 (pH 4 sulfate reservoir overstated).** Accept. At pH 4
+with pKa₂ = 1.99: [SO4]/[HSO4] ≈ 10^(4−1.99) = 102. So at bulk pH 4
+HSO4 is ~1% of total; at surface pH 10.6 it's ~10^(−9) of total —
+essentially zero. The buffering reservoir at the surface is
+*non-existent*; what matters is the *gradient* of HSO4 / SO4 / H⁺
+between bulk and surface, and the rate at which the equilibrium can
+re-supply H⁺ from HSO4 *as it diffuses in from bulk*. The spike has
+to model that gradient explicitly — a single-point algebraic check
+at the surface gives ~zero buffer regardless of voltage.
+
+**Re point 5 (activity correction).** Accept with bracket. At
+I = 0.3 M divalent SO₄²⁻ activity coefficient by Davies:
+`log γ_2 = −0.51·z²·(√I/(1+√I) − 0.3·I) ≈ −0.51·4·(0.385 − 0.09) = −0.602`,
+so γ_SO4 ≈ 0.25; γ_HSO4 (z=−1) ≈ 0.71; γ_H ≈ 0.71. Effective
+concentration Ka:
+`Kc = Ka° · γ_HSO4 / (γ_H · γ_SO4) = 10^(−1.99) · 0.71 / (0.71·0.25) = 4·Ka°`,
+i.e. effective pKa shifts from 1.99 to 1.39 — about 0.6 units. So
+the spike should use a pKa_eff bracket of {1.4, 2.0} and not claim
+quantitative magnitude precision. The 30% gate in the plan is
+unjustifiable; replace with a sign-and-direction gate (does sulfate
+bring surface pH into the deck operating window 4-9 at the relevant
+V_RHE).
+
+**Re point 6 (n=0.5/1.0 wrong).** Accept. The plan even acknowledged
+this in a footnote but the spike spec was inconsistent. Correct
+powers: R2e n_H = 2 (cathodic factor `(c_H/C_HP_HAT)²`), R4e n_H = 4
+(cathodic factor `(c_H/C_HP_HAT)⁴`). Compute R2e and R4e separately,
+recombine via electron flux `j_disk = 2·F·R_R2e + 4·F·R_R4e`. This
+also makes ratio dependence (R2e/R4e magnitudes) propagate
+correctly into the spike.
+
+**Re point 7 (post-hoc multiplier ≠ cd prediction).** Accept. At
+deep cathodic V_RHE = −0.4 V, raising surface pH from 10.6 → 6 would
+multiply the R4e cathodic factor by ~10^(4·(10.6−6)) = ~10^18 with
+the BV exponential unchanged → unphysical |cd|. Need a 1D O2 Levich
+diffusion cap to bound magnitudes. **Better:** descope the spike to
+sign-and-window only, since magnitude is a self-consistent solve
+problem and the spike is fundamentally a sounding board for
+direction. The spike's question is then: "with sulfate buffering on,
+where does the (c_H)^n factor enter the *binding* regime — the V_RHE
+at which the BV exponential first hits the H⁺-supply ceiling?"
+
+**Re point 8 (acid-form BV + transport gives plateau, not decay).**
+Partial accept, but with an important refinement from handoff 26 §4.
+
+You're right that:
+* Pure acid-form `(c_H)^n` with rising c_H gives a *plateau* at the
+  H⁺-supply rate, not a *decay past peak*.
+* Therefore sulfate alone cannot produce the cathodic decay past the
+  deck peak.
+
+But the deck shows BOTH a peak AND a decay, and these are different
+phenomena:
+
+* **Peak formation** — handoff 26 §4 claims the cathodic peak is the
+  V_RHE where the BV exponential growth `exp(α·n·|η|/V_T)` *first
+  hits* the `(c_H/c_H_ref)^n` ceiling. With surface pH stuck at ~10.6
+  (current Phase 6α), c_H ≈ 1e-7 mol/m³, the ceiling is *too soft* —
+  the BV exponential just keeps winning. With sulfate pinning
+  surface pH near 6-7, c_H ≈ 1e-3 mol/m³ becomes a *hard* ceiling
+  and the rising-cd curve flattens to a plateau-or-peak there.
+* **Decay past peak** — sulfate alone gives a peak followed by a
+  plateau. To get *decay past peak* you need either O2 surface
+  depletion (which would give a 2nd plateau, not decay), or
+  alkaline-form / pH-switched kinetics that *reduce* the rate as
+  surface pH crosses some threshold — that's 6δ.
+
+So the corrected mechanism story is:
+
+1. Phase 6α (water ionization): broke H⁺ Levich, surface pH ~10.6,
+   no peak/plateau because (c_H)^n ceiling is too soft.
+2. Phase 6β (sulfate buffering): sulfate provides a finite-rate H⁺
+   re-supply that pins surface pH near 6-7, hardens the (c_H)^n
+   ceiling. **Predicted: peak forms, plateau after.**
+3. Phase 6δ (alkaline/switch kinetics): alkaline-form ORR rate or
+   coverage/switch reduces the rate past the peak. **Predicted:
+   decay past peak.**
+
+The spike's purpose is therefore (revised): **does sulfate buffering
+bring surface pH into the deck operating window (4-9, ideally 4-7)
+within the V_RHE band [+0.0, +0.20] where the deck peak sits?** If
+yes, the (c_H)^n ceiling argument from handoff 26 §4 implies a peak
+is mechanically forced; sulfate is sufficient for the peak but not
+for the decay.
+
+**Re point 9 (current sweep already uses Cs+ + SO4).** Accept.
+Confirmed by `scripts/studies/l_eff_transport_sweep_csplus_so4.py:189`:
+
+```python
+boltzmann_counterions=[
+    DEFAULT_CSPLUS_BOLTZMANN_COUNTERION_STERIC,
+    DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC,
+],
+```
+
+So Phase 6β is **adding HSO₄⁻/SO₄²⁻ acid-base speciation** to an
+already-static SO₄²⁻ multi-ion model, not "replace ClO₄⁻ with
+sulfate." The plan needs to be rewritten around this baseline, and
+6β.1's `boltzmann_counterions` keeps `Cs⁺` and `SO₄²⁻` and adds
+either `HSO₄⁻` as a third Boltzmann counterion (algebraic closure)
+or as a dynamic species with an exchange residual (path 6β.2).
+
+**Re point 10 (Branch A impossible under proposed spike).** Accept.
+Restructured: Branch A is no longer "sign-of-rate-factor positive"
+but "spike predicts surface pH lands in deck window AT the V_RHE band
+where peak should form." The branch becomes a *ceiling-prediction*
+test, not a magnitude-multiplier test. The actual peak shape comes
+from the 6β.1 solver run, not from the spike.
+
+**Re point 11 (80 mV grid not hiding peak).** Accept. The 13-point
+table from handoff 26 over [−0.40, +0.55] V is monotonically
+increasing in |cd|; the +0.075 to −0.083 jump is the foot of the
+cathodic rise, not a missed maximum. A finer grid would refine the
+slope but not surface a hidden peak. Drop "spacing might hide a
+peak" from the plan.
+
+**Re point 12 (K2SO4 file ≠ Cs deck column).** Accept. The
+`0,1M K2SO4 data 8-15-19.xlsx` is the K⁺ system. K⁺ vs Cs⁺ is
+*the* experimental variable that controls peak height/shape (handoff
+26 §6.3 elevates this to a sub-task). Use the K2SO4 file only for:
+
+* qualitative sign — does the deck show a peak in [+0.05, +0.15] V?
+* qualitative pH window — does surface pH at the deck peak fall in
+  [4, 9]?
+* Levich slope verification at the anodic limit.
+
+**Do not** use the K₂SO₄ file as a 30 % quantitative gate. Quantitative
+deck comparison waits for either (a) the missing
+`Tafel slope analysis cation-pH-Li-K-Cs.xlsx` to resurface or
+(b) the cation-identity sub-task running Cs⁺/K⁺/Na⁺/Li⁺ side-by-side
+in the solver and matching to whichever data exists.
+
+**Re point 13 (ratio dependence not ignorable).** Accept. R2e (n_H=2)
+and R4e (n_H=4) have different sensitivity to surface pH; the
+1e-18 vs 1e-30 ratio sets which channel dominates. Spike runs both
+ratios, reports per-reaction surface fluxes (`R_R2e_surface`,
+`R_R4e_surface`) AND total cd. Selectivity (ratio of 2e to 4e
+electrons) is also a deck-comparison observable per the K2SO4 file's
+`H2O2 %` column.
+
+**Re point 14 (6β.1 conservation incomplete).** Accept. Updated 6β.1
+form: `c_T = c_SO4 + c_HSO4` is a primary NP variable (one extra
+DOF per node), with the speciation derived algebraically:
+
+```
+c_HSO4(y) = c_T(y) · c_H(y) / (c_H(y) + Ka_eff)
+c_SO4(y)  = c_T(y) · Ka_eff / (c_H(y) + Ka_eff)
+```
+
+Flux: `J_T = J_SO4 + J_HSO4`, where each is the standard NP flux
+with the species-specific charge / steric / diffusivity. Poisson
+charge gets `(−2)·c_SO4 + (−1)·c_HSO4` (each separately). Bikerman
+A_dyn: includes both `a_SO4·c_SO4 + a_HSO4·c_HSO4`. The DAE
+character (algebraic speciation inside the residual) is the
+*smaller* change vs two-NP-with-equilibrium-residual; Newton should
+converge as long as Ka_eff is bounded away from 0.
+
+**Re point 15 (proton-condition flux missing).** Accept. Extended
+proton-condition residual replaces the Phase 6α `E = c_H − c_OH` with:
+
+```
+E = c_H + c_HSO4 − c_OH
+J_E = J_H + J_HSO4 − J_OH
+F_E_res = ∂E/∂t + ∇·J_E - source_BV = 0
+```
+
+(at the BV electrode, source_BV is the proton-stoichiometry-weighted
+sum of reaction rates). Derive weak form before implementation; add
+a `TestKwHsoZeroReducesToBaseline` slow regression (analog of the
+existing `TestKwZeroReducesToBaseline`) that asserts disabling
+sulfate-buffering recovers byte-equivalent behavior to Phase 6α.
+
+**Re point 16 (split 6δ).** Accept. New 6δ structure:
+
+* **6δ.1** — explicit alkaline-form parallel reactions
+  (`R2e_alk: O₂ + H₂O + 2e⁻ → HO₂⁻ + OH⁻`,
+  `R4e_alk: O₂ + 2H₂O + 4e⁻ → 4OH⁻`) added via existing
+  reaction-list machinery in `_bv_common.py`. New k0/α/E°_alk for
+  each. No kinetic-form switching code; Newton finds dominant
+  channel via rate magnitudes. Smaller change.
+* **6δ.2** — pH-gated switching or site-coverage / adsorbed
+  intermediate kinetics. Requires deeper refactor of the BV
+  residual. Reserve until 6δ.1 outcome shows whether the
+  parallel-channels hypothesis alone produces the deck decay.
+
+Order: 6β.1 → measure → 6δ.1 → measure → only then 6δ.2.
+
+---
+
+## 2. Updated artifact
+
+The full revised plan is now committed to disk at
+`docs/phase6b_next_steps_plan.md`. Headline changes:
+
+1. Replaced the "Phase 6α in progress" preamble with the verified
+   final 8-combo numbers from handoff 26 §3 (P1 PASS, P2 PASS, P3
+   FAIL at max_pH = 10.58).
+2. Added the **L_eff-independence of surface pH at ~10.6** finding
+   from handoff 26 §3a as the load-bearing observation that motivates
+   moving from Phase 6α → 6β.
+3. Restated the baseline correctly: the sweep already uses Cs⁺ + static
+   SO₄²⁻ Boltzmann; 6β = adding HSO₄⁻ acid-base speciation.
+4. Rewrote step 3 (algebra spike):
+   * `[SO4]_T = 0.1 M`, `I = 0.3 M`, `[Cs⁺] = 0.2 M`.
+   * pKa_eff bracket {1.4, 2.0} via Davies activity correction.
+   * Per-reaction R2e (n_H=2) + R4e (n_H=4); recombine via
+     `j_disk = 2F·R2e + 4F·R4e`.
+   * Surface c_H comes from electroneutrality + speciation + the
+     existing Phase 6α surface state, not from an unconstrained
+     equilibrium algebra.
+   * 1D O₂ Levich diffusion cap on cd magnitudes, OR explicitly
+     descope to *sign + pH-window prediction* and abandon magnitude
+     comparison.
+5. Rewrote step 4 (branch decision):
+   * Branch A (proceed to 6β.1): spike predicts surface pH lands in
+     [4, 9] (ideally [4, 7]) within V_RHE ∈ [+0.0, +0.20] V — the
+     deck-peak window.
+   * Branch B (move to 6δ.1 first or in parallel): spike shows
+     sulfate doesn't bring pH into window even with most-favorable
+     pKa_eff, OR sulfate brings pH down but the rate doesn't show
+     the (c_H)^n ceiling kicking in at the right V_RHE.
+6. Rewrote step 5 (deck cross-check) per #12: K2SO4 file is for
+   sign+window verification only, not 30 % quantitative gate. Add
+   the cation-identity sub-task from handoff 26 §6.3 as a post-6β.1
+   item.
+7. New step 6 — fix the cosmetic `_config_dict` logging bug
+   (hardcoded `enable_water_ionization=False` at the success path's
+   `_config_dict` call site, line 519). Add a `score_l_eff_sweep.py`
+   cross-check that summary.json and per-combo config agree.
+8. Rewrote 6β.1 implementation (now §7) per #14, #15:
+   * `c_T = c_SO4 + c_HSO4` as primary NP variable (one extra DOF per
+     node), algebraic speciation derived inside the residual.
+   * Extended proton-condition `E = c_H + c_HSO4 − c_OH` with full
+     flux `J_E = J_H + J_HSO4 − J_OH`.
+   * Poisson charge counts `−2·c_SO4 + −1·c_HSO4` separately.
+   * Bikerman A_dyn includes both species.
+   * `kw_eff_ladder`-analogous `ka_eff_ladder` continuation.
+   * `TestKwHsoZeroReducesToBaseline` slow regression.
+9. Rewrote 6δ as 6δ.1 (parallel alkaline channels) + 6δ.2 (pH-gated
+   switching / coverage), per #16.
+
+(Full text in `docs/phase6b_next_steps_plan.md`; written before this
+counterreply was sent.)
+
+---
+
+## 3. Continued critique prompt
+
+Review the updated plan and my responses to your earlier issues.
+Push back on responses where I defended poorly — name which point.
+Raise any new issues the updated plan creates. Re-issue any earlier
+issue you don't think I addressed. Same numbered format and same
+verdict line at the end:
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN
+
+codex
+I’ll review the revised plan as the artifact now, not the R1 version. I’m going to check the updated doc plus the finished sweep metadata/log so the pushback is on what’s actually on disk.
+exec
+/bin/zsh -lc "nl -ba docs/phase6b_next_steps_plan.md | sed -n '1,280p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+     1	# Phase 6β next-steps plan (v2, post-R1 critique)
+     2	
+     3	**Status basis:** Written 2026-05-09 22:10 PT. Phase 6α sweep
+     4	**complete** (8/8 combos × 13 V_RHE points, 58.5 min wall). Numbers
+     5	verified from `docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md`
+     6	§3 (updated 2026-05-09 22:00 CDT) and the on-disk `summary.json` /
+     7	`verdict.json` written 21:51.
+     8	
+     9	This v2 incorporates GPT's 16-issue R1 critique (see
+    10	`docs/CHATGPT_HANDOFF_28_phase6b-sulfate-spike-planning/`). Specific
+    11	changes from v1 are tagged inline `[R1#N]` against GPT's issue
+    12	numbers. v1 is preserved in git history.
+    13	
+    14	---
+    15	
+    16	## 1. Verified Phase 6α final state
+    17	
+    18	### 1.1 Verdict
+    19	
+    20	`StudyResults/.../l_eff_transport_sweep/verdict.json`:
+    21	
+    22	| Gate | Result | Detail |
+    23	|---|---|---|
+    24	| P1 plateau Levich linearity | **PASS** | slope 1.0048 (1e-18), 1.0000 (1e-30); both inside [0.85, 1.15] |
+    25	| P2 no cathodic peak | **PASS** | no interior local minimum at any (L_eff, ratio) |
+    26	| P3 max_surface_pH < 9 at L=16 µm | **FAIL** | max pH = 10.583 (1e-18), 10.580 (1e-30) |
+    27	
+    28	P3 failure is the headline insight, not a regression. The deck
+    29	operating window (pH 4-9, ideally 4-7) is **not reachable by water
+    30	self-ionization alone**. Sulfate buffering is required, not optional.
+    31	
+    32	### 1.2 Plateau magnitudes (deck target ≈ −0.18 mA/cm²)
+    33	
+    34	| L_eff | ratio 1e-18 | ratio 1e-30 |
+    35	|---|---|---|
+    36	| 100 µm | −0.737 (4.1×) | −0.440 (2.4×) |
+    37	| 66 µm | −1.122 (6.2×) | −0.667 (3.7×) |
+    38	| 21 µm | −3.541 (19.7×) | −2.095 (11.6×) |
+    39	| 16 µm | −4.651 (25.8×) | −2.749 (15.3×) |
+    40	
+    41	|cd| scales ~ 1/L_eff (Levich) at fixed ratio; ratio 1e-30 is ~60 %
+    42	of ratio 1e-18 across all L_eff. R2e dominates at ratio 1e-30 and
+    43	above; R4e becomes comparable at ratio 1e-18.
+    44	
+    45	### 1.3 Surface pH at deepest cathodic V_RHE = −0.40 V
+    46	
+    47	| L_eff | ratio 1e-18 | ratio 1e-30 | baseline (no water ion) |
+    48	|---|---|---|---|
+    49	| 100 µm | 10.61 | 10.34 | 14.14 |
+    50	| 66 µm | 10.60 | 10.34 | 14.04 |
+    51	| 21 µm | 10.58 | 10.31 | 13.78 |
+    52	| 16 µm | 10.58 | 10.31 | 13.72 |
+    53	
+    54	**Load-bearing physical observation:** surface pH at deep cathodic V
+    55	is **L_eff-independent at ~10.6 (1e-18) / ~10.3 (1e-30)**. Going from
+    56	100 µm to 16 µm — a 6× shrink in transport length — does not move
+    57	surface pH. The water-source-vs-ORR balance pins surface pH at the
+    58	value where OH⁻-Levich removal balances ORR's H⁺ consumption.
+    59	Transport (smaller L_eff) only scales magnitudes; **chemistry is the
+    60	only lever to move surface pH**. Phase 6β (sulfate buffering) is the
+    61	chemical lever.
+    62	
+    63	### 1.4 Provenance caveat
+    64	
+    65	The per-combo `iv_curve.json` files have a cosmetic logging bug:
+    66	`config.enable_water_ionization` reads `false` and `kw_eff_hat_target`
+    67	reads `0.0` even though water ionization was active. Source: handoff
+    68	26 §2.1 — the `_config_dict` call at line 519 of
+    69	`scripts/studies/l_eff_transport_sweep_csplus_so4.py` was missing the
+    70	`enable_water_ionization=…` keyword. Three independent sources
+    71	confirm physics is correct:
+    72	
+    73	* run log heartbeats (`kw=6.944e-09 k0=1.0 ok` per combo)
+    74	* top-level `summary.json` correctly records the flag
+    75	* cd magnitudes 4-25× exceed the H⁺ Levich ceiling
+    76	
+    77	Action item: fix `_config_dict` and add a cross-check assertion in
+    78	`score_l_eff_sweep.py` (see step 6 below).
+    79	
+    80	### 1.5 Baseline electrolyte composition
+    81	
+    82	The sweep script already uses **Cs⁺ + static SO₄²⁻** Boltzmann
+    83	counterions, not ClO₄⁻. From `l_eff_transport_sweep_csplus_so4.py:189`:
+    84	
+    85	```python
+    86	boltzmann_counterions=[
+    87	    DEFAULT_CSPLUS_BOLTZMANN_COUNTERION_STERIC,
+    88	    DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC,
+    89	],
+    90	```
+    91	
+    92	So Phase 6β = **add HSO₄⁻ / SO₄²⁻ acid-base speciation** to an
+    93	already-static SO₄²⁻ multi-ion stack, not "replace ClO₄⁻ with
+    94	sulfate." `[SO₄²⁻]_total = 0.1 M`, `[Cs⁺] = 0.2 M`, ionic strength
+    95	`I = 0.3 M` (from 0.1 M Cs₂SO₄ or equivalently the Brianna 0.1 M
+    96	K₂SO₄ deck). This corrects v1's conflation of I = 0.3 M with
+    97	[SO4]_total = 0.3 M `[R1#2]`.
+    98	
+    99	---
+   100	
+   101	## 2. Plan
+   102	
+   103	### Step 1 — Done (Phase 6α complete)
+   104	
+   105	No action. Numbers in §1 above.
+   106	
+   107	### Step 2 — Postprocessing audit
+   108	
+   109	1. Verify `summary.json` and `verdict.json` reflect the post-21:30
+   110	   coherent state. (Both confirmed timestamped 21:51, with
+   111	   `enable_water_ionization: true` and `kw_eff_hat_target: 6.944e-9`.)
+   112	2. Defer the `--out-dir`/`--only-l-eff`/`--resume` CLI retrofit
+   113	   (handoff 27 §9 task 1). The directory is already coherent; retrofit
+   114	   only matters when 6β.1 needs partial reruns.
+   115	
+   116	### Step 3 — Sulfate-buffer algebra spike (revised) `[R1#3,4,5,6,7]`
+   117	
+   118	**Purpose** (revised per `[R1#10]`): predict whether sulfate buffering
+   119	pulls surface pH into the deck operating window (4-9, ideally 4-7) at
+   120	the V_RHE band [+0.00, +0.20] V where the deck peak sits. This is a
+   121	**ceiling-prediction** test, not a magnitude prediction. The spike's
+   122	output decides whether 6β.1 solver work is justified, not the size of
+   123	the cathodic peak.
+   124	
+   125	**Inputs:**
+   126	
+   127	* `surface_pH_proxy` and `c_H_surface_nondim` arrays from each
+   128	  Phase 6α `iv_curve.json` (4 L_eff × 2 ratios = 8 curves).
+   129	* Reaction-rate functions for R2e (n_H = 2, n_O2 = 1, E°=0.695 V) and
+   130	  R4e (n_H = 4, n_O2 = 1, E°=1.23 V) per `scripts/_bv_common.py:660-690`.
+   131	* `c_H_ref = C_HP_HAT` (bulk pH 4 = 0.0833 nondim) per same source.
+   132	
+   133	**Algebra (corrected per [R1#2,3,4,5]):**
+   134	
+   135	For each grid voltage V_RHE in each curve:
+   136	
+   137	1. Read existing surface state from 6α: `c_H_old`, `c_OH_old`, derived
+   138	   `pH_old`. Compute `E_old = c_H_old − c_OH_old` (Phase 6α's proton
+   139	   condition).
+   140	2. Activity-correct Ka via Davies at I = 0.3 M:
+   141	   * γ_SO4 ≈ 0.25, γ_HSO4 ≈ 0.71, γ_H ≈ 0.71.
+   142	   * `Kc_eff = Ka° · γ_HSO4 / (γ_H · γ_SO4) ≈ 4·Ka°` →
+   143	     pKa_eff ≈ 1.39.
+   144	   * Bracket: pKa_eff ∈ {1.4, 2.0} to span uncertainty.
+   145	3. Solve a self-consistent surface system at each V_RHE:
+   146	   * Speciation: `c_HSO4 / c_SO4 = c_H / Kc_eff` with
+   147	     `c_T = c_HSO4 + c_SO4 = 0.1 M`.
+   148	   * Extended proton condition: `E_new = c_H + c_HSO4 − c_OH` with
+   149	     `c_OH = Kw / c_H` (Phase 6α water ionization preserved).
+   150	   * Closure: assume the *flux* into the surface (driven by the BV
+   151	     reactions consuming H⁺) is unchanged from 6α to first order.
+   152	     This makes E_new the surface accumulator: choose c_H_new such
+   153	     that the *additional* H⁺ supply from HSO₄⁻ → SO₄²⁻ + H⁺ exactly
+   154	     matches the deficit Phase 6α was carrying.
+   155	   * Equivalent root-finding: find c_H_new such that
+   156	     `(c_H_new − c_H_old) + (c_HSO4_new − c_HSO4_old) = 0` at fixed
+   157	     total proton inventory (small-change-from-equilibrium argument).
+   158	4. Per-reaction rate factor change `[R1#6]`:
+   159	   * R2e: `(c_H_new / c_H_old)²`.
+   160	   * R4e: `(c_H_new / c_H_old)⁴`.
+   161	5. Sign + window verdict (no magnitude claim) `[R1#7,10]`:
+   162	   * Does pH_new fall in [4, 9] (ideally [4, 7]) within V_RHE ∈
+   163	     [+0.00, +0.20] V?
+   164	   * Does the per-reaction factor amplify by at least ~10² in that
+   165	     window? (Ceiling-binding heuristic from handoff 26 §4: when
+   166	     c_H_new reaches ~1e-3 M the (c_H)⁴ ceiling becomes hard.)
+   167	
+   168	**Outputs:**
+   169	
+   170	* `scripts/studies/phase6b_sulfate_algebra_spike.py`
+   171	* `StudyResults/fast_realignment_2026-05-08/phase6b_sulfate_spike/`:
+   172	  * `algebra_summary.json`: per-(L_eff, ratio, pKa_eff) per-V_RHE
+   173	    `pH_old`, `pH_new`, `R2e_factor`, `R4e_factor`,
+   174	    `falls_in_deck_window`, `ceiling_binds`.
+   175	  * `pH_shift_overlay.png`: surface pH old vs new vs deck operating
+   176	    window 4-9.
+   177	  * `rate_factor_overlay.png`: per-reaction factor curves with
+   178	    pKa_eff = {1.4, 2.0} bands.
+   179	  * `verdict.md`: 1-paragraph answer to "does sulfate buffering bring
+   180	    surface pH into the deck window at the V_RHE peak band?"
+   181	
+   182	**Explicit limitations to call out in `verdict.md`** `[R1#7]`:
+   183	
+   184	* No magnitude prediction — Coupled solve will redistribute O₂ and the
+   185	  full Poisson charge. The spike cannot say what the peak |cd| is.
+   186	* No prediction of decay past peak — sulfate gives plateau-or-peak,
+   187	  not decay (`[R1#8]`); decay needs 6δ.
+   188	* No claim that K2SO4 deck = Cs2SO4 model — cation identity not
+   189	  matched (`[R1#12]`).
+   190	
+   191	### Step 4 — Branch decision after spike `[R1#10]`
+   192	
+   193	Refined branch logic:
+   194	
+   195	* **Branch A → 6β.1 (algebraic-buffer solver work)** if either
+   196	  pKa_eff endpoint shows surface pH falling into the deck window
+   197	  (preferably [4, 7]) within V_RHE ∈ [+0.00, +0.20] V, AND R2e or R4e
+   198	  factor amplification ≥ 10² in that window. The (c_H)^n ceiling is
+   199	  predicted to bind; sulfate-driven peak is mechanically forced per
+   200	  handoff 26 §4.
+   201	* **Branch B → 6δ.1 plan first or in parallel** if neither pKa_eff
+   202	  endpoint brings pH into [4, 9] in the deck-peak band, OR if pH
+   203	  drops but ceiling doesn't bind (factor amplification stays < 10²).
+   204	  Sulfate alone insufficient; alkaline-form parallel reactions
+   205	  (6δ.1) become the load-bearing scope.
+   206	
+   207	In **either** branch, 6δ.1 is queued *eventually* — sulfate gives the
+   208	peak (best case), alkaline parallel reactions give the decay past
+   209	peak. The branch decides whether 6β.1 runs first or 6δ.1 runs first
+   210	or in parallel.
+   211	
+   212	### Step 5 — Deck cross-check (qualitative only) `[R1#12]`
+   213	
+   214	The local file `data/EChem Reactor Modeling-Seitz-Mangan/Brianna/
+   215	0,1M K2SO4 data 8-15-19.xlsx` is the K⁺ system (six pH values, RRDE
+   216	LSV with `j_disk`, `j_ring`, `H2O2%`, `n_e`, `Overpotential`). Use
+   217	ONLY for:
+   218	
+   219	* Sign verification: does the deck show a cathodic peak in
+   220	  V_RHE ∈ [+0.05, +0.15] V at pH 4?
+   221	* Surface pH plausibility: does the deck's `j_disk` magnitude at the
+   222	  peak imply a surface pH consistent with sulfate-buffered c_H ~ 1e-3
+   223	  M?
+   224	* Anodic-limit Levich slope verification.
+   225	* H₂O₂% ratio (j_ring/j_disk) for selectivity comparison.
+   226	
+   227	Do **not**:
+   228	
+   229	* Use as a 30 % quantitative gate (v1 had this — wrong).
+   230	* Use as a Cs⁺-direct comparison (this is K⁺).
+   231	
+   232	Quantitative deck comparison waits for either:
+   233	
+   234	(a) the missing `Tafel slope analysis cation-pH-Li-K-Cs.xlsx` to
+   235	    surface (handoff 26 §6.3 sub-task), OR
+   236	(b) the cation-identity sub-task in step 9 below.
+   237	
+   238	### Step 6 — Fix the `_config_dict` cosmetic bug (small, do soon)
+   239	
+   240	Single-line fix:
+   241	
+   242	```python
+   243	# scripts/studies/l_eff_transport_sweep_csplus_so4.py:519
+   244	"config": _config_dict(
+   245	    l_eff_m=l_eff_m, ratio=ratio,
+   246	    enable_water_ionization=enable_water_ionization,  # was missing
+   247	),
+   248	```
+   249	
+   250	Plus add a cross-check in `scripts/studies/score_l_eff_sweep.py`:
+   251	
+   252	```python
+   253	for combo in summary["per_combo"]:
+   254	    label = combo["label"]
+   255	    cfg = json.load(open(out_dir / label / "iv_curve.json"))["config"]
+   256	    assert cfg["enable_water_ionization"] == summary["enable_water_ionization"], (
+   257	        f"{label}: per-combo config disagrees with summary"
+   258	    )
+   259	```
+   260	
+   261	This closes a class of provenance bug that GPT correctly flagged.
+   262	
+   263	### Step 7 — 6β.1 implementation outline (Branch A) `[R1#14,15]`
+   264	
+   265	Mirror Phase 6α architectural pattern: default-off flag, helper
+   266	module, byte-equivalent disabled path, `kw_eff_ladder`-analogous
+   267	continuation, slow regression test.
+   268	
+   269	**Module:** `Forward/bv_solver/sulfate_buffering.py` (mirror of
+   270	`Forward/bv_solver/water_ionization.py`).
+   271	
+   272	**New primary variable:** `c_T = c_SO4 + c_HSO4` as a Nernst-Planck
+   273	species (one extra DOF per node). Algebraic speciation:
+   274	
+   275	```
+   276	c_HSO4(y) = c_T(y) · c_H(y) / (c_H(y) + Ka_eff)
+   277	c_SO4(y)  = c_T(y) · Ka_eff / (c_H(y) + Ka_eff)
+   278	```
+   279	
+   280	**Flux for c_T:** `J_T = J_SO4 + J_HSO4`, where each is the standard
+
+exec
+/bin/zsh -lc "python - <<'PY'
+import json
+from pathlib import Path
+p=Path('StudyResults/fast_realignment_2026-05-08/l_eff_transport_sweep/summary.json')
+print(p.exists(), p)
+if p.exists():
+    d=json.loads(p.read_text())
+    for k in ['enable_water_ionization','config_template','wall_seconds','per_combo']:
+        v=d.get(k)
+        if k=='per_combo' and isinstance(v,list):
+            print(k, len(v), v[:2], v[-2:])
+        else:
+            print(k, v)
+PY" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+True StudyResults/fast_realignment_2026-05-08/l_eff_transport_sweep/summary.json
+enable_water_ionization True
+config_template {'l_eff_m': 0.0001, 'domain_height_hat': 1.0, 'ratio_K0_R4e_to_K0_R2e': 1e-18, 'mesh_Nx': 8, 'mesh_Ny': 80, 'mesh_beta': 3.0, 'exponent_clip': 100.0, 'u_clamp': 100.0, 'stern_capacitance_f_m2': 0.1, 'ic': 'debye_boltzmann', 'formulation': 'logc_muh', 'initial_scales': [1e-12, 1e-09, 1e-06, 0.001, 1.0], 'max_inserts_per_step': 4, 'ic_at_target': True, 'n_substeps_warm': 8, 'bisect_depth_warm': 5, 'v_rhe_grid_n': 13, 'v_rhe_grid_min': -0.4, 'v_rhe_grid_max': 0.55, 'anchor_v_rhe': 0.55, 'n_collection': 0.224, 'enable_water_ionization': True, 'kw_eff_hat_target': 6.944444444444445e-09}
+wall_seconds 3508.484232902527
+per_combo 8 [{'l_eff_m': 0.0001, 'l_eff_um': 100.0, 'ratio': 1e-18, 'label': 'L100um_ratio_1e-18', 'anchor_converged': True, 'n_converged': 13, 'n_total': 13}, {'l_eff_m': 0.0001, 'l_eff_um': 100.0, 'ratio': 1e-30, 'label': 'L100um_ratio_1e-30', 'anchor_converged': True, 'n_converged': 13, 'n_total': 13}] [{'l_eff_m': 1.6e-05, 'l_eff_um': 16.0, 'ratio': 1e-18, 'label': 'L16um_ratio_1e-18', 'anchor_converged': True, 'n_converged': 13, 'n_total': 13}, {'l_eff_m': 1.6e-05, 'l_eff_um': 16.0, 'ratio': 1e-30, 'label': 'L16um_ratio_1e-30', 'anchor_converged': True, 'n_converged': 13, 'n_total': 13}]
+
+exec
+/bin/zsh -lc "rg -n \"Phase 6α|surface pH|10\\.6|P1|P2|P3|sulfate|HSO|SO4|ceiling|peak|plateau|6β|6δ|config_dict|enable_water\" docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md docs/phase6b_next_steps_plan.md" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:1:# Handoff 26 — Phase 6α outcome (water self-ionization) and Phase 6β scoping
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:3:**Status as of 2026-05-09 22:00 CDT — sweep COMPLETE.** Phase 6α
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:7:Verdict: **P1 PASS, P2 PASS, P3 FAIL** — `overall_pass = false`, with
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:10:## 1. What's landed (Phase 6α)
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:20:  `bv_convergence['enable_water_ionization']`; the disabled path is
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:32:* **Tests**: 549 fast + 10 slow Phase 6α tests pass. The MMS
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:35:  follow-up (do NOT take its absence as a sign Phase 6α math is
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:47:exactly — adding `enable_water_ionization=True, Kw_eff=0` and asserting
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:60:| −0.400 | −0.737 | −0.090 | 10.61 | 14.14 | **−3.53** |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:67:* Cathodic plateau magnitude jumps **8.2×** at V=−0.40 V; the
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:68:  H⁺ Levich ceiling is broken.
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:69:* Surface pH at the deepest cathodic V drops from **14.14 → 10.61**.
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:76:The success-path `_config_dict` call in
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:78:`enable_water_ionization`, so combo-1's `iv_curve.json` config block
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:79:shows `enable_water_ionization: False` even though the residual *is*
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:91:| P1 plateau Levich linearity | **PASS** | slope = 1.0048 (ratio 1e-18), 1.0000 (ratio 1e-30); both inside [0.85, 1.15] |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:92:| P2 no cathodic peak | **PASS** | no interior local minimum of cd at any (L_eff, ratio) |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:93:| P3 max_surface_pH < 9 at L=16 µm | **FAIL** | max pH = **10.583** (ratio 1e-18), **10.580** (ratio 1e-30) |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:108:| 100 µm | 10.61 | 10.34 | 14.14 |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:109:| 66 µm | 10.60 | 10.34 (≈ same) | 14.04 |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:113:The **L_eff-independence of surface pH** at deep cathodic V is the
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:115:`max_surface_pH = 13.72` at L=16 µm, Phase 6α moves it to 10.58 — a
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:130:| L=100 / 1e-18 | −0.737 | **10.61** |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:132:| L=66  / 1e-18 | −1.122 | **10.60** |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:139:   removal back to bulk (Phase 6α), but both are 1/L_eff-Levich-like.
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:140:   **P1 (Levich linearity) → likely PASS** (was predicted FAIL).
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:141:2. **Surface pH is L_eff-independent at ≈10.6.** Comparing L=100 / 1e-18
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:142:   (pH 10.61) to L=66 / 1e-18 (pH 10.60) — *same pH, different cd*.
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:143:   The water-source-vs-ORR equilibrium pins surface pH at a value that
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:146:   **P3 (`max_surface_pH < 9` at L=16 µm) → likely FAIL** (was
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:150:- **P1 Levich linearity: PASS** (slope ≈ 1.0 preserved through the
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:152:- **P2 No peak: PASS** (Phase 6α still has no peak-forming kinetics).
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:153:- **P3 surface_pH < 9 at L=16 µm: FAIL** at ~10.6; the deck's pH 4-7
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:156:The original verdict had P1 PASS / P2 PASS / P3 FAIL with `max_surface_pH
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:157:= 13.72`. Phase 6α moves P3's `max_surface_pH` from 13.72 → ~10.6
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:159:goal of Phase 6α — surface pH inside experimental window — is NOT
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:160:achieved by Phase 6α alone.**
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:171:| Plateau magnitude ≈ −0.18 mA/cm² | ❌ 4-15× over | **sulfate buffering (6β)** |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:172:| Surface pH in 4-7 (deck operating window) | ❌ ~10-11 | **sulfate buffering (6β)** |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:173:| Cathodic **peak** at V_RHE ≈ +0.10 V | ❌ monotonic, no peak | **6β to set the (c_H)^n ceiling**, possibly **6δ** for sharpness |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:174:| Cathodic **decay** past peak | ❌ no decay | **6δ alkaline-form ORR**, or local-pH-dependent BV stoichiometry switch |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:175:| Cation-identity-dependent peak height | ❌ not modeled | **6γ** explicit cation-OHP physics |
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:177:**Key insight for 6β scoping:** the cathodic peak is *not* a kinetic
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:179:growth `exp(−α·n·η/V_T)` first hits the `(c_H/c_H_ref)^n` ceiling
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:180:imposed by surface pH. With the surface pH stuck at ~10-11 (water
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:181:alone), `c_H ≈ 1e-7 mol/m³` is too soft a ceiling — the BV exponential
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:182:wins and cd just grows. With sulfate buffering pinning surface pH
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:183:near 6-7, `c_H ≈ 1e-3 mol/m³` is a hard ceiling and the curve peaks.
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:186:surface-pH equilibrium under Phase 6α is **L_eff-independent at
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:187:~10.6**. This means transport (smaller L_eff) does NOT bring surface
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:190:consumption. Phase 6β's job is to introduce a **chemical** H⁺ source
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:195:## 5. Recommended scope for Phase 6β
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:199:* **Closure shape**: `HSO₄⁻ ⇌ SO₄²⁻ + H⁺` with `K_a ≈ 1.0e-2` (pKa₂ ≈ 1.99).
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:203:  - **Path B (recommended for 6β.1)**: Treat the buffer with an
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:204:    *algebraic equilibrium closure* mirroring Phase 6α. Add a buffer
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:205:    term `R_buf = k·(c_HSO4 − c_SO4·c_H/K_a)` to the H⁺ flux that
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:208:    `J_E gains a buffer flux, Poisson source gains charge from HSO4⁻
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:209:    and SO4²⁻ separately`. SO₄²⁻ is *already* in the multi-ion
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:211:    HSO₄⁻ would need to enter as either a third counterion or a fully
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:213:  - **Path A (more correct, for 6β.2)**: Make HSO₄⁻ a fully dynamic
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:215:    finite-rate residual. Roughly the work of Phase 6α scaled up.
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:216:* **What 6β should preserve**: every byte-equivalence we have today
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:217:  (default-off path, anodic regime, Phase 6α residual at Kw_eff=0).
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:221:* **Continuation**: 6β will likely need its own sub-ladder (analogous
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:224:* **Phase 6δ ordering**: do *not* try to land 6δ before 6β. The
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:226:  cathodic regime; without 6β-set surface pH it'll over-correct in
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:227:  the wrong direction. 6β first, then evaluate whether 6δ is needed
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:228:  for the decay past peak.
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:232:1. **HSO₄⁻ as dynamic species or third counterion?** The plan's
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:233:   §5 deferred-list said "HSO₄⁻ as a separate dynamic species: Phase
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:234:   6β" — but a Boltzmann-equilibrium closure (mirror of Phase 6α water
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:236:   solver work. Need to think about whether HSO₄⁻ deviates from
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:239:   enough that the algebraic closure is justified? Aqueous sulfate
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:243:3. **Cathodic peak verification**: the deck peak position depends on
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:244:   Cs⁺ vs K⁺ vs Na⁺ vs Li⁺ identity. Phase 6β alone (sulfate
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:245:   buffering) may give a peak at the wrong V_RHE. **Plan a sub-task**
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:246:   to compare cd vs V_RHE peak position across the 4 cation choices
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:249:4. **Whether Phase 6α's `cd` overshoot at small L_eff blows up
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:252:   sweep, Phase 6β becomes urgent — *and* the Phase 6α validation
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:253:   sweep needs a smaller cathodic V_RHE band until 6β lands.
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:280:- **Plan 6β.1 (algebraic-buffer)**: HSO₄⁻ ⇌ SO₄²⁻+H⁺ as an algebraic
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:281:  closure on the proton-condition residual, mirroring Phase 6α. Scope
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:282:  ~3-5 days. Should yield the cathodic peak and bring magnitudes
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:284:- **Plan 6β.2 (dynamic-buffer)**: HSO₄⁻ as a fully dynamic NP species
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:288:Recommend starting with 6β.1 unless the next agent identifies a
+docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md:292:whether 6β alone is sufficient or 6δ also needs scoping.
+docs/phase6b_next_steps_plan.md:1:# Phase 6β next-steps plan (v2, post-R1 critique)
+docs/phase6b_next_steps_plan.md:3:**Status basis:** Written 2026-05-09 22:10 PT. Phase 6α sweep
+docs/phase6b_next_steps_plan.md:10:`docs/CHATGPT_HANDOFF_28_phase6b-sulfate-spike-planning/`). Specific
+docs/phase6b_next_steps_plan.md:16:## 1. Verified Phase 6α final state
+docs/phase6b_next_steps_plan.md:24:| P1 plateau Levich linearity | **PASS** | slope 1.0048 (1e-18), 1.0000 (1e-30); both inside [0.85, 1.15] |
+docs/phase6b_next_steps_plan.md:25:| P2 no cathodic peak | **PASS** | no interior local minimum at any (L_eff, ratio) |
+docs/phase6b_next_steps_plan.md:26:| P3 max_surface_pH < 9 at L=16 µm | **FAIL** | max pH = 10.583 (1e-18), 10.580 (1e-30) |
+docs/phase6b_next_steps_plan.md:28:P3 failure is the headline insight, not a regression. The deck
+docs/phase6b_next_steps_plan.md:49:| 100 µm | 10.61 | 10.34 | 14.14 |
+docs/phase6b_next_steps_plan.md:50:| 66 µm | 10.60 | 10.34 | 14.04 |
+docs/phase6b_next_steps_plan.md:54:**Load-bearing physical observation:** surface pH at deep cathodic V
+docs/phase6b_next_steps_plan.md:55:is **L_eff-independent at ~10.6 (1e-18) / ~10.3 (1e-30)**. Going from
+docs/phase6b_next_steps_plan.md:57:surface pH. The water-source-vs-ORR balance pins surface pH at the
+docs/phase6b_next_steps_plan.md:60:only lever to move surface pH**. Phase 6β (sulfate buffering) is the
+docs/phase6b_next_steps_plan.md:66:`config.enable_water_ionization` reads `false` and `kw_eff_hat_target`
+docs/phase6b_next_steps_plan.md:68:26 §2.1 — the `_config_dict` call at line 519 of
+docs/phase6b_next_steps_plan.md:70:`enable_water_ionization=…` keyword. Three independent sources
+docs/phase6b_next_steps_plan.md:75:* cd magnitudes 4-25× exceed the H⁺ Levich ceiling
+docs/phase6b_next_steps_plan.md:77:Action item: fix `_config_dict` and add a cross-check assertion in
+docs/phase6b_next_steps_plan.md:92:So Phase 6β = **add HSO₄⁻ / SO₄²⁻ acid-base speciation** to an
+docs/phase6b_next_steps_plan.md:94:sulfate." `[SO₄²⁻]_total = 0.1 M`, `[Cs⁺] = 0.2 M`, ionic strength
+docs/phase6b_next_steps_plan.md:97:[SO4]_total = 0.3 M `[R1#2]`.
+docs/phase6b_next_steps_plan.md:103:### Step 1 — Done (Phase 6α complete)
+docs/phase6b_next_steps_plan.md:111:   `enable_water_ionization: true` and `kw_eff_hat_target: 6.944e-9`.)
+docs/phase6b_next_steps_plan.md:114:   only matters when 6β.1 needs partial reruns.
+docs/phase6b_next_steps_plan.md:118:**Purpose** (revised per `[R1#10]`): predict whether sulfate buffering
+docs/phase6b_next_steps_plan.md:119:pulls surface pH into the deck operating window (4-9, ideally 4-7) at
+docs/phase6b_next_steps_plan.md:120:the V_RHE band [+0.00, +0.20] V where the deck peak sits. This is a
+docs/phase6b_next_steps_plan.md:121:**ceiling-prediction** test, not a magnitude prediction. The spike's
+docs/phase6b_next_steps_plan.md:122:output decides whether 6β.1 solver work is justified, not the size of
+docs/phase6b_next_steps_plan.md:123:the cathodic peak.
+docs/phase6b_next_steps_plan.md:128:  Phase 6α `iv_curve.json` (4 L_eff × 2 ratios = 8 curves).
+docs/phase6b_next_steps_plan.md:138:   `pH_old`. Compute `E_old = c_H_old − c_OH_old` (Phase 6α's proton
+docs/phase6b_next_steps_plan.md:141:   * γ_SO4 ≈ 0.25, γ_HSO4 ≈ 0.71, γ_H ≈ 0.71.
+docs/phase6b_next_steps_plan.md:142:   * `Kc_eff = Ka° · γ_HSO4 / (γ_H · γ_SO4) ≈ 4·Ka°` →
+docs/phase6b_next_steps_plan.md:146:   * Speciation: `c_HSO4 / c_SO4 = c_H / Kc_eff` with
+docs/phase6b_next_steps_plan.md:147:     `c_T = c_HSO4 + c_SO4 = 0.1 M`.
+docs/phase6b_next_steps_plan.md:148:   * Extended proton condition: `E_new = c_H + c_HSO4 − c_OH` with
+docs/phase6b_next_steps_plan.md:149:     `c_OH = Kw / c_H` (Phase 6α water ionization preserved).
+docs/phase6b_next_steps_plan.md:153:     that the *additional* H⁺ supply from HSO₄⁻ → SO₄²⁻ + H⁺ exactly
+docs/phase6b_next_steps_plan.md:154:     matches the deficit Phase 6α was carrying.
+docs/phase6b_next_steps_plan.md:156:     `(c_H_new − c_H_old) + (c_HSO4_new − c_HSO4_old) = 0` at fixed
+docs/phase6b_next_steps_plan.md:166:     c_H_new reaches ~1e-3 M the (c_H)⁴ ceiling becomes hard.)
+docs/phase6b_next_steps_plan.md:170:* `scripts/studies/phase6b_sulfate_algebra_spike.py`
+docs/phase6b_next_steps_plan.md:171:* `StudyResults/fast_realignment_2026-05-08/phase6b_sulfate_spike/`:
+docs/phase6b_next_steps_plan.md:174:    `falls_in_deck_window`, `ceiling_binds`.
+docs/phase6b_next_steps_plan.md:175:  * `pH_shift_overlay.png`: surface pH old vs new vs deck operating
+docs/phase6b_next_steps_plan.md:179:  * `verdict.md`: 1-paragraph answer to "does sulfate buffering bring
+docs/phase6b_next_steps_plan.md:180:    surface pH into the deck window at the V_RHE peak band?"
+docs/phase6b_next_steps_plan.md:185:  full Poisson charge. The spike cannot say what the peak |cd| is.
+docs/phase6b_next_steps_plan.md:186:* No prediction of decay past peak — sulfate gives plateau-or-peak,
+docs/phase6b_next_steps_plan.md:187:  not decay (`[R1#8]`); decay needs 6δ.
+docs/phase6b_next_steps_plan.md:188:* No claim that K2SO4 deck = Cs2SO4 model — cation identity not
+docs/phase6b_next_steps_plan.md:195:* **Branch A → 6β.1 (algebraic-buffer solver work)** if either
+docs/phase6b_next_steps_plan.md:196:  pKa_eff endpoint shows surface pH falling into the deck window
+docs/phase6b_next_steps_plan.md:198:  factor amplification ≥ 10² in that window. The (c_H)^n ceiling is
+docs/phase6b_next_steps_plan.md:199:  predicted to bind; sulfate-driven peak is mechanically forced per
+docs/phase6b_next_steps_plan.md:201:* **Branch B → 6δ.1 plan first or in parallel** if neither pKa_eff
+docs/phase6b_next_steps_plan.md:202:  endpoint brings pH into [4, 9] in the deck-peak band, OR if pH
+docs/phase6b_next_steps_plan.md:203:  drops but ceiling doesn't bind (factor amplification stays < 10²).
+docs/phase6b_next_steps_plan.md:205:  (6δ.1) become the load-bearing scope.
+docs/phase6b_next_steps_plan.md:207:In **either** branch, 6δ.1 is queued *eventually* — sulfate gives the
+docs/phase6b_next_steps_plan.md:208:peak (best case), alkaline parallel reactions give the decay past
+docs/phase6b_next_steps_plan.md:209:peak. The branch decides whether 6β.1 runs first or 6δ.1 runs first
+docs/phase6b_next_steps_plan.md:215:0,1M K2SO4 data 8-15-19.xlsx` is the K⁺ system (six pH values, RRDE
+docs/phase6b_next_steps_plan.md:219:* Sign verification: does the deck show a cathodic peak in
+docs/phase6b_next_steps_plan.md:222:  peak imply a surface pH consistent with sulfate-buffered c_H ~ 1e-3
+docs/phase6b_next_steps_plan.md:238:### Step 6 — Fix the `_config_dict` cosmetic bug (small, do soon)
+docs/phase6b_next_steps_plan.md:244:"config": _config_dict(
+docs/phase6b_next_steps_plan.md:246:    enable_water_ionization=enable_water_ionization,  # was missing
+docs/phase6b_next_steps_plan.md:256:    assert cfg["enable_water_ionization"] == summary["enable_water_ionization"], (
+docs/phase6b_next_steps_plan.md:263:### Step 7 — 6β.1 implementation outline (Branch A) `[R1#14,15]`
+docs/phase6b_next_steps_plan.md:265:Mirror Phase 6α architectural pattern: default-off flag, helper
+docs/phase6b_next_steps_plan.md:269:**Module:** `Forward/bv_solver/sulfate_buffering.py` (mirror of
+docs/phase6b_next_steps_plan.md:272:**New primary variable:** `c_T = c_SO4 + c_HSO4` as a Nernst-Planck
+docs/phase6b_next_steps_plan.md:276:c_HSO4(y) = c_T(y) · c_H(y) / (c_H(y) + Ka_eff)
+docs/phase6b_next_steps_plan.md:277:c_SO4(y)  = c_T(y) · Ka_eff / (c_H(y) + Ka_eff)
+docs/phase6b_next_steps_plan.md:280:**Flux for c_T:** `J_T = J_SO4 + J_HSO4`, where each is the standard
+docs/phase6b_next_steps_plan.md:286:**Extended proton condition** (replaces Phase 6α
+docs/phase6b_next_steps_plan.md:290:E = c_H + c_HSO4 − c_OH
+docs/phase6b_next_steps_plan.md:291:J_E = J_H + J_HSO4 − J_OH
+docs/phase6b_next_steps_plan.md:294:The BV-reaction proton-stoichiometry term in the existing Phase 6α
+docs/phase6b_next_steps_plan.md:295:flux is unchanged (sulfate doesn't consume H⁺ at the electrode in
+docs/phase6b_next_steps_plan.md:296:the BV reactions; it only re-supplies H⁺ from HSO₄⁻ → SO₄²⁻ + H⁺ in
+docs/phase6b_next_steps_plan.md:299:**Poisson charge:** add `−2·c_SO4 − 1·c_HSO4` separately. The static
+docs/phase6b_next_steps_plan.md:303:**Bikerman A_dyn:** include `a_SO4·c_SO4 + a_HSO4·c_HSO4` separately;
+docs/phase6b_next_steps_plan.md:304:sulfate's Stokes radius is ~2.3 Å, HSO4⁻ is ~2.0 Å (literature; cite
+docs/phase6b_next_steps_plan.md:313:  → kw_eff_ladder (Phase 6α, unchanged)
+docs/phase6b_next_steps_plan.md:314:    → ka_eff_ladder (NEW, Phase 6β.1)
+docs/phase6b_next_steps_plan.md:318:running with `enable_sulfate_buffering=True, Ka_eff=0` produces a
+docs/phase6b_next_steps_plan.md:319:residual L²-norm matching the pre-sulfate-buffering Phase 6α path
+docs/phase6b_next_steps_plan.md:327:### Step 8 — 6δ split per `[R1#16]`
+docs/phase6b_next_steps_plan.md:329:* **6δ.1** — explicit alkaline-form parallel reactions added via the
+docs/phase6b_next_steps_plan.md:338:    reactions don't consume H⁺ → become dominant at high surface pH).
+docs/phase6b_next_steps_plan.md:341:* **6δ.2** — pH-gated switching, site-coverage / adsorbed-intermediate
+docs/phase6b_next_steps_plan.md:344:  6δ.1 outcome shows whether parallel-channels alone produce the
+docs/phase6b_next_steps_plan.md:345:  deck decay past peak.
+docs/phase6b_next_steps_plan.md:347:Order: 6β.1 → measure → 6δ.1 → measure → only then 6δ.2 (if needed).
+docs/phase6b_next_steps_plan.md:349:### Step 9 — Cation-identity sub-task (post-6β.1)
+docs/phase6b_next_steps_plan.md:351:Per handoff 26 §6.3 open question: the deck peak position depends on
+docs/phase6b_next_steps_plan.md:352:Cs⁺ vs K⁺ vs Na⁺ vs Li⁺ identity. After 6β.1 lands, run a 4-cation
+docs/phase6b_next_steps_plan.md:357:also serves as a partial deck-comparison gate for the K2SO4 8-15-19
+docs/phase6b_next_steps_plan.md:375:  cathodic PC peak).
+docs/phase6b_next_steps_plan.md:383:1. HSO₄⁻ as algebraic-closure dynamic c_T (Path 6β.1) or fully
+docs/phase6b_next_steps_plan.md:384:   dynamic third NP species with finite-rate exchange (Path 6β.2)?
+docs/phase6b_next_steps_plan.md:385:   Aqueous sulfate protonation is essentially diffusion-limited
+docs/phase6b_next_steps_plan.md:387:   with literature before 6β.2 commitment.
+docs/phase6b_next_steps_plan.md:388:2. Whether 6δ.1's parallel alkaline channels alone produce the deck
+docs/phase6b_next_steps_plan.md:389:   decay past peak, or whether 6δ.2 (pH-gated switch / coverage) is
+docs/phase6b_next_steps_plan.md:391:3. Cation-identity peak shape sensitivity (step 9).
+docs/phase6b_next_steps_plan.md:392:4. Cs2SO4 vs K2SO4 deck comparison validity — pending the missing
+
+exec
+/bin/zsh -lc "ls -l StudyResults/fast_realignment_2026-05-08/l_eff_transport_sweep | sed -n '1,120p' && find . -name 'l_eff_transport_sweep_phase6a_run.log' -print" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 141ms:
+./StudyResults/fast_realignment_2026-05-08/l_eff_transport_sweep_phase6a_run.log
+
+exec
+/bin/zsh -lc "nl -ba docs/phase6b_next_steps_plan.md | sed -n '280,430p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+   280	**Flux for c_T:** `J_T = J_SO4 + J_HSO4`, where each is the standard
+   281	NP flux with species-specific charge / steric / diffusivity. This is
+   282	correct DAE-style PDE; the algebraic constraint is local (no integral
+   283	coupling), so Newton converges as long as `Ka_eff` is bounded away
+   284	from 0 and the activation continuation ladder is in place.
+   285	
+   286	**Extended proton condition** (replaces Phase 6α
+   287	`E = c_H − c_OH`):
+   288	
+   289	```
+   290	E = c_H + c_HSO4 − c_OH
+   291	J_E = J_H + J_HSO4 − J_OH
+   292	```
+   293	
+   294	The BV-reaction proton-stoichiometry term in the existing Phase 6α
+   295	flux is unchanged (sulfate doesn't consume H⁺ at the electrode in
+   296	the BV reactions; it only re-supplies H⁺ from HSO₄⁻ → SO₄²⁻ + H⁺ in
+   297	the bulk).
+   298	
+   299	**Poisson charge:** add `−2·c_SO4 − 1·c_HSO4` separately. The static
+   300	`DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC` entry is **replaced**
+   301	by the dynamic `c_T` — keeping it static would double-count.
+   302	
+   303	**Bikerman A_dyn:** include `a_SO4·c_SO4 + a_HSO4·c_HSO4` separately;
+   304	sulfate's Stokes radius is ~2.3 Å, HSO4⁻ is ~2.0 Å (literature; cite
+   305	in code).
+   306	
+   307	**Continuation:** new `ka_eff_ladder` analogous to `kw_eff_ladder`,
+   308	ramping `Ka_eff` from a tiny floor up to `Ka_eff_target` *after* the
+   309	`kw_eff_ladder` has converged. Sequence per anchor:
+   310	
+   311	```
+   312	k0_scale ladder (existing, unchanged)
+   313	  → kw_eff_ladder (Phase 6α, unchanged)
+   314	    → ka_eff_ladder (NEW, Phase 6β.1)
+   315	```
+   316	
+   317	**Slow regression test:** `TestKaZeroReducesToBaseline` — assert that
+   318	running with `enable_sulfate_buffering=True, Ka_eff=0` produces a
+   319	residual L²-norm matching the pre-sulfate-buffering Phase 6α path
+   320	within atol/rtol. (This is the analog of
+   321	`TestKwZeroReducesToBaseline` and the `[R1#15]` mandate from the flux
+   322	helper bug history.)
+   323	
+   324	**Smoke order:** L100 µm × 1e-18 first (lowest |cd|, easiest Newton).
+   325	Only after that converges 13/13 do the other 7 combos run.
+   326	
+   327	### Step 8 — 6δ split per `[R1#16]`
+   328	
+   329	* **6δ.1** — explicit alkaline-form parallel reactions added via the
+   330	  existing reaction-list machinery in `_bv_common.py`:
+   331	  * `R2e_alk: O₂ + H₂O + 2e⁻ → HO₂⁻ + OH⁻`, E°_alk_2e = ~ −0.07 V
+   332	    vs SHE = +0.13 V vs RHE at pH 14, scaled by pH.
+   333	  * `R4e_alk: O₂ + 2H₂O + 4e⁻ → 4OH⁻`, E°_alk_4e = +0.40 V vs SHE
+   334	    = +1.23 V vs RHE on the RHE scale (same as R4e acid form,
+   335	    different rate law).
+   336	  * New k0/α/E_eq for each. No kinetic-form switching code; Newton
+   337	    finds the dominant channel via rate magnitudes (alkaline
+   338	    reactions don't consume H⁺ → become dominant at high surface pH).
+   339	  * Smaller change: extends the existing 2-reaction list to 4.
+   340	
+   341	* **6δ.2** — pH-gated switching, site-coverage / adsorbed-intermediate
+   342	  kinetics. Requires deeper refactor of the BV residual to add
+   343	  Langmuir-Hinshelwood adsorbed-intermediate terms. Reserve until
+   344	  6δ.1 outcome shows whether parallel-channels alone produce the
+   345	  deck decay past peak.
+   346	
+   347	Order: 6β.1 → measure → 6δ.1 → measure → only then 6δ.2 (if needed).
+   348	
+   349	### Step 9 — Cation-identity sub-task (post-6β.1)
+   350	
+   351	Per handoff 26 §6.3 open question: the deck peak position depends on
+   352	Cs⁺ vs K⁺ vs Na⁺ vs Li⁺ identity. After 6β.1 lands, run a 4-cation
+   353	sweep (`L_eff = 21 µm, ratio = 1e-18`, single V_RHE band) by swapping
+   354	the `DEFAULT_CSPLUS_BOLTZMANN_COUNTERION_STERIC` entry for K⁺/Na⁺/Li⁺
+   355	analogs (cation Stokes radius, hydration shell, OHP closest-approach
+   356	distance). Compare to whichever deck data exists per cation. This
+   357	also serves as a partial deck-comparison gate for the K2SO4 8-15-19
+   358	file (K⁺-only system).
+   359	
+   360	### Step 10 — Find / request the missing Tafel-slope workbook
+   361	
+   362	`Tafel slope analysis cation-pH-Li-K-Cs.xlsx` is referenced by the
+   363	audit and Yash's plotting workflow but absent from the local data
+   364	folder. Request from the Seitz/Mangan group; alternatively check the
+   365	Yash-Trends-and-Data zip (per memory `reference_yash_modeling_code.md`)
+   366	for the Cs⁺ pH 4 column. Without this, quantitative deck matching is
+   367	gated.
+   368	
+   369	---
+   370	
+   371	## 3. Hard solver invariants (unchanged from CLAUDE.md)
+   372	
+   373	* C+D continuation only.
+   374	* `exponent_clip = 100` only (clip = 50 produces fictitious
+   375	  cathodic PC peak).
+   376	* Physical `E_eq` (R2e = 0.695 V, R4e = 1.23 V).
+   377	* `set_initial_conditions(blob=True)` ignored in log-c mode.
+   378	* Run from `PNPInverse/` with `venv-firedrake` activated.
+   379	* Cache env: `MPLCONFIGDIR=/tmp` etc.
+   380	
+   381	## 4. Open questions (queued, not blocking)
+   382	
+   383	1. HSO₄⁻ as algebraic-closure dynamic c_T (Path 6β.1) or fully
+   384	   dynamic third NP species with finite-rate exchange (Path 6β.2)?
+   385	   Aqueous sulfate protonation is essentially diffusion-limited
+   386	   (k_f ≈ 1e10 M⁻¹s⁻¹) → algebraic closure should be valid. Confirm
+   387	   with literature before 6β.2 commitment.
+   388	2. Whether 6δ.1's parallel alkaline channels alone produce the deck
+   389	   decay past peak, or whether 6δ.2 (pH-gated switch / coverage) is
+   390	   structurally required.
+   391	3. Cation-identity peak shape sensitivity (step 9).
+   392	4. Cs2SO4 vs K2SO4 deck comparison validity — pending the missing
+   393	   Tafel-slope workbook.
+
+codex
+1. **WHAT:** R2 point 8/10 still has the core physics backwards: raising surface `c_H` from pH 10.6 to pH 6 increases acid-form BV rates by enormous factors; it does not “harden” a ceiling.  
+   **WHY:** In the live rate law, `(c_H/c_ref)^n` is a multiplier, not a cap. Sulfate acid supply can move the onset/plateau, but it cannot by itself reduce the deep-cathodic current that is already 4× above the deck target at 100 µm.  
+   **WHAT TO DO:** Define the ceiling as a transport-limited acid-equivalent flux, not as the BV `c_H^n` factor. The spike must compare BV proton demand against max acid-equivalent supply.
+
+2. **WHAT:** Step 3’s root equation is wrong: `(c_H_new - c_H_old) + (c_HSO4_new - c_HSO4_old) = 0` cannot acidify the surface.  
+   **WHY:** Since `c_HSO4` increases with `c_H`, that equation has a root near the old alkaline state or lower `c_H`. It will not produce pH 6-7. If you instead conserve `E = c_H + c_HSO4 - c_OH`, equality to the Phase 6α `E_old` also mostly preserves the old alkaline state.  
+   **WHAT TO DO:** Drop the local algebraic pH-shift spike. Use a 1D steady acid-transport model or a flux-cap estimate with bulk H, HSO4, SO4, OH and electrode BV demand.
+
+3. **WHAT:** The revised plan says the relevant buffer is a gradient, but Step 3 still uses a local surface algebra.  
+   **WHY:** HSO4 is nearly absent at pH 10.6 and scarce at pH 4. The only plausible contribution is diffusive delivery of bulk HSO4 to the surface, not local equilibrium inventory.  
+   **WHAT TO DO:** The spike must include distance `L_eff`, diffusivities, and bulk HSO4 concentration. A per-voltage local root is not a valid branch gate.
+
+4. **WHAT:** Sulfate is a poor pH 6-7 buffer. The plan keeps assuming it can pin that window.  
+   **WHY:** pKa2 is ~2. At pH 6, HSO4 fraction is ~1e-4 to 2.5e-5 depending on pKa_eff. Buffer capacity there is tiny.  
+   **WHAT TO DO:** Reframe sulfate as an added acid-equivalent transport reservoir from bulk HSO4, not a local pH 6-7 buffer.
+
+5. **WHAT:** Branch A is too permissive: “either pKa endpoint” and `factor >= 1e2` is confirmation-biased and not physically tied to peak formation.  
+   **WHY:** The favorable pKa endpoint may be the non-activity-corrected one, and rate amplification is not ceiling binding.  
+   **WHAT TO DO:** Branch A should require a robust acid-flux ceiling crossing in the deck voltage window across the pKa bracket, or proceed only as exploratory solver work.
+
+6. **WHAT:** Step 7’s continuation and regression test are mathematically wrong. `Ka_eff = 0` is not the baseline.  
+   **WHY:** With `c_HSO4 = c_T*c_H/(c_H + Ka)`, `Ka=0` makes all sulfate HSO4, not all SO4. The static-SO4 baseline is `Ka -> infinity` or zero protonation activation.  
+   **WHAT TO DO:** Ramp `q = 1/Ka` from `0` to target, or add an activation `lambda` on protonation. Rename the regression to `TestSulfateActivationZeroReducesToBaseline`.
+
+7. **WHAT:** The “new primary variable `c_T` as a Nernst-Planck species” understates the implementation.  
+   **WHY:** `c_T` has no fixed charge or diffusivity. Existing `SpeciesConfig` assumes fixed `z` and `D`; `J_T = J_SO4 + J_HSO4` depends on gradients of both `c_T` and `c_H`.  
+   **WHAT TO DO:** Plan a custom residual path, not a normal added species. Include changes to forms, ICs, diagnostics, stoichiometry padding, and observables.
+
+8. **WHAT:** Bulk electroneutrality is not specified after HSO4/SO4 speciation.  
+   **WHY:** `[Cs+] = 0.2 M`, `c_T = 0.1 M`, pH 4 is not exactly neutral once a finite HSO4 fraction exists. Small charge errors matter in Poisson/DB initialization.  
+   **WHAT TO DO:** Compute bulk Cs from the chosen pKa_eff and pH: `c_Cs = 2c_SO4 + c_HSO4 + c_OH - c_H`.
+
+9. **WHAT:** Step 5 claims deck `j_disk` can imply surface pH near `c_H ~ 1e-3 M`.  
+   **WHY:** Disk current alone does not determine surface pH without a transport/kinetic model.  
+   **WHAT TO DO:** Use the workbook only for curve shape, onset/peak location, and RRDE selectivity. Do not infer pH from current magnitude.
+
+10. **WHAT:** 6δ.1 is still under-scoped. Alkaline products are OH/HO2, but OH is not an explicit dynamic species and HO2 is absent.  
+    **WHY:** Existing reaction-list machinery cannot simply add `R2e_alk`/`R4e_alk` without changing the proton-condition source and likely peroxide chemistry.  
+    **WHAT TO DO:** Before 6δ.1, derive source terms for `E = c_H + c_HSO4 - c_OH`, decide whether HO2/H2O2 equilibrium is needed, and verify RHE thermodynamic consistency.
+
+VERDICT: ISSUES_REMAIN
+tokens used
+172,899
+1. **WHAT:** R2 point 8/10 still has the core physics backwards: raising surface `c_H` from pH 10.6 to pH 6 increases acid-form BV rates by enormous factors; it does not “harden” a ceiling.  
+   **WHY:** In the live rate law, `(c_H/c_ref)^n` is a multiplier, not a cap. Sulfate acid supply can move the onset/plateau, but it cannot by itself reduce the deep-cathodic current that is already 4× above the deck target at 100 µm.  
+   **WHAT TO DO:** Define the ceiling as a transport-limited acid-equivalent flux, not as the BV `c_H^n` factor. The spike must compare BV proton demand against max acid-equivalent supply.
+
+2. **WHAT:** Step 3’s root equation is wrong: `(c_H_new - c_H_old) + (c_HSO4_new - c_HSO4_old) = 0` cannot acidify the surface.  
+   **WHY:** Since `c_HSO4` increases with `c_H`, that equation has a root near the old alkaline state or lower `c_H`. It will not produce pH 6-7. If you instead conserve `E = c_H + c_HSO4 - c_OH`, equality to the Phase 6α `E_old` also mostly preserves the old alkaline state.  
+   **WHAT TO DO:** Drop the local algebraic pH-shift spike. Use a 1D steady acid-transport model or a flux-cap estimate with bulk H, HSO4, SO4, OH and electrode BV demand.
+
+3. **WHAT:** The revised plan says the relevant buffer is a gradient, but Step 3 still uses a local surface algebra.  
+   **WHY:** HSO4 is nearly absent at pH 10.6 and scarce at pH 4. The only plausible contribution is diffusive delivery of bulk HSO4 to the surface, not local equilibrium inventory.  
+   **WHAT TO DO:** The spike must include distance `L_eff`, diffusivities, and bulk HSO4 concentration. A per-voltage local root is not a valid branch gate.
+
+4. **WHAT:** Sulfate is a poor pH 6-7 buffer. The plan keeps assuming it can pin that window.  
+   **WHY:** pKa2 is ~2. At pH 6, HSO4 fraction is ~1e-4 to 2.5e-5 depending on pKa_eff. Buffer capacity there is tiny.  
+   **WHAT TO DO:** Reframe sulfate as an added acid-equivalent transport reservoir from bulk HSO4, not a local pH 6-7 buffer.
+
+5. **WHAT:** Branch A is too permissive: “either pKa endpoint” and `factor >= 1e2` is confirmation-biased and not physically tied to peak formation.  
+   **WHY:** The favorable pKa endpoint may be the non-activity-corrected one, and rate amplification is not ceiling binding.  
+   **WHAT TO DO:** Branch A should require a robust acid-flux ceiling crossing in the deck voltage window across the pKa bracket, or proceed only as exploratory solver work.
+
+6. **WHAT:** Step 7’s continuation and regression test are mathematically wrong. `Ka_eff = 0` is not the baseline.  
+   **WHY:** With `c_HSO4 = c_T*c_H/(c_H + Ka)`, `Ka=0` makes all sulfate HSO4, not all SO4. The static-SO4 baseline is `Ka -> infinity` or zero protonation activation.  
+   **WHAT TO DO:** Ramp `q = 1/Ka` from `0` to target, or add an activation `lambda` on protonation. Rename the regression to `TestSulfateActivationZeroReducesToBaseline`.
+
+7. **WHAT:** The “new primary variable `c_T` as a Nernst-Planck species” understates the implementation.  
+   **WHY:** `c_T` has no fixed charge or diffusivity. Existing `SpeciesConfig` assumes fixed `z` and `D`; `J_T = J_SO4 + J_HSO4` depends on gradients of both `c_T` and `c_H`.  
+   **WHAT TO DO:** Plan a custom residual path, not a normal added species. Include changes to forms, ICs, diagnostics, stoichiometry padding, and observables.
+
+8. **WHAT:** Bulk electroneutrality is not specified after HSO4/SO4 speciation.  
+   **WHY:** `[Cs+] = 0.2 M`, `c_T = 0.1 M`, pH 4 is not exactly neutral once a finite HSO4 fraction exists. Small charge errors matter in Poisson/DB initialization.  
+   **WHAT TO DO:** Compute bulk Cs from the chosen pKa_eff and pH: `c_Cs = 2c_SO4 + c_HSO4 + c_OH - c_H`.
+
+9. **WHAT:** Step 5 claims deck `j_disk` can imply surface pH near `c_H ~ 1e-3 M`.  
+   **WHY:** Disk current alone does not determine surface pH without a transport/kinetic model.  
+   **WHAT TO DO:** Use the workbook only for curve shape, onset/peak location, and RRDE selectivity. Do not infer pH from current magnitude.
+
+10. **WHAT:** 6δ.1 is still under-scoped. Alkaline products are OH/HO2, but OH is not an explicit dynamic species and HO2 is absent.  
+    **WHY:** Existing reaction-list machinery cannot simply add `R2e_alk`/`R4e_alk` without changing the proton-condition source and likely peroxide chemistry.  
+    **WHAT TO DO:** Before 6δ.1, derive source terms for `E = c_H + c_HSO4 - c_OH`, decide whether HO2/H2O2 equilibrium is needed, and verify RHE thermodynamic consistency.
+
+VERDICT: ISSUES_REMAIN

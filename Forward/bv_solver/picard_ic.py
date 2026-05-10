@@ -288,6 +288,264 @@ def solve_stern_split(
 
 
 # ---------------------------------------------------------------------------
+# Electrostatics helpers shared by picard_outer_loop and
+# picard_outer_loop_general. Single-ion only at this stage; multi-ion
+# branches added in Phase 5α T6.
+# ---------------------------------------------------------------------------
+
+def _solve_phi_o(
+    *,
+    H_o: float,
+    c_clo4_bulk: float,
+    multi_ion_ctx: dict | None = None,
+    c_dyn_outer: list[float] | None = None,
+    phi_o_prev: float | None = None,
+) -> float:
+    """Outer-region equilibrium φ_o.
+
+    - Single-ion (``multi_ion_ctx is None``): 1:1 closed form
+      ``ln(H_o / c_clo4_bulk)``.
+    - Multi-ion: bisect electroneutrality via
+      ``multi_ion.solve_outer_phi_multiion`` against the current
+      ``c_dyn_outer`` (== Picard's ``c_s``). When ``phi_o_prev`` is
+      finite, narrow the initial bracket to ``(phi_o_prev ± 5)`` for
+      warm-start; fall back to the global ``(-50, +50)`` bracket if the
+      local bracket fails.
+    """
+    if multi_ion_ctx is None:
+        return math.log(max(H_o, 1e-300) / max(c_clo4_bulk, 1e-300))
+    if c_dyn_outer is None:
+        raise ValueError(
+            "_solve_phi_o: multi_ion_ctx requires c_dyn_outer (the "
+            "current dynamic-species concentrations at the outer-region edge)."
+        )
+    from .multi_ion import solve_outer_phi_multiion
+
+    if phi_o_prev is not None and math.isfinite(phi_o_prev) and abs(phi_o_prev) < 50.0:
+        try:
+            return solve_outer_phi_multiion(
+                ctx=multi_ion_ctx,
+                c_dyn_outer=c_dyn_outer,
+                bracket=(phi_o_prev - 5.0, phi_o_prev + 5.0),
+            )
+        except ValueError:
+            pass
+    return solve_outer_phi_multiion(
+        ctx=multi_ion_ctx,
+        c_dyn_outer=c_dyn_outer,
+        bracket=(-50.0, +50.0),
+    )
+
+
+def _compute_picard_gamma_s(
+    *,
+    H_o: float,
+    c_clo4_bulk: float,
+    psi_D: float,
+    a_h: float,
+    a_cl: float,
+    c_cl_anchor: float,
+    multi_ion_ctx: dict | None = None,
+    phi_o: float | None = None,
+    c_s: list[float] | None = None,
+) -> float:
+    """Surface activity coefficient γ_s.
+
+    - Single-ion (``multi_ion_ctx is None``): wraps
+      ``compute_surface_gamma`` (1 H⁺ + 1 ClO₄⁻ Bikerman denom).
+    - Multi-ion: dispatches to
+      ``multi_ion.compute_surface_gamma_multiion`` with per-ion outer
+      concentrations evaluated at ``phi_o`` via
+      ``multi_ion.per_ion_outer_concs`` (shared-theta closure).
+    """
+    if multi_ion_ctx is None:
+        return compute_surface_gamma(
+            H_o, c_clo4_bulk, psi_D, a_h, a_cl, c_cl_anchor,
+        )
+    if phi_o is None or c_s is None:
+        raise ValueError(
+            "_compute_picard_gamma_s: multi_ion_ctx requires phi_o and c_s "
+            "(the current outer-region equilibrium potential and "
+            "dynamic-species concentrations)."
+        )
+    from .multi_ion import compute_surface_gamma_multiion, per_ion_outer_concs
+
+    c_outer_per_ion = per_ion_outer_concs(
+        ctx=multi_ion_ctx, c_dyn_outer=c_s, phi_o=phi_o,
+    )
+    ions_with_outer = [
+        {**ion, "c_outer": float(c_o)}
+        for ion, c_o in zip(multi_ion_ctx["ions"], c_outer_per_ion)
+    ]
+    return compute_surface_gamma_multiion(
+        H_o=H_o, psi_D=psi_D, a_h=a_h, ions=ions_with_outer,
+    )
+
+
+def _solve_picard_stern_split(
+    *,
+    phi_applied_model: float,
+    phi_o: float,
+    c_clo4_bulk: float,
+    a_cl: float,
+    stern_split: dict | None,
+    multi_ion_ctx: dict | None = None,
+    c_dyn_outer: list[float] | None = None,
+    poisson_coefficient: float | None = None,
+) -> tuple[float, float, float]:
+    """Stern + diffuse split.
+
+    Returns ``(psi_S, psi_D, phi_surface)``.
+
+    Single-ion (``multi_ion_ctx is None``):
+
+      - ``stern_split is None`` (no Stern at IC): ``(0.0,
+        phi_applied_model - phi_o, phi_applied_model)``.
+      - dict ``{lambda_D, stern_coeff, eps}``: dispatch to
+        ``solve_stern_split`` (BKSA composite bisection).
+
+    Multi-ion (``multi_ion_ctx`` given):
+
+      - ``stern_split is None``: identical no-Stern result.
+      - dict ``{stern_coeff, eps}``: linear-Debye matching using
+        ``multi_ion.effective_debye_length_local`` for λ_eff at the
+        current ``phi_o``. Asserts λ_eff > 0 finite and ``|psi_D| <=
+        |full_drop|``.
+
+    eta_drop is NOT folded in here — see ``_update_electrostatics``.
+    """
+    if multi_ion_ctx is None:
+        if stern_split is None:
+            return 0.0, phi_applied_model - phi_o, phi_applied_model
+        return solve_stern_split(
+            phi_applied_model=phi_applied_model,
+            phi_o=phi_o,
+            lambda_D=stern_split["lambda_D"],
+            c_clo4_bulk=c_clo4_bulk,
+            a_cl=a_cl,
+            stern_coeff_nondim=stern_split["stern_coeff"],
+            eps_nondim=stern_split["eps"],
+        )
+    if stern_split is None:
+        return 0.0, phi_applied_model - phi_o, phi_applied_model
+    if c_dyn_outer is None or poisson_coefficient is None:
+        raise ValueError(
+            "_solve_picard_stern_split: multi_ion_ctx + stern_split "
+            "requires c_dyn_outer and poisson_coefficient for λ_eff."
+        )
+    from .multi_ion import effective_debye_length_local
+
+    lambda_eff = effective_debye_length_local(
+        phi_o=phi_o,
+        ctx=multi_ion_ctx,
+        c_dyn_outer=c_dyn_outer,
+        poisson_coeff=poisson_coefficient,
+    )
+    if not (math.isfinite(lambda_eff) and lambda_eff > 0.0):
+        raise ValueError(
+            f"_solve_picard_stern_split: multi-ion lambda_eff non-finite "
+            f"or non-positive ({lambda_eff!r}) at phi_o={phi_o:.3e}"
+        )
+    full_drop = phi_applied_model - phi_o
+    stern_coeff_val = float(stern_split["stern_coeff"])
+    eps_val = float(stern_split["eps"])
+    psi_D = stern_coeff_val * full_drop * lambda_eff / (
+        eps_val + stern_coeff_val * lambda_eff
+    )
+    if abs(psi_D) > abs(full_drop) + 1e-12:
+        raise ValueError(
+            f"_solve_picard_stern_split: multi-ion |psi_D|={abs(psi_D):.3e} "
+            f"exceeds |full_drop|={abs(full_drop):.3e} (linear-Debye "
+            f"closure violated)"
+        )
+    psi_S = full_drop - psi_D
+    return psi_S, psi_D, phi_applied_model - psi_S
+
+
+def _update_electrostatics(
+    *,
+    c_s: list[float],
+    h_idx: int,
+    c_clo4_bulk: float,
+    phi_o: float,
+    phi_applied_model: float,
+    a_h: float,
+    a_cl: float,
+    c_cl_anchor_kind: str,
+    stern_split: dict | None,
+    reactions: list,
+    bv_exp_scale: float,
+    exponent_clip: float,
+    clip_exponent: bool,
+    multi_ion_ctx: dict | None = None,
+    poisson_coefficient: float | None = None,
+) -> dict:
+    """Update Stern split + γ_s + eta_drop + eta_list given ``c_s, phi_o``.
+
+    Caller is responsible for first computing ``phi_o`` via
+    ``_solve_phi_o`` so the non-finite check can run *before* this
+    consolidation. ``_update_electrostatics`` does NOT recompute
+    ``phi_o`` — it just unifies the post-update bundle.
+
+    eta_drop semantics (R3 sign correction, validated by GPT critique):
+
+      - no Stern: ``eta_drop = phi_applied_model``  (NOT ``phi_applied - phi_o``)
+      - Stern:    ``eta_drop = psi_S``
+
+    The returned ``gamma_s`` is computed at the NEW ``psi_D``. The
+    legacy in-loop convention uses ``gamma_s`` from the previous iter's
+    step-2 (i.e. stale w.r.t. the new psi_D); callers preserving
+    byte-equivalence MUST IGNORE the returned ``gamma_s`` and let the
+    next iter's step-2 recompute it. Callers using this for the
+    post-loop final recompute may consume ``gamma_s`` directly.
+
+    Multi-ion: when ``multi_ion_ctx`` is provided, ``c_s`` is also
+    passed to the sub-helpers as ``c_dyn_outer``; ``poisson_coefficient``
+    is required by the Stern λ_eff path.
+    """
+    H_o = c_s[h_idx]
+    psi_S, psi_D, phi_surface = _solve_picard_stern_split(
+        phi_applied_model=phi_applied_model,
+        phi_o=phi_o,
+        c_clo4_bulk=c_clo4_bulk,
+        a_cl=a_cl,
+        stern_split=stern_split,
+        multi_ion_ctx=multi_ion_ctx,
+        c_dyn_outer=c_s if multi_ion_ctx is not None else None,
+        poisson_coefficient=poisson_coefficient,
+    )
+    eta_drop = psi_S if stern_split is not None else phi_applied_model
+    eta_list = _eta_list_from_drop(
+        eta_drop=eta_drop,
+        reactions=reactions,
+        bv_exp_scale=bv_exp_scale,
+        exponent_clip=exponent_clip,
+        clip_exponent=clip_exponent,
+    )
+    c_cl_anchor = H_o if c_cl_anchor_kind == "synthesised_4sp" else c_clo4_bulk
+    gamma_s_new = _compute_picard_gamma_s(
+        H_o=H_o,
+        c_clo4_bulk=c_clo4_bulk,
+        psi_D=psi_D,
+        a_h=a_h,
+        a_cl=a_cl,
+        c_cl_anchor=c_cl_anchor,
+        multi_ion_ctx=multi_ion_ctx,
+        phi_o=phi_o if multi_ion_ctx is not None else None,
+        c_s=c_s if multi_ion_ctx is not None else None,
+    )
+    return {
+        "phi_o": phi_o,
+        "psi_S": psi_S,
+        "psi_D": psi_D,
+        "phi_surface": phi_surface,
+        "eta_drop": eta_drop,
+        "eta_list": eta_list,
+        "gamma_s": gamma_s_new,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Picard outer loop
 # ---------------------------------------------------------------------------
 
@@ -403,22 +661,14 @@ def picard_outer_loop(
     #   no-Stern: eta_raw = phi_applied - E          (residual)
     #   Stern:    eta_raw = phi_applied - phi(OHP) - E (residual)
     #             eta_drop = phi_applied - phi(OHP)  = psi_S.
-    if stern_split is not None:
-        psi_S, psi_D, phi_surface = solve_stern_split(
-            phi_applied_model=phi_applied_model,
-            phi_o=phi_o,
-            lambda_D=stern_split["lambda_D"],
-            c_clo4_bulk=c_clo4_bulk,
-            a_cl=a_cl,
-            stern_coeff_nondim=stern_split["stern_coeff"],
-            eps_nondim=stern_split["eps"],
-        )
-        eta_drop = psi_S
-    else:
-        psi_S = 0.0
-        psi_D = phi_applied_model - phi_o
-        phi_surface = phi_applied_model
-        eta_drop = phi_applied_model
+    psi_S, psi_D, phi_surface = _solve_picard_stern_split(
+        phi_applied_model=phi_applied_model,
+        phi_o=phi_o,
+        c_clo4_bulk=c_clo4_bulk,
+        a_cl=a_cl,
+        stern_split=stern_split,
+    )
+    eta_drop = psi_S if stern_split is not None else phi_applied_model
 
     eta1 = _eta_clipped(
         eta_drop=eta_drop,
@@ -445,8 +695,9 @@ def picard_outer_loop(
         c_cl_anchor = H_o if c_cl_anchor_kind == "synthesised_4sp" else c_clo4_bulk
 
         # Surface activity (Bikerman multispecies gamma).
-        gamma_s = compute_surface_gamma(
-            H_o, c_clo4_bulk, psi_D, a_h, a_cl, c_cl_anchor
+        gamma_s = _compute_picard_gamma_s(
+            H_o=H_o, c_clo4_bulk=c_clo4_bulk, psi_D=psi_D,
+            a_h=a_h, a_cl=a_cl, c_cl_anchor=c_cl_anchor,
         )
         log_gamma = math.log(max(gamma_s, 1e-300))
 
@@ -514,7 +765,7 @@ def picard_outer_loop(
         # (PNP_BV_Analytical_Simplifications.md lines 240-244). The
         # denominator is bare D_H, NOT 2*D_H; do not "correct".
         H_o = max(H_b - (R1 + R2) / D_H, 1e-300)
-        phi_o = math.log(H_o / c_clo4_bulk)
+        phi_o = _solve_phi_o(H_o=H_o, c_clo4_bulk=c_clo4_bulk)
 
         # Update (psi_D, psi_S, phi_surface, eta_drop, eta1, eta2) at the
         # END of the iter so the post-loop state matches the legacy
@@ -522,22 +773,14 @@ def picard_outer_loop(
         # eta1, eta2 are constants for no-Stern (eta_drop = phi_applied)
         # but evolve per iter for Stern (eta_drop = psi_S, which depends
         # on phi_o through solve_stern_split).
-        if stern_split is not None:
-            psi_S, psi_D, phi_surface = solve_stern_split(
-                phi_applied_model=phi_applied_model,
-                phi_o=phi_o,
-                lambda_D=stern_split["lambda_D"],
-                c_clo4_bulk=c_clo4_bulk,
-                a_cl=a_cl,
-                stern_coeff_nondim=stern_split["stern_coeff"],
-                eps_nondim=stern_split["eps"],
-            )
-            eta_drop = psi_S
-        else:
-            psi_S = 0.0
-            psi_D = phi_applied_model - phi_o
-            phi_surface = phi_applied_model
-            eta_drop = phi_applied_model
+        psi_S, psi_D, phi_surface = _solve_picard_stern_split(
+            phi_applied_model=phi_applied_model,
+            phi_o=phi_o,
+            c_clo4_bulk=c_clo4_bulk,
+            a_cl=a_cl,
+            stern_split=stern_split,
+        )
+        eta_drop = psi_S if stern_split is not None else phi_applied_model
 
         eta1 = _eta_clipped(
             eta_drop=eta_drop,
@@ -578,8 +821,9 @@ def picard_outer_loop(
     c_cl_anchor_post = (
         H_o if c_cl_anchor_kind == "synthesised_4sp" else c_clo4_bulk
     )
-    gamma_s = compute_surface_gamma(
-        H_o, c_clo4_bulk, psi_D, a_h, a_cl, c_cl_anchor_post
+    gamma_s = _compute_picard_gamma_s(
+        H_o=H_o, c_clo4_bulk=c_clo4_bulk, psi_D=psi_D,
+        a_h=a_h, a_cl=a_cl, c_cl_anchor=c_cl_anchor_post,
     )
 
     # Numerically-stable post-convergence P_s, O_s.  The 2x2 fixed
@@ -1028,6 +1272,8 @@ def picard_outer_loop_general(
     tol: float = 1e-6,
     topology_hint: str = "general",
     verbose: bool = False,
+    multi_ion_ctx: dict | None = None,
+    poisson_coefficient: float | None = None,
 ) -> tuple[bool, str, int, dict]:
     """Generalized N-reaction Picard outer loop (v3 §7-§9).
 
@@ -1100,22 +1346,17 @@ def picard_outer_loop_general(
     gamma_s = 1.0
 
     # Initialize Stern + eta_drop for iter 1 (matches legacy ordering).
-    if stern_split is not None:
-        psi_S, psi_D, phi_surface = solve_stern_split(
-            phi_applied_model=phi_applied_model,
-            phi_o=phi_o,
-            lambda_D=stern_split["lambda_D"],
-            c_clo4_bulk=c_clo4_bulk,
-            a_cl=a_cl,
-            stern_coeff_nondim=stern_split["stern_coeff"],
-            eps_nondim=stern_split["eps"],
-        )
-        eta_drop = psi_S
-    else:
-        psi_S = 0.0
-        psi_D = phi_applied_model - phi_o
-        phi_surface = phi_applied_model
-        eta_drop = phi_applied_model
+    psi_S, psi_D, phi_surface = _solve_picard_stern_split(
+        phi_applied_model=phi_applied_model,
+        phi_o=phi_o,
+        c_clo4_bulk=c_clo4_bulk,
+        a_cl=a_cl,
+        stern_split=stern_split,
+        multi_ion_ctx=multi_ion_ctx,
+        c_dyn_outer=c_s if multi_ion_ctx is not None else None,
+        poisson_coefficient=poisson_coefficient,
+    )
+    eta_drop = psi_S if stern_split is not None else phi_applied_model
 
     eta_list = _eta_list_from_drop(
         eta_drop=eta_drop,
@@ -1136,8 +1377,12 @@ def picard_outer_loop_general(
         R_old = list(R)
 
         c_cl_anchor = H_o if c_cl_anchor_kind == "synthesised_4sp" else c_clo4_bulk
-        gamma_s = compute_surface_gamma(
-            H_o, c_clo4_bulk, psi_D, a_h, a_cl, c_cl_anchor
+        gamma_s = _compute_picard_gamma_s(
+            H_o=H_o, c_clo4_bulk=c_clo4_bulk, psi_D=psi_D,
+            a_h=a_h, a_cl=a_cl, c_cl_anchor=c_cl_anchor,
+            multi_ion_ctx=multi_ion_ctx,
+            phi_o=phi_o if multi_ion_ctx is not None else None,
+            c_s=c_s if multi_ion_ctx is not None else None,
         )
         log_gamma = math.log(max(gamma_s, 1e-300))
 
@@ -1209,7 +1454,14 @@ def picard_outer_loop_general(
             species_floors=species_floors,
         )
         H_o = c_s[h_idx]
-        phi_o = math.log(max(H_o, 1e-300) / max(c_clo4_bulk, 1e-300))
+        phi_o_prev = phi_o
+        phi_o = _solve_phi_o(
+            H_o=H_o,
+            c_clo4_bulk=c_clo4_bulk,
+            multi_ion_ctx=multi_ion_ctx,
+            c_dyn_outer=c_s if multi_ion_ctx is not None else None,
+            phi_o_prev=phi_o_prev,
+        )
 
         # Reject post-update non-finite state (v3 §9 item 8 (iii)).
         if not all(math.isfinite(v) for v in c_s) or not math.isfinite(phi_o):
@@ -1223,31 +1475,32 @@ def picard_outer_loop_general(
                 ),
             )
 
-        # Stern split + eta_drop update (matches legacy post-update ordering).
-        if stern_split is not None:
-            psi_S, psi_D, phi_surface = solve_stern_split(
-                phi_applied_model=phi_applied_model,
-                phi_o=phi_o,
-                lambda_D=stern_split["lambda_D"],
-                c_clo4_bulk=c_clo4_bulk,
-                a_cl=a_cl,
-                stern_coeff_nondim=stern_split["stern_coeff"],
-                eps_nondim=stern_split["eps"],
-            )
-            eta_drop = psi_S
-        else:
-            psi_S = 0.0
-            psi_D = phi_applied_model - phi_o
-            phi_surface = phi_applied_model
-            eta_drop = phi_applied_model
-
-        eta_list = _eta_list_from_drop(
-            eta_drop=eta_drop,
+        # Stern split + eta_drop + eta_list update (T4 consolidation).
+        # Note: ``state["gamma_s"]`` is freshly computed at the new psi_D
+        # but legacy semantics keep the in-scope ``gamma_s`` (from this
+        # iter's step-2) untouched here; iter k+1 step-2 recomputes it.
+        state = _update_electrostatics(
+            c_s=c_s,
+            h_idx=h_idx,
+            c_clo4_bulk=c_clo4_bulk,
+            phi_o=phi_o,
+            phi_applied_model=phi_applied_model,
+            a_h=a_h,
+            a_cl=a_cl,
+            c_cl_anchor_kind=c_cl_anchor_kind,
+            stern_split=stern_split,
             reactions=reactions,
             bv_exp_scale=bv_exp_scale,
             exponent_clip=exponent_clip,
             clip_exponent=clip_exponent,
+            multi_ion_ctx=multi_ion_ctx,
+            poisson_coefficient=poisson_coefficient,
         )
+        psi_S = state["psi_S"]
+        psi_D = state["psi_D"]
+        phi_surface = state["phi_surface"]
+        eta_drop = state["eta_drop"]
+        eta_list = state["eta_list"]
 
         delta = sum(
             abs(R[j] - R_old[j]) / max(abs(R[j]), 1e-30) for j in range(N)
@@ -1282,8 +1535,12 @@ def picard_outer_loop_general(
     c_cl_anchor_post = (
         H_o if c_cl_anchor_kind == "synthesised_4sp" else c_clo4_bulk
     )
-    gamma_s = compute_surface_gamma(
-        H_o, c_clo4_bulk, psi_D, a_h, a_cl, c_cl_anchor_post
+    gamma_s = _compute_picard_gamma_s(
+        H_o=H_o, c_clo4_bulk=c_clo4_bulk, psi_D=psi_D,
+        a_h=a_h, a_cl=a_cl, c_cl_anchor=c_cl_anchor_post,
+        multi_ion_ctx=multi_ion_ctx,
+        phi_o=phi_o if multi_ion_ctx is not None else None,
+        c_s=c_s if multi_ion_ctx is not None else None,
     )
     log_gamma_post = math.log(max(gamma_s, 1e-300))
     log_by_species_post: list[float] = []

@@ -1,0 +1,86 @@
+{
+  "anchor_v_rhe": 0.55,
+  "mesh_Ny": 80,
+  "exponent_clip": 100.0,
+  "initial_scales": [
+    1e-12,
+    1e-09,
+    1e-06,
+    0.001,
+    1.0
+  ],
+  "max_inserts_per_step": 4,
+  "ic_at_target": true,
+  "k0_targets": {
+    "0": 0.0012631578947368421,
+    "1": 0.0012631578947368421
+  },
+  "converged": true,
+  "ladder_exhausted": false,
+  "ladder_history": [
+    [
+      1e-12,
+      "ok"
+    ],
+    [
+      1e-09,
+      "ok"
+    ],
+    [
+      1e-06,
+      "ok"
+    ],
+    [
+      0.001,
+      "ok"
+    ],
+    [
+      1.0,
+      "ok"
+    ]
+  ],
+  "rungs": [
+    {
+      "scale": 1e-12,
+      "snes_converged": true,
+      "cd_observable": 0.20240350167009363,
+      "R_2e_mA_cm2": -2.3342351372068484e-17,
+      "R_4e_mA_cm2": -0.04452604986438364
+    },
+    {
+      "scale": 1e-09,
+      "snes_converged": true,
+      "cd_observable": 0.20403901262830396,
+      "R_2e_mA_cm2": -7.404472601957615e-16,
+      "R_4e_mA_cm2": -0.04488584029230631
+    },
+    {
+      "scale": 1e-06,
+      "snes_converged": true,
+      "cd_observable": 0.20433062757554832,
+      "R_2e_mA_cm2": -2.3082660170881234e-14,
+      "R_4e_mA_cm2": -0.044949991661096
+    },
+    {
+      "scale": 0.001,
+      "snes_converged": true,
+      "cd_observable": 0.20438254924358054,
+      "R_2e_mA_cm2": -3.829567641152016e-13,
+      "R_4e_mA_cm2": -0.04496141373000449
+    },
+    {
+      "scale": 1.0,
+      "snes_converged": true,
+      "cd_observable": 0.20439189426795792,
+      "R_2e_mA_cm2": 3.349456897948772e-10,
+      "R_4e_mA_cm2": -0.04496346967742551
+    }
+  ],
+  "ic_fallback": true,
+  "ic_fallback_reason": "picard_max_iters_delta=1.001",
+  "cd_mA_cm2": -0.08992693901990516,
+  "R_2e_mA_cm2": 3.349456897948772e-10,
+  "R_4e_mA_cm2": -0.04496346967742551,
+  "wall_seconds": 25.21116304397583,
+  "error": null
+}

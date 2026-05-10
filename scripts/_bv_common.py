@@ -159,6 +159,54 @@ A_DEFAULT = 0.01
 
 
 # ---------------------------------------------------------------------------
+# Water self-ionization constants (Phase 6α — proton-condition variable)
+# ---------------------------------------------------------------------------
+#
+# Homogeneous water self-ionization:  H₂O ⇌ H⁺ + OH⁻,
+# fast-equilibrium closure  c_H · c_OH = K_w  (concentration-Kw model).
+#
+# Phase 6α replaces the H⁺ NP residual with the proton-condition residual
+# for E = c_H − c_OH; the closure c_OH = K_w / c_H sources fresh H⁺ as
+# ORR consumes it, capping local pH around the experimental 4-9 range.
+# OH⁻ enters Poisson (z = −1) and Bikerman packing (a_OH · c_OH) but is
+# NOT a separate dynamic NP species.  See
+# docs/PHASE_6A_OH_WATER_IONIZATION_PLAN.md and
+# docs/CHATGPT_HANDOFF_25_phase-6a-water-ionization/FINAL_REVISION.md.
+#
+# Scaling chain:
+#   KW_MOLAR_SQUARED  : 1e-14   (mol/L)²   [textbook value at 25 °C]
+#   KW_PHYS           : 1e-8    (mol/m³)²  [× (1000 mol/m³ per mol/L)²]
+#   KW_HAT            : KW_PHYS / C_SCALE² ≈ 6.944e-9
+#
+# At pH 4 (C_HP_HAT ≈ 0.0833):  KW_HAT == C_HP_HAT · C_OH_BULK_HAT
+# ⇒ C_OH_BULK_HAT = KW_HAT / C_HP_HAT ≈ 8.333e-8
+# ⇔ c_OH_phys = 1e-7 mol/m³ (i.e. 1e-10 mol/L) — matches Kw at pH 4 ✓
+#
+# Diffusivity (Atkins / CRC 25 °C):  D_OH⁻ = 5.273e-9 m²/s.
+# Hard-sphere radius (Marcus):  r_OH = 1.76 Å.
+KW_MOLAR_SQUARED = 1.0e-14   # (mol/L)²
+KW_PHYS = KW_MOLAR_SQUARED * (1000.0 ** 2)  # (mol/m³)² = 1.0e-8
+D_OH = 5.273e-9              # m²/s
+
+# C_SCALE / D_REF / L_REF are defined above; KW_HAT / D_OH_HAT / A_OH_HAT
+# are derived from them.
+KW_HAT = KW_PHYS / (C_SCALE ** 2)
+D_OH_HAT = D_OH / D_REF
+
+# A_OH hard-sphere nondim:  a_phys = (4/3) π r³ N_A  in m³/mol;
+# a_nondim = a_phys · C_SCALE.   (Linsey ACS-CATL 2025 deck slide 13
+# convention; Marcus radius for OH⁻ = 1.76 Å.)
+import math as _math
+_AVOGADRO = 6.02214076e23                                       # /mol (CODATA)
+_A_OH_PHYS = (4.0 / 3.0) * _math.pi * (1.76e-10) ** 3 * _AVOGADRO  # m³/mol
+A_OH_HAT = _A_OH_PHYS * C_SCALE
+del _math, _AVOGADRO, _A_OH_PHYS
+
+# Bulk OH⁻ at pH 4 (derived; useful for IC / diagnostics).
+C_OH_BULK_HAT = KW_HAT / C_HP_HAT
+
+
+# ---------------------------------------------------------------------------
 # Current density scale
 # ---------------------------------------------------------------------------
 
@@ -211,7 +259,18 @@ SNES_OPTS_CHARGED: Dict[str, Any] = {
 
 @dataclass(frozen=True)
 class SpeciesConfig:
-    """Immutable species configuration for BV solver params construction."""
+    """Immutable species configuration for BV solver params construction.
+
+    Phase 6β v9 Gate 1: optional ``roles`` field carries explicit per-
+    species role labels (e.g. ``"neutral"``, ``"proton"``, ``"counterion"``)
+    used by role-aware solver helpers to disambiguate species when
+    ``z_vals`` alone cannot.  The K2SO4 stack has BOTH H⁺ and K⁺ at
+    ``z=+1``; without explicit roles the legacy ``z=+1 ⇒ proton``
+    inference is ambiguous and hard-fails at form-build time.
+
+    ``roles=None`` (default) preserves byte-equivalence for every existing
+    call site: the role-aware helpers fall back to legacy z-inference.
+    """
 
     n_species: int
     z_vals: List[int]
@@ -225,6 +284,82 @@ class SpeciesConfig:
     alpha_legacy: List[float] = field(default_factory=list)
     stoichiometry_legacy: List[int] = field(default_factory=list)
     c_ref_legacy: List[float] = field(default_factory=list)
+    # Phase 6β v9 Gate 1 — explicit per-species role labels.
+    roles: Optional[List[str]] = None
+
+    def __post_init__(self) -> None:
+        if self.roles is not None and len(self.roles) != self.n_species:
+            raise ValueError(
+                f"SpeciesConfig.roles length {len(self.roles)} does not match "
+                f"n_species {self.n_species} (roles={list(self.roles)!r})"
+            )
+
+
+def resolve_role_index(
+    roles: Optional[Sequence[str]],
+    z_vals: Sequence[int],
+    target_role: str,
+) -> int:
+    """Resolve the species index matching ``target_role``.
+
+    Two paths:
+
+    * ``roles is None`` — legacy z-inference.  Currently supports only
+      ``target_role='proton'`` (z=+1, exactly one match required); other
+      targets raise NotImplementedError.  Existing call sites that need
+      counterion lookup with no roles continue to use the inline
+      ``z_vals[i] < 0`` check (preserves byte-equivalence for the ClO₄⁻
+      stack).
+    * ``roles is not None`` — explicit role lookup, case-insensitive on
+      the ``roles`` list.  Raises if zero or multiple matches.
+
+    Phase 6β v9 Gate 1 motivation: with both H⁺ and K⁺ at z=+1 in the
+    K2SO4 stack, ``resolve_h_index`` cannot uniquely identify the proton
+    from ``z_vals`` alone.  Passing ``roles`` disambiguates and lets the
+    solver build cleanly.
+    """
+    if roles is None:
+        if target_role != "proton":
+            raise NotImplementedError(
+                f"resolve_role_index: legacy z-inference (roles=None) only "
+                f"supports target_role='proton'; got {target_role!r}.  Pass "
+                f"an explicit roles list."
+            )
+        candidates = [
+            i for i, zv in enumerate(z_vals)
+            if abs(float(zv) - 1.0) < 1e-12
+        ]
+        if not candidates:
+            raise ValueError(
+                f"resolve_role_index(target_role='proton', roles=None) "
+                f"requires a species with z=+1; none found in "
+                f"z_vals={list(z_vals)}."
+            )
+        if len(candidates) > 1:
+            raise ValueError(
+                f"resolve_role_index(target_role='proton', roles=None) "
+                f"requires exactly one species with z=+1; found "
+                f"{len(candidates)} (indices {candidates}).  Pass an "
+                f"explicit roles list to disambiguate."
+            )
+        return candidates[0]
+
+    target = str(target_role).strip().lower()
+    matches = [
+        i for i, r in enumerate(roles)
+        if str(r).strip().lower() == target
+    ]
+    if not matches:
+        raise ValueError(
+            f"resolve_role_index: no species with role={target_role!r} in "
+            f"roles={list(roles)}."
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            f"resolve_role_index: multiple species with role={target_role!r} "
+            f"in roles={list(roles)} (indices {matches}); roles must be unique."
+        )
+    return matches[0]
 
 
 # 3-species + analytic-Boltzmann counterion preset — the production
@@ -247,6 +382,7 @@ THREE_SPECIES_LOGC_BOLTZMANN = SpeciesConfig(
     alpha_legacy=[ALPHA_R1] * 3,
     stoichiometry_legacy=[-1, -1, -1],
     c_ref_legacy=[1.0, 0.0, 1.0],
+    roles=["neutral", "neutral", "proton"],
 )
 
 
@@ -269,6 +405,7 @@ FOUR_SPECIES_LOGC_DYNAMIC = SpeciesConfig(
     alpha_legacy=[ALPHA_R1] * 4,
     stoichiometry_legacy=[-1, -1, -1, 0],
     c_ref_legacy=[1.0, 0.0, 1.0, 1.0],
+    roles=["neutral", "neutral", "proton", "counterion"],
 )
 
 
@@ -280,7 +417,12 @@ def _make_bv_convergence_cfg(*, softplus: bool = False,
                               log_rate: bool = False,
                               u_clamp: float = 100.0,
                               formulation: str = "concentration",
-                              initializer: str = "linear_phi") -> Dict[str, Any]:
+                              initializer: str = "linear_phi",
+                              domain_height_hat: float = 1.0,
+                              enable_water_ionization: bool = False,
+                              kw_eff_hat: float = KW_HAT,
+                              d_oh_hat: float = D_OH_HAT,
+                              a_oh_hat: float = A_OH_HAT) -> Dict[str, Any]:
     """Standard BV convergence config sub-dict.
 
     Parameters
@@ -302,6 +444,33 @@ def _make_bv_convergence_cfg(*, softplus: bool = False,
         primary variable; Phase 1 routes to ``logc`` with a warning).
         Selects which weak-form backend the dispatcher in
         ``Forward.bv_solver`` uses.
+    domain_height_hat:
+        Mesh y-extent in nondim coords (= ``L_eff_m / L_REF``).  Default
+        ``1.0`` reproduces the legacy unit-cube mesh (transport-domain
+        height = L_REF).  The L_eff sweep uses smaller values
+        (e.g. ``0.16`` ≈ 16 µm at L_REF = 100 µm) to test the H+ Levich
+        ceiling hypothesis without rescaling the global L_REF.  Read by
+        ``forms_logc.py`` / ``forms_logc_muh.py`` ICs to normalize the
+        outer linear interpolation by ``y / domain_height_hat`` so the
+        bulk anchor lands at the mesh top regardless of L_eff.
+    enable_water_ionization:
+        Phase 6α opt-in flag.  When True, the H⁺ NP residual is replaced
+        by the proton-condition residual on E = c_H − c_OH with the
+        fast-equilibrium closure c_OH = K_w / c_H, OH⁻ enters Poisson
+        (z = −1) and Bikerman packing (a_OH·c_OH).  When False
+        (default), the residual / Poisson / packing are byte-equivalent
+        to the pre-Phase-6α stack.  See
+        ``docs/PHASE_6A_OH_WATER_IONIZATION_PLAN.md``.
+    kw_eff_hat:
+        Continuation-controlled K_w in nondim units.  Defaults to the
+        physical ``KW_HAT`` (≈ 6.94e-9).  The anchor builder ramps this
+        from a tiny floor (or 0) up to ``KW_HAT`` to keep Newton in a
+        well-posed regime; production runs leave the default.  Ignored
+        unless ``enable_water_ionization`` is True.
+    d_oh_hat, a_oh_hat:
+        OH⁻ nondim diffusivity and hard-sphere size.  Default to
+        ``D_OH_HAT`` / ``A_OH_HAT`` (5.273e-9 m²/s and r=1.76 Å Marcus).
+        Ignored unless ``enable_water_ionization`` is True.
     """
     cfg: Dict[str, Any] = {
         "clip_exponent": True,
@@ -318,6 +487,11 @@ def _make_bv_convergence_cfg(*, softplus: bool = False,
         "u_clamp": u_clamp,
         "formulation": str(formulation).strip().lower(),
         "initializer": str(initializer).strip().lower(),
+        "domain_height_hat": float(domain_height_hat),
+        "enable_water_ionization": bool(enable_water_ionization),
+        "kw_eff_hat": float(kw_eff_hat),
+        "d_oh_hat": float(d_oh_hat),
+        "a_oh_hat": float(a_oh_hat),
     }
     if softplus:
         cfg["softplus_regularization"] = True
@@ -470,6 +644,12 @@ def _make_bv_bc_cfg(
         cfg["boltzmann_counterions"] = [dict(entry) for entry in boltzmann_counterions]
     if stern_capacitance_f_m2 is not None:
         cfg["stern_capacitance_f_m2"] = float(stern_capacitance_f_m2)
+    # Phase 6β v9 Gate 1: surface explicit per-species role labels so the
+    # solver-side resolvers can disambiguate stacks with two z=+1 species
+    # (K2SO4: H⁺ + K⁺).  Absent ``species.roles`` falls through and the
+    # legacy z-inference path stays byte-equivalent.
+    if species.roles is not None:
+        cfg["species_roles"] = list(species.roles)
     return cfg
 
 
@@ -480,6 +660,7 @@ DEFAULT_CLO4_BOLTZMANN_COUNTERION: Dict[str, Any] = {
     "z": -1,
     "c_bulk_nondim": C_CLO4_HAT,
     "phi_clamp": 50.0,
+    "role": "counterion",
 }
 
 
@@ -533,6 +714,7 @@ DEFAULT_CSPLUS_BOLTZMANN_COUNTERION_STERIC: Dict[str, Any] = {
     "steric_mode": "bikerman",
     "a_nondim": A_CSPLUS_HAT,
     "label": "Cs+",
+    "role": "counterion",
 }
 
 DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC: Dict[str, Any] = {
@@ -542,7 +724,88 @@ DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC: Dict[str, Any] = {
     "steric_mode": "bikerman",
     "a_nondim": A_SO4_HAT,
     "label": "SO4--",
+    "role": "counterion",
 }
+
+
+# ---------------------------------------------------------------------------
+# K⁺ / SO4²⁻ multi-ion stack — Phase 6β v9 Gate 2 (2026-05-09).
+#
+# Deck baseline electrolyte per Linsey 2025 ACS-CATL slide 9
+# (`[SO₄²⁻]=0.1 M & [K⁺]=0.2 M`) and Ruggiero 2022 §2 (K₂SO₄, I = 0.3 M).
+# Differs from the existing Cs⁺/SO₄²⁻ stack only in the cation choice
+# and its hydrated radius / diffusivity; bulk electroneutrality is
+# numerically identical (Cs⁺ and K⁺ both balance the same
+# H⁺ + 2·SO₄²⁻ at pH 4).
+#
+# The K2SO4 stack promotes K⁺ to a DYNAMIC NP species (not analytic
+# Bikerman), so Phase 6β v9's cation hydrolysis residual can read
+# c_K(0) at the OHP.  The remaining anion (SO₄²⁻) stays as the analytic
+# Bikerman counterion.  Electroneutrality (algebraic, no Firedrake):
+#     C_HP·1 + C_KPLUS·1 = C_SO4·2
+#     0.1 + 199.9 = 2·100  ✓   (mol/m³)
+#     0.0833 + 166.58 = 2·83.33 = 166.66  ✓   (nondim)
+# ---------------------------------------------------------------------------
+
+K_PLUS = 199.9              # mol/m³ — electroneutrality with H⁺ + SO₄²⁻
+C_KPLUS_HAT = K_PLUS / C_SCALE
+
+D_KPLUS = 1.96e-9           # m²/s — CRC 25 °C (Atkins / Robinson-Stokes)
+D_KPLUS_HAT = D_KPLUS / D_REF
+
+# K⁺ Stokes/hydrated radius from Linsey 2025 ACS-CATL deck slide 13: 2.3 Å.
+# a_phys = (4/3)·π·r³·N_A m³/mol; a_nondim = a_phys · C_SCALE.
+import math as _math_kp
+_AVOGADRO_KP = 6.02214076e23
+_A_KPLUS_PHYS = (4.0 / 3.0) * _math_kp.pi * (2.3e-10) ** 3 * _AVOGADRO_KP
+A_KPLUS_HAT = _A_KPLUS_PHYS * C_SCALE
+del _math_kp, _AVOGADRO_KP, _A_KPLUS_PHYS
+
+
+# Convenience alias: the K2SO4 stack uses the same SO₄²⁻ analytic
+# Bikerman counterion as the Cs⁺/SO₄²⁻ stack.  Aliased rather than
+# redefined so any future SO₄²⁻ tuning lands in one place.
+DEFAULT_SULFATE_ANALYTIC_BIKERMAN_FOR_K2SO4: Dict[str, Any] = (
+    DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC
+)
+
+# Analytic Bikerman counterion entry for K⁺ — used by the Phase 6β v9
+# Gate 2D regression test as the "reference" stack (K⁺ as analytic
+# Boltzmann counterion, paired with analytic SO₄²⁻) against which the
+# 4sp dynamic-K⁺ probe is compared.  Same bulk / size as the dynamic
+# K⁺ entry in FOUR_SPECIES_LOGC_DYNAMIC_K2SO4 so the two stacks should
+# yield byte-equivalent equilibria up to integration error.
+DEFAULT_KPLUS_BOLTZMANN_COUNTERION_STERIC: Dict[str, Any] = {
+    "z": +1,
+    "c_bulk_nondim": C_KPLUS_HAT,
+    "phi_clamp": 50.0,
+    "steric_mode": "bikerman",
+    "a_nondim": A_KPLUS_HAT,
+    "label": "K+",
+    "role": "counterion",
+}
+
+
+# 4-species fully-dynamic K2SO4 preset — Phase 6β v9 Gate 2.
+# Both H⁺ (idx 2) and K⁺ (idx 3) carry z = +1; explicit ``roles`` are
+# REQUIRED so the role-aware solver helpers (resolve_h_index,
+# _resolve_mu_h_index, the IC counterion synthesizer) can disambiguate.
+# Pair with ``boltzmann_counterions=[DEFAULT_SULFATE_ANALYTIC_BIKERMAN_FOR_K2SO4]``
+# in ``make_bv_solver_params`` for the deck-baseline cathodic stack.
+FOUR_SPECIES_LOGC_DYNAMIC_K2SO4 = SpeciesConfig(
+    n_species=4,
+    z_vals=[0, 0, 1, 1],            # both H+ and K+ at z=+1 (the Gate 1 case)
+    d_vals_hat=[D_O2_HAT, D_H2O2_HAT, D_HP_HAT, D_KPLUS_HAT],
+    a_vals_hat=[A_DEFAULT, A_DEFAULT, A_DEFAULT, A_KPLUS_HAT],
+    c0_vals_hat=[C_O2_HAT, H2O2_SEED_NONDIM, C_HP_HAT, C_KPLUS_HAT],
+    stoichiometry_r1=[-1, +1, -2, 0],   # K+ inert in R1
+    stoichiometry_r2=[ 0, -1, -2, 0],   # K+ inert in R2 (legacy R2)
+    k0_legacy=[K0_HAT_R1] * 4,
+    alpha_legacy=[ALPHA_R1] * 4,
+    stoichiometry_legacy=[-1, -1, -1, 0],
+    c_ref_legacy=[1.0, 0.0, 1.0, 1.0],
+    roles=["neutral", "neutral", "proton", "counterion"],
+)
 
 
 # ---------------------------------------------------------------------------
@@ -602,6 +865,22 @@ PARALLEL_2E_4E_REACTIONS: List[Dict[str, Any]] = [
 ]
 
 
+# 4-species variant of PARALLEL_2E_4E_REACTIONS for the K2SO4 stack
+# (FOUR_SPECIES_LOGC_DYNAMIC_K2SO4 = O₂, H₂O₂, H⁺, K⁺).  K⁺ is inert
+# in both R_2e and R_4e — same stoichiometry padding pattern as the
+# legacy FOUR_SPECIES_LOGC_DYNAMIC ClO₄⁻ entry.  Phase 6β v9 Gate 2.
+PARALLEL_2E_4E_REACTIONS_4SP: List[Dict[str, Any]] = [
+    {
+        **PARALLEL_2E_4E_REACTIONS[0],
+        "stoichiometry": [-1, +1, -2, 0],   # K+ inert
+    },
+    {
+        **PARALLEL_2E_4E_REACTIONS[1],
+        "stoichiometry": [-1,  0, -4, 0],   # K+ inert
+    },
+]
+
+
 # ---------------------------------------------------------------------------
 # SolverParams factory
 # ---------------------------------------------------------------------------
@@ -633,6 +912,11 @@ def make_bv_solver_params(
     include_h_factor: Optional[bool] = None,
     bv_reactions: Optional[Sequence[Dict[str, Any]]] = None,
     multi_ion_enabled: bool = False,
+    l_eff_m: float = L_REF,
+    enable_water_ionization: bool = False,
+    kw_eff_hat: float = KW_HAT,
+    d_oh_hat: float = D_OH_HAT,
+    a_oh_hat: float = A_OH_HAT,
 ) -> "SolverParams":
     """Build SolverParams for multi-species BV with graded rectangle mesh markers.
 
@@ -702,6 +986,34 @@ def make_bv_solver_params(
         entry into Poisson and the dynamic-species packing.  Hard-
         validated here so a missing flag fails LOUDLY at solver-params
         construction rather than silently at solve time.
+    l_eff_m:
+        Physical transport-domain height in metres (default
+        ``L_REF = 100e-6``).  Stored as ``domain_height_hat = l_eff_m /
+        L_REF`` on ``solver_options['bv_convergence']`` and consumed by
+        ``make_graded_rectangle_mesh`` and the IC routines.  Lets the
+        L_eff transport sweep vary the H+ Levich ceiling without
+        rescaling L_REF (which would also rescale every transport
+        coefficient and I_SCALE).  See
+        ``.claude/plans/l-eff-transport-sweep.md``.
+    enable_water_ionization:
+        Phase 6α opt-in.  When False (default), the residual is
+        byte-equivalent to the pre-Phase-6α stack — existing tests, the
+        production ClO₄⁻ stack, and the Cs⁺/SO₄²⁻ multi-ion stack are
+        untouched.  When True, the H⁺ NP residual is replaced by the
+        proton-condition residual on E = c_H − c_OH with the
+        fast-equilibrium closure c_OH = K_w / c_H, and OH⁻ contributes
+        to Poisson (z = −1) and Bikerman packing.  Forward runs with
+        L_eff < ~50 µm should enable this to keep surface pH inside the
+        experimental 4-9 range.  See
+        ``docs/PHASE_6A_OH_WATER_IONIZATION_PLAN.md``.
+    kw_eff_hat, d_oh_hat, a_oh_hat:
+        OH⁻ closure parameters.  Default to the physical ``KW_HAT``
+        (≈ 6.944e-9), ``D_OH_HAT`` (= 5.273e-9 / D_REF), and ``A_OH_HAT``
+        (Marcus 1.76 Å hard-sphere).  Anchor continuation overrides
+        ``kw_eff_hat`` directly via ``set_reaction_kw_eff_model``;
+        callers usually accept the defaults.  All three are stored on
+        ``solver_options['bv_convergence']`` and consumed by the forms
+        modules; ignored unless ``enable_water_ionization`` is True.
 
     Returns
     -------
@@ -733,10 +1045,17 @@ def make_bv_solver_params(
                 "requires at least one counterion with steric_mode='bikerman'."
             )
 
+    domain_height_hat = float(l_eff_m) / float(L_REF)
+
     params = dict(snes_opts or SNES_OPTS)
     params["bv_convergence"] = _make_bv_convergence_cfg(
         softplus=softplus, log_rate=log_rate, u_clamp=u_clamp,
         formulation=formulation, initializer=initializer,
+        domain_height_hat=domain_height_hat,
+        enable_water_ionization=enable_water_ionization,
+        kw_eff_hat=kw_eff_hat,
+        d_oh_hat=d_oh_hat,
+        a_oh_hat=a_oh_hat,
     )
     params["nondim"] = _make_nondim_cfg()
     params["bv_bc"] = _make_bv_bc_cfg(

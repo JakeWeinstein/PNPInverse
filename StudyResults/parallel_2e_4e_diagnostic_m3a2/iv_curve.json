@@ -1,0 +1,469 @@
+{
+  "experiment_metadata": {
+    "catalyst": "CMK-3",
+    "geometry": "RRDE",
+    "pH_bulk": 4.0,
+    "cation": "Cs+",
+    "anion_model": "ClO4_protonic_surrogate",
+    "rotation_rate_rpm": 1600.0,
+    "L_eff_m": null,
+    "N_collection": 0.224,
+    "electrolyte_model": "pH_countercharge_surrogate",
+    "comparison_status": "diagnostic_only",
+    "source_authority": "Ruggiero_manuscript",
+    "target_curve": "Mangan2025_deck_p15_H2O2_current_density_pH4_Csplus",
+    "acceptance_tier": "trend"
+  },
+  "v_rhe": [
+    -0.4,
+    -0.32,
+    -0.2,
+    0.0,
+    0.1,
+    0.2,
+    0.3,
+    0.45
+  ],
+  "passes": [
+    {
+      "label": "pure_2e_k04e_zero",
+      "k0_factor_R2e": 1.0,
+      "k0_factor_R4e": 0.0
+    },
+    {
+      "label": "pure_4e_k02e_zero",
+      "k0_factor_R2e": 0.0,
+      "k0_factor_R4e": 1.0
+    },
+    {
+      "label": "mixed_equal_priors",
+      "k0_factor_R2e": 1.0,
+      "k0_factor_R4e": 1.0
+    }
+  ],
+  "mesh_Ny": 200,
+  "exponent_clip": 100.0,
+  "u_clamp": 100.0,
+  "initializer": "linear_phi",
+  "formulation": "logc_muh",
+  "i_scale_mA_cm2": 0.4399731180239999,
+  "reports": [
+    {
+      "label": "pure_2e_k04e_zero",
+      "k0_factor_R2e": 1.0,
+      "k0_factor_R4e": 0.0,
+      "wall_seconds": 14.6978120803833,
+      "v_rhe": [
+        -0.4,
+        -0.32,
+        -0.2,
+        0.0,
+        0.1,
+        0.2,
+        0.3,
+        0.45
+      ],
+      "phi_applied_hat": [
+        -15.568697924103027,
+        -12.45495833928242,
+        -7.784348962051514,
+        0.0,
+        3.892174481025757,
+        7.784348962051514,
+        11.676523443077269,
+        17.514785164615905
+      ],
+      "cd_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "gross_R2e_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "gross_R4e_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "surface_pH_proxy": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "j_ring_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "S_H2O2_percent": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "n_e_rrde": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "c_H_surface_nondim": [
+        0.0003433347510305496,
+        0.0005907665254181748,
+        0.001863883892592039,
+        0.07856962844590872,
+        0.8174041807910989,
+        4.200868128407112,
+        12.648437343015923,
+        40.78306588178446
+      ],
+      "N_collection_used": 0.224,
+      "converged": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "method": [
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed"
+      ],
+      "z_achieved": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "n_converged": 0,
+      "n_total": 8
+    },
+    {
+      "label": "pure_4e_k02e_zero",
+      "k0_factor_R2e": 0.0,
+      "k0_factor_R4e": 1.0,
+      "wall_seconds": 18.228559017181396,
+      "v_rhe": [
+        -0.4,
+        -0.32,
+        -0.2,
+        0.0,
+        0.1,
+        0.2,
+        0.3,
+        0.45
+      ],
+      "phi_applied_hat": [
+        -15.568697924103027,
+        -12.45495833928242,
+        -7.784348962051514,
+        0.0,
+        3.892174481025757,
+        7.784348962051514,
+        11.676523443077269,
+        17.514785164615905
+      ],
+      "cd_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "gross_R2e_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "gross_R4e_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "surface_pH_proxy": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "j_ring_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "S_H2O2_percent": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "n_e_rrde": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "c_H_surface_nondim": [
+        5.92538634817263e+282,
+        0.0,
+        0.0150098320030034,
+        6.852145509992248e+176,
+        0.7479702553014209,
+        null,
+        0.051335143606562945,
+        null
+      ],
+      "N_collection_used": 0.224,
+      "converged": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "method": [
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed"
+      ],
+      "z_achieved": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "n_converged": 0,
+      "n_total": 8
+    },
+    {
+      "label": "mixed_equal_priors",
+      "k0_factor_R2e": 1.0,
+      "k0_factor_R4e": 1.0,
+      "wall_seconds": 18.807572841644287,
+      "v_rhe": [
+        -0.4,
+        -0.32,
+        -0.2,
+        0.0,
+        0.1,
+        0.2,
+        0.3,
+        0.45
+      ],
+      "phi_applied_hat": [
+        -15.568697924103027,
+        -12.45495833928242,
+        -7.784348962051514,
+        0.0,
+        3.892174481025757,
+        7.784348962051514,
+        11.676523443077269,
+        17.514785164615905
+      ],
+      "cd_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "gross_R2e_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "gross_R4e_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "surface_pH_proxy": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "j_ring_mA_cm2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "S_H2O2_percent": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "n_e_rrde": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "c_H_surface_nondim": [
+        null,
+        0.00045756928067596674,
+        0.0016487516917291383,
+        3.704355839144749e+115,
+        0.7563481065709277,
+        4.211940754490314,
+        1.248856951127158e+47,
+        0.008610832183441698
+      ],
+      "N_collection_used": 0.224,
+      "converged": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "method": [
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed",
+        "cold-failed"
+      ],
+      "z_achieved": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "n_converged": 0,
+      "n_total": 8
+    }
+  ]
+}

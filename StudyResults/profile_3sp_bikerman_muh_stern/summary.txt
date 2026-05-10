@@ -1,0 +1,308 @@
+==============================================================================
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  PROFILING: 3sp + bikerman + muh + Stern (cs=0.10), clip=100
+=
+  output dir: /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/profile_3sp_bikerman_muh_stern
+  profile:    /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/profile_3sp_bikerman_muh_stern/profile.prof
+  petsc log:  /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/profile_3sp_bikerman_muh_stern/petsc_log.txt
+  V grid:     [-0.5, -0.3, -0.1, 0.0, 0.1, 0.3, 0.5, 0.55, 0.6, 0.65, 0.66, 0.68, 0.7, 0.75, 1.0]  (n=15)
+  mesh Ny:    200
+  formulation:logc_muh
+  initializer:debye_boltzmann
+  clip:       100.0 (overridden from script default)
+
+==============================================================================
+  Total wall time: 544.1s
+  Reported wall:   542.4s
+  Converged:       15/15
+==============================================================================
+
+# Per-voltage method × convergence
+    V=-0.500  ok=True  method=warm<--11.677
+    V=-0.300  ok=True  method=warm<--3.892
+    V=-0.100  ok=True  method=warm<-+0.000
+    V=+0.000  ok=True  method=warm<-+3.892
+    V=+0.100  ok=True  method=warm<-+11.677
+    V=+0.300  ok=True  method=warm<-+19.461
+    V=+0.500  ok=True  method=cold
+    V=+0.550  ok=True  method=cold
+    V=+0.600  ok=True  method=cold
+    V=+0.650  ok=True  method=warm<-+23.353
+    V=+0.660  ok=True  method=warm<-+25.299
+    V=+0.680  ok=True  method=warm<-+25.688
+    V=+0.700  ok=True  method=warm<-+26.467
+    V=+0.750  ok=True  method=cold
+    V=+1.000  ok=True  method=warm<-+29.191
+
+# Top 50 by cumulative time (cumtime)
+         141651793 function calls (140615900 primitive calls) in 543.313 seconds
+
+   Ordered by: cumulative time
+   List reduced from 10076 to 50 due to restriction <50>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000  544.074  544.074 peroxide_window_3sp_bikerman_muh.py:73(_run_one_pass)
+        1    0.006    0.006  542.376  542.376 grid_per_voltage.py:112(solve_grid_per_voltage_cold_with_warm_fallback)
+      119    0.007    0.000  537.057    4.513 grid_per_voltage.py:260(run_ss)
+      641    0.003    0.000  533.982    0.833 variational_solver.py:59(wrapper)
+      641   12.038    0.019  533.978    0.833 variational_solver.py:339(solve)
+     6296    0.037    0.000  522.558    0.083 assemble.py:1003(assemble)
+    71700    0.357    0.000  517.789    0.007 parloop.py:243(__call__)
+   143400    0.378    0.000  510.270    0.004 parloop.py:224(_compute)
+   143400  500.508    0.003  507.654    0.004 global_kernel.py:325(__call__)
+       11    0.000    0.000  482.106   43.828 grid_per_voltage.py:377(_solve_warm)
+       11    0.000    0.000  478.502   43.500 grid_per_voltage.py:389(_march)
+     1971    0.041    0.000  404.960    0.205 assemble.py:1053(execute_parloops)
+     1160    0.013    0.000  403.793    0.348 solving_utils.py:466(form_jacobian)
+     4325    0.045    0.000  117.461    0.027 solving_utils.py:432(form_function)
+     4325    0.042    0.000  116.195    0.027 assemble.py:1272(execute_parloops)
+       15    0.000    0.000   59.664    3.978 grid_per_voltage.py:321(_solve_cold)
+144668/144452    0.373    0.000    8.347    0.000 caching.py:523(wrapper)
+      193    0.003    0.000    5.351    0.028 __init__.py:1(<module>)
+       26    0.001    0.000    4.692    0.180 grid_per_voltage.py:218(_build_for_voltage)
+      896    0.008    0.000    4.205    0.005 assembly.py:9(wrapper)
+    71700    0.461    0.000    3.806    0.000 parloop.py:262(increment_dat_version)
+15141/14007    0.088    0.000    3.794    0.000 analysis.py:49(extract_type)
+     6296    0.049    0.000    3.773    0.001 assemble.py:1057(parloops)
+8052/2889    0.012    0.000    3.600    0.001 map_integrands.py:22(map_integrands)
+   203446    0.379    0.000    3.591    0.000 analysis.py:86(<genexpr>)
+      241    0.001    0.000    3.239    0.013 contextlib.py:78(inner)
+  3430713    1.499    0.000    3.172    0.000 traversal.py:64(unique_pre_traversal)
+       50    0.002    0.000    3.136    0.063 global_kernel.py:421(compile_global_kernel)
+       50    0.002    0.000    3.054    0.061 compilation.py:437(load)
+     1773    0.012    0.000    2.932    0.002 assemble.py:1902(build)
+      155    0.007    0.000    2.865    0.018 subprocess.py:506(run)
+       50    0.008    0.000    2.831    0.057 compilation.py:133(sniff_compiler)
+   112999    0.178    0.000    2.737    0.000 parloop.py:532(zip_arguments)
+66822/44856    0.043    0.000    2.737    0.000 functools.py:982(__get__)
+   109264    0.034    0.000    2.703    0.000 parloop.py:214(zipped_arguments)
+   117206    0.348    0.000    2.689    0.000 local_kernel.py:138(arguments)
+489002/393496    0.096    0.000    2.601    0.000 {built-in method builtins.next}
+      896    0.002    0.000    2.485    0.003 assemble.py:43(assemble)
+56950/56949    0.020    0.000    2.439    0.000 functools.py:907(wrapper)
+      948    0.001    0.000    2.435    0.003 assemble.py:866(preprocess_base_form)
+      922    0.004    0.000    2.412    0.003 assemble.py:885(expand_derivatives_form)
+15438463/15438413    1.446    0.000    2.379    0.000 {built-in method builtins.isinstance}
+      837    0.003    0.000    2.356    0.003 compute_form_data.py:222(preprocess_form)
+    55468    0.010    0.000    2.302    0.000 assemble.py:2063(_as_parloop_arg)
+   143400    1.234    0.000    2.140    0.000 parloop.py:203(arglist)
+      153    0.005    0.000    2.129    0.014 subprocess.py:1165(communicate)
+     2098    0.002    0.000    2.111    0.001 ufl_utils.py:71(extract_firedrake_constants)
+      150    0.008    0.000    2.097    0.014 subprocess.py:2062(_communicate)
+    39738    0.004    0.000    2.088    0.000 assemble.py:2188(iter_constants)
+      300    0.003    0.000    2.070    0.007 selectors.py:402(select)
+
+
+
+# Top 50 by total time excluding subcalls (tottime)
+         141651793 function calls (140615900 primitive calls) in 543.313 seconds
+
+   Ordered by: internal time
+   List reduced from 10076 to 50 due to restriction <50>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   143400  500.508    0.003  507.654    0.004 global_kernel.py:325(__call__)
+      641   12.038    0.019  533.978    0.833 variational_solver.py:339(solve)
+      300    2.067    0.007    2.067    0.007 {method 'poll' of 'select.poll' objects}
+  3430713    1.499    0.000    3.172    0.000 traversal.py:64(unique_pre_traversal)
+15438463/15438413    1.446    0.000    2.379    0.000 {built-in method builtins.isinstance}
+   143400    1.234    0.000    2.140    0.000 parloop.py:203(arglist)
+ 10466984    1.010    0.000    1.458    0.000 types.py:117(__hash__)
+  4331192    0.683    0.000    1.432    0.000 local_kernel.py:145(<genexpr>)
+10460749/10311402    0.660    0.000    0.786    0.000 compute_expr_hash.py:16(compute_expr_hash)
+   571487    0.626    0.000    1.530    0.000 {method 'get' of 'dict' objects}
+12529942/12409902    0.612    0.000    0.803    0.000 {built-in method builtins.hash}
+3997740/3996179    0.537    0.000    0.917    0.000 {method 'add' of 'set' objects}
+   238191    0.514    0.000    0.908    0.000 local_kernel.py:218(dtypes)
+  5648843    0.467    0.000    0.934    0.000 <frozen abc>:117(__instancecheck__)
+    71700    0.461    0.000    3.806    0.000 parloop.py:262(increment_dat_version)
+  5648843    0.458    0.000    0.466    0.000 {built-in method _abc._abc_instancecheck}
+  4296172    0.430    0.000    0.438    0.000 parloop.py:42(_kernel_args_)
+  8780060    0.392    0.000    0.392    0.000 local_kernel.py:220(<genexpr>)
+   102/99    0.383    0.004    0.384    0.004 {built-in method _imp.create_dynamic}
+   149085    0.382    0.000    1.005    0.000 {method 'setdefault' of 'dict' objects}
+   203446    0.379    0.000    3.591    0.000 analysis.py:86(<genexpr>)
+   143400    0.378    0.000  510.270    0.004 parloop.py:224(_compute)
+144668/144452    0.373    0.000    8.347    0.000 caching.py:523(wrapper)
+      608    0.367    0.001    0.367    0.001 {built-in method posix.read}
+    71700    0.357    0.000  517.789    0.007 parloop.py:243(__call__)
+   117206    0.348    0.000    2.689    0.000 local_kernel.py:138(arguments)
+    71700    0.340    0.000    0.765    0.000 parloop.py:454(update_arg_data_state)
+  1590945    0.325    0.000    0.488    0.000 constant.py:90(__hash__)
+      155    0.289    0.002    0.289    0.002 {built-in method _posixsubprocess.fork_exec}
+  2651827    0.271    0.000    0.419    0.000 parloop.py:199(accesses)
+     6674    0.267    0.000    1.563    0.000 map_dag.py:43(map_expr_dags)
+  3945146    0.253    0.000    0.253    0.000 {method 'pop' of 'list' objects}
+   320891    0.253    0.000    0.435    0.000 traversal.py:83(unique_post_traversal)
+     1582    0.253    0.000    0.253    0.000 {method 'read' of '_io.BufferedReader' objects}
+504307/504279    0.249    0.000    0.310    0.000 mpi.py:283(is_pyop2_comm)
+  4025827    0.235    0.000    0.235    0.000 {method 'append' of 'list' objects}
+    71700    0.226    0.000    1.138    0.000 parloop.py:279(replace_lgmaps)
+140252/1728    0.212    0.000    1.383    0.001 dag_traverser.py:31(__call__)
+     1787    0.206    0.000    0.498    0.000 signature.py:96(compute_expression_hashdata)
+    71700    0.203    0.000    0.289    0.000 parloop.py:303(restore_lgmaps)
+       53    0.199    0.004    0.199    0.004 {built-in method _ctypes.dlopen}
+  2773094    0.193    0.000    0.196    0.000 {built-in method builtins.getattr}
+   162065    0.187    0.000    0.649    0.000 mpi.py:341(internal_comm)
+    71700    0.184    0.000    0.451    0.000 parloop.py:324(global_to_local_end)
+   112999    0.178    0.000    2.737    0.000 parloop.py:532(zip_arguments)
+   387177    0.171    0.000    0.267    0.000 dat.py:640(global_to_local_end)
+    22236    0.160    0.000    0.294    0.000 dat.py:1206(vec_context)
+   387177    0.158    0.000    0.266    0.000 dat.py:621(global_to_local_begin)
+   132687    0.151    0.000    0.279    0.000 functools.py:35(update_wrapper)
+  1001131    0.148    0.000    0.222    0.000 dataset.py:62(__getattr__)
+
+

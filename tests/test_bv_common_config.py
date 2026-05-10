@@ -114,6 +114,8 @@ class TestSternRegressionGate:
             "concentration_marker",
             "ground_marker",
             "boltzmann_counterions",
+            # Phase 6β v9 Gate 1: explicit per-species role labels.
+            "species_roles",
         }
         assert set(bv_bc.keys()) == expected_keys
 

@@ -109,6 +109,208 @@ def _restore_U(snap: tuple, U, U_prev) -> None:
     U_prev.assign(U)
 
 
+# ---------------------------------------------------------------------------
+# Public aliases (Phase 5γ — used by anchor_continuation.py and external
+# callers that need to checkpoint/restore U or run a stand-alone SS loop).
+# ---------------------------------------------------------------------------
+
+def snapshot_U(U) -> tuple:
+    """Public alias for :func:`_snapshot_U`.
+
+    Returns ``tuple(d.data_ro.copy() for d in U.dat)`` — a deep copy
+    suitable for later restoration via :func:`restore_U`.
+    """
+    return _snapshot_U(U)
+
+
+def restore_U(snap: tuple, U, U_prev) -> None:
+    """Public alias for :func:`_restore_U`.
+
+    Writes ``snap`` into ``U.dat`` and assigns ``U_prev = U`` to keep
+    the time-stepping state consistent.
+    """
+    _restore_U(snap, U, U_prev)
+
+
+def make_run_ss(
+    *,
+    ctx,
+    solver,
+    of_cd,
+    dt_init: float = 0.25,
+    dt_growth_cap: float = 4.0,
+    dt_max_ratio: float = 20.0,
+    ss_rel_tol: float = 1e-4,
+    ss_abs_tol: float = 1e-8,
+    ss_consec: int = 4,
+) -> Callable[[int], bool]:
+    """Build a SER adaptive-dt steady-state loop closure.
+
+    Returns a callable ``run_ss(max_steps: int) -> bool`` that drives
+    the supplied ``solver`` for up to ``max_steps`` Newton solves,
+    using the SER adaptive-dt rule against the observable form
+    ``of_cd``. Returns ``True`` once ``ss_consec`` consecutive steady
+    plateau detections are seen, or ``False`` if Newton diverges or
+    the step cap is hit.
+
+    This factory makes the SS loop available outside the orchestrator
+    (e.g. for k0-continuation rungs in
+    :mod:`Forward.bv_solver.anchor_continuation`) without duplicating
+    the SER logic.
+
+    Parameters
+    ----------
+    ctx
+        Firedrake context (must expose ``U``, ``U_prev``, ``dt_const``).
+    solver
+        Pre-built ``NonlinearVariationalSolver``.
+    of_cd
+        Observable UFL form whose plateau detects steady state.
+    dt_init, dt_growth_cap, dt_max_ratio
+        SER knobs. ``dt_max = dt_init * dt_max_ratio``.
+    ss_rel_tol, ss_abs_tol, ss_consec
+        Plateau-detection thresholds.
+    """
+    import firedrake as fd
+
+    U = ctx["U"]
+    U_prev = ctx["U_prev"]
+    dt_const = ctx["dt_const"]
+    dt_max = float(dt_init) * float(dt_max_ratio)
+
+    def run_ss(max_steps: int) -> bool:
+        dt_val = float(dt_init)
+        dt_const.assign(dt_val)
+        prev_flux = None
+        prev_delta = None
+        steady_count = 0
+        for _ in range(1, max_steps + 1):
+            try:
+                solver.solve()
+            except Exception:
+                return False
+            U_prev.assign(U)
+            fv = float(fd.assemble(of_cd))
+            if prev_flux is not None:
+                delta = abs(fv - prev_flux)
+                sv = max(abs(fv), abs(prev_flux), ss_abs_tol)
+                is_steady = (delta / sv <= ss_rel_tol) or (delta <= ss_abs_tol)
+                steady_count = steady_count + 1 if is_steady else 0
+                if prev_delta is not None and delta > 0:
+                    ratio = prev_delta / delta
+                    if ratio > 1.0:
+                        grow = min(ratio, dt_growth_cap)
+                        dt_val = min(dt_val * grow, dt_max)
+                    else:
+                        dt_val = max(dt_val * 0.5, float(dt_init))
+                    dt_const.assign(dt_val)
+                prev_delta = delta
+            else:
+                steady_count = 0
+            prev_flux = fv
+            if steady_count >= ss_consec:
+                return True
+        return False
+
+    return run_ss
+
+
+def warm_walk_phi(
+    *,
+    ctx,
+    solver,
+    of_cd,
+    v_anchor_eta: float,
+    v_target_eta: float,
+    n_substeps: int = 4,
+    bisect_depth: int = 3,
+    max_ss_steps_per_substep: int = 150,
+    max_ss_steps_final: int = 200,
+    ss_rel_tol: float = 1e-4,
+    ss_abs_tol: float = 1e-8,
+    ss_consec: int = 4,
+    dt_init: float = 0.25,
+    dt_growth_cap: float = 4.0,
+    dt_max_ratio: float = 20.0,
+) -> bool:
+    """Walk ``ctx['phi_applied_func']`` from anchor to target.
+
+    Performs the substep+bisect from ``v_anchor_eta`` to
+    ``v_target_eta`` (mirrors the C+D Phase 2 D logic), then a final
+    SS at ``v_target_eta``.
+
+    Pre-conditions (caller's responsibility):
+      * ``ctx['U']`` holds a converged state at ``v_anchor_eta``.
+      * z-factors are at full (1.0); k0 is at production target.
+      * ``solver`` is a ``NonlinearVariationalSolver`` for the same
+        ctx; ``of_cd`` is a current-density observable form.
+
+    Returns
+    -------
+    bool
+        ``True`` iff the final SS converges. On failure, restores the
+        U snapshot taken at function entry (the anchor state) and
+        resets ``ctx['phi_applied_func']`` to ``v_anchor_eta``.
+    """
+    U = ctx["U"]
+    U_prev = ctx["U_prev"]
+    paf = ctx["phi_applied_func"]
+
+    run_ss = make_run_ss(
+        ctx=ctx,
+        solver=solver,
+        of_cd=of_cd,
+        dt_init=dt_init,
+        dt_growth_cap=dt_growth_cap,
+        dt_max_ratio=dt_max_ratio,
+        ss_rel_tol=ss_rel_tol,
+        ss_abs_tol=ss_abs_tol,
+        ss_consec=ss_consec,
+    )
+
+    def _march(v0: float, v1: float, depth: int) -> bool:
+        # Track v_prev_substep explicitly: paf is NOT in U.dat, so
+        # _restore_U does not roll it back, and reading paf after a
+        # failed substep returns the failed voltage (not the previous
+        # successful one).  Using paf as the source of v_prev would
+        # collapse the bisection midpoint to the failed voltage and
+        # make the recursion degenerate.
+        substeps = np.linspace(v0, v1, n_substeps + 1)[1:]
+        ckpt_outer = _snapshot_U(U)
+        v_prev_substep = float(v0)
+        for v_sub in substeps:
+            ckpt_inner = _snapshot_U(U)
+            paf.assign(float(v_sub))
+            if run_ss(max_ss_steps_per_substep):
+                v_prev_substep = float(v_sub)
+                continue
+            _restore_U(ckpt_inner, U, U_prev)
+            paf.assign(v_prev_substep)
+            if depth >= bisect_depth:
+                _restore_U(ckpt_outer, U, U_prev)
+                paf.assign(float(v0))
+                return False
+            v_mid = 0.5 * (v_prev_substep + float(v_sub))
+            if not _march(v_prev_substep, v_mid, depth + 1):
+                _restore_U(ckpt_outer, U, U_prev)
+                paf.assign(float(v0))
+                return False
+            if not _march(v_mid, float(v_sub), depth + 1):
+                _restore_U(ckpt_outer, U, U_prev)
+                paf.assign(float(v0))
+                return False
+            v_prev_substep = float(v_sub)
+        return True
+
+    if not _march(float(v_anchor_eta), float(v_target_eta), 0):
+        return False
+    # Final SS at V_target to make sure we're firmly at the target.
+    paf.assign(float(v_target_eta))
+    if not run_ss(max_ss_steps_final):
+        return False
+    return True
+
+
 def solve_grid_per_voltage_cold_with_warm_fallback(
     solver_params,
     *,
@@ -250,48 +452,25 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
 
     # ------------------------------------------------------------------
     # SS time-stepping loop with SER adaptive dt
+    #
+    # Delegates to the public ``make_run_ss`` factory so external callers
+    # (anchor_continuation.py) and the orchestrator share a single
+    # implementation. The closure here captures the orchestrator's
+    # outer kwargs to preserve byte-equivalence with the pre-Phase-5γ
+    # version.
     # ------------------------------------------------------------------
     def _make_run_ss(ctx, solver, of_cd):
-        U = ctx["U"]
-        U_prev = ctx["U_prev"]
-        dt_const = ctx["dt_const"]
-        dt_max = float(dt_init) * float(dt_max_ratio)
-
-        def run_ss(max_steps: int) -> bool:
-            dt_val = float(dt_init)
-            dt_const.assign(dt_val)
-            prev_flux = None
-            prev_delta = None
-            steady_count = 0
-            for _ in range(1, max_steps + 1):
-                try:
-                    solver.solve()
-                except Exception:
-                    return False
-                U_prev.assign(U)
-                fv = float(fd.assemble(of_cd))
-                if prev_flux is not None:
-                    delta = abs(fv - prev_flux)
-                    sv = max(abs(fv), abs(prev_flux), ss_abs_tol)
-                    is_steady = (delta / sv <= ss_rel_tol) or (delta <= ss_abs_tol)
-                    steady_count = steady_count + 1 if is_steady else 0
-                    if prev_delta is not None and delta > 0:
-                        ratio = prev_delta / delta
-                        if ratio > 1.0:
-                            grow = min(ratio, dt_growth_cap)
-                            dt_val = min(dt_val * grow, dt_max)
-                        else:
-                            dt_val = max(dt_val * 0.5, float(dt_init))
-                        dt_const.assign(dt_val)
-                    prev_delta = delta
-                else:
-                    steady_count = 0
-                prev_flux = fv
-                if steady_count >= ss_consec:
-                    return True
-            return False
-
-        return run_ss
+        return make_run_ss(
+            ctx=ctx,
+            solver=solver,
+            of_cd=of_cd,
+            dt_init=dt_init,
+            dt_growth_cap=dt_growth_cap,
+            dt_max_ratio=dt_max_ratio,
+            ss_rel_tol=ss_rel_tol,
+            ss_abs_tol=ss_abs_tol,
+            ss_consec=ss_consec,
+        )
 
     # ------------------------------------------------------------------
     # Helper: scale all charges (dynamic species + Boltzmann ion)
@@ -373,58 +552,40 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
 
     # ------------------------------------------------------------------
     # Phase 2 (D): warm-walk with paf substepping + bisection
+    #
+    # Delegates the substep+bisect+final-SS to the public
+    # ``warm_walk_phi`` factored out in Phase 5γ. Wrapper handles
+    # context build, anchor restore, and z=1 flip — preconditions of
+    # ``warm_walk_phi`` — then captures the final snapshot on success.
     # ------------------------------------------------------------------
     def _solve_warm(orig_idx: int, V_target_eta: float,
                     V_anchor_eta: float, anchor_snap: tuple):
         ctx, solver, of_cd = _build_for_voltage(V_target_eta)
-        run_ss = _make_run_ss(ctx, solver, of_cd)
         U = ctx["U"]
         U_prev = ctx["U_prev"]
-        paf = ctx["phi_applied_func"]
         # Restore neighbor's snapshot (already at full z) and force
         # full charge from the start of the walk — no z-ramp here.
         _restore_U(anchor_snap, U, U_prev)
         _set_z_factor(ctx, 1.0)
 
-        def _march(v0: float, v1: float, depth: int) -> bool:
-            # Track v_prev_substep explicitly: paf is NOT in U.dat, so
-            # _restore_U does not roll it back, and reading paf after a
-            # failed substep returns the failed voltage (not the previous
-            # successful one).  Using paf as the source of v_prev would
-            # collapse the bisection midpoint to the failed voltage and
-            # make the recursion degenerate.
-            substeps = np.linspace(v0, v1, n_substeps_warm + 1)[1:]
-            ckpt_outer = _snapshot_U(U)
-            v_prev_substep = float(v0)
-            for v_sub in substeps:
-                ckpt_inner = _snapshot_U(U)
-                paf.assign(float(v_sub))
-                if run_ss(max_ss_steps_warm):
-                    v_prev_substep = float(v_sub)
-                    continue
-                _restore_U(ckpt_inner, U, U_prev)
-                paf.assign(v_prev_substep)
-                if depth >= bisect_depth_warm:
-                    _restore_U(ckpt_outer, U, U_prev)
-                    paf.assign(float(v0))
-                    return False
-                v_mid = 0.5 * (v_prev_substep + float(v_sub))
-                if not _march(v_prev_substep, v_mid, depth + 1):
-                    _restore_U(ckpt_outer, U, U_prev)
-                    paf.assign(float(v0))
-                    return False
-                if not _march(v_mid, float(v_sub), depth + 1):
-                    _restore_U(ckpt_outer, U, U_prev)
-                    paf.assign(float(v0))
-                    return False
-                v_prev_substep = float(v_sub)
-            return True
-
-        if not _march(float(V_anchor_eta), float(V_target_eta), 0):
-            return None, ctx
-        # Final SS at V_target to make sure we're firmly at the target
-        paf.assign(float(V_target_eta))
-        if not run_ss(max_ss_steps_warm_final):
+        ok = warm_walk_phi(
+            ctx=ctx,
+            solver=solver,
+            of_cd=of_cd,
+            v_anchor_eta=float(V_anchor_eta),
+            v_target_eta=float(V_target_eta),
+            n_substeps=n_substeps_warm,
+            bisect_depth=bisect_depth_warm,
+            max_ss_steps_per_substep=max_ss_steps_warm,
+            max_ss_steps_final=max_ss_steps_warm_final,
+            ss_rel_tol=ss_rel_tol,
+            ss_abs_tol=ss_abs_tol,
+            ss_consec=ss_consec,
+            dt_init=dt_init,
+            dt_growth_cap=dt_growth_cap,
+            dt_max_ratio=dt_max_ratio,
+        )
+        if not ok:
             return None, ctx
         return _snapshot_U(U), ctx
 
@@ -704,4 +865,290 @@ def solve_grid_per_voltage_cold_with_warm_fallback(
     return PerVoltageContinuationResult(
         points=points,
         mesh_dof_count=int(last_dof_count or 0),
+    )
+
+
+# ---------------------------------------------------------------------------
+# solve_grid_with_anchor — Phase 5γ Pass A driver
+# ---------------------------------------------------------------------------
+
+def solve_grid_with_anchor(
+    solver_params,
+    *,
+    anchor: "PreconvergedAnchor",
+    phi_applied_values: np.ndarray,
+    mesh: Any,
+    n_substeps_warm: int = 8,
+    bisect_depth_warm: int = 5,
+    ss_rel_tol: float = 1e-4,
+    ss_abs_tol: float = 1e-8,
+    ss_consec: int = 4,
+    max_ss_steps_warm: int = 150,
+    max_ss_steps_warm_final: int = 200,
+    dt_init: float = 0.25,
+    dt_growth_cap: float = 4.0,
+    dt_max_ratio: float = 20.0,
+    print_interval: int = 1,
+    per_point_callback: Optional[Callable] = None,
+) -> PerVoltageContinuationResult:
+    """Drive a V_RHE grid by walking outward from a preconverged anchor.
+
+    No cold-start, no z-ramp: every voltage warm-walks from the
+    nearest converged neighbour (the anchor itself for the first
+    visited V). Use ``solve_anchor_with_continuation`` upstream to
+    build the anchor.
+
+    Strategy
+    --------
+    1. Sort grid indices by ``|phi - anchor.phi_applied_eta|``
+       ascending — closest first.
+    2. For each target V in that order:
+       a. Build a fresh ctx + forms at that V.
+       b. Assert ``ctx['U'].function_space().dim() ==
+          anchor.mesh_dof_count``.
+       c. Set k0 from ``anchor.k0_targets`` via
+          :func:`set_reaction_k0_model` (both before and after IC) so
+          the FE residual and Picard agree on production rates.
+       d. Restore U from the nearest converged neighbour's snapshot
+          (the anchor at first; subsequent visited V's eligible).
+       e. Set z-factor to 1.0 (anchor is at full z).
+       f. Set ``ctx['phi_applied_func']`` to the neighbour's V (NOT
+          the target — :func:`warm_walk_phi` advances it).
+       g. Build solver + run :func:`warm_walk_phi` from neighbour V
+          to target V.
+       h. On success: snapshot U, mark converged, optional
+          ``per_point_callback``. The new snapshot becomes a candidate
+          neighbour for subsequent targets.
+       i. On failure: ``PerVoltagePointResult`` with
+          ``converged=False`` and
+          ``method=f"warm<-{neighbour:+.3f}-FAILED"``.
+    3. Wrap the entire loop in ``firedrake.adjoint.stop_annotating()``.
+
+    Parameters
+    ----------
+    solver_params
+        :class:`Forward.params.SolverParams` (or compatible 11-tuple)
+        already configured for the production reaction stack
+        (k0, alpha, etc. should match ``anchor.k0_targets`` for
+        consistency, though the orchestrator re-pins k0 from the
+        anchor regardless).
+    anchor
+        :class:`PreconvergedAnchor` produced by
+        :func:`extract_preconverged_anchor` from a successful
+        :func:`solve_anchor_with_continuation` run.
+    phi_applied_values
+        Array of dimensionless overpotentials (V/V_T units).
+    mesh
+        Shared graded mesh. Must match the mesh that produced the
+        anchor (same ``ctx['U'].function_space().dim()``).
+
+    Returns
+    -------
+    PerVoltageContinuationResult
+        Same type as
+        :func:`solve_grid_per_voltage_cold_with_warm_fallback`, so
+        callers can switch entry points without changing reporting.
+
+    Raises
+    ------
+    ValueError
+        Mesh DOF mismatch between anchor and live ctx; or
+        ``solver_params`` is not 11-element.
+    TypeError
+        ``anchor`` is not a :class:`PreconvergedAnchor`.
+    """
+    import firedrake as fd
+    import firedrake.adjoint as adj
+
+    from .anchor_continuation import (
+        NON_PETSC_KEYS,
+        PreconvergedAnchor,
+        set_reaction_k0_model,
+    )
+    from .dispatch import build_context, build_forms, set_initial_conditions
+    from .observables import _build_bv_observable_form
+    from .solvers import _clone_params_with_phi
+    from .diagnostics import collect_diagnostics
+    from Forward.params import SolverParams
+
+    if not isinstance(anchor, PreconvergedAnchor):
+        raise TypeError(
+            f"anchor must be PreconvergedAnchor "
+            f"(got {type(anchor).__name__})"
+        )
+
+    phi_applied_values = np.asarray(phi_applied_values, dtype=float)
+    n_points = len(phi_applied_values)
+
+    try:
+        n_s, order, dt, t_end, z_v, D_v, a_v, _, c0, phi0, params = solver_params
+    except Exception as exc:
+        raise ValueError(
+            "solve_grid_with_anchor expects an 11-element solver_params"
+        ) from exc
+
+    z_nominal = [float(v) for v in (
+        [z_v] * n_s if np.isscalar(z_v) else list(z_v)
+    )][:n_s]
+
+    def _params_with_phi(phi_target: float):
+        if isinstance(solver_params, SolverParams):
+            return solver_params.with_phi_applied(float(phi_target))
+        return list(_clone_params_with_phi(
+            solver_params, phi_applied=float(phi_target),
+        ))
+
+    def _set_z_factor(ctx: dict, z_val: float) -> None:
+        for i in range(n_s):
+            ctx["z_consts"][i].assign(z_nominal[i] * z_val)
+        boltz = ctx.get("boltzmann_z_scale")
+        if boltz is not None:
+            boltz.assign(float(z_val))
+
+    k0_target_dict = anchor.k0_targets_dict()
+
+    def _build_for_voltage(phi_target: float):
+        sp_v = _params_with_phi(phi_target)
+        ctx = build_context(sp_v, mesh=mesh)
+        ctx = build_forms(ctx, sp_v)
+        # Pin k0 to anchor targets BEFORE IC so Picard sees production
+        # rates while seeding (matches the anchor's converged regime).
+        for j, k_target in k0_target_dict.items():
+            set_reaction_k0_model(ctx, j, k_target)
+        set_initial_conditions(ctx, sp_v)
+        # Re-pin AFTER IC: defensive in case set_initial_conditions
+        # internals reseed k0 from the build-time bv_reactions config.
+        for j, k_target in k0_target_dict.items():
+            set_reaction_k0_model(ctx, j, k_target)
+        items = params.items() if isinstance(params, dict) else []
+        solve_opts = {k: v for k, v in items if k not in NON_PETSC_KEYS}
+        solve_opts.setdefault("snes_error_if_not_converged", True)
+        problem = fd.NonlinearVariationalProblem(
+            ctx["F_res"], ctx["U"], bcs=ctx["bcs"], J=ctx["J_form"]
+        )
+        solver = fd.NonlinearVariationalSolver(
+            problem, solver_parameters=solve_opts,
+        )
+        ctx["_last_solver"] = solver
+        of_cd = _build_bv_observable_form(
+            ctx, mode="current_density", reaction_index=None, scale=1.0,
+        )
+        return ctx, solver, of_cd
+
+    # Visit grid in order of distance from the anchor's voltage.
+    visit_order = sorted(
+        range(n_points),
+        key=lambda i: abs(
+            float(phi_applied_values[i]) - float(anchor.phi_applied_eta)
+        ),
+    )
+
+    # Sources: (phi_eta, snapshot) pairs eligible as warm-walk anchors.
+    # Start with the anchor itself; append each successful grid solve.
+    sources: list[tuple[float, tuple]] = [
+        (float(anchor.phi_applied_eta), anchor.U_snapshot),
+    ]
+
+    points: Dict[int, PerVoltagePointResult] = {}
+    last_dof_count: Optional[int] = None
+
+    print(
+        f"[solve_grid_with_anchor] grid of {n_points} points; "
+        f"anchor at phi_eta={float(anchor.phi_applied_eta):+.4f}"
+    )
+
+    with adj.stop_annotating():
+        for visit_n, orig_idx in enumerate(visit_order):
+            target_phi = float(phi_applied_values[orig_idx])
+
+            ctx, solver, of_cd = _build_for_voltage(target_phi)
+
+            dof = int(ctx["U"].function_space().dim())
+            if last_dof_count is None:
+                last_dof_count = dof
+            if dof != int(anchor.mesh_dof_count):
+                raise ValueError(
+                    f"mesh DOF mismatch: ctx['U'].function_space().dim()"
+                    f"={dof} but anchor.mesh_dof_count={anchor.mesh_dof_count}. "
+                    "The anchor was built on a different mesh than the grid "
+                    "run; both must use the same mesh."
+                )
+
+            # Pick nearest converged source by absolute phi distance.
+            src_phi, src_snap = min(
+                sources,
+                key=lambda s: abs(float(s[0]) - target_phi),
+            )
+
+            U = ctx["U"]
+            U_prev = ctx["U_prev"]
+            _restore_U(src_snap, U, U_prev)
+            _set_z_factor(ctx, 1.0)
+            ctx["phi_applied_func"].assign(float(src_phi))
+
+            ok = warm_walk_phi(
+                ctx=ctx,
+                solver=solver,
+                of_cd=of_cd,
+                v_anchor_eta=float(src_phi),
+                v_target_eta=target_phi,
+                n_substeps=n_substeps_warm,
+                bisect_depth=bisect_depth_warm,
+                max_ss_steps_per_substep=max_ss_steps_warm,
+                max_ss_steps_final=max_ss_steps_warm_final,
+                ss_rel_tol=ss_rel_tol,
+                ss_abs_tol=ss_abs_tol,
+                ss_consec=ss_consec,
+                dt_init=dt_init,
+                dt_growth_cap=dt_growth_cap,
+                dt_max_ratio=dt_max_ratio,
+            )
+
+            if ok:
+                snap = _snapshot_U(U)
+                sources.append((target_phi, snap))
+                method = f"warm<-{src_phi:+.3f}"
+                converged = True
+                if per_point_callback is not None:
+                    per_point_callback(orig_idx, target_phi, ctx)
+            else:
+                snap = None
+                method = f"warm<-{src_phi:+.3f}-FAILED"
+                converged = False
+
+            if (visit_n + 1) % print_interval == 0 or visit_n == 0:
+                tag = "OK" if converged else "FAIL"
+                print(
+                    f"  [{visit_n + 1}/{n_points}] eta={target_phi:+8.4f} "
+                    f"src={src_phi:+8.4f} {method} {tag}"
+                )
+
+            try:
+                diags = collect_diagnostics(
+                    ctx, phase="warm_walk_anchor", params=params,
+                )
+            except Exception as exc:
+                diags = {
+                    "phase": "diagnostics_error",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+
+            points[orig_idx] = PerVoltagePointResult(
+                orig_idx=orig_idx,
+                phi_applied=target_phi,
+                U_data=snap,
+                achieved_z_factor=1.0,
+                converged=converged,
+                method=method,
+                diagnostics=diags,
+            )
+
+    n_total_ok = sum(1 for p in points.values() if p.converged)
+    print(
+        f"[solve_grid_with_anchor] {n_total_ok}/{n_points} converged"
+    )
+
+    return PerVoltageContinuationResult(
+        points=points,
+        mesh_dof_count=int(last_dof_count or anchor.mesh_dof_count),
     )

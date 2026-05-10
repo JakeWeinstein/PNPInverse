@@ -1,0 +1,51 @@
+{
+  "config": {
+    "V_RHE": 0.55,
+    "phi_target_eta": 21.406959645641663,
+    "mesh_Ny": 200,
+    "exponent_clip": 100.0,
+    "u_clamp": 100.0,
+    "formulation": "logc_muh",
+    "initializer": "debye_boltzmann",
+    "k0_factor": 1e-30,
+    "log_tol": 0.05,
+    "tiny_threshold": 1e-15,
+    "abs_tol": 1e-10
+  },
+  "picard_state": {
+    "phi_o": -1.7763568394002505e-15,
+    "psi_D": 1.5841281887009426,
+    "psi_S": 19.82283145694072,
+    "phi_surface": 1.5841281887009444,
+    "gamma_s": 0.9304561197959337,
+    "H_o": 0.08333333333185924,
+    "R_list": [
+      3.697231631601937e-31,
+      3.6119297184668792e-12
+    ],
+    "eta_list": [
+      -7.227781186188288,
+      -28.05091465967608
+    ],
+    "initializer_fallback": false,
+    "initializer_fallback_reason": ""
+  },
+  "R_residual_per_rxn": [
+    3.6819161172996347e-31,
+    3.587026098375191e-12
+  ],
+  "R_picard_per_rxn": [
+    3.697231631601937e-31,
+    3.6119297184668792e-12
+  ],
+  "log10_R_ratio_per_rxn": [
+    0.0,
+    -0.0030047546349307127
+  ],
+  "abs_diff_per_rxn": [
+    1.5315514302302414e-33,
+    2.4903620091688058e-14
+  ],
+  "gate_passed": true,
+  "failures": []
+}

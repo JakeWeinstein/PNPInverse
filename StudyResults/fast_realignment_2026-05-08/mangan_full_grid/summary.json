@@ -1,0 +1,74 @@
+{
+  "ratios": [
+    1e-18,
+    1e-24
+  ],
+  "anchor_v_rhe": 0.55,
+  "v_rhe_grid": [
+    -0.4,
+    -0.3604,
+    -0.3208,
+    -0.2812,
+    -0.2417,
+    -0.2021,
+    -0.1625,
+    -0.1229,
+    -0.0833,
+    -0.0437,
+    -0.0042,
+    0.0354,
+    0.075,
+    0.1146,
+    0.1542,
+    0.1938,
+    0.2333,
+    0.2729,
+    0.3125,
+    0.3521,
+    0.3917,
+    0.4313,
+    0.4708,
+    0.5104,
+    0.55
+  ],
+  "per_ratio": [
+    {
+      "ratio": 1e-18,
+      "label": "ratio_1e-18",
+      "anchor_converged": true,
+      "n_converged": 25,
+      "n_total": 25
+    },
+    {
+      "ratio": 1e-24,
+      "label": "ratio_1e-24",
+      "anchor_converged": true,
+      "n_converged": 25,
+      "n_total": 25
+    }
+  ],
+  "wall_seconds": 3445.7864587306976,
+  "config": {
+    "ratio_K0_R4e_to_K0_R2e": 0.0,
+    "mesh_Ny": 80,
+    "exponent_clip": 100.0,
+    "u_clamp": 100.0,
+    "stern_capacitance_f_m2": 0.1,
+    "ic": "debye_boltzmann",
+    "formulation": "logc_muh",
+    "initial_scales": [
+      1e-12,
+      1e-09,
+      1e-06,
+      0.001,
+      1.0
+    ],
+    "max_inserts_per_step": 4,
+    "ic_at_target": true,
+    "n_substeps_warm": 8,
+    "bisect_depth_warm": 5,
+    "v_rhe_grid_n": 25,
+    "v_rhe_grid_min": -0.4,
+    "v_rhe_grid_max": 0.55
+  }
+}

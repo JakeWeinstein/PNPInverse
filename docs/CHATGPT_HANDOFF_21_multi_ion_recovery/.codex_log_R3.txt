@@ -1,0 +1,877 @@
+OpenAI Codex v0.129.0 (research preview)
+--------
+workdir: /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/jakeweinstein/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e08c1-caa1-7f83-9df9-d9a53812f992
+--------
+user
+# Round 3 — Counterreply
+
+Sharp round. Most points accept; one needs verification; one I want to
+push back on the framing of.
+
+## Section 1 — Acknowledgment per issue
+
+**Re your point 1** (set_initial_conditions routes back to analytical
+if sp says debye_boltzmann):
+**Accept fully.** I had `set_initial_conditions(ctx, sp)` reading the
+unchanged `initializer="debye_boltzmann"` from sp.bv_convergence and
+routing right back to the analytical IC, defeating the fallback's
+purpose. Correct fix: at the orchestrator's fallback branch, build
+a `_params_with_phi_linear` that clones `sp.solver_options` with
+`bv_convergence.initializer = "linear_phi"`, then call the dispatched
+`set_initial_conditions(ctx, sp_linear)` — OR call the formulation-
+specific linear-phi function directly based on
+`sp.solver_options['bv_convergence']['formulation']`.
+
+  Concrete: the orchestrator already has `_params_with_phi(eta_target)`
+  at line 219 (cloning params with new phi_applied). I'll add a
+  `_params_with_linear_phi_init(eta_target)` that ALSO swaps the
+  initializer flag, then call `set_initial_conditions(ctx, _params_...)`.
+
+**Re your point 2** (factual error: `_set_z_factor` mutates SAME
+z Constants used in muh reconstruction; at z=0, c_H = exp(mu_H), not
+exp(mu_H - phi)):
+**Accept fully.** Critical correction. The muh reconstruction at the
+form level uses the same `z[i]` Constant that gets z-ramped. So at
+z=0:
+  - electromigration drift in transport residual: `em·z·∇φ → 0` ✓
+  - muh reconstruction: `c_H = exp(mu_H - em·z_H·phi)` with z_H=0 →
+    `c_H = exp(mu_H)`, which for the linear-phi fallback IC's
+    `mu_H = ln(H_b)` constant gives `c_H = c_H_b = 0.0833` everywhere.
+
+So at z=0 the H+ concentration IS bulk everywhere, NOT artificially
+depleted. My speculation about "wrong fallback giving accidental H+
+depletion" was wrong — the Robin BC at z=0 with no Poisson source
+gives phi(0)=phi_applied=21.4, but c_H_at_electrode=0.0833 (bulk).
+Then BV evaluates with c_H = 0.0833, (c_H/c_H_ref)² = 1, full
+exponent factor exp(α·n_e·η)=exp(33.9). R_2e cathodic ≈ 1.263e-3 ·
+1.0 · 1 · 5e14 = 6.3e11 NONDIM. Truly unbounded. THAT's why z=0 fails.
+
+And ramping z from 0 to 1 doesn't help linearly: at any z<1, the BV
+rate has full exp factor (z doesn't enter the BV rate computation
+directly — only through the dynamic-species charges that affect phi
+via Poisson). So z-ramp's z=0 step might never converge for this
+configuration regardless of fallback IC quality.
+
+  Plan: re-evaluate after Phase 5α patch. With multi-ion-correct
+  Picard → multi-ion-correct linear-phi IC → c_H_at_electrode might
+  end up at exp(-psi_D)·c_H_b after the IC walks through the multi-ion
+  Boltzmann shift, in which case z=0's BV rate is bounded.
+
+**Re your point 3** (Phase 5α must patch the FIRST Picard
+electrostatics computation at lines 1102-1126 too, not just the loop
+update at lines 1138-1228):
+**Accept fully.** I missed the pre-loop initialization. Same structural
+edit: factor a `_update_electrostatics(c_s, multi_ion_ctx, stern_split,
+phi_applied_model, ...)` helper that returns `(phi_o, psi_D, psi_S,
+phi_surface, gamma_s, eta_drop)` and call it both at the pre-loop
+init (lines 1102-1126) AND at each loop iteration (lines 1138-1228).
+Cleaner than sprinkling `if multi_ion_ctx` branches.
+
+  Plan: refactor before the multi-ion patch. The helper takes
+  `multi_ion_ctx=None` for single-ion (current behavior, unchanged
+  call signature) and uses the multi-ion branch when provided.
+
+**Re your point 4** (sprinkling `if multi_ion_ctx is not None` will
+make the loop brittle; prefer small helpers/closures):
+**Accept fully.** Same conclusion as point 3. The helper-based
+refactor is the right abstraction.
+
+**Re your point 5** (multi_ion.py uses unclamped `_safe_exp` while
+boltzmann.py clamps each ion's phi at phi_clamp):
+**Accept partially with a clarification.** boltzmann.py's
+`phi_clamped = fd.min_value(fd.max_value(phi, -phi_clamp), phi_clamp)`
+is a UFL expression that clamps the field-point phi BEFORE evaluating
+the closure exp. multi_ion.py's `_safe_exp` clamps the EXPONENT
+(±cap=700.0). Different things; both prevent overflow but at
+different layers.
+
+The Picard's bisection in `solve_outer_phi_multiion` operates over
+phi_o in [-50, +50] with `_safe_exp`. The boltzmann.py UFL has
+`phi_clamp_val` per entry (default 50). For consistency at extreme
+phi_o, the bisection should respect the same per-ion clamp the UFL
+uses.
+
+  Concrete: in `_electroneutrality_residual` and related helpers,
+  apply per-ion phi clamp (not just _safe_exp) so the multi_ion
+  bisection sees the same closure the residual sees. This is more
+  important for higher-order calls like `effective_debye_length_local`
+  where dρ/dφ is taken at phi=phi_o (potentially close to clamp).
+
+  For the production page-15 grid (V_RHE ∈ [-0.5, +1.0] V → phi_o
+  expected to stay well below ±10 in nondim units after the full
+  solve), the clamp shouldn't bite. But I'll add an assertion in
+  the Picard that |phi_o| stays well below phi_clamp during the
+  loop, and abort early if it ever approaches.
+
+**Re your point 6** (bisection might pick wrong root if monotonicity
+breaks; use local bracket):
+**Accept fully.** Two fixes:
+  1. Add a monotonic scan test: at Cs/SO4 representative bulk and
+     across phi ∈ [-50, +50] in steps of 0.5, verify `dρ/dφ < 0`
+     everywhere. If non-monotone, error out at ctx-build time.
+  2. In the Picard's per-iteration phi_o solve, pass a local bracket
+     `(phi_o_prev - 5, phi_o_prev + 5)` instead of the global default.
+     If that fails to bracket, fall back to global bisection (with
+     the monotone test passing, this should be safe).
+
+**Re your point 7** (1000x k0 ramp is too coarse; use 10× or 32×
+with adaptive rollback/bisect):
+**Accept fully.** 32× per step (= 5 steps from 1e-12 to ~3e-5, plus
+2-3 more to reach K0_HAT_R2E ≈ 1.26e-3 = 8 steps total). Adaptive:
+on Newton failure, rollback to previous k0, halve the multiplier,
+retry. Standard continuation pattern.
+
+**Re your point 8** (Picard reads nondim["bv_reactions"] static k0,
+residual uses mutable bv_k0_funcs; metadata divergence on ramp):
+**Accept fully.** This is a real bug not a hypothetical. Two paths:
+  1. Build with target K0_HAT_R2E, then `bv_k0_funcs[j].assign(1e-12)`
+     BEFORE first solve. Picard sees target k0 in scaled bv_reactions
+     (its prefactor calc would use target k0 and compute "correct"
+     Picard rates at full k0), but the residual uses the assigned
+     1e-12. So Picard's R/c_s would be inconsistent with the
+     residual rate. BAD.
+  2. Build a `update_picard_k0(ctx, j, new_k0_model)` helper that
+     mutates BOTH `ctx["nondim"]["bv_reactions"][j]["k0_model"]` AND
+     `ctx["bv_k0_funcs"][j].assign(new_k0_model)`. Then per ramp
+     step, update both. Picard re-runs with new k0 and produces
+     consistent R/c_s. Residual sees consistent k0.
+
+  Plan: implement option 2. Add the helper to bv_solver/multi_ion.py
+  (or a new continuation.py module).
+
+**Re your point 9** (current C+D has no k0 homotopy hook; rebuilds
+context per voltage, no driver-side assignment):
+**Accept fully.** Need a separate anchor-builder that does k0+dt
+continuation OUTSIDE the C+D orchestrator, returns a converged
+state, and feeds that as the anchor for C+D's warm-walk.
+
+  Plan: build `solve_anchor_with_continuation(sp, V_anchor, mesh)`
+  in scripts/_bv_common or as a helper in the new driver. It:
+    1. Build context at V_anchor with k0_R2e_target = K0_HAT_R2E
+       (no continuation in setup yet — context holds full bv_k0_funcs).
+    2. `update_picard_k0(ctx, 0, 1e-12)` (assign tiny down).
+    3. Set dt = 1e-4 (override `ctx["dt_constant"]` — need to check
+       how dt is stored in the form).
+    4. Run SS at this small-k0 small-dt state.
+    5. Geometric ramp k0_R2e: 1e-12 → 1e-10 → 1e-8 → ... → K0_HAT_R2E
+       with adaptive rollback (32x per step).
+    6. Then ramp dt: 1e-4 → 1e-3 → 1e-2 → 0.25.
+    7. Return the final converged ctx state as the anchor.
+
+  Then C+D warm-walks from this anchor across the V_RHE grid.
+
+**Re your point 10** (dt_init=1e-4 won't ramp to 0.25 under
+default SER ratio of 20):
+**Accept fully.** SER default `dt_max = dt_init · dt_max_ratio` at
+grid_per_voltage.py:258. With `dt_init=1e-4 · 20 = 2e-3` max. Need
+explicit override.
+
+  Concrete: pass `dt_max_ratio=2500` (or just `dt_max_abs=0.25` if
+  the orchestrator supports that param; check). Or implement a manual
+  dt ladder OUTSIDE the SER mechanism in the anchor-builder.
+
+**Re your point 11** (above-Eeq homotopy isn't a clean zero
+crossing; treat as empirical voltage homotopy):
+**Accept fully.** I oversimplified. The actual rate at V=E_eq has
+cathodic term k0·c_O·(c_H/c_H_ref)² and anodic term k0·c_H2O2·1
+(no overpotential exp factor). Net zero only if those balance, which
+requires specific surface concs not the ideal. Empirical homotopy
++0.85 → +0.55 might be useful or might not — need to measure.
+
+  Plan: keep above-Eeq as a TENTATIVE 5δ; falsify empirically if
+  5α+5β+5γ doesn't reach ≥15/25.
+
+**Re your point 12** (Stern homotopy is not one-parameter smooth;
+no-Stern changes residual form):
+**Accept fully.** No-Stern path uses Dirichlet BC at the electrode
+(phi=phi_applied), Stern path uses Robin BC. Different residuals.
+Within Stern Robin path: large finite C_S → eta ≈ -E_eq (Stern
+absorbs all of phi_applied, ψ_S = phi_applied = 21.4). At
+V_RHE=+0.55, eta_R2e_at_surface = -E_eq_R2e = -27.05 nondim
+(strong cathodic, not bounded by H+ depletion via large psi_D
+because psi_D ≈ 0 at large C_S).
+
+  So Stern continuation is NOT useful here. Defer.
+
+**Re your point 13** (Phase 5β byte-equivalence: logc OK if
+linear_phi forced; logc_muh intentionally changed; need regression
+tests):
+**Accept fully.** Two test categories:
+  1. logc + single-ClO4 (legacy): byte-equivalent before/after.
+     Existing snapshot test (test_stern_no_stern_snapshot.py).
+  2. logc_muh + single-ClO4 (legacy): semantically changed
+     (linear_phi fallback now correctly routes through logc_muh
+     IC builder). Should still pass the legacy 15/15 sweep.
+
+  Plan: extend snapshot tests to cover the muh fallback path.
+  May require regenerating the muh baseline if the bug fix shifts
+  values within tolerance.
+
+**Re your point 14** (Phase 5ζ diagnostics shouldn't be post-only):
+**Accept partially.** Patch BEFORE relying on diagnostics for
+triage; AFTER relying on Picard correctness for steering. Order:
+  - Phase 5α (Picard patch) lands first.
+  - Phase 5ζ (diagnostics patch) lands next, before Phase 5β.
+  - Phase 5β/γ use the corrected diagnostics for failure analysis.
+
+**Re your point 15** ("sensible R/c_s" test is too vague; add
+rate-consistency test):
+**Accept fully.** Concrete test: at Cs/SO4 multi-ion at +0.55 V
+with k0_R2e = K0_HAT_R2E:
+  1. Run patched Picard, get `R_list_picard, c_s_list_picard`.
+  2. Build the residual context with the same params (no orchestrator).
+  3. Set IC to bulk-flat (or Picard's c_s_list).
+  4. Evaluate the BV rate expression at the boundary (assemble
+     `bv_rate_exprs[j] * fd.ds(electrode_marker)`) using the IC's c_s.
+  5. Compare to Picard's R_list[j] within rel_tol=1e-3 (for the
+     case where Picard's c_s_list IS the IC).
+
+  This pins that Picard's flux balance and the residual's BV rate
+  agree on the same surface state. Without this test, "sensible"
+  is in the eye of the beholder.
+
+## Section 2 — Updated artifact (the recommended path, v2)
+
+### Phase 5α: Patch Picard for multi-ion (HIGHEST PRIORITY)
+
+Refactor: extract `_update_electrostatics(c_s, *, c_clo4_bulk,
+phi_applied_model, multi_ion_ctx=None, stern_split=None, a_h, a_cl,
+c_cl_anchor_kind, ...)` helper from picard_ic.py:1102-1228 returning
+`(phi_o, psi_D, psi_S, phi_surface, gamma_s, eta_drop, eta_list)`.
+
+When `multi_ion_ctx is not None`:
+  - phi_o ← `solve_outer_phi_multiion(ctx=multi_ion_ctx, c_dyn_outer=c_s,
+            bracket=(phi_o_prev-5, phi_o_prev+5))`
+  - Per-ion outer concs ← `per_ion_outer_concs(ctx, c_s, phi_o)`
+  - λ_eff ← `effective_debye_length_local(phi_o, multi_ion_ctx, c_s,
+            poisson_coeff=eps)`
+  - psi_D ← linear-Debye Stern matching with λ_eff
+  - psi_S ← phi_applied - phi_o - psi_D
+  - phi_surface ← phi_o + psi_D
+  - gamma_s ← `compute_surface_gamma_multiion(H_o, psi_D, a_h,
+              ions_with_outer_concs)`
+  - eta_drop ← psi_S (Stern) or phi_applied - phi_o (no Stern)
+  - eta_list ← `_eta_list_from_drop(eta_drop, ...)`
+
+When `multi_ion_ctx is None` (legacy single-ion): unchanged calls
+to `compute_surface_gamma`, `solve_stern_split`, `phi_o = log(H_o /
+c_clo4_bulk)`. Byte-equivalence guaranteed.
+
+Add tests:
+  - `test_picard_multi_ion_csplus_so4_phi_o_at_bulk`: with c_dyn = bulk,
+    Picard phi_o → 0 (within 1e-9).
+  - `test_picard_single_ion_byte_equivalent`: re-run all existing
+    Picard tests through the refactored path with multi_ion_ctx=None.
+  - `test_picard_residual_rate_consistency_csplus_so4`: per
+    your point 15. Picard's R agrees with residual's BV rate at
+    the same surface state.
+
+Also adds a monotonicity test:
+  - `test_multi_ion_electroneutrality_monotone`: scan ρ(phi) over
+    [-50, +50] for Cs/SO4 bulk; assert `dρ/dφ < 0` everywhere.
+
+Per your point 5: in `_electroneutrality_residual` and all
+`multi_ion.py` exp callsites, apply per-ion `phi_clamp` consistent
+with the boltzmann.py UFL clamp. Add an assert in Picard that
+|phi_o| < 0.9 · min(phi_clamp_per_ion) during iteration.
+
+### Phase 5ζ: Patch multi-ion diagnostics
+
+Refactor `surface_field_means` and the saturation diagnostic in
+`diagnostics.py:195` to use `build_counterion_ctx` +
+`per_ion_outer_concs`. Single producer of theta_b, shared across
+counterions. Tests verify the diagnostic now reports correct
+saturation for Cs/SO4.
+
+### Phase 5β: Patch grid_per_voltage.py:350 + logc_muh linear IC
+
+  1. grid_per_voltage.py:350: don't call dispatcher with unchanged
+     sp. Instead:
+     ```python
+     formulation = sp.solver_options['bv_convergence'].get('formulation', 'logc')
+     if formulation == 'logc_muh':
+         set_initial_conditions_logc_muh(ctx, _params_with_phi(V_target_eta))
+     else:
+         set_initial_conditions_logc(ctx, _params_with_phi(V_target_eta))
+     ```
+     Both functions internally know to skip the analytical IC and
+     write linear-phi (they're the LOGC-name-suffix linear-phi
+     variants, distinct from `set_initial_conditions_debye_boltzmann_*`).
+
+  2. forms_logc_muh.py:662 (linear-phi IC for muh): gate on
+     `len(bikerman) > 1` and call `solve_outer_phi_multiion()` +
+     `effective_debye_length_local()` for the multi-ion linear
+     case. Mirror the Phase 2.4 _try_debye_boltzmann_ic_muh
+     multi-ion branch but as the linear path (no Picard call).
+
+  3. Tests:
+     - logc + single-ClO4: byte-equivalent (existing snapshots).
+     - logc_muh + single-ClO4: regenerate baseline once; should
+       converge as before.
+     - logc_muh + Cs/SO4: NEW path; tested via the smoke driver.
+
+### Phase 5γ: Anchor builder with k0 + dt continuation
+
+`solve_anchor_with_continuation(sp, V_anchor, mesh)` in
+scripts/_bv_common.py:
+
+  1. Build context at V_anchor with target K0_HAT_R2E.
+  2. Helper `update_picard_k0(ctx, j, new_k0_model)`:
+     - Mutates `ctx["nondim"]["bv_reactions"][j]["k0_model"] = new_k0_model`
+     - Calls `ctx["bv_k0_funcs"][j].assign(new_k0_model)`
+     Both Picard input and residual see the new k0 consistently.
+  3. Initial state: `update_picard_k0(ctx, 0, 1e-12)` (Pass A pure-2e:
+     R_2e is the only active rxn; R_4e = 0 hardcoded by Phase 1.1
+     guard or starts at 1e-12 for Pass D).
+  4. Override dt to 1e-4: mutate `ctx["dt_constant"]` (UFL Constant)
+     directly.
+  5. SS solve at k0_R2e=1e-12, dt=1e-4. If diverges, halve dt and
+     retry.
+  6. k0 ramp: 1e-12 → 32× → ... → K0_HAT_R2E (8 steps). Adaptive:
+     on failure, rollback k0 and halve multiplier (16×, 8×, ...).
+     Hard cap on rollback iterations.
+  7. dt ramp: 1e-4 → 10× → ... → 0.25 (4 steps). Adaptive same as k0.
+  8. Return `ctx` with all fields at production k0 and dt.
+
+C+D orchestrator then warm-walks from this anchor across the V_RHE
+grid using its existing warm-walk code path.
+
+### Phase 5δ (only if 5α-5γ insufficient): empirical voltage homotopy
+
+Anchor at V_RHE=+0.85 (above E_eq_R2E; rate dominated by anodic
+direction with bounded c_H2O2). Walk to +0.55. Empirical, not
+"clean zero crossing".
+
+### Phase 5ε (last resort): legacy-ClO4 IC swap or 2-parameter
+homotopy. Cheap one-hour falsification at most.
+
+## Section 3 — Continued critique prompt
+
+Review the v2 escalation plan. Push back on my acceptances if I
+backtracked weakly, and re-issue any earlier point I addressed
+shallowly.
+
+Specifically:
+  - Phase 5α refactor: is `_update_electrostatics` helper the right
+    name and signature? Or should it be split into
+    `_solve_phi_o`, `_solve_stern_split`, `_compute_gamma_s`
+    (three separate helpers)?
+  - The k0+dt continuation order (k0 first, then dt) — is k0-first
+    correct? Or should dt go first (small dt = transient damping)
+    and then k0? Argument for dt-first: at small dt the residual
+    has a strong (c-c_old)/dt term that effectively biases toward
+    the previous state, helping Newton. Argument for k0-first:
+    BV rate is the actual blow-up source; reducing it directly is
+    surgical.
+  - Is there a case for combining: dt small AND k0 small simultaneously
+    at step 1, then ramp them on independent schedules?
+  - The rate-consistency test (your point 15): is "Picard R agrees
+    with residual BV rate at the same surface state to rel_tol=1e-3"
+    too tight? The Picard uses scalar arithmetic, the residual uses
+    UFL+Firedrake with FEM quadrature on a graded mesh. Some drift
+    is expected. Suggest a tolerance.
+
+  - Regression test discipline for Phase 5β logc_muh fallback:
+    do you trust regenerating the muh baseline as part of this
+    patch, or is that a yellow flag we should treat with care
+    (the existing 15/15 sweep result is load-bearing for
+    docs/4sp_bikerman_ic_option_2b_results.md)?
+
+Same numbered format and same verdict line at the end:
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN
+
+codex
+I’ll do one quick check for the continuation/orchestrator details, because the v2 plan now depends on injecting an externally continued anchor and on the dt key name.
+exec
+/bin/zsh -lc 'rg -n "dt_const|dt_constant|anchor|warm|cold_success|anchor_snap|_solve_warm|_solve_cold|PerVoltagePointResult|initializer" Forward/bv_solver/grid_per_voltage.py Forward/bv_solver/forms_logc.py Forward/bv_solver/forms_logc_muh.py' in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+Forward/bv_solver/forms_logc.py:218:    dt_const = fd.Constant(float(scaling["dt_model"]))
+Forward/bv_solver/forms_logc.py:337:        F_res += ((c_i - c_old) / dt_const) * v * dx
+Forward/bv_solver/forms_logc.py:530:        "dt_const": dt_const,
+Forward/bv_solver/forms_logc.py:561:    When the residual is Stern-aware, the linear phi anchors at the
+Forward/bv_solver/forms_logc.py:583:    # Stern-aware anchoring (Phase F).  When use_stern is active, solve
+Forward/bv_solver/forms_logc.py:657:    back to the linear-phi IC and sets ``ctx['initializer_fallback']=True``
+Forward/bv_solver/forms_logc.py:658:    with a string in ``ctx['initializer_fallback_reason']``.
+Forward/bv_solver/forms_logc.py:677:            ctx["initializer_fallback"] = False
+Forward/bv_solver/forms_logc.py:678:            ctx["initializer_picard_iters"] = picard_iters
+Forward/bv_solver/forms_logc.py:680:        ctx["initializer_fallback"] = True
+Forward/bv_solver/forms_logc.py:681:        ctx["initializer_fallback_reason"] = reason
+Forward/bv_solver/forms_logc.py:682:        ctx["initializer_picard_iters"] = picard_iters
+Forward/bv_solver/forms_logc.py:837:            # anchor is H_o (electroneutrality with the proton).
+Forward/bv_solver/forms_logc.py:839:            c_cl_anchor_kind = "synthesised_4sp"
+Forward/bv_solver/forms_logc.py:842:            # ``a_nondim`` of the bikerman entry; anchor = c_clo4_bulk.
+Forward/bv_solver/forms_logc.py:848:            c_cl_anchor_kind = "bulk"
+Forward/bv_solver/forms_logc.py:852:        c_cl_anchor_kind = "bulk"
+Forward/bv_solver/forms_logc.py:899:        c_cl_anchor_kind=c_cl_anchor_kind,
+Forward/bv_solver/forms_logc.py:906:    ctx["initializer_picard_state"] = picard_state
+Forward/bv_solver/forms_logc.py:1068:    # outer-anchor for the analytic counterion in the gamma denominator.
+Forward/bv_solver/forms_logc.py:1078:            c_cl_anchor = H_outer
+Forward/bv_solver/forms_logc.py:1081:            # ``a_nondim``; the outer-region anchor for the analytic
+Forward/bv_solver/forms_logc.py:1088:            c_cl_anchor = fd.Constant(c_clo4_bulk)
+Forward/bv_solver/forms_logc.py:1131:        #   gamma(psi) = 1 / [1 + sum_j a_j * c_anchor_j * (exp(-z_j*psi) - 1)].
+Forward/bv_solver/forms_logc.py:1133:        # Neutral species drop out (exp(0) - 1 = 0).  c_anchor_j is
+Forward/bv_solver/forms_logc.py:1139:            + fd.Constant(a_cl) * c_cl_anchor * (fd.exp(+psi) - fd.Constant(1.0))
+Forward/bv_solver/grid_per_voltage.py:1:"""Per-voltage cold-start with internal z-ramp + warm-fallback (C+D).
+Forward/bv_solver/grid_per_voltage.py:15:    Phase 2 (D): warm-walk from nearest converged neighbor.
+Forward/bv_solver/grid_per_voltage.py:18:        phi_applied from V_anchor toward V_target in N substeps,
+Forward/bv_solver/grid_per_voltage.py:30:solve_grid_per_voltage_cold_with_warm_fallback(
+Forward/bv_solver/grid_per_voltage.py:36:    n_substeps_warm=4,
+Forward/bv_solver/grid_per_voltage.py:37:    bisect_depth_warm=3,
+Forward/bv_solver/grid_per_voltage.py:43:    max_ss_steps_warm=150,
+Forward/bv_solver/grid_per_voltage.py:44:    max_ss_steps_warm_final=200,
+Forward/bv_solver/grid_per_voltage.py:66:class PerVoltagePointResult:
+Forward/bv_solver/grid_per_voltage.py:74:    method: str                  # "cold" | f"warm<-{V_anchor:+.3f}" | "missing"
+Forward/bv_solver/grid_per_voltage.py:82:    points: Dict[int, PerVoltagePointResult]
+Forward/bv_solver/grid_per_voltage.py:112:def solve_grid_per_voltage_cold_with_warm_fallback(
+Forward/bv_solver/grid_per_voltage.py:118:    n_substeps_warm: int = 4,
+Forward/bv_solver/grid_per_voltage.py:119:    bisect_depth_warm: int = 3,
+Forward/bv_solver/grid_per_voltage.py:125:    max_ss_steps_warm: int = 150,
+Forward/bv_solver/grid_per_voltage.py:126:    max_ss_steps_warm_final: int = 200,
+Forward/bv_solver/grid_per_voltage.py:133:    """Solve BV-PNP across a voltage grid via per-V cold + warm-walk fallback.
+Forward/bv_solver/grid_per_voltage.py:144:    2. **Phase 2 (warm-walk from cold successes).** For voltages
+Forward/bv_solver/grid_per_voltage.py:148:       index NV-1.  Each walk warm-starts from the *nearest converged
+Forward/bv_solver/grid_per_voltage.py:150:       ``V_anchor`` to ``V_target`` in ``n_substeps_warm`` linear
+Forward/bv_solver/grid_per_voltage.py:151:       substeps, recursively bisecting (up to ``bisect_depth_warm``)
+Forward/bv_solver/grid_per_voltage.py:170:    n_substeps_warm, bisect_depth_warm
+Forward/bv_solver/grid_per_voltage.py:178:        after each per-V solve completes (cold or warm) with the
+Forward/bv_solver/grid_per_voltage.py:199:            "solve_grid_per_voltage_cold_with_warm_fallback expects an "
+Forward/bv_solver/grid_per_voltage.py:257:        dt_const = ctx["dt_const"]
+Forward/bv_solver/grid_per_voltage.py:262:            dt_const.assign(dt_val)
+Forward/bv_solver/grid_per_voltage.py:285:                        dt_const.assign(dt_val)
+Forward/bv_solver/grid_per_voltage.py:311:        _initializer_flag = (
+Forward/bv_solver/grid_per_voltage.py:312:            str(_bv_conv_for_init.get("initializer", "linear_phi")).strip().lower()
+Forward/bv_solver/grid_per_voltage.py:316:        _initializer_flag = "linear_phi"
+Forward/bv_solver/grid_per_voltage.py:321:    def _solve_cold(orig_idx: int, V_target_eta: float):
+Forward/bv_solver/grid_per_voltage.py:336:        if _initializer_flag != "linear_phi" and not ctx.get(
+Forward/bv_solver/grid_per_voltage.py:337:            "initializer_fallback", False
+Forward/bv_solver/grid_per_voltage.py:345:            ctx["initializer_fallback"] = True
+Forward/bv_solver/grid_per_voltage.py:346:            ctx["initializer_fallback_reason"] = (
+Forward/bv_solver/grid_per_voltage.py:347:                ctx.get("initializer_fallback_reason", "")
+Forward/bv_solver/grid_per_voltage.py:375:    # Phase 2 (D): warm-walk with paf substepping + bisection
+Forward/bv_solver/grid_per_voltage.py:377:    def _solve_warm(orig_idx: int, V_target_eta: float,
+Forward/bv_solver/grid_per_voltage.py:378:                    V_anchor_eta: float, anchor_snap: tuple):
+Forward/bv_solver/grid_per_voltage.py:386:        _restore_U(anchor_snap, U, U_prev)
+Forward/bv_solver/grid_per_voltage.py:396:            substeps = np.linspace(v0, v1, n_substeps_warm + 1)[1:]
+Forward/bv_solver/grid_per_voltage.py:402:                if run_ss(max_ss_steps_warm):
+Forward/bv_solver/grid_per_voltage.py:407:                if depth >= bisect_depth_warm:
+Forward/bv_solver/grid_per_voltage.py:423:        if not _march(float(V_anchor_eta), float(V_target_eta), 0):
+Forward/bv_solver/grid_per_voltage.py:427:        if not run_ss(max_ss_steps_warm_final):
+Forward/bv_solver/grid_per_voltage.py:435:          f"strategy = cold (per-V z-ramp) + warm-walk fallback")
+Forward/bv_solver/grid_per_voltage.py:437:    points: Dict[int, PerVoltagePointResult] = {}
+Forward/bv_solver/grid_per_voltage.py:445:        snap, achieved_z, ctx = _solve_cold(orig_idx, eta_target)
+Forward/bv_solver/grid_per_voltage.py:468:                picard_iters=ctx.get("initializer_picard_iters"),
+Forward/bv_solver/grid_per_voltage.py:473:        points[orig_idx] = PerVoltagePointResult(
+Forward/bv_solver/grid_per_voltage.py:489:            "[per-voltage] no cold successes; warm-walk has nothing to "
+Forward/bv_solver/grid_per_voltage.py:490:            "anchor on, returning Phase-1 results as-is."
+Forward/bv_solver/grid_per_voltage.py:497:    # ------- Phase 2: warm-walk outward -------
+Forward/bv_solver/grid_per_voltage.py:499:        f"[per-voltage Phase 2] warm-walk from cold anchors "
+Forward/bv_solver/grid_per_voltage.py:500:        f"(n_substeps={n_substeps_warm}, bisect_depth={bisect_depth_warm})"
+Forward/bv_solver/grid_per_voltage.py:503:    anchor_lo = cold_idxs[0]
+Forward/bv_solver/grid_per_voltage.py:504:    anchor_hi = cold_idxs[-1]
+Forward/bv_solver/grid_per_voltage.py:506:    # Cathodic walk: from anchor_lo down toward index 0
+Forward/bv_solver/grid_per_voltage.py:507:    for orig_idx in range(anchor_lo - 1, -1, -1):
+Forward/bv_solver/grid_per_voltage.py:511:        # but the walk is descending so that's "closer to anchor_lo")
+Forward/bv_solver/grid_per_voltage.py:516:            break  # no anchor available (shouldn't happen given anchor_lo)
+Forward/bv_solver/grid_per_voltage.py:518:        eta_anchor = float(phi_applied_values[j])
+Forward/bv_solver/grid_per_voltage.py:519:        snap, ctx = _solve_warm(orig_idx, eta_target, eta_anchor,
+Forward/bv_solver/grid_per_voltage.py:523:            method = f"warm<-{phi_applied_values[j]:+.3f}"
+Forward/bv_solver/grid_per_voltage.py:529:                    ctx, phase="warm_walk_cathodic", params=params,
+Forward/bv_solver/grid_per_voltage.py:534:            points[orig_idx] = PerVoltagePointResult(
+Forward/bv_solver/grid_per_voltage.py:550:                f"eta={eta_target:+8.4f}  warm-walk FAILED (broke chain)"
+Forward/bv_solver/grid_per_voltage.py:556:    # Anodic walk: from anchor_hi up toward index NV-1
+Forward/bv_solver/grid_per_voltage.py:557:    for orig_idx in range(anchor_hi + 1, n_points):
+Forward/bv_solver/grid_per_voltage.py:566:        eta_anchor = float(phi_applied_values[j])
+Forward/bv_solver/grid_per_voltage.py:567:        snap, ctx = _solve_warm(orig_idx, eta_target, eta_anchor,
+Forward/bv_solver/grid_per_voltage.py:571:            method = f"warm<-{phi_applied_values[j]:+.3f}"
+Forward/bv_solver/grid_per_voltage.py:577:                    ctx, phase="warm_walk_anodic", params=params,
+Forward/bv_solver/grid_per_voltage.py:582:            points[orig_idx] = PerVoltagePointResult(
+Forward/bv_solver/grid_per_voltage.py:598:                f"eta={eta_target:+8.4f}  warm-walk FAILED (broke chain)"
+Forward/bv_solver/grid_per_voltage.py:602:    # ------- Phase 2 (interior): fill cold-failed gaps between anchors -------
+Forward/bv_solver/grid_per_voltage.py:604:    # [anchor_lo, anchor_hi].  Cold-failed points *between* non-contiguous
+Forward/bv_solver/grid_per_voltage.py:606:    # at 3-6) need their own pass.  For each interior failure, warm-walk
+Forward/bv_solver/grid_per_voltage.py:609:    # interior points can serve as anchors for further interior fills,
+Forward/bv_solver/grid_per_voltage.py:610:    # and so a longer-distance anchor is retried only after a closer one
+Forward/bv_solver/grid_per_voltage.py:612:    if anchor_hi - anchor_lo > 1:
+Forward/bv_solver/grid_per_voltage.py:615:            f"between anchor_lo={anchor_lo} and anchor_hi={anchor_hi}"
+Forward/bv_solver/grid_per_voltage.py:617:        # Track (j_lo, j_hi) anchor pairs that already failed for each
+Forward/bv_solver/grid_per_voltage.py:618:        # orig_idx.  Skip a retry on a subsequent pass if the anchors
+Forward/bv_solver/grid_per_voltage.py:620:        failed_with_anchors: Dict[int, tuple] = {}
+Forward/bv_solver/grid_per_voltage.py:624:            for orig_idx in range(anchor_lo + 1, anchor_hi):
+Forward/bv_solver/grid_per_voltage.py:641:                anchor_key = (j_lo, j_hi)
+Forward/bv_solver/grid_per_voltage.py:642:                if failed_with_anchors.get(orig_idx) == anchor_key:
+Forward/bv_solver/grid_per_voltage.py:643:                    # Same anchors as last failed attempt; nothing to gain.
+Forward/bv_solver/grid_per_voltage.py:655:                    eta_anchor = float(phi_applied_values[j])
+Forward/bv_solver/grid_per_voltage.py:656:                    snap, ctx = _solve_warm(
+Forward/bv_solver/grid_per_voltage.py:657:                        orig_idx, eta_target, eta_anchor,
+Forward/bv_solver/grid_per_voltage.py:663:                    method = f"warm<-{phi_applied_values[j]:+.3f}"
+Forward/bv_solver/grid_per_voltage.py:668:                            ctx, phase="warm_walk_interior", params=params,
+Forward/bv_solver/grid_per_voltage.py:673:                    points[orig_idx] = PerVoltagePointResult(
+Forward/bv_solver/grid_per_voltage.py:682:                    failed_with_anchors.pop(orig_idx, None)
+Forward/bv_solver/grid_per_voltage.py:691:                    failed_with_anchors[orig_idx] = anchor_key
+Forward/bv_solver/grid_per_voltage.py:694:                        f"eta={eta_target:+8.4f}  warm-walk FAILED "
+Forward/bv_solver/grid_per_voltage.py:695:                        f"from anchors {anchor_key}"
+Forward/bv_solver/grid_per_voltage.py:701:        f"(cold {n_cold_ok}, warm {n_total_ok - n_cold_ok})"
+Forward/bv_solver/forms_logc_muh.py:250:    dt_const = fd.Constant(float(scaling["dt_model"]))
+Forward/bv_solver/forms_logc_muh.py:382:        F_res += ((c_i - c_old) / dt_const) * v * dx
+Forward/bv_solver/forms_logc_muh.py:581:        "dt_const": dt_const,
+Forward/bv_solver/forms_logc_muh.py:651:    # Stern-aware anchoring (Phase F).
+Forward/bv_solver/forms_logc_muh.py:732:    muh linear-phi IC and sets ``ctx['initializer_fallback']=True``.
+Forward/bv_solver/forms_logc_muh.py:750:            ctx["initializer_fallback"] = False
+Forward/bv_solver/forms_logc_muh.py:751:            ctx["initializer_picard_iters"] = picard_iters
+Forward/bv_solver/forms_logc_muh.py:753:        ctx["initializer_fallback"] = True
+Forward/bv_solver/forms_logc_muh.py:754:        ctx["initializer_fallback_reason"] = reason
+Forward/bv_solver/forms_logc_muh.py:755:        ctx["initializer_picard_iters"] = picard_iters
+Forward/bv_solver/forms_logc_muh.py:906:            c_cl_anchor_kind = "synthesised_4sp"
+Forward/bv_solver/forms_logc_muh.py:913:            c_cl_anchor_kind = "bulk"
+Forward/bv_solver/forms_logc_muh.py:917:        c_cl_anchor_kind = "bulk"
+Forward/bv_solver/forms_logc_muh.py:959:        c_cl_anchor_kind=c_cl_anchor_kind,
+Forward/bv_solver/forms_logc_muh.py:962:    ctx["initializer_picard_state"] = picard_state
+Forward/bv_solver/forms_logc_muh.py:1122:            c_cl_anchor = H_outer
+Forward/bv_solver/forms_logc_muh.py:1129:            c_cl_anchor = fd.Constant(c_clo4_bulk)
+Forward/bv_solver/forms_logc_muh.py:1167:            + fd.Constant(a_cl) * c_cl_anchor * (fd.exp(+psi) - fd.Constant(1.0))
+
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/forms_logc.py | sed -n '523,550p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/grid_per_voltage.py | sed -n '374,520p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/forms_logc_muh.py | sed -n '574,605p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+   523	    ctx.update({
+   524	        "F_res": F_res,
+   525	        "J_form": J_form,
+   526	        "bcs": bcs,
+   527	        "logD_funcs": m,
+   528	        "D_consts": D,
+   529	        "z_consts": z,
+   530	        "dt_const": dt_const,
+   531	        "phi_applied_func": phi_applied_func,
+   532	        "phi0_func": phi0_func,
+   533	        "bv_settings": bv_cfg,
+   534	        "bv_convergence": conv_cfg,
+   535	        "bv_rate_exprs": bv_rate_exprs,
+   536	        "bv_k0_funcs": bv_k0_funcs,
+   537	        "bv_alpha_funcs": bv_alpha_funcs,
+   538	        "steric_a_funcs": steric_a_funcs,
+   539	        "nondim": scaling,
+   540	        "use_stern": use_stern,
+   541	        "ci_exprs": ci,   # exp(u_i) expressions for observable extraction
+   542	        # Diagnostic metadata mirroring forms.py so downstream validation /
+   543	        # observable code that reads these keys works in the logc path too.
+   544	        "_diag_bv_exp_scale": float(bv_exp_scale),
+   545	        "_diag_exponent_clip": float(conv_cfg["exponent_clip"]),
+   546	        "_diag_eps_c": float(conv_cfg.get("conc_floor", 1e-8)),
+   547	        "logc_transform": True,
+   548	        "steric_boltzmann": steric_boltz,  # None for ideal-only configs
+   549	    })
+   550	    # Ideal-path Boltzmann counterions (bikerman entries are wired above
+
+ succeeded in 0ms:
+   374	    # ------------------------------------------------------------------
+   375	    # Phase 2 (D): warm-walk with paf substepping + bisection
+   376	    # ------------------------------------------------------------------
+   377	    def _solve_warm(orig_idx: int, V_target_eta: float,
+   378	                    V_anchor_eta: float, anchor_snap: tuple):
+   379	        ctx, solver, of_cd = _build_for_voltage(V_target_eta)
+   380	        run_ss = _make_run_ss(ctx, solver, of_cd)
+   381	        U = ctx["U"]
+   382	        U_prev = ctx["U_prev"]
+   383	        paf = ctx["phi_applied_func"]
+   384	        # Restore neighbor's snapshot (already at full z) and force
+   385	        # full charge from the start of the walk — no z-ramp here.
+   386	        _restore_U(anchor_snap, U, U_prev)
+   387	        _set_z_factor(ctx, 1.0)
+   388	
+   389	        def _march(v0: float, v1: float, depth: int) -> bool:
+   390	            # Track v_prev_substep explicitly: paf is NOT in U.dat, so
+   391	            # _restore_U does not roll it back, and reading paf after a
+   392	            # failed substep returns the failed voltage (not the previous
+   393	            # successful one).  Using paf as the source of v_prev would
+   394	            # collapse the bisection midpoint to the failed voltage and
+   395	            # make the recursion degenerate.
+   396	            substeps = np.linspace(v0, v1, n_substeps_warm + 1)[1:]
+   397	            ckpt_outer = _snapshot_U(U)
+   398	            v_prev_substep = float(v0)
+   399	            for v_sub in substeps:
+   400	                ckpt_inner = _snapshot_U(U)
+   401	                paf.assign(float(v_sub))
+   402	                if run_ss(max_ss_steps_warm):
+   403	                    v_prev_substep = float(v_sub)
+   404	                    continue
+   405	                _restore_U(ckpt_inner, U, U_prev)
+   406	                paf.assign(v_prev_substep)
+   407	                if depth >= bisect_depth_warm:
+   408	                    _restore_U(ckpt_outer, U, U_prev)
+   409	                    paf.assign(float(v0))
+   410	                    return False
+   411	                v_mid = 0.5 * (v_prev_substep + float(v_sub))
+   412	                if not _march(v_prev_substep, v_mid, depth + 1):
+   413	                    _restore_U(ckpt_outer, U, U_prev)
+   414	                    paf.assign(float(v0))
+   415	                    return False
+   416	                if not _march(v_mid, float(v_sub), depth + 1):
+   417	                    _restore_U(ckpt_outer, U, U_prev)
+   418	                    paf.assign(float(v0))
+   419	                    return False
+   420	                v_prev_substep = float(v_sub)
+   421	            return True
+   422	
+   423	        if not _march(float(V_anchor_eta), float(V_target_eta), 0):
+   424	            return None, ctx
+   425	        # Final SS at V_target to make sure we're firmly at the target
+   426	        paf.assign(float(V_target_eta))
+   427	        if not run_ss(max_ss_steps_warm_final):
+   428	            return None, ctx
+   429	        return _snapshot_U(U), ctx
+   430	
+   431	    # ------------------------------------------------------------------
+   432	    # Main orchestration
+   433	    # ------------------------------------------------------------------
+   434	    print(f"[per-voltage] grid of {n_points} points; "
+   435	          f"strategy = cold (per-V z-ramp) + warm-walk fallback")
+   436	
+   437	    points: Dict[int, PerVoltagePointResult] = {}
+   438	    snapshots: list[Optional[tuple]] = [None] * n_points
+   439	    last_dof_count: Optional[int] = None
+   440	
+   441	    # ------- Phase 1: cold-start each V independently -------
+   442	    print(f"[per-voltage Phase 1] cold + z-ramp at each V_RHE_eta...")
+   443	    for orig_idx in range(n_points):
+   444	        eta_target = float(phi_applied_values[orig_idx])
+   445	        snap, achieved_z, ctx = _solve_cold(orig_idx, eta_target)
+   446	        if last_dof_count is None:
+   447	            last_dof_count = int(ctx["U"].function_space().dim())
+   448	        if snap is not None:
+   449	            snapshots[orig_idx] = snap
+   450	            converged = True
+   451	            method = "cold"
+   452	            if per_point_callback is not None:
+   453	                per_point_callback(orig_idx, eta_target, ctx)
+   454	        else:
+   455	            converged = False
+   456	            method = "cold-failed"
+   457	        if (orig_idx + 1) % print_interval == 0 or orig_idx == 0:
+   458	            tag = "OK" if converged else f"PARTIAL z={achieved_z:.3f}"
+   459	            print(
+   460	                f"  [Phase 1] {orig_idx + 1}/{n_points}  "
+   461	                f"eta={eta_target:+8.4f}  {tag}"
+   462	            )
+   463	        try:
+   464	            diags = collect_diagnostics(
+   465	                ctx,
+   466	                phase="cold_z_ramp" if converged else "cold_failed",
+   467	                params=params,
+   468	                picard_iters=ctx.get("initializer_picard_iters"),
+   469	            )
+   470	        except Exception as exc:
+   471	            diags = {"phase": "diagnostics_error",
+   472	                     "error": f"{type(exc).__name__}: {exc}"}
+   473	        points[orig_idx] = PerVoltagePointResult(
+   474	            orig_idx=orig_idx,
+   475	            phi_applied=eta_target,
+   476	            U_data=snap,
+   477	            achieved_z_factor=achieved_z,
+   478	            converged=converged,
+   479	            method=method,
+   480	            diagnostics=diags,
+   481	        )
+   482	
+   483	    cold_idxs = sorted(i for i, p in points.items() if p.converged)
+   484	    n_cold_ok = len(cold_idxs)
+   485	    print(f"[per-voltage Phase 1] {n_cold_ok}/{n_points} cold-converged")
+   486	
+   487	    if not cold_idxs:
+   488	        print(
+   489	            "[per-voltage] no cold successes; warm-walk has nothing to "
+   490	            "anchor on, returning Phase-1 results as-is."
+   491	        )
+   492	        return PerVoltageContinuationResult(
+   493	            points=points,
+   494	            mesh_dof_count=int(last_dof_count or 0),
+   495	        )
+   496	
+   497	    # ------- Phase 2: warm-walk outward -------
+   498	    print(
+   499	        f"[per-voltage Phase 2] warm-walk from cold anchors "
+   500	        f"(n_substeps={n_substeps_warm}, bisect_depth={bisect_depth_warm})"
+   501	    )
+   502	
+   503	    anchor_lo = cold_idxs[0]
+   504	    anchor_hi = cold_idxs[-1]
+   505	
+   506	    # Cathodic walk: from anchor_lo down toward index 0
+   507	    for orig_idx in range(anchor_lo - 1, -1, -1):
+   508	        if points[orig_idx].converged:
+   509	            continue
+   510	        # Find nearest converged neighbor to the right (higher index,
+   511	        # but the walk is descending so that's "closer to anchor_lo")
+   512	        j = orig_idx + 1
+   513	        while j < n_points and not points[j].converged:
+   514	            j += 1
+   515	        if j >= n_points:
+   516	            break  # no anchor available (shouldn't happen given anchor_lo)
+   517	        eta_target = float(phi_applied_values[orig_idx])
+   518	        eta_anchor = float(phi_applied_values[j])
+   519	        snap, ctx = _solve_warm(orig_idx, eta_target, eta_anchor,
+   520	                                snapshots[j])  # type: ignore[arg-type]
+
+ succeeded in 0ms:
+   574	    ctx.update({
+   575	        "F_res": F_res,
+   576	        "J_form": J_form,
+   577	        "bcs": bcs,
+   578	        "logD_funcs": m,
+   579	        "D_consts": D,
+   580	        "z_consts": z,
+   581	        "dt_const": dt_const,
+   582	        "phi_applied_func": phi_applied_func,
+   583	        "phi0_func": phi0_func,
+   584	        "bv_settings": bv_cfg,
+   585	        "bv_convergence": conv_cfg,
+   586	        "bv_rate_exprs": bv_rate_exprs,
+   587	        "bv_k0_funcs": bv_k0_funcs,
+   588	        "bv_alpha_funcs": bv_alpha_funcs,
+   589	        "steric_a_funcs": steric_a_funcs,
+   590	        "nondim": scaling,
+   591	        "use_stern": use_stern,
+   592	        "ci_exprs": ci,
+   593	        "u_exprs": u_exprs,           # NEW: log(c_i) for diagnostics in muh runs
+   594	        "mu_species": list(mu_species),  # NEW: which raw U.sub(i) is mu, not u
+   595	        "logc_transform": True,        # downstream code may key off this
+   596	        "logc_muh_transform": True,    # NEW: muh-specific code path flag
+   597	        # Diagnostic metadata mirroring forms_logc.py.
+   598	        "_diag_bv_exp_scale": float(bv_exp_scale),
+   599	        "_diag_exponent_clip": float(conv_cfg["exponent_clip"]),
+   600	        "_diag_eps_c": float(conv_cfg.get("conc_floor", 1e-8)),
+   601	        "steric_boltzmann": steric_boltz,
+   602	    })
+   603	    # Ideal-path Boltzmann counterions (bikerman entries handled above
+   604	    # by build_steric_boltzmann_expressions).
+   605	    add_boltzmann_counterion_residual(ctx, params, skip_bikerman=True)
+
+codex
+1. WHAT: Your Phase 5α no-Stern eta rule is wrong. You wrote `eta_drop = phi_applied - phi_o` for no Stern.
+WHY: Current residual semantics use `eta_raw = phi_applied_func - E_eq_const` when `use_stern=False` and `use_eta_in_bv=True` [forms_logc_muh.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/forms_logc_muh.py:298). Current Picard matches that with `eta_drop = phi_applied_model` [picard_ic.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/picard_ic.py:1115).
+WHAT TO DO: In `_update_electrostatics`, no-Stern multi-ion must use `eta_drop = phi_applied_model`, not subtract `phi_o`.
+
+2. WHAT: You flipped Stern physics again in point 12. Large finite `C_S` gives `psi_D -> full_drop`, `psi_S -> 0`; small `C_S` gives `psi_D -> 0`, `psi_S -> full_drop`. The code formula says this directly [picard_ic.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/picard_ic.py:263).
+WHY: Your conclusion “large finite C_S → Stern absorbs all” is backwards.
+WHAT TO DO: If you use Stern homotopy, large positive `C_S` is the easy Robin-branch start; ramp down to `0.10`. It is not first priority, but it is not invalid for the reason you gave.
+
+3. WHAT: `_update_electrostatics` is the right top-level helper, but it should compose smaller helpers.
+WHY: One giant helper returning seven values will become hard to test and easy to break for byte-equivalence.
+WHAT TO DO: Implement `_solve_phi_o`, `_solve_stern_split_for_picard`, `_compute_gamma_s`, then one `_update_electrostatics` wrapper that preserves current single-ion order.
+
+4. WHAT: The monotonicity test as written will fail or mislead once you add per-ion `phi_clamp`. A clamped residual can have zero derivative outside the clamp.
+WHY: `assert dρ/dφ < 0 everywhere on [-50,50]` is too strong if the closure is deliberately flat near clamp.
+WHAT TO DO: Test strict monotonicity inside the unclamped operating interval, and separately assert the Picard root stays comfortably inside clamp.
+
+5. WHAT: Your local bracket `(phi_o_prev - 5, phi_o_prev + 5)` is fine only with a fallback, but do not make global bisection the silent fallback.
+WHY: If local bracketing fails, that is signal about a large Picard jump.
+WHAT TO DO: Log/return a diagnostic when local bracket fails; then use global bracket only after confirming monotonicity and root-inside-clamp.
+
+6. WHAT: Phase 5γ still underspecifies IC ordering. You must update k0 before calling the Picard IC if you want the initial IC to match small k0.
+WHY: If you build forms, set IC at target k0, then assign k0 down, Picard and residual are inconsistent for the first solve.
+WHAT TO DO: In the anchor builder: build context, build forms, assign k0 down in both metadata and `bv_k0_funcs`, then call `set_initial_conditions`.
+
+7. WHAT: “Picard re-runs with new k0” during continuation is not true unless you explicitly call the IC again.
+WHY: Once you are warm-starting from the previous converged solution, Picard metadata is mostly irrelevant; the residual sees `bv_k0_funcs`.
+WHAT TO DO: Rename `update_picard_k0` to something like `set_reaction_k0_model`; use it before IC for consistency and during continuation for residual/diagnostic consistency, but do not overwrite warm states by rerunning IC at every k0 step.
+
+8. WHAT: The key is `ctx["dt_const"]`, not `ctx["dt_constant"]` [forms_logc_muh.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/forms_logc_muh.py:581).
+WHY: The proposed anchor builder will throw or silently miss the dt control.
+WHAT TO DO: Mutate `ctx["dt_const"].assign(...)`.
+
+9. WHAT: Existing C+D cannot consume your external anchor. If no cold successes exist, it returns immediately [grid_per_voltage.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/grid_per_voltage.py:487).
+WHY: Returning a converged anchor `ctx` from `solve_anchor_with_continuation` does not feed warm-walk unless you add an injection API.
+WHAT TO DO: Add `preconverged_anchors` / `initial_snapshots` support to C+D, or write a separate warm-walk routine that starts from the external anchor.
+
+10. WHAT: k0-first vs dt-first: neither alone. Your first state should use both small k0 and small dt.
+WHY: k0 attacks the BV source; dt attacks Newton step size/stiffness. They solve different parts of the failure.
+WHAT TO DO: Start with `k0 small + dt small`; ramp k0 to target while keeping dt small; then ramp dt to production. Interleave only if the k0 ramp stalls.
+
+11. WHAT: The z=0 rate explanation is closer now, but `phi(0)=phi_applied` under Stern at z=0 is not guaranteed. The Robin solve determines surface phi.
+WHY: Your exact `exp(33.9)` number may be wrong, although the qualitative “bulk H plus large BV rate” point stands.
+WHAT TO DO: Measure `phi_surface` and assembled `bv_rate_exprs[0]` at the z=0 fallback IC after the Phase 5β fix.
+
+12. WHAT: Rate-consistency tolerance should not be a blind `rel_tol=1e-3`.
+WHY: Scalar Picard vs UFL assembly can differ through interpolation, quadrature, area normalization, and near-zero rates.
+WHAT TO DO: For constant boundary-state tests, use `1e-3` relative plus absolute floor `1e-10`. For full spatial IC tests, start at `1e-2` relative. Always divide assembled rate by electrode area.
+
+13. WHAT: Regenerating the `logc_muh` baseline is a yellow flag, not routine cleanup.
+WHY: The 15/15 sweep is load-bearing; changing fallback semantics can improve correctness while shifting legacy results.
+WHAT TO DO: Keep old and new baselines side by side. Require: direct debye path unchanged where fallback is not used; fallback-only cases documented as intentional behavior change.
+
+14. WHAT: Phase 5β direct formulation dispatch is acceptable, but use params, not `sp.solver_options`, unless you are certain `sp` is always a `SolverParams`.
+WHY: `grid_per_voltage` supports both `SolverParams` and legacy 11-tuples.
+WHAT TO DO: Reuse the existing `params` dict and `_params_with_phi(...)`, or write a helper that handles both representations.
+
+VERDICT: ISSUES_REMAIN
+tokens used
+523,510
+1. WHAT: Your Phase 5α no-Stern eta rule is wrong. You wrote `eta_drop = phi_applied - phi_o` for no Stern.
+WHY: Current residual semantics use `eta_raw = phi_applied_func - E_eq_const` when `use_stern=False` and `use_eta_in_bv=True` [forms_logc_muh.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/forms_logc_muh.py:298). Current Picard matches that with `eta_drop = phi_applied_model` [picard_ic.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/picard_ic.py:1115).
+WHAT TO DO: In `_update_electrostatics`, no-Stern multi-ion must use `eta_drop = phi_applied_model`, not subtract `phi_o`.
+
+2. WHAT: You flipped Stern physics again in point 12. Large finite `C_S` gives `psi_D -> full_drop`, `psi_S -> 0`; small `C_S` gives `psi_D -> 0`, `psi_S -> full_drop`. The code formula says this directly [picard_ic.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/picard_ic.py:263).
+WHY: Your conclusion “large finite C_S → Stern absorbs all” is backwards.
+WHAT TO DO: If you use Stern homotopy, large positive `C_S` is the easy Robin-branch start; ramp down to `0.10`. It is not first priority, but it is not invalid for the reason you gave.
+
+3. WHAT: `_update_electrostatics` is the right top-level helper, but it should compose smaller helpers.
+WHY: One giant helper returning seven values will become hard to test and easy to break for byte-equivalence.
+WHAT TO DO: Implement `_solve_phi_o`, `_solve_stern_split_for_picard`, `_compute_gamma_s`, then one `_update_electrostatics` wrapper that preserves current single-ion order.
+
+4. WHAT: The monotonicity test as written will fail or mislead once you add per-ion `phi_clamp`. A clamped residual can have zero derivative outside the clamp.
+WHY: `assert dρ/dφ < 0 everywhere on [-50,50]` is too strong if the closure is deliberately flat near clamp.
+WHAT TO DO: Test strict monotonicity inside the unclamped operating interval, and separately assert the Picard root stays comfortably inside clamp.
+
+5. WHAT: Your local bracket `(phi_o_prev - 5, phi_o_prev + 5)` is fine only with a fallback, but do not make global bisection the silent fallback.
+WHY: If local bracketing fails, that is signal about a large Picard jump.
+WHAT TO DO: Log/return a diagnostic when local bracket fails; then use global bracket only after confirming monotonicity and root-inside-clamp.
+
+6. WHAT: Phase 5γ still underspecifies IC ordering. You must update k0 before calling the Picard IC if you want the initial IC to match small k0.
+WHY: If you build forms, set IC at target k0, then assign k0 down, Picard and residual are inconsistent for the first solve.
+WHAT TO DO: In the anchor builder: build context, build forms, assign k0 down in both metadata and `bv_k0_funcs`, then call `set_initial_conditions`.
+
+7. WHAT: “Picard re-runs with new k0” during continuation is not true unless you explicitly call the IC again.
+WHY: Once you are warm-starting from the previous converged solution, Picard metadata is mostly irrelevant; the residual sees `bv_k0_funcs`.
+WHAT TO DO: Rename `update_picard_k0` to something like `set_reaction_k0_model`; use it before IC for consistency and during continuation for residual/diagnostic consistency, but do not overwrite warm states by rerunning IC at every k0 step.
+
+8. WHAT: The key is `ctx["dt_const"]`, not `ctx["dt_constant"]` [forms_logc_muh.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/forms_logc_muh.py:581).
+WHY: The proposed anchor builder will throw or silently miss the dt control.
+WHAT TO DO: Mutate `ctx["dt_const"].assign(...)`.
+
+9. WHAT: Existing C+D cannot consume your external anchor. If no cold successes exist, it returns immediately [grid_per_voltage.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/grid_per_voltage.py:487).
+WHY: Returning a converged anchor `ctx` from `solve_anchor_with_continuation` does not feed warm-walk unless you add an injection API.
+WHAT TO DO: Add `preconverged_anchors` / `initial_snapshots` support to C+D, or write a separate warm-walk routine that starts from the external anchor.
+
+10. WHAT: k0-first vs dt-first: neither alone. Your first state should use both small k0 and small dt.
+WHY: k0 attacks the BV source; dt attacks Newton step size/stiffness. They solve different parts of the failure.
+WHAT TO DO: Start with `k0 small + dt small`; ramp k0 to target while keeping dt small; then ramp dt to production. Interleave only if the k0 ramp stalls.
+
+11. WHAT: The z=0 rate explanation is closer now, but `phi(0)=phi_applied` under Stern at z=0 is not guaranteed. The Robin solve determines surface phi.
+WHY: Your exact `exp(33.9)` number may be wrong, although the qualitative “bulk H plus large BV rate” point stands.
+WHAT TO DO: Measure `phi_surface` and assembled `bv_rate_exprs[0]` at the z=0 fallback IC after the Phase 5β fix.
+
+12. WHAT: Rate-consistency tolerance should not be a blind `rel_tol=1e-3`.
+WHY: Scalar Picard vs UFL assembly can differ through interpolation, quadrature, area normalization, and near-zero rates.
+WHAT TO DO: For constant boundary-state tests, use `1e-3` relative plus absolute floor `1e-10`. For full spatial IC tests, start at `1e-2` relative. Always divide assembled rate by electrode area.
+
+13. WHAT: Regenerating the `logc_muh` baseline is a yellow flag, not routine cleanup.
+WHY: The 15/15 sweep is load-bearing; changing fallback semantics can improve correctness while shifting legacy results.
+WHAT TO DO: Keep old and new baselines side by side. Require: direct debye path unchanged where fallback is not used; fallback-only cases documented as intentional behavior change.
+
+14. WHAT: Phase 5β direct formulation dispatch is acceptable, but use params, not `sp.solver_options`, unless you are certain `sp` is always a `SolverParams`.
+WHY: `grid_per_voltage` supports both `SolverParams` and legacy 11-tuples.
+WHAT TO DO: Reuse the existing `params` dict and `_params_with_phi(...)`, or write a helper that handles both representations.
+
+VERDICT: ISSUES_REMAIN

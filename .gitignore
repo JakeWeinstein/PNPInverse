@@ -4,6 +4,9 @@ __pycache__/
 # macOS filesystem metadata
 .DS_Store
 
+# Experimental data drop (273 MB; lives outside git, see CLAUDE.md)
+data/
+
 # LaTeX build artifacts
 *.aux
 *.fdb_latexmk

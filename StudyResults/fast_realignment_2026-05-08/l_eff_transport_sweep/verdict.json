@@ -1,0 +1,230 @@
+{
+  "overall_pass": false,
+  "predictions": {
+    "1_plateau_levich_linear": {
+      "pass": true,
+      "per_ratio": {
+        "1e-18": {
+          "slope": 1.0048117154083887,
+          "log_intercept": -9.558530013559388,
+          "in_band": true,
+          "n_used": 4,
+          "L_eff_um_used": [
+            100.0,
+            66.0,
+            21.0,
+            16.0
+          ],
+          "plateau_used_mA_cm2": [
+            -0.7373038942816692,
+            -1.1215864178608934,
+            -3.5413078433154426,
+            -4.651071997459115
+          ],
+          "slope_band": [
+            0.85,
+            1.15
+          ]
+        },
+        "1e-30": {
+          "slope": 0.9999999685060361,
+          "log_intercept": -10.031561992556721,
+          "in_band": true,
+          "n_used": 4,
+          "L_eff_um_used": [
+            100.0,
+            66.0,
+            21.0,
+            16.0
+          ],
+          "plateau_used_mA_cm2": [
+            -0.43989380672883305,
+            -0.6665057832221604,
+            -2.09473242661806,
+            -2.7493360884093123
+          ],
+          "slope_band": [
+            0.85,
+            1.15
+          ]
+        }
+      },
+      "criterion": "log(|plateau|) vs log(1/L_eff) slope in [0.85, 1.15] for each ratio"
+    },
+    "2_no_peak": {
+      "pass": true,
+      "any_peak": false,
+      "criterion": "no interior local minimum of cd at any (L_eff, ratio)"
+    },
+    "3_pH_under_9_at_smallest_L": {
+      "pass": false,
+      "smallest_L_eff_um": 16.0,
+      "siblings": [
+        {
+          "ratio": 1e-18,
+          "max_surface_pH": 10.583496636976028,
+          "passes_threshold": false
+        },
+        {
+          "ratio": 1e-30,
+          "max_surface_pH": 10.580330196700247,
+          "passes_threshold": false
+        }
+      ],
+      "threshold": 9.0,
+      "criterion": "max_surface_pH < 9.0 at smallest L_eff for both ratios"
+    }
+  },
+  "deck_targets": {
+    "left_plateau_mA_cm2": -0.18,
+    "peak_mA_cm2": -0.4,
+    "peak_v_rhe": 0.1,
+    "decay_threshold_mA_cm2": 0.01
+  },
+  "per_combo": [
+    {
+      "L_eff_m": 0.0001,
+      "L_eff_um": 100.0,
+      "ratio": 1e-18,
+      "plateau_v_rhe": -0.4,
+      "plateau_cathodic_mA_cm2": -0.7373038942816692,
+      "plateau_target_residual_pct": 309.6132746009274,
+      "has_peak": false,
+      "peak_v_rhe": null,
+      "peak_magnitude_mA_cm2": null,
+      "peak_target_residual_pct": null,
+      "v_decay_zero": null,
+      "max_surface_pH": 10.633060439854466,
+      "surface_pH_plausibility_pass": false,
+      "anchor_converged": true,
+      "n_grid_converged": 13,
+      "n_grid_total": 13
+    },
+    {
+      "L_eff_m": 0.0001,
+      "L_eff_um": 100.0,
+      "ratio": 1e-30,
+      "plateau_v_rhe": -0.4,
+      "plateau_cathodic_mA_cm2": -0.43989380672883305,
+      "plateau_target_residual_pct": 144.38544818268505,
+      "has_peak": false,
+      "peak_v_rhe": null,
+      "peak_magnitude_mA_cm2": null,
+      "peak_target_residual_pct": null,
+      "v_decay_zero": null,
+      "max_surface_pH": 10.631408576530687,
+      "surface_pH_plausibility_pass": false,
+      "anchor_converged": true,
+      "n_grid_converged": 13,
+      "n_grid_total": 13
+    },
+    {
+      "L_eff_m": 6.6e-05,
+      "L_eff_um": 66.0,
+      "ratio": 1e-18,
+      "plateau_v_rhe": -0.4,
+      "plateau_cathodic_mA_cm2": -1.1215864178608934,
+      "plateau_target_residual_pct": 523.1035654782742,
+      "has_peak": false,
+      "peak_v_rhe": null,
+      "peak_magnitude_mA_cm2": null,
+      "peak_target_residual_pct": null,
+      "v_decay_zero": null,
+      "max_surface_pH": 10.622506584791708,
+      "surface_pH_plausibility_pass": false,
+      "anchor_converged": true,
+      "n_grid_converged": 13,
+      "n_grid_total": 13
+    },
+    {
+      "L_eff_m": 6.6e-05,
+      "L_eff_um": 66.0,
+      "ratio": 1e-30,
+      "plateau_v_rhe": -0.4,
+      "plateau_cathodic_mA_cm2": -0.6665057832221604,
+      "plateau_target_residual_pct": 270.28099067897796,
+      "has_peak": false,
+      "peak_v_rhe": null,
+      "peak_magnitude_mA_cm2": null,
+      "peak_target_residual_pct": null,
+      "v_decay_zero": null,
+      "max_surface_pH": 10.620807038600837,
+      "surface_pH_plausibility_pass": false,
+      "anchor_converged": true,
+      "n_grid_converged": 13,
+      "n_grid_total": 13
+    },
+    {
+      "L_eff_m": 2.1e-05,
+      "L_eff_um": 21.0,
+      "ratio": 1e-18,
+      "plateau_v_rhe": -0.4,
+      "plateau_cathodic_mA_cm2": -3.5413078433154426,
+      "plateau_target_residual_pct": 1867.393246286357,
+      "has_peak": false,
+      "peak_v_rhe": null,
+      "peak_magnitude_mA_cm2": null,
+      "peak_target_residual_pct": null,
+      "v_decay_zero": null,
+      "max_surface_pH": 10.59239275900705,
+      "surface_pH_plausibility_pass": false,
+      "anchor_converged": true,
+      "n_grid_converged": 13,
+      "n_grid_total": 13
+    },
+    {
+      "L_eff_m": 2.1e-05,
+      "L_eff_um": 21.0,
+      "ratio": 1e-30,
+      "plateau_v_rhe": -0.4,
+      "plateau_cathodic_mA_cm2": -2.09473242661806,
+      "plateau_target_residual_pct": 1063.7402370100335,
+      "has_peak": false,
+      "peak_v_rhe": null,
+      "peak_magnitude_mA_cm2": null,
+      "peak_target_residual_pct": null,
+      "v_decay_zero": null,
+      "max_surface_pH": 10.590547254073561,
+      "surface_pH_plausibility_pass": false,
+      "anchor_converged": true,
+      "n_grid_converged": 13,
+      "n_grid_total": 13
+    },
+    {
+      "L_eff_m": 1.6e-05,
+      "L_eff_um": 16.0,
+      "ratio": 1e-18,
+      "plateau_v_rhe": -0.4,
+      "plateau_cathodic_mA_cm2": -4.651071997459115,
+      "plateau_target_residual_pct": 2483.9288874772865,
+      "has_peak": false,
+      "peak_v_rhe": null,
+      "peak_magnitude_mA_cm2": null,
+      "peak_target_residual_pct": null,
+      "v_decay_zero": null,
+      "max_surface_pH": 10.583496636976028,
+      "surface_pH_plausibility_pass": false,
+      "anchor_converged": true,
+      "n_grid_converged": 13,
+      "n_grid_total": 13
+    },
+    {
+      "L_eff_m": 1.6e-05,
+      "L_eff_um": 16.0,
+      "ratio": 1e-30,
+      "plateau_v_rhe": -0.4,
+      "plateau_cathodic_mA_cm2": -2.7493360884093123,
+      "plateau_target_residual_pct": 1427.4089380051737,
+      "has_peak": false,
+      "peak_v_rhe": null,
+      "peak_magnitude_mA_cm2": null,
+      "peak_target_residual_pct": null,
+      "v_decay_zero": null,
+      "max_surface_pH": 10.580330196700247,
+      "surface_pH_plausibility_pass": false,
+      "anchor_converged": true,
+      "n_grid_converged": 13,
+      "n_grid_total": 13
+    }
+  ]
+}

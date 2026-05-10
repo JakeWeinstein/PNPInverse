@@ -1,0 +1,55 @@
+{
+  "v_rhe": 0.0,
+  "mesh_Ny": 200,
+  "exponent_clip": 50.0,
+  "u_clamp": 100.0,
+  "formulation": "logc_muh",
+  "initializer_sequential": "debye_boltzmann",
+  "step_a": {
+    "converged": true,
+    "method": "cold",
+    "achieved_z_factor": 1.0,
+    "wall_seconds": 96.53203701972961,
+    "cd_mA_cm2": -0.1747319910333933,
+    "pc_mA_cm2": 3.6838899334950215e-05,
+    "dof_count": 7236
+  },
+  "step_b": {
+    "v_rhe": 0.0,
+    "k0_R4e_unit": 0.0012631578947368421,
+    "ladder": [
+      1e-30,
+      1e-15,
+      1.0
+    ],
+    "rungs": [
+      {
+        "k0_R4e_scale": 1e-30,
+        "k0_R4e_value": 1.2631578947368422e-33,
+        "snes_traceback_tail": [
+          "petsc4py.PETSc.Error: error code 91",
+          "[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919",
+          "[0] SNESSolve has not converged"
+        ],
+        "snes_converged": false,
+        "wall_seconds": 2.317888021469116,
+        "snes_error": "Error: error code 91\n[0] SNESSolve() at /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/petsc/src/snes/interface/snes.c:4919\n[0] SNESSolve has not converged",
+        "cd_mA_cm2": 459563437520.8786,
+        "gross_h2o2_current_mA_cm2": 459563437520.8786,
+        "R_0_mA_cm2": 459563437520.8786,
+        "R_1_mA_cm2": -1.0741617502261105e-16,
+        "c0_surface_mean": 0.804194252952953,
+        "c1_surface_mean": 4.071080773123368e+23,
+        "c2_surface_mean": 8.197789280936502e-08,
+        "min_phi": -3.303536451691719,
+        "snes_iters": null
+      }
+    ],
+    "dof_count": 7236,
+    "stopped_on_failure": true,
+    "stopped_at_scale": 1e-30
+  },
+  "n_converged": 0,
+  "n_total": 1,
+  "verdict": "even_bottom_rung_failed_picard_rewrite_needed"
+}

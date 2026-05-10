@@ -65,11 +65,18 @@ from .config import (
     _get_bv_convergence_cfg,
     _get_bv_reactions_cfg,
     _get_bv_boltzmann_counterions_cfg,
+    _get_species_roles,
 )
 from .nondim import _add_bv_scaling_to_transform, _add_bv_reactions_scaling_to_transform
 from .boltzmann import (
     add_boltzmann_counterion_residual,
     build_steric_boltzmann_expressions,
+)
+from .water_ionization import (
+    build_proton_condition_flux,
+    build_water_ionization_terms,
+    is_water_ionization_enabled,
+    resolve_h_index,
 )
 from .forms_logc import build_context_logc, set_initial_conditions_logc
 
@@ -78,13 +85,45 @@ from .forms_logc import build_context_logc, set_initial_conditions_logc
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _resolve_mu_h_index(z_vals: list) -> int:
-    """Return the index of the proton species (z = +1) for the muh formulation.
+def _resolve_mu_h_index(z_vals: list, *, roles=None) -> int:
+    """Return the index of the proton species for the muh formulation.
+
+    Two paths:
+
+    * ``roles=None`` (legacy) — infer from ``z_vals``: exactly one
+      species with ``z = +1`` is required.  Same fail-loudly behavior as
+      ``resolve_h_index``.
+    * ``roles is not None`` (Phase 6β v9 Gate 1) — pick the unique index
+      whose role label is ``"proton"``.  Required for the K2SO4 stack
+      where both H⁺ and K⁺ carry ``z = +1``.
 
     Phase 2 of the muh landing is *hybrid* -- only H+ becomes the mu
     variable; ClO4- (z = -1, when dynamic) stays as u-log-c.  Charged-species
     mu for 4sp+Bikerman is Phase 7 and lives in a separate forms file.
     """
+    if roles is not None:
+        if len(roles) != len(z_vals):
+            raise ValueError(
+                f"_resolve_mu_h_index: roles length {len(roles)} != z_vals "
+                f"length {len(z_vals)}; pass one role per dynamic species."
+            )
+        candidates = [
+            i for i, r in enumerate(roles)
+            if str(r).strip().lower() == "proton"
+        ]
+        if not candidates:
+            raise ValueError(
+                "_resolve_mu_h_index: no species with role='proton' in "
+                f"roles={list(roles)}."
+            )
+        if len(candidates) > 1:
+            raise ValueError(
+                "_resolve_mu_h_index: multiple species with role='proton' "
+                f"in roles={list(roles)} (indices {candidates}); roles must "
+                "be unique."
+            )
+        return candidates[0]
+
     candidates = [i for i, zv in enumerate(z_vals) if abs(float(zv) - 1.0) < 1e-12]
     if not candidates:
         raise ValueError(
@@ -185,22 +224,30 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
             concentration_inputs_dimless=concentration_inputs_dimless,
             E_eq_v=E_eq_v,
         )
-        # Stern layer capacitance (same as forms_logc.py)
+        # Stern layer capacitance (same as forms_logc.py).  Phase 6β v9
+        # Gate 2: also store the phys→nondim conversion factor so the
+        # C_S continuation orchestrator can reassign the live Constant
+        # given a physical F/m² target.
         stern_raw = bv_cfg.get("stern_capacitance_f_m2")
         if stern_raw is not None and float(stern_raw) > 0:
             if not nondim_enabled:
                 scaling["bv_stern_capacitance_model"] = float(stern_raw)
+                scaling["bv_stern_phys_to_nondim_factor"] = 1.0
             else:
                 from Nondim.constants import FARADAY_CONSTANT as _F
                 length_scale = scaling.get("length_scale_m", 1.0)
                 potential_scale_v = scaling.get("potential_scale_v", 1.0)
                 concentration_scale = scaling.get("concentration_scale_mol_m3", 1.0)
-                scaling["bv_stern_capacitance_model"] = (
-                    float(stern_raw) * potential_scale_v
-                    / (_F * concentration_scale * length_scale)
+                conv_factor = potential_scale_v / (
+                    _F * concentration_scale * length_scale
                 )
+                scaling["bv_stern_capacitance_model"] = (
+                    float(stern_raw) * conv_factor
+                )
+                scaling["bv_stern_phys_to_nondim_factor"] = float(conv_factor)
         else:
             scaling.setdefault("bv_stern_capacitance_model", None)
+            scaling.setdefault("bv_stern_phys_to_nondim_factor", 1.0)
     else:
         scaling = _add_bv_scaling_to_transform(
             base_scaling, bv_cfg,
@@ -229,8 +276,11 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
     U = ctx["U"]
     U_prev = ctx["U_prev"]
 
-    # Resolve mu species (Phase 2: H+ only).
-    mu_h_idx = _resolve_mu_h_index(list(z_vals))
+    # Resolve mu species (Phase 2: H+ only).  Phase 6β v9 Gate 1: thread
+    # ``species_roles`` so K2SO4-style stacks with two z=+1 species (H⁺
+    # + K⁺) can disambiguate via explicit role labels.
+    species_roles = _get_species_roles(params, n)
+    mu_h_idx = _resolve_mu_h_index(list(z_vals), roles=species_roles)
     mu_species = [mu_h_idx]
 
     # Split mixed function: u_i (non-mu) or mu_H (mu_h_idx) for species,
@@ -275,6 +325,37 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
                for i in range(n)]
     ci_prev = [fd.exp(fd.min_value(fd.max_value(u_prev_exprs[i], _NEG_U_CLAMP_C), _U_CLAMP_C))
                for i in range(n)]
+
+    # Phase 6α — water self-ionization closure for the muh backend.
+    # ``u_exprs[h_idx_water]`` is the muh-reconstructed log(c_H) =
+    # μ_H − em·z_H·φ; pass the unclamped reconstruction to the helper so
+    # the symmetric clamp on c_OH = Kw_eff·exp(-u_H) lines up with the
+    # symmetric clamp on c_H = exp(u_H).
+    water_ion_enabled = is_water_ionization_enabled(conv_cfg)
+    if water_ion_enabled:
+        h_idx_water = resolve_h_index(list(z_vals), roles=species_roles)
+        if h_idx_water != mu_h_idx:
+            raise ValueError(
+                "enable_water_ionization=True requires the water-ionization "
+                "H+ index to match the muh formulation's mu species index "
+                f"(h_idx_water={h_idx_water}, mu_h_idx={mu_h_idx}); the "
+                "muh stack only supports H+ as the proton-condition variable."
+            )
+        water_bundle = build_water_ionization_terms(
+            ctx=ctx,
+            conv_cfg=conv_cfg,
+            z_vals=z_vals,
+            u_h_unclamped=u_exprs[h_idx_water],
+            u_h_unclamped_prev=u_prev_exprs[h_idx_water],
+            ci_h_clamped=ci[h_idx_water],
+            ci_h_prev_clamped=ci_prev[h_idx_water],
+            R_space=R_space,
+            u_clamp=_U_CLAMP,
+            roles=species_roles,
+        )
+    else:
+        h_idx_water = None
+        water_bundle = None
 
     # Electrode potential constant.
     phi_applied_func = fd.Function(R_space, name="phi_applied")
@@ -332,10 +413,17 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
         R_space=R_space,
     )
 
-    steric_active = any(v != 0.0 for v in a_vals_list) or bool(steric_boltz)
+    steric_active = (
+        any(v != 0.0 for v in a_vals_list)
+        or bool(steric_boltz)
+        or (water_ion_enabled and float(water_bundle.a_oh_const) != 0.0)
+    )
     if steric_active:
         packing_floor = float(conv_cfg.get("packing_floor", 1e-8))
         A_dyn = sum(steric_a_funcs[j] * ci[j] for j in range(n))
+        if water_ion_enabled and float(water_bundle.a_oh_const) != 0.0:
+            # OH⁻ Bikerman packing contribution (shadow species).
+            A_dyn = A_dyn + water_bundle.a_oh_const * water_bundle.c_oh_expr
         if steric_boltz:
             # Multi-counterion: shared z_scale, sum packing_contribution
             # over every bikerman bundle.  Single-counterion case (the
@@ -366,12 +454,32 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
         v = v_list[i]
 
         if i in mu_species:
-            # mu-species flux: D*c*grad(mu) (+ steric activity)
+            # mu-species flux: D*c*grad(mu) (+ steric activity).  In muh,
+            # the proton's μ_H is the primary, so ∇μ_H_ideal = ∇ui[i].
             ideal_grad = fd.grad(ui[i])
         else:
             # log-c flux: D*c*(grad(u) + em*z*grad(phi))
             drift = fd.Constant(em) * z[i] * phi
             ideal_grad = fd.grad(u_exprs[i]) + fd.grad(drift)
+
+        if water_ion_enabled and i == h_idx_water:
+            # Phase 6α — proton-condition residual on E = c_H − c_OH for
+            # the muh backend.  ``ideal_grad`` here is ∇μ_H (the primary).
+            mu_steric_grad = fd.grad(mu_steric) if steric_active else None
+            Jflux = build_proton_condition_flux(
+                bundle=water_bundle,
+                D_h=D[i],
+                c_h=c_i,
+                ideal_grad_h=ideal_grad,
+                mu_steric_grad=mu_steric_grad,
+                steric_active=steric_active,
+            )
+            F_res += (
+                (water_bundle.e_var_expr - water_bundle.e_var_prev_expr)
+                / dt_const
+            ) * v * dx
+            F_res += fd.dot(Jflux, fd.grad(v)) * dx
+            continue
 
         if steric_active:
             Jflux = D[i] * c_i * (ideal_grad + fd.grad(mu_steric))
@@ -522,6 +630,11 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
     F_res += eps_coeff * fd.dot(fd.grad(phi), fd.grad(w)) * dx
     if not suppress_poisson_source:
         F_res -= charge_rhs * sum(z[i] * ci[i] * w for i in range(n)) * dx
+        if water_ion_enabled:
+            # OH⁻ Poisson contribution (z = −1).
+            F_res -= charge_rhs * (
+                fd.Constant(-1.0) * water_bundle.c_oh_expr
+            ) * w * dx
         if steric_boltz:
             # Bikerman counterion charge density: shared z_scale, sum
             # charge_density across every bundle.  Single-counterion
@@ -532,10 +645,15 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
                 z_scale_shared * charge_rhs * charge_density_total * w * dx
             )
 
-    # Stern layer Robin BC
+    # Stern layer Robin BC.  Phase 6β v9 Gate 2: ``stern_coeff`` is
+    # promoted to the ctx so the C_S continuation ladder in
+    # ``solve_anchor_with_continuation`` can reassign it via
+    # ``set_stern_capacitance_model``.
     if use_stern:
         stern_coeff = fd.Constant(float(stern_capacitance_model))
         F_res -= stern_coeff * (phi_applied_func - phi) * w * ds(electrode_marker)
+    else:
+        stern_coeff = None
 
     # ---------------------------------------------------------------
     # Boundary conditions
@@ -589,6 +707,11 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
         "steric_a_funcs": steric_a_funcs,
         "nondim": scaling,
         "use_stern": use_stern,
+        # Phase 6β v9 Gate 2: live FE Constant for the Stern capacitance
+        # in nondim units.  None when use_stern is False.  Allows
+        # set_stern_capacitance_model() to update the residual without a
+        # form rebuild.
+        "stern_coeff_const": stern_coeff,
         "ci_exprs": ci,
         "u_exprs": u_exprs,           # NEW: log(c_i) for diagnostics in muh runs
         "mu_species": list(mu_species),  # NEW: which raw U.sub(i) is mu, not u
@@ -599,6 +722,7 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
         "_diag_exponent_clip": float(conv_cfg["exponent_clip"]),
         "_diag_eps_c": float(conv_cfg.get("conc_floor", 1e-8)),
         "steric_boltzmann": steric_boltz,
+        "water_ionization": water_bundle,  # None when feature disabled
     })
     # Ideal-path Boltzmann counterions (bikerman entries handled above
     # by build_steric_boltzmann_expressions).
@@ -645,7 +769,8 @@ def set_initial_conditions_logc_muh(ctx: dict[str, Any], solver_params: Any) -> 
     phi_applied_model = scaling.get("phi_applied_model", float(phi_applied))
     em = float(scaling.get("electromigration_prefactor", 1.0))
 
-    mu_h_idx = _resolve_mu_h_index(list(z_vals))
+    species_roles = _get_species_roles(params, n)
+    mu_h_idx = _resolve_mu_h_index(list(z_vals), roles=species_roles)
     mu_species = {mu_h_idx}
 
     # Stern-aware anchoring (Phase F).
@@ -692,7 +817,13 @@ def set_initial_conditions_logc_muh(ctx: dict[str, Any], solver_params: Any) -> 
     else:
         spatial_var = coords[1]
 
-    phi_init_expr = fd.Constant(phi_surface) * (1.0 - spatial_var)
+    # ``y_norm = y / domain_height_hat`` so phi_init lands at 0 at the
+    # mesh top regardless of the L_eff sweep extent.
+    bv_conv = params.get("bv_convergence", {}) if isinstance(params, dict) else {}
+    domain_height_hat = float(bv_conv.get("domain_height_hat", 1.0))
+    y_norm = spatial_var / fd.Constant(domain_height_hat)
+
+    phi_init_expr = fd.Constant(phi_surface) * (1.0 - y_norm)
 
     _C_FLOOR = 1e-20
     for i in range(n):
@@ -833,7 +964,8 @@ def _try_debye_boltzmann_ic_muh(
     em = float(scaling.get("electromigration_prefactor", 1.0))
 
     z_vals_full = list(solver_params[4])
-    mu_h_idx = _resolve_mu_h_index(z_vals_full[:n])
+    species_roles = _get_species_roles(params, n)
+    mu_h_idx = _resolve_mu_h_index(z_vals_full[:n], roles=species_roles)
     z_h_val = float(z_vals_full[mu_h_idx])
 
     D_model_vals = [float(v) for v in scaling.get("D_model_vals", [1.0] * n)]
@@ -844,20 +976,30 @@ def _try_debye_boltzmann_ic_muh(
     c0_model = [max(float(v), 1e-300) for v in scaling.get("c0_model_vals", c0_raw)]
 
     # ----- Locate the Boltzmann counterion bulk concentration ---------
+    # Phase 6β v9 Gate 1: when ``species_roles`` are provided, use them
+    # to locate the dynamic counterion (necessary for K2SO4-style stacks
+    # where K⁺ at idx 3 has z=+1, not z=-1).  Without roles, fall back
+    # to the legacy ``z=-1`` check at idx 3 (preserves the ClO₄⁻ stack).
     counterions = _get_bv_boltzmann_counterions_cfg(params)
     synthesised_4sp_counterion = False
     if not counterions:
-        if (
-            n == 4
-            and len(z_vals_full) >= 4
-            and int(z_vals_full[3]) == -1
-            and len(c0_model) >= 4
-        ):
-            counterions = [{
-                "z": -1,
-                "c_bulk_nondim": float(c0_model[3]),
-            }]
-            synthesised_4sp_counterion = True
+        if n == 4 and len(z_vals_full) >= 4 and len(c0_model) >= 4:
+            idx_counterion = None
+            if species_roles is not None:
+                role_matches = [
+                    i for i, r in enumerate(species_roles)
+                    if str(r).strip().lower() == "counterion"
+                ]
+                if len(role_matches) == 1:
+                    idx_counterion = role_matches[0]
+            if idx_counterion is None and int(z_vals_full[3]) == -1:
+                idx_counterion = 3
+            if idx_counterion is not None and 0 <= idx_counterion < n:
+                counterions = [{
+                    "z": int(z_vals_full[idx_counterion]),
+                    "c_bulk_nondim": float(c0_model[idx_counterion]),
+                }]
+                synthesised_4sp_counterion = True
     if not counterions:
         return False, "no_boltzmann_counterion", 0
 
@@ -866,6 +1008,12 @@ def _try_debye_boltzmann_ic_muh(
     # 0, 1, 2) is required.  Reject configurations where mu_h_idx != 2,
     # or fall through to logc IC.  The orchestrator's fallback handles
     # this gracefully.
+    #
+    # Phase 6β v9 Gate 1: K2SO4 stacks with explicit ``species_roles``
+    # preserve the species ordering (O₂, H₂O₂, H⁺, K⁺), so mu_h_idx == 2
+    # holds and the reject does not fire.  Lifting the constraint to
+    # arbitrary proton positions requires refactoring the Picard's
+    # hardcoded h_idx=2 — out of Gate 1/2 scope.
     if mu_h_idx != 2:
         return False, f"mu_h_idx_unsupported ({mu_h_idx} != 2)", 0
 
@@ -942,6 +1090,28 @@ def _try_debye_boltzmann_ic_muh(
     bulk_concs = [O_b, P_b, H_b]
     diffusivities = [D_O, D_P, D_H]
     species_floors = [1e-300, P_FLOOR, 1e-300]
+
+    # Phase 5α T7: when 2+ bikerman counterions are configured (Cs⁺ +
+    # SO₄²⁻ etc.), build the multi-ion ctx BEFORE the Picard call and
+    # pass it as ``multi_ion_ctx`` so the helpers ``_solve_phi_o``,
+    # ``_compute_picard_gamma_s``, ``_solve_picard_stern_split`` each
+    # use the multi-ion shared-theta closure.
+    bikerman_entries_pre = [
+        e for e in (counterions or [])
+        if e.get("steric_mode", "ideal") == "bikerman"
+    ]
+    if len(bikerman_entries_pre) > 1:
+        from .multi_ion import build_counterion_ctx as _build_counterion_ctx_pre
+        a_vals_full_pre = list(solver_params[6])
+        ctx_mion_pre = _build_counterion_ctx_pre(
+            counterions=counterions,
+            a_dyn=[float(v) for v in a_vals_full_pre[:n]],
+            c_dyn_bulk=[float(O_b), float(P_b), float(H_b)],
+            z_dyn=[int(v) for v in z_vals_full[:n]],
+        )
+    else:
+        ctx_mion_pre = None
+
     ok, reason, picard_iters, picard_state = picard_outer_loop_general(
         reactions=bv_reactions,
         bulk_concs=bulk_concs,
@@ -958,6 +1128,8 @@ def _try_debye_boltzmann_ic_muh(
         a_cl=a_cl_picard,
         c_cl_anchor_kind=c_cl_anchor_kind,
         stern_split=stern_split_picard,
+        multi_ion_ctx=ctx_mion_pre,
+        poisson_coefficient=poisson_coefficient,
     )
     ctx["initializer_picard_state"] = picard_state
 
@@ -980,6 +1152,13 @@ def _try_debye_boltzmann_ic_muh(
     ndim = mesh.geometric_dimension()
     y = coords[0] if ndim == 1 else coords[1]
 
+    # ``y_norm = y / domain_height_hat`` (∈ [0, 1]) drives the outer
+    # surface→bulk linear interpolation so the bulk anchor lands at the
+    # mesh top regardless of the L_eff sweep mesh extent.  Debye-layer
+    # terms keep using ``y`` directly (lambda_D shares its nondim units).
+    domain_height_hat = float(conv_cfg.get("domain_height_hat", 1.0))
+    y_norm = y / fd.Constant(domain_height_hat)
+
     E_expr = fd.exp(-y / fd.Constant(lambda_D))
     arg = fd.Constant(T_clamp) * E_expr
     arg_safe = fd.min_value(
@@ -990,13 +1169,13 @@ def _try_debye_boltzmann_ic_muh(
         (fd.Constant(1.0) + arg_safe) / (fd.Constant(1.0) - arg_safe)
     )
 
-    O_outer = fd.Constant(O_s) + (fd.Constant(O_b) - fd.Constant(O_s)) * y
+    O_outer = fd.Constant(O_s) + (fd.Constant(O_b) - fd.Constant(O_s)) * y_norm
     P_outer = fd.max_value(
-        fd.Constant(P_s) + (fd.Constant(P_b) - fd.Constant(P_s)) * y,
+        fd.Constant(P_s) + (fd.Constant(P_b) - fd.Constant(P_s)) * y_norm,
         fd.Constant(P_FLOOR),
     )
     H_outer = fd.max_value(
-        fd.Constant(H_o) + (fd.Constant(H_b) - fd.Constant(H_o)) * y,
+        fd.Constant(H_o) + (fd.Constant(H_b) - fd.Constant(H_o)) * y_norm,
         fd.Constant(1e-300),
     )
 
@@ -1050,7 +1229,7 @@ def _try_debye_boltzmann_ic_muh(
 
         psi = fd.Constant(psi_D_local) * fd.exp(-y / fd.Constant(lambda_eff))
         phi_outer = fd.Constant(phi_o_local) * (
-            fd.Constant(1.0) - fd.min_value(y, fd.Constant(1.0))
+            fd.Constant(1.0) - fd.min_value(y_norm, fd.Constant(1.0))
         )
         phi_init_expr = phi_outer + psi
 
@@ -1190,6 +1369,23 @@ def _try_debye_boltzmann_ic_muh(
             U_prev.sub(3).interpolate(
                 fd.Constant(math.log(c_clo4_bulk)) + phi_init_expr + log_gamma
             )
+        else:
+            # Phase 6β v9 Gate 2: when the explicit Bikerman counterion
+            # is analytic (e.g. SO₄²⁻), seed any extra dynamic species
+            # at idx 3+ with their own Boltzmann-anchored bulk profile.
+            # Otherwise U.sub(3+) stays at zero ⇒ c_i(IC) = 1.0 nondim,
+            # which is wildly off-bulk for the K2SO4 stack (c_K_bulk ≈ 167).
+            # Treats them as inert dynamic species (no BV depletion ⇒ outer
+            # = bulk), with the Boltzmann anchor c_i(y) = c_i_bulk · γ(y) ·
+            # exp(-z_i · phi(y)).
+            for i_extra in range(3, n):
+                c0_i = max(float(c0_model[i_extra]), 1e-300)
+                z_i_extra = float(z_vals_full[i_extra])
+                U_prev.sub(i_extra).interpolate(
+                    fd.Constant(math.log(c0_i))
+                    - fd.Constant(z_i_extra) * phi_init_expr
+                    + log_gamma
+                )
     else:
         # 3sp + ideal counterion (legacy): byte-identical to pre-2b.
         # ``apply_bikerman_ic = False`` here implies

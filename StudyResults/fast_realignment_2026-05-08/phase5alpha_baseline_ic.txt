@@ -1,0 +1,44 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0 -- /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/venv-firedrake/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+configfile: pyproject.toml
+plugins: mpi-pytest-2026.0
+collecting ... collected 27 items
+
+tests/test_initializer_debye_boltzmann.py::TestDebyeBoltzmannInitializer::test_ic_implements_analytical_formula_v05 PASSED
+tests/test_initializer_debye_boltzmann.py::TestDebyeBoltzmannInitializer::test_ic_completes_at_v10_no_inf_nan PASSED
+tests/test_initializer_debye_boltzmann.py::TestDebyeBoltzmannInitializer::test_ic_steric_warning_at_v05 PASSED
+tests/test_initializer_debye_boltzmann_3sp_bikerman.py::Test3spBikermanLogc::test_ic_fires_at_v05 PASSED
+tests/test_initializer_debye_boltzmann_3sp_bikerman.py::Test3spBikermanLogc::test_ic_seeds_h_with_gamma_correction PASSED
+tests/test_initializer_debye_boltzmann_3sp_bikerman.py::Test3spBikermanLogc::test_ic_total_packing_positive_at_v0p3 PASSED
+tests/test_initializer_debye_boltzmann_3sp_bikerman.py::Test3spBikermanLogc::test_ic_reaches_phi_applied_at_electrode PASSED
+tests/test_initializer_debye_boltzmann_3sp_bikerman.py::Test3spBikermanLogc::test_ic_depletes_h_at_electrode PASSED
+tests/test_initializer_debye_boltzmann_3sp_bikerman.py::Test3spBikermanLogc::test_ic_uses_composite_psi_at_v0p66 PASSED
+tests/test_initializer_debye_boltzmann_3sp_bikerman.py::Test3spBikermanMuh::test_ic_fires_at_v05 PASSED
+tests/test_initializer_debye_boltzmann_3sp_bikerman.py::Test3spBikermanMuh::test_mu_h_propagates_log_gamma PASSED
+tests/test_initializer_debye_boltzmann_3sp_bikerman.py::Test3spBikermanMuh::test_ic_reaches_phi_applied_at_electrode PASSED
+tests/test_initializer_debye_boltzmann_3sp_bikerman.py::Test3spBikermanMuh::test_ic_total_packing_positive_at_v0p3 PASSED
+tests/test_initializer_debye_boltzmann_3sp_bikerman.py::TestRegression3spIdealStillWorks::test_3sp_ideal_logc_unchanged PASSED
+tests/test_initializer_debye_boltzmann_3sp_bikerman.py::TestRegression3spIdealStillWorks::test_3sp_ideal_logc_muh_unchanged PASSED
+tests/test_initializer_debye_boltzmann_4sp.py::TestDebyeBoltzmann4spExtension::test_ic_fires_at_v05 PASSED
+tests/test_initializer_debye_boltzmann_4sp.py::TestDebyeBoltzmann4spExtension::test_ic_seeds_clo4_with_gamma_correction PASSED
+tests/test_initializer_debye_boltzmann_4sp.py::TestDebyeBoltzmann4spExtension::test_ic_total_packing_positive_at_v0p3 PASSED
+tests/test_initializer_debye_boltzmann_4sp.py::TestDebyeBoltzmann4spExtension::test_ic_reaches_phi_applied_at_electrode PASSED
+tests/test_initializer_debye_boltzmann_4sp.py::TestDebyeBoltzmann4spExtension::test_ic_depletes_h_at_electrode PASSED
+tests/test_initializer_debye_boltzmann_4sp.py::TestDebyeBoltzmann4spExtension::test_ic_uses_composite_psi_at_v0p66 PASSED
+tests/test_initializer_debye_boltzmann_4sp.py::TestRegression3spStillWorks::test_3sp_still_fires PASSED
+tests/test_initializer_debye_boltzmann_4sp_muh.py::TestDebyeBoltzmann4spMuhExtension::test_ic_fires_at_v05 PASSED
+tests/test_initializer_debye_boltzmann_4sp_muh.py::TestDebyeBoltzmann4spMuhExtension::test_ic_seeds_clo4_with_gamma_correction PASSED
+tests/test_initializer_debye_boltzmann_4sp_muh.py::TestDebyeBoltzmann4spMuhExtension::test_mu_h_propagates_log_gamma PASSED
+tests/test_initializer_debye_boltzmann_4sp_muh.py::TestDebyeBoltzmann4spMuhExtension::test_ic_total_packing_positive_at_v0p3 PASSED
+tests/test_initializer_debye_boltzmann_4sp_muh.py::TestDebyeBoltzmann4spMuhExtension::test_ic_reaches_phi_applied_at_electrode PASSED
+
+============================== 27 passed in 2.76s ==============================
+WARNING! There are options you set that were not used!
+WARNING! could be spelling mistake, etc!
+There are 4 unused database options. They are:
+Option left: name:--log-cli-level=INFO (no value) source: command line
+Option left: name:-m value: slow source: command line
+Option left: name:-s (no value) source: command line
+Option left: name:-v (no value) source: command line

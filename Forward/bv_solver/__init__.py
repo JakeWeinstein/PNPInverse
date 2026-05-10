@@ -94,8 +94,28 @@ from Forward.bv_solver.dispatch import (
 )
 from Forward.bv_solver.grid_per_voltage import (
     solve_grid_per_voltage_cold_with_warm_fallback,
+    solve_grid_with_anchor,
     PerVoltageContinuationResult,
     PerVoltagePointResult,
+    snapshot_U,
+    restore_U,
+    make_run_ss,
+    warm_walk_phi,
+)
+from Forward.bv_solver.anchor_continuation import (
+    AdaptiveLadder,
+    AnchorContinuationResult,
+    LadderExhausted,
+    NON_PETSC_KEYS,
+    PreconvergedAnchor,
+    extract_preconverged_anchor,
+    get_reaction_k0_model,
+    set_reaction_k0_model,
+    get_reaction_kw_eff_model,
+    set_reaction_kw_eff_model,
+    get_stern_capacitance_model,
+    set_stern_capacitance_model,
+    solve_anchor_with_continuation,
 )
 
 
@@ -123,6 +143,24 @@ __all__ = [
     "effective_debye_length_local",
     "per_ion_outer_concs",
     "solve_grid_per_voltage_cold_with_warm_fallback",
+    "solve_grid_with_anchor",
     "PerVoltageContinuationResult",
     "PerVoltagePointResult",
+    "snapshot_U",
+    "restore_U",
+    "make_run_ss",
+    "warm_walk_phi",
+    "AdaptiveLadder",
+    "AnchorContinuationResult",
+    "LadderExhausted",
+    "NON_PETSC_KEYS",
+    "PreconvergedAnchor",
+    "extract_preconverged_anchor",
+    "get_reaction_k0_model",
+    "set_reaction_k0_model",
+    "get_reaction_kw_eff_model",
+    "set_reaction_kw_eff_model",
+    "get_stern_capacitance_model",
+    "set_stern_capacitance_model",
+    "solve_anchor_with_continuation",
 ]

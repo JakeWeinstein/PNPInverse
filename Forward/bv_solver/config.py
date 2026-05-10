@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any
+from typing import Any, List, Optional
 
 from Nondim.transform import _as_list, _bool
 
@@ -169,6 +169,32 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
         raise ValueError(f"packing_floor must be positive; got {packing_floor}")
     if u_clamp <= 0:
         raise ValueError(f"u_clamp must be positive; got {u_clamp}")
+
+    # Phase 6α — water self-ionization keys.  Default to a disabled
+    # configuration (enable_water_ionization=False, zero kw/d_oh/a_oh)
+    # so callers that never set these keys are byte-equivalent to the
+    # pre-Phase-6α stack.  Validated when enable_water_ionization is on.
+    enable_water_ionization = _bool(raw.get("enable_water_ionization", False))
+    kw_eff_hat = float(raw.get("kw_eff_hat", 0.0))
+    d_oh_hat = float(raw.get("d_oh_hat", 0.0))
+    a_oh_hat = float(raw.get("a_oh_hat", 0.0))
+    if enable_water_ionization:
+        if kw_eff_hat < 0.0:
+            raise ValueError(
+                "kw_eff_hat must be non-negative when "
+                f"enable_water_ionization=True; got {kw_eff_hat}"
+            )
+        if d_oh_hat <= 0.0:
+            raise ValueError(
+                "d_oh_hat must be positive when "
+                f"enable_water_ionization=True; got {d_oh_hat}"
+            )
+        if a_oh_hat < 0.0:
+            raise ValueError(
+                "a_oh_hat must be non-negative when "
+                f"enable_water_ionization=True; got {a_oh_hat}"
+            )
+
     return {
         "clip_exponent":              _bool(raw.get("clip_exponent", True)),
         "exponent_clip":              exponent_clip,
@@ -181,7 +207,46 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
         "u_clamp":                    u_clamp,
         "formulation":                formulation,
         "initializer":                initializer,
+        "enable_water_ionization":    enable_water_ionization,
+        "kw_eff_hat":                 kw_eff_hat,
+        "d_oh_hat":                   d_oh_hat,
+        "a_oh_hat":                   a_oh_hat,
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 6β v9 Gate 1 — role-aware species lookup
+# ---------------------------------------------------------------------------
+
+def _get_species_roles(params: Any, n_species: int) -> Optional[List[str]]:
+    """Read optional per-species role labels from ``bv_bc.species_roles``.
+
+    Phase 6β v9 Gate 1.  Returns the explicit roles list when set on the
+    config, or ``None`` to signal callers should fall back to legacy
+    z-inference.  Validates length matches ``n_species`` so a stale config
+    fails LOUDLY at form-build rather than silently mis-wiring the proton
+    index.
+    """
+    if not isinstance(params, dict):
+        return None
+    bv_raw = params.get("bv_bc", {})
+    if not isinstance(bv_raw, dict):
+        return None
+    roles_raw = bv_raw.get("species_roles", None)
+    if roles_raw is None:
+        return None
+    if not isinstance(roles_raw, (list, tuple)):
+        raise ValueError(
+            "bv_bc.species_roles must be a list of strings or None; "
+            f"got {type(roles_raw).__name__}"
+        )
+    roles = [str(r) for r in roles_raw]
+    if len(roles) != n_species:
+        raise ValueError(
+            f"bv_bc.species_roles length {len(roles)} does not match "
+            f"n_species {n_species}"
+        )
+    return roles
 
 
 # ---------------------------------------------------------------------------

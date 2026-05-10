@@ -26,8 +26,12 @@ import math
 import pytest
 
 from Forward.bv_solver.picard_ic import (
+    _compute_picard_gamma_s,
     _factor_log_from_species_logs,
     _safe_exp,
+    _solve_phi_o,
+    _solve_picard_stern_split,
+    _update_electrostatics,
     compute_surface_gamma,
     compute_surface_slope_signed,
     picard_outer_loop,
@@ -689,3 +693,185 @@ def test_picard_outer_loop_gamma_aware_changes_R_with_a_h_a_cl_nonzero():
         assert not math.isclose(st_ideal["R1"], st_bik["R1"], rel_tol=1e-3), (
             "bikerman Picard gives same R1 as ideal -- gamma plumbing not active"
         )
+
+
+# ---------------------------------------------------------------------------
+# Phase 5α T1 — _solve_phi_o helper byte-equivalence
+# ---------------------------------------------------------------------------
+
+def test_solve_phi_o_single_ion_byte_equivalent_to_legacy_log():
+    """Helper output must match ``log(H_o / c_clo4_bulk)`` at production
+    parameter values where the floor is a no-op."""
+    for H_o, c_b in [(0.1, 0.0833), (1e-5, 0.0833), (10.0, 1.0), (0.05, 0.0833)]:
+        legacy = math.log(H_o / c_b)
+        helper = _solve_phi_o(H_o=H_o, c_clo4_bulk=c_b)
+        assert helper == legacy, (
+            f"_solve_phi_o drift at H_o={H_o}, c_b={c_b}: "
+            f"helper={helper!r} legacy={legacy!r}"
+        )
+
+
+def test_solve_phi_o_floors_protect_underflow():
+    """When inputs collapse below 1e-300, helper floors them; legacy raw
+    ``log(0)`` would raise. Exercises only the saturation branch — production
+    inputs are always above 1e-30."""
+    out = _solve_phi_o(H_o=0.0, c_clo4_bulk=0.0833)
+    assert out == math.log(1e-300 / 0.0833)
+    out2 = _solve_phi_o(H_o=0.05, c_clo4_bulk=0.0)
+    assert out2 == math.log(0.05 / 1e-300)
+
+
+# ---------------------------------------------------------------------------
+# Phase 5α T2 — _solve_picard_stern_split helper byte-equivalence
+# ---------------------------------------------------------------------------
+
+def test_solve_picard_stern_split_no_stern_returns_full_drop_at_metal():
+    """``stern_split=None`` -> ``(0.0, phi_applied - phi_o, phi_applied)``."""
+    psi_S, psi_D, phi_surf = _solve_picard_stern_split(
+        phi_applied_model=12.34,
+        phi_o=0.5,
+        c_clo4_bulk=0.0833,
+        a_cl=0.0,
+        stern_split=None,
+    )
+    assert psi_S == 0.0
+    assert psi_D == 12.34 - 0.5
+    assert phi_surf == 12.34
+
+
+def test_solve_picard_stern_split_dispatches_to_solve_stern_split():
+    """With a Stern dict, the helper must produce the same triple as a
+    direct ``solve_stern_split`` call."""
+    cfg = {"lambda_D": 0.05, "stern_coeff": 1.5, "eps": 0.0025}
+    legacy = solve_stern_split(
+        phi_applied_model=10.0,
+        phi_o=1.5,
+        lambda_D=cfg["lambda_D"],
+        c_clo4_bulk=0.0833,
+        a_cl=A_DEFAULT,
+        stern_coeff_nondim=cfg["stern_coeff"],
+        eps_nondim=cfg["eps"],
+    )
+    helper = _solve_picard_stern_split(
+        phi_applied_model=10.0,
+        phi_o=1.5,
+        c_clo4_bulk=0.0833,
+        a_cl=A_DEFAULT,
+        stern_split=cfg,
+    )
+    assert helper == legacy
+
+
+# ---------------------------------------------------------------------------
+# Phase 5α T3 — _compute_picard_gamma_s helper byte-equivalence
+# ---------------------------------------------------------------------------
+
+def test_compute_picard_gamma_s_single_ion_matches_legacy():
+    """Single-ion helper output must match a direct
+    ``compute_surface_gamma`` call at every parameter point we exercise."""
+    cases = [
+        # (H_o, c_clo4_bulk, psi_D, a_h, a_cl, c_cl_anchor)
+        (0.05, 0.0833, 0.0, 0.0, 0.0, 0.0833),     # ideal limit
+        (0.05, 0.0833, 1.5, A_DEFAULT, A_DEFAULT, 0.0833),
+        (1e-5, 0.0833, 10.87, A_DEFAULT, A_DEFAULT, 0.0833),  # high anodic
+        (10.0, 0.0833, -3.0, A_DEFAULT, A_DEFAULT, 10.0),     # synthesised_4sp anchor
+    ]
+    for H_o, c_b, psi_D, a_h, a_cl, c_cl_anchor in cases:
+        legacy = compute_surface_gamma(H_o, c_b, psi_D, a_h, a_cl, c_cl_anchor)
+        helper = _compute_picard_gamma_s(
+            H_o=H_o, c_clo4_bulk=c_b, psi_D=psi_D,
+            a_h=a_h, a_cl=a_cl, c_cl_anchor=c_cl_anchor,
+        )
+        assert helper == legacy, (
+            f"_compute_picard_gamma_s drift at H_o={H_o}, c_b={c_b}, "
+            f"psi_D={psi_D}: helper={helper!r} legacy={legacy!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Phase 5α T4 — _update_electrostatics consolidation + R3 sign correction
+# ---------------------------------------------------------------------------
+
+def _orr_reactions_for_eta():
+    """Minimal 2-rxn list for ``_eta_list_from_drop`` exercises."""
+    return [
+        {"E_eq_model": 0.0},
+        {"E_eq_model": 1.5},
+    ]
+
+
+def test_update_electrostatics_no_stern_eta_drop_is_phi_applied():
+    """R3 sign correction (validated by GPT critique):
+    no-Stern eta_drop = phi_applied_model (NOT phi_applied - phi_o)."""
+    out = _update_electrostatics(
+        c_s=[1.0, 1e-5, 0.05],
+        h_idx=2,
+        c_clo4_bulk=0.0833,
+        phi_o=-0.51,
+        phi_applied_model=21.4,
+        a_h=A_DEFAULT,
+        a_cl=A_DEFAULT,
+        c_cl_anchor_kind="bulk",
+        stern_split=None,
+        reactions=_orr_reactions_for_eta(),
+        bv_exp_scale=1.0,
+        exponent_clip=100.0,
+        clip_exponent=True,
+    )
+    assert out["eta_drop"] == 21.4   # NOT 21.4 - phi_o(=21.91)
+    assert out["psi_S"] == 0.0
+    assert out["psi_D"] == 21.4 - (-0.51)
+    assert out["phi_surface"] == 21.4
+
+
+def test_update_electrostatics_stern_eta_drop_is_psi_S():
+    """Stern: eta_drop = psi_S, the Stern-layer drop."""
+    cfg = {"lambda_D": 0.05, "stern_coeff": 1.5, "eps": 0.0025}
+    out = _update_electrostatics(
+        c_s=[1.0, 1e-5, 0.05],
+        h_idx=2,
+        c_clo4_bulk=0.0833,
+        phi_o=-0.51,
+        phi_applied_model=21.4,
+        a_h=A_DEFAULT,
+        a_cl=A_DEFAULT,
+        c_cl_anchor_kind="bulk",
+        stern_split=cfg,
+        reactions=_orr_reactions_for_eta(),
+        bv_exp_scale=1.0,
+        exponent_clip=100.0,
+        clip_exponent=True,
+    )
+    assert out["eta_drop"] == out["psi_S"]
+    # |psi_S| < |full_drop| = 21.91 (Stern partitions)
+    assert abs(out["psi_S"]) < abs(21.4 - (-0.51))
+
+
+def test_update_electrostatics_eta_list_matches_direct_eta_list_from_drop():
+    """The bundled eta_list must equal a direct _eta_list_from_drop call
+    at the same eta_drop, for byte-equivalence of the in-loop block."""
+    from Forward.bv_solver.picard_ic import _eta_list_from_drop
+    rxns = _orr_reactions_for_eta()
+    out = _update_electrostatics(
+        c_s=[1.0, 1e-5, 0.05],
+        h_idx=2,
+        c_clo4_bulk=0.0833,
+        phi_o=-0.51,
+        phi_applied_model=12.0,
+        a_h=A_DEFAULT,
+        a_cl=A_DEFAULT,
+        c_cl_anchor_kind="bulk",
+        stern_split=None,
+        reactions=rxns,
+        bv_exp_scale=1.0,
+        exponent_clip=100.0,
+        clip_exponent=True,
+    )
+    expected = _eta_list_from_drop(
+        eta_drop=12.0,
+        reactions=rxns,
+        bv_exp_scale=1.0,
+        exponent_clip=100.0,
+        clip_exponent=True,
+    )
+    assert out["eta_list"] == expected

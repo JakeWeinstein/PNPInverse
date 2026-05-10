@@ -53,6 +53,27 @@ def _safe_exp(x: float, *, cap: float = 700.0) -> float:
     return math.exp(x)
 
 
+def _phi_safe_exp(
+    phi: float, *, z: float, phi_clamp_val: float = 50.0,
+) -> float:
+    """Match ``boltzmann.py`` UFL ``phi_clamp_val`` semantics.
+
+    ``boltzmann.py:223`` clamps ``phi`` to ``[-phi_clamp_val,
+    +phi_clamp_val]`` BEFORE multiplying by ``-z`` and exponentiating.
+    Mirror that here so the scalar helpers in this module agree with the
+    UFL residual on what ``c_k(phi)`` is at extreme phi.
+
+    At production parameters (|phi| ~ 5-10, phi_clamp_val=50) this is
+    byte-equivalent to ``_safe_exp(-z*phi)`` with cap=700; it only
+    differs once bisection wanders into clamped territory.
+    """
+    if phi > phi_clamp_val:
+        phi = phi_clamp_val
+    elif phi < -phi_clamp_val:
+        phi = -phi_clamp_val
+    return math.exp(-z * phi)
+
+
 # ---------------------------------------------------------------------------
 # CounterionConfig
 # ---------------------------------------------------------------------------
@@ -183,14 +204,21 @@ def _ck_at_phi(*, ion: dict, phi: float, A_dyn_local: float,
     """
     z = float(ion["z"])
     c_b = float(ion["c_bulk_nondim"])
+    phi_clamp = float(ion.get("phi_clamp", 50.0))
     if ion.get("steric_mode", "ideal") != "bikerman":
-        return c_b * _safe_exp(-z * phi)
+        return c_b * _phi_safe_exp(phi, z=z, phi_clamp_val=phi_clamp)
     if denom_cache is None:
         denom_cache = theta_b + sum(
-            ip["a_nondim"] * ip["c_bulk_nondim"] * _safe_exp(-ip["z"] * phi)
+            ip["a_nondim"] * ip["c_bulk_nondim"] * _phi_safe_exp(
+                phi, z=float(ip["z"]),
+                phi_clamp_val=float(ip.get("phi_clamp", 50.0)),
+            )
             for ip in ions if ip.get("steric_mode", "ideal") == "bikerman"
         )
-    return c_b * _safe_exp(-z * phi) * max(1.0 - A_dyn_local, 1e-12) / max(denom_cache, 1e-300)
+    return (
+        c_b * _phi_safe_exp(phi, z=z, phi_clamp_val=phi_clamp)
+        * max(1.0 - A_dyn_local, 1e-12) / max(denom_cache, 1e-300)
+    )
 
 
 def _electroneutrality_residual(
@@ -209,7 +237,10 @@ def _electroneutrality_residual(
     theta_b = ctx["theta_b"]
     A_dyn_local = sum(a * c for a, c in zip(a_dyn, c_dyn))
     denom = theta_b + sum(
-        ion["a_nondim"] * ion["c_bulk_nondim"] * _safe_exp(-ion["z"] * phi)
+        ion["a_nondim"] * ion["c_bulk_nondim"] * _phi_safe_exp(
+            phi, z=float(ion["z"]),
+            phi_clamp_val=float(ion.get("phi_clamp", 50.0)),
+        )
         for ion in ions if ion.get("steric_mode", "ideal") == "bikerman"
     )
     rho_dyn = sum(z * c for z, c in zip(z_dyn, c_dyn))
@@ -406,7 +437,10 @@ def per_ion_outer_concs(
     """
     A_dyn_local = sum(a * c for a, c in zip(ctx["a_dyn"], c_dyn_outer))
     denom = ctx["theta_b"] + sum(
-        ion["a_nondim"] * ion["c_bulk_nondim"] * _safe_exp(-ion["z"] * phi_o)
+        ion["a_nondim"] * ion["c_bulk_nondim"] * _phi_safe_exp(
+            phi_o, z=float(ion["z"]),
+            phi_clamp_val=float(ion.get("phi_clamp", 50.0)),
+        )
         for ion in ctx["ions"] if ion.get("steric_mode", "ideal") == "bikerman"
     )
     return [

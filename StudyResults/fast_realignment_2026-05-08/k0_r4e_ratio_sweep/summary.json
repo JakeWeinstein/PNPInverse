@@ -1,0 +1,86 @@
+{
+  "ratios": [
+    1.0,
+    1e-06,
+    1e-12,
+    1e-18,
+    1e-24,
+    1e-30
+  ],
+  "anchor_v_rhe": 0.55,
+  "v_rhe_grid": [
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5,
+    0.6,
+    0.7,
+    0.8
+  ],
+  "per_ratio": [
+    {
+      "ratio": 1.0,
+      "label": "ratio_1e+00",
+      "anchor_converged": true,
+      "n_converged": 8,
+      "n_total": 8
+    },
+    {
+      "ratio": 1e-06,
+      "label": "ratio_1e-06",
+      "anchor_converged": true,
+      "n_converged": 8,
+      "n_total": 8
+    },
+    {
+      "ratio": 1e-12,
+      "label": "ratio_1e-12",
+      "anchor_converged": true,
+      "n_converged": 8,
+      "n_total": 8
+    },
+    {
+      "ratio": 1e-18,
+      "label": "ratio_1e-18",
+      "anchor_converged": true,
+      "n_converged": 8,
+      "n_total": 8
+    },
+    {
+      "ratio": 1e-24,
+      "label": "ratio_1e-24",
+      "anchor_converged": true,
+      "n_converged": 8,
+      "n_total": 8
+    },
+    {
+      "ratio": 1e-30,
+      "label": "ratio_1e-30",
+      "anchor_converged": true,
+      "n_converged": 8,
+      "n_total": 8
+    }
+  ],
+  "wall_seconds": 1534.2922060489655,
+  "config": {
+    "ratio_K0_R4e_to_K0_R2e": 0.0,
+    "mesh_Ny": 80,
+    "exponent_clip": 100.0,
+    "u_clamp": 100.0,
+    "stern_capacitance_f_m2": 0.1,
+    "ic": "debye_boltzmann",
+    "formulation": "logc_muh",
+    "initial_scales": [
+      1e-12,
+      1e-09,
+      1e-06,
+      0.001,
+      1.0
+    ],
+    "max_inserts_per_step": 4,
+    "ic_at_target": true,
+    "n_substeps_warm": 8,
+    "bisect_depth_warm": 5
+  }
+}

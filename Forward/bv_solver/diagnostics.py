@@ -21,7 +21,7 @@ from typing import Any, Optional
 import firedrake as fd
 import numpy as np
 
-from .config import _get_bv_boltzmann_counterions_cfg
+from .config import _get_bv_boltzmann_counterions_cfg, _get_species_roles
 
 
 def surface_field_means(ctx: dict[str, Any]) -> dict[str, float]:
@@ -147,6 +147,27 @@ def collect_diagnostics(
         out.update(surface_field_means(ctx))
     except Exception as exc:
         out["surface_fields_error"] = f"{type(exc).__name__}: {exc}"
+
+    # Phase 6β v9 Gate 2: role-aware alias for the dynamic counterion's
+    # surface mean concentration.  Reads ``species_roles`` from params and
+    # aliases ``c{idx_counterion}_surface_mean`` as ``c_kplus_surface_mean``
+    # so K2SO4 study scripts can grep for the cation surface mean by name.
+    # Falls through silently when params is None or roles aren't set.
+    if params is not None:
+        try:
+            roles = _get_species_roles(params, n)
+        except Exception:
+            roles = None
+        if roles is not None:
+            counterion_matches = [
+                i for i, r in enumerate(roles)
+                if str(r).strip().lower() == "counterion"
+            ]
+            if len(counterion_matches) == 1:
+                idx_c = counterion_matches[0]
+                c_surf = out.get(f"c{idx_c}_surface_mean")
+                if c_surf is not None:
+                    out["c_kplus_surface_mean"] = c_surf
 
     if params is not None:
         try:

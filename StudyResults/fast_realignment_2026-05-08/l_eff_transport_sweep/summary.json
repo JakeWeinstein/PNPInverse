@@ -1,0 +1,135 @@
+{
+  "l_eff_values_m": [
+    0.0001,
+    6.6e-05,
+    2.1e-05,
+    1.6e-05
+  ],
+  "ratios": [
+    1e-18,
+    1e-30
+  ],
+  "anchor_v_rhe": 0.55,
+  "v_rhe_grid": [
+    -0.4,
+    -0.3208,
+    -0.2417,
+    -0.1625,
+    -0.0833,
+    -0.0042,
+    0.075,
+    0.1542,
+    0.2333,
+    0.3125,
+    0.3917,
+    0.4708,
+    0.55
+  ],
+  "per_combo": [
+    {
+      "l_eff_m": 0.0001,
+      "l_eff_um": 100.0,
+      "ratio": 1e-18,
+      "label": "L100um_ratio_1e-18",
+      "anchor_converged": true,
+      "n_converged": 13,
+      "n_total": 13
+    },
+    {
+      "l_eff_m": 0.0001,
+      "l_eff_um": 100.0,
+      "ratio": 1e-30,
+      "label": "L100um_ratio_1e-30",
+      "anchor_converged": true,
+      "n_converged": 13,
+      "n_total": 13
+    },
+    {
+      "l_eff_m": 6.6e-05,
+      "l_eff_um": 66.0,
+      "ratio": 1e-18,
+      "label": "L66um_ratio_1e-18",
+      "anchor_converged": true,
+      "n_converged": 13,
+      "n_total": 13
+    },
+    {
+      "l_eff_m": 6.6e-05,
+      "l_eff_um": 66.0,
+      "ratio": 1e-30,
+      "label": "L66um_ratio_1e-30",
+      "anchor_converged": true,
+      "n_converged": 13,
+      "n_total": 13
+    },
+    {
+      "l_eff_m": 2.1e-05,
+      "l_eff_um": 21.0,
+      "ratio": 1e-18,
+      "label": "L21um_ratio_1e-18",
+      "anchor_converged": true,
+      "n_converged": 13,
+      "n_total": 13
+    },
+    {
+      "l_eff_m": 2.1e-05,
+      "l_eff_um": 21.0,
+      "ratio": 1e-30,
+      "label": "L21um_ratio_1e-30",
+      "anchor_converged": true,
+      "n_converged": 13,
+      "n_total": 13
+    },
+    {
+      "l_eff_m": 1.6e-05,
+      "l_eff_um": 16.0,
+      "ratio": 1e-18,
+      "label": "L16um_ratio_1e-18",
+      "anchor_converged": true,
+      "n_converged": 13,
+      "n_total": 13
+    },
+    {
+      "l_eff_m": 1.6e-05,
+      "l_eff_um": 16.0,
+      "ratio": 1e-30,
+      "label": "L16um_ratio_1e-30",
+      "anchor_converged": true,
+      "n_converged": 13,
+      "n_total": 13
+    }
+  ],
+  "wall_seconds": 3508.484232902527,
+  "config_template": {
+    "l_eff_m": 0.0001,
+    "domain_height_hat": 1.0,
+    "ratio_K0_R4e_to_K0_R2e": 1e-18,
+    "mesh_Nx": 8,
+    "mesh_Ny": 80,
+    "mesh_beta": 3.0,
+    "exponent_clip": 100.0,
+    "u_clamp": 100.0,
+    "stern_capacitance_f_m2": 0.1,
+    "ic": "debye_boltzmann",
+    "formulation": "logc_muh",
+    "initial_scales": [
+      1e-12,
+      1e-09,
+      1e-06,
+      0.001,
+      1.0
+    ],
+    "max_inserts_per_step": 4,
+    "ic_at_target": true,
+    "n_substeps_warm": 8,
+    "bisect_depth_warm": 5,
+    "v_rhe_grid_n": 13,
+    "v_rhe_grid_min": -0.4,
+    "v_rhe_grid_max": 0.55,
+    "anchor_v_rhe": 0.55,
+    "n_collection": 0.224,
+    "enable_water_ionization": true,
+    "kw_eff_hat_target": 6.944444444444445e-09
+  },
+  "enable_water_ionization": true
+}

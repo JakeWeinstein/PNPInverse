@@ -1,0 +1,53 @@
+{
+  "config": {
+    "V_RHE": 0.55,
+    "phi_target_eta": 21.406959645641663,
+    "mesh_Ny": 200,
+    "exponent_clip": 100.0,
+    "u_clamp": 100.0,
+    "formulation": "logc_muh",
+    "initializer": "debye_boltzmann",
+    "log_tol": 0.05,
+    "tiny_threshold": 1e-15,
+    "abs_tol": 1e-10
+  },
+  "picard_state": {
+    "phi_o": -0.00016670834722631866,
+    "psi_D": 1.5815330358473407,
+    "psi_S": 19.82559331814155,
+    "phi_surface": 1.5813663275001133,
+    "gamma_s": 0.9301476098315676,
+    "H_o": 1e-300,
+    "R_list": [
+      -5.363935983429489e-10,
+      0.28571428586730313
+    ],
+    "eta_list": [
+      -7.225019324987457,
+      -28.04815279847525
+    ],
+    "initializer_fallback": true,
+    "initializer_fallback_reason": "picard_max_iters_delta=1.001"
+  },
+  "R_residual_per_rxn": [
+    90.46979976912313,
+    8.540761707714532e+22
+  ],
+  "R_picard_per_rxn": [
+    -5.363935983429489e-10,
+    0.28571428586730313
+  ],
+  "log10_R_ratio_per_rxn": [
+    11.227020043054035,
+    23.475564649081324
+  ],
+  "abs_diff_per_rxn": [
+    90.46979976965952,
+    8.540761707714532e+22
+  ],
+  "gate_passed": false,
+  "failures": [
+    "rxn0: |log10(Rr/Rp)|=11.227 >= 0.05; R_residual=9.047e+01, R_picard=-5.364e-10",
+    "rxn1: |log10(Rr/Rp)|=23.476 >= 0.05; R_residual=8.541e+22, R_picard=2.857e-01"
+  ]
+}

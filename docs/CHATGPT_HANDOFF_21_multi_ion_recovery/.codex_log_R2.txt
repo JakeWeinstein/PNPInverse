@@ -1,0 +1,1064 @@
+OpenAI Codex v0.129.0 (research preview)
+--------
+workdir: /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/jakeweinstein/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e08c1-caa1-7f83-9df9-d9a53812f992
+--------
+user
+# Round 2 — Counterreply
+
+Strong critique. Most points stick. A few I want to push back on or clarify.
+Numbered to match your R1 issues.
+
+## Section 1 — Acknowledgment per issue
+
+**Re your point 1** (JSON mismatch — anchor_v_rhe=0.0 not +0.55):
+**Accept.** You caught a real evidence-tracking error. The smoke script
+overwrites the same JSON path each run, and my last invocation tested
+V=0.0 (per plan §5c anchor relocation), so the JSON in the handoff is
+the V=0.0 result, not the +0.55 V one. The qualitative finding ("z=0
+diverges with multi-ion stack") holds for both V's (I have terminal
+output for both: same `PARTIAL z=0.000` failure mode, just different
+phi_applied magnitude in the ramp), but the JSON I quoted is mixed
+evidence as you say.
+
+  Fix: I'll modify the smoke script to write per-V JSON
+  (`anchor_smoke_V{v_rhe:+.3f}.json`) so each V has a separate
+  artifact. Done in this counterreply (file written by Claude
+  alongside this handoff).
+
+**Re your point 2** (R_2e ≈ 0.45 estimate is incomplete — bulk-H
+boundary-rate vs Picard flux balance):
+**Accept partially.** You're right that the Picard's `_surface_concs_from_rates`
+(picard_ic.py:907) gives the *self-consistent* surface tuple where the
+flux balance closes, not just a one-step `c_O_b - R/D_O2`. But the
+Picard reports `c_s_list ≈ [1.0, 1.0e-4, 0.0833] ≈ bulk` for this case
+(R_list = [-5.7e-13, 0]), meaning the Picard's own SC iteration also
+ended at "bulk H, bulk O₂" surface. So the Picard's tuple agrees with
+my back-of-envelope. The reason: the Picard's η is built from the WRONG
+phi_o (your point 3), so Picard sees the cathodic exponent as eta_drop=
+psi_S=18.14, gives c_H_at_OHP = c_H_b · exp(-psi_D=10.87) = 1.7e-6,
+which kills the rate via (c_H/c_H_ref)². Picard's tuple is internally
+consistent but built on the wrong-anchor 1:1 closure, so its R≈0 is
+misleading for the multi-ion residual.
+
+  Concrete: in the multi-ion case the "true" SS R is much larger
+  than Picard's ≈0, and c_s_O is ≈0.55 not ≈1.0. The Picard tuple
+  isn't a useful warm-start FOR THE MULTI-ION RESIDUAL even though
+  it's self-consistent under the (wrong) 1:1 closure. This reinforces
+  your point 3 (patch Picard).
+
+**Re your point 3** (multi-ion Picard still wrong on phi_o,
+lambda_eff, psi_D, per-ion concs, gamma_s — patch them all together):
+**Accept fully.** This is the actual root cause. My Phase 2.4 post-
+Picard override is cosmetic — fixes the spatial IC potential but
+inherits the wrong R/c_s tuple from Picard. The Picard needs to
+internally use:
+  - `phi_o` from `solve_outer_phi_multiion(c_dyn_outer, ctx_mion)` instead
+    of the hardwired `log(H_o/c_clo4_bulk)` at picard_ic.py:1142.
+  - `psi_D` from a multi-ion-aware Stern split (linear-Debye with
+    `effective_debye_length_local` since the BKSA closed-form at
+    picard_ic.py:181 is 1:1-ClO4).
+  - `gamma_s` from `compute_surface_gamma_multiion(H_o, psi_D, a_h,
+    ions_with_outer_concs)` instead of `compute_surface_gamma`
+    (picard_ic.py:101) which is single-ClO4.
+
+  Plan: build a `picard_outer_loop_multiion` thin wrapper (or add
+  optional `multi_ion_ctx=ctx_mion` parameter to
+  `picard_outer_loop_general` that swaps the phi_o / Stern / gamma_s
+  callsites). The latter is less invasive. I'll go with the optional-
+  parameter approach.
+
+**Re your point 4** (orchestrator line 350 calls `set_initial_conditions_logc`
+not dispatched):
+**Accept fully.** Pre-existing bug; my multi-ion path exposed it. For
+muh formulation, when Path B's z=1 attempt fails and the orchestrator
+resets to linear-phi, it calls the LOGC IC builder which writes
+`u_2 = ln(c_H_b)` to subfunction 2 — but in muh that subfunction is
+`mu_H = u_H + em·z_H·phi`, not `u_H`. So the post-reset state has
+mu_H ≈ -2.49 with phi at electrode = phi_applied (not psi_S). The
+muh reconstruction `c_H = exp(mu_H - em·z_H·phi)` then gives
+`c_H_at_electrode = exp(-2.49 - 21.4) = exp(-23.9) ≈ 4e-11`, which is
+the artificially-strong H+ depletion the single-ClO4 case produces by
+accident.
+
+Wait — that's actually GOOD for Newton, isn't it? The fallback IC
+accidentally gets the H+ depletion right (by writing the wrong-formula
+mu_H but having Path A's downstream Newton see strongly-depleted H+
+via reconstruction). Yet z=0 still fails for the multi-ion case. So
+the "wrong fallback" hypothesis isn't the full story.
+
+  More likely: at z=0 the dynamic-species Poisson contribution is
+  zeroed (z_consts·=0), so phi(0) = phi_applied = 21.4 with no
+  diffuse-layer screening. The eta_clipped exponent `α·n_e·(phi_applied -
+  phi - E_eq)` evaluates with phi(0) = phi_applied so eta=−E_eq=−27.05.
+  exp(0.627·2·27.05) = exp(33.9) ≈ 5e14. Even with H+ depletion via
+  the muh reconstruction, this exponent is ~10^14, which is then
+  multiplied by tiny c_H (1e-11) and tiny c_O (well, c_O is bulk =1
+  at z=0 with no electromigration). Net rate ≈ 1.263e-3 · 1.0 · 1e-22
+  · 5e14 = 6e-12. Tiny. So z=0 SHOULD work? Let me re-check.
+
+  Actually the orchestrator's z-ramp sets `z_consts[i] = z_nominal[i]
+  · z_factor` (grid_per_voltage.py:300-302). At z=0, all dynamic-
+  species `z` Constants are 0. The em·z_H term in mu_H reconstruction
+  uses `em·z_H` where z_H is the GLOBAL z (not z_consts). So at z=0,
+  the dynamic-species Poisson source is zero, but mu_H reconstruction
+  still uses em·z_H=1 (full prefactor). That mismatch means:
+    - Poisson at z=0 has no source, phi solves linear from BC.
+    - But mu_H is treated as `u_H + 1·phi` for c_H reconstruction.
+    - c_H from mu_H = -2.49 (linear-phi IC fallback) + phi(0)=21.4 → exp(-23.9) ≈ 1e-10.
+
+  So at z=0, c_H_at_electrode is artificially 1e-10. But the BV rate
+  has (c_H/c_H_ref)^2 = (1e-10/0.0833)² ≈ 1.4e-18. Cathodic rate
+  ≈ 1.263e-3 · 1.0 · 1.4e-18 · 5e14 = 8.8e-7. Tiny. SHOULD work.
+
+  Yet z=0 diverges. So the failure isn't the BV rate at z=0 — it's
+  something else. Likely the inconsistency between the IC's linear
+  phi (21.4 at electrode) and the muh transformation's expectation
+  of mu_H = u_H + em·z_H·phi for the H+ species. The IC builder
+  `set_initial_conditions_logc` writes `u_2 = ln(c_H_b)` directly
+  to subfunction 2, but in muh, sub(2) is supposed to BE mu_H. So
+  the IC has mu_H = -2.49 (constant), and ci[mu_h_idx] = exp(mu_H -
+  em·z_H·phi) goes wild near the electrode.
+
+  Concretely: at electrode, c_H = exp(-2.49 - 21.4) = 1e-10. Newton
+  hits this and tries to drive the residual to zero. The residual
+  for H+ has flux terms like D_H·c_H·∇mu_H/em. With c_H = 1e-10 at
+  electrode and 0.0833 at bulk, the gradient is huge and Newton's
+  Jacobian conditions blow up.
+
+  Fix per your point 4: replace line 350 with dispatched
+  `set_initial_conditions(ctx, sp)`. Or add a logc_muh-aware fallback.
+  The dispatched version honors the formulation flag in conv_cfg and
+  routes to `set_initial_conditions_logc_muh` correctly.
+
+**Re your point 5** (logc_muh's linear-phi IC also single-ion at
+forms_logc_muh.py:662):
+**Accept fully.** Even after fixing the orchestrator dispatch
+(your point 4), the logc_muh linear-phi IC at line 662 still uses
+single-ion algebra. Need a multi-ion-aware linear-Stern path.
+
+  Plan: gate on `len(bikerman_entries) > 1` in
+  `set_initial_conditions_logc_muh` and call `solve_outer_phi_multiion()`
+  + `effective_debye_length_local()` for the multi-ion case. The
+  same trick I already added in `_try_debye_boltzmann_ic_muh` Phase 2.4.
+
+**Re your point 6** (5b I-ramp requires form rebuild per α —
+boltzmann.py:220 has c_bulk baked into UFL Constants):
+**Accept fully.** `fd.Constant(c_b)` at line 220 (and the analogous
+line in my multi-ion code) is baked into the form at build time. To
+ramp c_bulk we'd need to either:
+  - Promote to `fd.Function` and assign per α step (similar to
+    `bv_k0_funcs[j].assign(...)` pattern). Doable but every consumer
+    of c_bulk_nondim has to change.
+  - Rebuild the entire context per α (slow; loses warm-start state).
+
+Either way, more work than k0 continuation. Defer 5b.
+
+**Re your point 7** (5g targets wrong variable first):
+**Accept fully.** Rate-consistency comes first; better spatial IC
+later. Defer 5g.
+
+**Re your point 8** (softplus/tanh changes physics, conflicts with
+clip=100 trust):
+**Accept fully.** Per your suggestion: only as a homotopy with final
+unsaturated residual verification, not production physics. Defer.
+
+**Re your point 9** ("transient pre-relax" already done by run_ss;
+make it concrete as `dt_init` continuation):
+**Accept fully.** I conflated "transient relaxation" with "let the
+orchestrator's run_ss handle it". You're right: run_ss IS implicit
+time-stepping. But it uses fixed dt=0.25 from SolverParams, which is
+too large for the multi-ion's first SNES solve from a strong-gradient
+IC. dt_init continuation 1e-4 → 1e-3 → ... is the correct concrete
+move.
+
+  Plan: add `dt_continuation` parameter to grid_per_voltage that
+  starts dt small and ramps up after each successful step. Or
+  simpler: drop dt to 1e-4 in the smoke script and see if Newton
+  converges from there at z=1.
+
+**Re your point 10** (Stern continuation direction backwards):
+**Accept fully.** I had the formula backwards. Linear-Debye:
+psi_D = stern · full_drop · λ / (eps + stern · λ). At fixed full_drop
+and λ, larger stern → larger psi_D → larger H+ depletion → friendlier
+Newton. So Stern ramp goes from "no Stern" or "very large C_S" DOWN to
+literature 0.10 F/m². Concretely: start with `stern_capacitance_f_m2 =
+None` (no Stern; full drop in diffuse layer), warm-walk to 0.10.
+
+  Wait, "no Stern" means full diffuse drop. λ_eff is small, so
+  `psi_D ≈ full_drop` directly. That's psi_D ≈ 21.4. STRONG H+ depletion.
+  Then ramp Stern up toward 0.10 — at large stern, psi_D goes DOWN
+  (Stern absorbs more). But we said larger C_S → larger psi_D... let
+  me recompute.
+
+  psi_D = C_S · ΔV · λ / (ε + C_S · λ).
+  - C_S → 0: psi_D → 0 (no Stern absorbs nothing? Wait, with C_S=0
+    the Robin BC degenerates to `eps·∇φ·n = 0` which is Neumann, NOT
+    Dirichlet. That's a different limit.)
+  - C_S → ∞: psi_D = C_S · ΔV · λ / (C_S · λ) = ΔV. So full drop in
+    diffuse layer.
+
+  So large C_S means STRONG diffuse drop = large psi_D = strong H+
+  depletion. Production is C_S = 0.10 F/m² which gives psi_D ≈ 1.58
+  (your linear-Debye formula confirmed). Walking C_S DOWN from ∞ to
+  0.10 means walking psi_D from 21.4 to 1.58. The 0.10 endpoint is
+  still psi_D=1.58 — still in the rate-blowing regime. So this
+  doesn't actually solve the problem; it just gives Newton a warm-
+  start that approaches the failure point.
+
+  Useful as homotopy if I_ramp also runs: at low I AND high C_S, ψ_D
+  is large → easy. Walk both down. But that's two-parameter homotopy
+  which is more engineering.
+
+  Defer Stern continuation; not the right first-order knob.
+
+**Re your point 11** (k0=0 is hardwired at form build; use tiny
+positive k0_R2e):
+**Accept fully.** This is the correct k0 continuation strategy. The
+disabled-reaction guard I added in Phase 1.1 short-circuits k0=0 at
+form build, so `bv_k0_funcs[j].assign(1e-10)` later does nothing
+(R_j is fd.Constant(0.0) baked in). For continuation we need to BUILD
+with positive k0 and assign down at the start, then ramp up.
+
+  Plan: in the smoke driver, build with k0_R2e_init = 1e-12 (tiny
+  but positive), solve at that k0 to get a warm state, then
+  geometrically ramp k0_R2e_init · 10 → 100 → 1000 → ... → K0_HAT_R2E.
+  Apply the same to k0_R4e for Pass D.
+
+**Re your point 12** (start at low V_RHE has sign wrong; +0.55 is
+already weakest cathodic):
+**Accept fully.** I had the V_RHE direction backwards. For ORR, the
+2e channel R_2e has E°=0.695 V. At V_RHE=+0.55 V, η_R2e = -0.145 V
+(slight cathodic). At V_RHE=-0.5 V, η_R2e = -1.195 V (much stronger
+cathodic). So +0.55 V is the easiest cathodic point on the page-15
+grid, and walking from -0.5 V is harder.
+
+  The plan §3 driver's PAGE_15_V_RHE_GRID = linspace(-0.40, +0.55, 25)
+  already has +0.55 as the maximum. The plan §3 anchor ANCHOR_V_RHE = +0.55
+  (= the easiest point). To "warm-walk from highest V" matches the plan's
+  anchor choice; my "scan from -0.5" idea was just wrong.
+
+  Above-Eeq homotopy (V > E_eq_R2e = 0.695 V → anodic regime where
+  R_2e flips sign and is bounded by tiny c_H2O2_b) is cleanly
+  feasible IF we accept temporary excursion above Mangan's grid.
+  Walk: V=+0.85 (above E_eq, anodic, easy) → +0.75 → +0.695 (zero
+  crossing) → +0.55 (target).
+
+  Plan: Try the above-Eeq homotopy as a fallback if direct anchor
+  + dt continuation fails.
+
+**Re your point 13** (legacy-ClO4 IC swap is low-trust):
+**Accept fully.** Cheap one-hour falsification at most.
+
+**Re your point 14** (multi-ion diagnostics in diagnostics.py:195
+compute theta_b per counterion, not shared):
+**Accept fully.** I haven't audited diagnostics.py for multi-ion
+correctness. Add to TODO post-Picard-patch.
+
+  Plan: refactor `surface_field_means` to use `build_counterion_ctx`
+  + `per_ion_outer_concs` so the saturation diagnostic reflects the
+  shared-theta closure.
+
+## Section 2 — Updated artifact (the recommended path)
+
+Based on your critique, the revised escalation plan is:
+
+### Phase 5α: Patch Picard for multi-ion (HIGHEST PRIORITY)
+
+  1. Add optional `multi_ion_ctx: dict | None = None` parameter to
+     `picard_outer_loop_general` (picard_ic.py:941).
+  2. When provided, replace single-ion callsites:
+     - line 1142: `phi_o = log(H_o/c_clo4_bulk)` →
+       `phi_o = solve_outer_phi_multiion(ctx=multi_ion_ctx,
+                                         c_dyn_outer=c_s)`
+     - line 1138 (`compute_surface_gamma`):
+       `gamma_s = compute_surface_gamma_multiion(H_o, psi_D, a_h,
+                                                  ions_with_outer)`
+       where `ions_with_outer = [{**ion, 'c_outer': c_k_outer}
+                                  for ion, c_k_outer in
+                                  zip(ions, per_ion_outer_concs(...))]`
+     - line 1228 (Stern split): replace `solve_stern_split(...)`
+       with `psi_D_local = stern_coeff * full_drop * lambda_eff /
+                           (eps + stern_coeff * lambda_eff)` where
+       `lambda_eff = effective_debye_length_local(phi_o, ctx,
+                                                  c_dyn_outer,
+                                                  poisson_coeff)`.
+  3. Caller (`_try_debye_boltzmann_ic*`) builds the ctx and passes
+     it when `len(bikerman) > 1`.
+  4. Tests: extend test_picard_general_topology to cover multi-ion
+     case; verify Picard now produces sensible R/c_s for Cs+/SO4
+     at +0.55V.
+
+### Phase 5β: Patch grid_per_voltage.py:350 + logc_muh linear IC
+
+  1. grid_per_voltage.py:350: replace `set_initial_conditions_logc(...)`
+     with dispatched `set_initial_conditions(ctx, sp)`.
+  2. forms_logc_muh.py:662: gate on `len(bikerman) > 1`, call
+     `solve_outer_phi_multiion` for the multi-ion linear-phi case.
+     Mirror the Phase 2.4 `_try_debye_boltzmann_ic_muh` multi-ion
+     branch but as the linear-phi fallback (no Picard call,
+     just analytic phi profile with multi-ion psi_D).
+
+### Phase 5γ: k0_R2e + dt_init continuation in driver
+
+  1. Smoke driver builds with k0_R2e_init = 1e-12 (tiny positive,
+     not zero — Phase 1.1 guard skips zero entirely, so we need a
+     non-zero seed value).
+  2. Solver options: `dt = 1e-4` for first SS step, then ramp
+     `dt → 1e-3 → 1e-2 → 0.25` after each successful solve.
+  3. After dt reaches 0.25, ramp k0_R2e:
+     `bv_k0_funcs[0].assign(...)` from 1e-12 → 1e-9 → 1e-6 → 1e-3
+     → K0_HAT_R2E. Same for k0_R4e in Pass D.
+  4. C+D orchestrator handles V continuation natively; just give it
+     the patched Picard + IC + driver.
+
+### Phase 5δ (only if needed): above-Eeq V homotopy
+
+  Anchor at V_RHE=+0.85 (above E_eq_R2E=0.695, anodic regime where
+  R_2e flips sign and is bounded by tiny c_H2O2_b ~ 1e-4). Warm-walk
+  to +0.55. Only needed if 5α+5β+5γ doesn't yield ≥15/25.
+
+### Phase 5ε (last resort): legacy-ClO4 IC swap or 2-parameter (I, C_S)
+homotopy. Both are escape valves for if 5α-5δ fail.
+
+### Phase 5ζ (post-convergence): patch diagnostics.py for multi-ion
+shared-theta. Cosmetic; doesn't block convergence.
+
+## Section 3 — Continued critique prompt
+
+Review the updated escalation plan (Phase 5α/β/γ/δ/ε/ζ) and my
+responses to your earlier issues. Push back on responses where I
+defended poorly — name which point. Raise any new issues the updated
+plan creates. Re-issue any earlier issue you don't think I addressed.
+
+Specifically:
+  - Is the Phase 5α Picard patch (optional multi_ion_ctx parameter)
+    the right surgery, or should the multi-ion path be a separate
+    `picard_outer_loop_multiion` function? Tradeoffs: optional-
+    parameter is less code but tangles single-ion vs multi-ion
+    branches inside the loop body; separate function is cleaner but
+    duplicates ~150 lines.
+  - The Phase 5γ k0_R2e_init = 1e-12 — is this small enough? At
+    1e-12 nondim with α·n_e·η ≈ 7 (after Stern) the cathodic rate
+    is k0 · 1e-12 · exp(7) ≈ 1e-9 (per c_H factor), well below
+    diffusion limit. Should work but I want a sanity check on the
+    initial value choice and the geometric ramp factor of 1000×
+    per step.
+  - Is there a risk that the Picard's multi-ion `solve_outer_phi_multiion`
+    bisection is itself an issue at high V_RHE because the
+    electroneutrality residual ρ(phi) might have multiple roots when
+    the Bikerman saturation kicks in? The single-ion case has a
+    trivially monotone residual; multi-ion with mixed steric ions
+    might not. If so, the bisection bracket needs care.
+  - Is there a homotopy direction I'm still missing — maybe in the
+    Stern *direction* (not magnitude)? E.g., starting from no-Stern
+    (psi_D = full_drop large) and adding Stern as a continuation
+    parameter could be cleaner than ramping C_S.
+  - Phase 5β bug fix — what's the byte-equivalence risk for
+    legacy single-ClO4 runs when grid_per_voltage.py:350 changes
+    from `set_initial_conditions_logc` to dispatched? The legacy
+    logc-formulation path should be unchanged, but logc_muh-formulation
+    legacy single-ClO4 runs go through a different fallback now.
+
+Same numbered format and same verdict line at the end:
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN
+
+codex
+I’ll re-check the touched code paths so the critique is against the current workspace, not only the earlier snapshot.
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/picard_ic.py | sed -n '1010,1260p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+  1010	def picard_outer_loop_general(
+  1011	    *,
+  1012	    reactions: list,
+  1013	    bulk_concs: list[float],
+  1014	    diffusivities: list[float],
+  1015	    species_floors: list[float],
+  1016	    h_idx: int,
+  1017	    c_clo4_bulk: float,
+  1018	    phi_applied_model: float,
+  1019	    bv_exp_scale: float,
+  1020	    exponent_clip: float,
+  1021	    clip_exponent: bool,
+  1022	    a_h: float = 0.0,
+  1023	    a_cl: float = 0.0,
+  1024	    c_cl_anchor_kind: str = "bulk",
+  1025	    stern_split: dict | None = None,
+  1026	    omega: float = 0.5,
+  1027	    max_iters: int = 50,
+  1028	    tol: float = 1e-6,
+  1029	    topology_hint: str = "general",
+  1030	    verbose: bool = False,
+  1031	) -> tuple[bool, str, int, dict]:
+  1032	    """Generalized N-reaction Picard outer loop (v3 §7-§9).
+  1033	
+  1034	    See ``docs/picard_general_topology_derivation.md`` v3 for the
+  1035	    derivation and the implementation contract (§9).
+  1036	
+  1037	    Parameters
+  1038	    ----------
+  1039	    reactions : list of dict
+  1040	        Per-reaction config.  Required keys: ``k0_model``, ``alpha``,
+  1041	        ``n_electrons``, ``E_eq_model``, ``cathodic_species``,
+  1042	        ``stoichiometry``.  Optional: ``anodic_species``, ``reversible``,
+  1043	        ``c_ref_model``, ``cathodic_conc_factors``.  See ``picard_ic``
+  1044	        module docstring + v3 §1.
+  1045	    bulk_concs, diffusivities, species_floors : lists of float
+  1046	        Per dynamic species (length n_species).  ``species_floors[i]`` is
+  1047	        the lower clamp on ``c_{i,s}`` (e.g. ``1e-300`` for O₂/H⁺;
+  1048	        ``P_FLOOR`` for H₂O₂).
+  1049	    h_idx : int
+  1050	        Index of H⁺ in the species ordering.  Used by the ambipolar
+  1051	        ``1/(2 D_H)`` flux-balance correction (v3 §2).
+  1052	    c_clo4_bulk, phi_applied_model, bv_exp_scale, exponent_clip,
+  1053	    clip_exponent, a_h, a_cl, c_cl_anchor_kind, stern_split, omega,
+  1054	    max_iters, tol :
+  1055	        Same semantics as ``picard_outer_loop``; see that function's
+  1056	        docstring.
+  1057	    topology_hint : str, optional
+  1058	        Selects the post-loop surface reconstruction (v3 §8):
+  1059	
+  1060	        - ``"sequential_2e_h2o2"``: legacy closed-form
+  1061	          ``P_s = (D_P·P_b + R_1)/(D_P + A_2_post)`` and
+  1062	          ``O_s = (D_O·O_b + B_1_post·P_s)/(D_O + A_1_post)``.  REQUIRED
+  1063	          for byte-equivalence with the legacy 2x2 ``picard_outer_loop``.
+  1064	        - ``"general"`` (default): naive signed flux balance per §2.
+  1065	
+  1066	    Returns
+  1067	    -------
+  1068	    (ok, reason, n_iters, picard_state) : tuple
+  1069	        ``picard_state`` includes ``R_list``, ``eta_list``,
+  1070	        ``alpha_hat_list``, ``beta_hat_list``, ``c_hat_list`` for
+  1071	        diagnostics.  When ``len(reactions) >= 2`` the dict ALSO carries
+  1072	        legacy keys ``R1, R2, eta1, eta2`` aliased to the first two
+  1073	        entries — preserves the existing wrapper/test/diagnostic API.
+  1074	        ``c_i_s`` per dynamic species lives under both the per-species
+  1075	        key (e.g. ``O_s, P_s, H_o``) for the standard ORR ordering AND
+  1076	        a generic ``c_s_list`` for arbitrary species lists.
+  1077	    """
+  1078	    n_species = len(bulk_concs)
+  1079	    if not (
+  1080	        len(diffusivities) == n_species
+  1081	        and len(species_floors) == n_species
+  1082	    ):
+  1083	        return False, "species_arity_mismatch", 0, {}
+  1084	    if h_idx < 0 or h_idx >= n_species:
+  1085	        return False, f"h_idx_out_of_range ({h_idx})", 0, {}
+  1086	
+  1087	    ok_h, reason_h = _validate_no_h_substrate(reactions=reactions, h_idx=h_idx)
+  1088	    if not ok_h:
+  1089	        return False, reason_h, 0, {}
+  1090	
+  1091	    N = len(reactions)
+  1092	    if N == 0:
+  1093	        return False, "empty_reactions", 0, {}
+  1094	
+  1095	    # --- Picard state ---
+  1096	    R = [0.0] * N
+  1097	    H_o = float(bulk_concs[h_idx])
+  1098	    phi_o = 0.0
+  1099	    c_s = [float(c) for c in bulk_concs]   # working surface concs
+  1100	    gamma_s = 1.0
+  1101	
+  1102	    # Initialize Stern + eta_drop for iter 1 (matches legacy ordering).
+  1103	    if stern_split is not None:
+  1104	        psi_S, psi_D, phi_surface = solve_stern_split(
+  1105	            phi_applied_model=phi_applied_model,
+  1106	            phi_o=phi_o,
+  1107	            lambda_D=stern_split["lambda_D"],
+  1108	            c_clo4_bulk=c_clo4_bulk,
+  1109	            a_cl=a_cl,
+  1110	            stern_coeff_nondim=stern_split["stern_coeff"],
+  1111	            eps_nondim=stern_split["eps"],
+  1112	        )
+  1113	        eta_drop = psi_S
+  1114	    else:
+  1115	        psi_S = 0.0
+  1116	        psi_D = phi_applied_model - phi_o
+  1117	        phi_surface = phi_applied_model
+  1118	        eta_drop = phi_applied_model
+  1119	
+  1120	    eta_list = _eta_list_from_drop(
+  1121	        eta_drop=eta_drop,
+  1122	        reactions=reactions,
+  1123	        bv_exp_scale=bv_exp_scale,
+  1124	        exponent_clip=exponent_clip,
+  1125	        clip_exponent=clip_exponent,
+  1126	    )
+  1127	
+  1128	    delta = float("inf")
+  1129	    converged = False
+  1130	    picard_iters = 0
+  1131	    alpha_hat: list[float] = [0.0] * N
+  1132	    beta_hat: list[float] = [0.0] * N
+  1133	    c_hat: list[float] = [0.0] * N
+  1134	
+  1135	    for k in range(1, max_iters + 1):
+  1136	        R_old = list(R)
+  1137	
+  1138	        c_cl_anchor = H_o if c_cl_anchor_kind == "synthesised_4sp" else c_clo4_bulk
+  1139	        gamma_s = compute_surface_gamma(
+  1140	            H_o, c_clo4_bulk, psi_D, a_h, a_cl, c_cl_anchor
+  1141	        )
+  1142	        log_gamma = math.log(max(gamma_s, 1e-300))
+  1143	
+  1144	        # γ-shifted log-concentrations at the OHP.
+  1145	        log_by_species: list[float] = []
+  1146	        for i in range(n_species):
+  1147	            base = math.log(max(c_s[i], 1e-300))
+  1148	            if i == h_idx:
+  1149	                # H⁺ at OHP is post-Boltzmann shifted by -psi_D.
+  1150	                log_by_species.append(base - psi_D + log_gamma)
+  1151	            else:
+  1152	                log_by_species.append(base + log_gamma)
+  1153	
+  1154	        alpha_hat, beta_hat, c_hat = _build_picard_prefactors(
+  1155	            reactions=reactions,
+  1156	            log_gamma=log_gamma,
+  1157	            log_by_species=log_by_species,
+  1158	            eta_list=eta_list,
+  1159	        )
+  1160	
+  1161	        M_mat, b_vec = _assemble_n_reaction_system(
+  1162	            reactions=reactions,
+  1163	            alpha_hat=alpha_hat,
+  1164	            beta_hat=beta_hat,
+  1165	            c_hat=c_hat,
+  1166	            bulk_concs=bulk_concs,
+  1167	            diffusivities=diffusivities,
+  1168	            h_idx=h_idx,
+  1169	        )
+  1170	
+  1171	        R_solve, det = _solve_linear_system(M_mat, b_vec)
+  1172	        if N == 2:
+  1173	            singular = (
+  1174	                not math.isfinite(det) or abs(det) < 1e-300
+  1175	            )
+  1176	        else:
+  1177	            singular = any(not math.isfinite(v) for v in R_solve)
+  1178	        if singular:
+  1179	            return (
+  1180	                False,
+  1181	                f"singular_jacobian_iter_{k}_det={det:.3g}",
+  1182	                k,
+  1183	                _state_dict_failure_general(
+  1184	                    R, c_s, H_o, phi_o, psi_D, psi_S, phi_surface,
+  1185	                    gamma_s, eta_list, h_idx,
+  1186	                ),
+  1187	            )
+  1188	        if any(not math.isfinite(v) for v in R_solve):
+  1189	            return (
+  1190	                False,
+  1191	                f"non_finite_R_iter_{k}",
+  1192	                k,
+  1193	                _state_dict_failure_general(
+  1194	                    R, c_s, H_o, phi_o, psi_D, psi_S, phi_surface,
+  1195	                    gamma_s, eta_list, h_idx,
+  1196	                ),
+  1197	            )
+  1198	
+  1199	        # Per-reaction relaxation on raw solve.
+  1200	        R = [(1.0 - omega) * R_old[j] + omega * R_solve[j] for j in range(N)]
+  1201	
+  1202	        # Surface concentrations from signed flux balance + per-species floors.
+  1203	        c_s = _surface_concs_from_rates(
+  1204	            R=R,
+  1205	            reactions=reactions,
+  1206	            bulk_concs=bulk_concs,
+  1207	            diffusivities=diffusivities,
+  1208	            h_idx=h_idx,
+  1209	            species_floors=species_floors,
+  1210	        )
+  1211	        H_o = c_s[h_idx]
+  1212	        phi_o = math.log(max(H_o, 1e-300) / max(c_clo4_bulk, 1e-300))
+  1213	
+  1214	        # Reject post-update non-finite state (v3 §9 item 8 (iii)).
+  1215	        if not all(math.isfinite(v) for v in c_s) or not math.isfinite(phi_o):
+  1216	            return (
+  1217	                False,
+  1218	                f"non_finite_state_iter_{k}",
+  1219	                k,
+  1220	                _state_dict_failure_general(
+  1221	                    R, c_s, H_o, phi_o, psi_D, psi_S, phi_surface,
+  1222	                    gamma_s, eta_list, h_idx,
+  1223	                ),
+  1224	            )
+  1225	
+  1226	        # Stern split + eta_drop update (matches legacy post-update ordering).
+  1227	        if stern_split is not None:
+  1228	            psi_S, psi_D, phi_surface = solve_stern_split(
+  1229	                phi_applied_model=phi_applied_model,
+  1230	                phi_o=phi_o,
+  1231	                lambda_D=stern_split["lambda_D"],
+  1232	                c_clo4_bulk=c_clo4_bulk,
+  1233	                a_cl=a_cl,
+  1234	                stern_coeff_nondim=stern_split["stern_coeff"],
+  1235	                eps_nondim=stern_split["eps"],
+  1236	            )
+  1237	            eta_drop = psi_S
+  1238	        else:
+  1239	            psi_S = 0.0
+  1240	            psi_D = phi_applied_model - phi_o
+  1241	            phi_surface = phi_applied_model
+  1242	            eta_drop = phi_applied_model
+  1243	
+  1244	        eta_list = _eta_list_from_drop(
+  1245	            eta_drop=eta_drop,
+  1246	            reactions=reactions,
+  1247	            bv_exp_scale=bv_exp_scale,
+  1248	            exponent_clip=exponent_clip,
+  1249	            clip_exponent=clip_exponent,
+  1250	        )
+  1251	
+  1252	        delta = sum(
+  1253	            abs(R[j] - R_old[j]) / max(abs(R[j]), 1e-30) for j in range(N)
+  1254	        )
+  1255	        picard_iters = k
+  1256	        if verbose:
+  1257	            R_str = " ".join(f"{x:+.3e}" for x in R)
+  1258	            cs_str = " ".join(f"{x:+.3e}" for x in c_s)
+  1259	            eta_str = " ".join(f"{x:+.3e}" for x in eta_list)
+  1260	            print(
+
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/forms_logc_muh.py | sed -n '613,710p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+   613	def set_initial_conditions_logc_muh(ctx: dict[str, Any], solver_params: Any) -> None:
+   614	    """Linear-phi IC for the muh formulation.
+   615	
+   616	    Sets:
+   617	
+   618	      non-mu species:   u_i(y) = ln(c0_i)              (constant, same as logc)
+   619	      mu species:       mu_H(y) = ln(c0_H) + em*z_H*phi_init(y)
+   620	      phi:              phi_init(y) = phi_surface * (1 - y)
+   621	
+   622	    Pointwise reconstruction of c_H from these IC fields recovers
+   623	    c_H_bulk exactly when phi_o_bulk = 0:
+   624	
+   625	      exp(mu_H(y) - em*z_H*phi(y)) = c_H_bulk * exp(-em*z_H*(phi(y) - phi_init(y)))
+   626	
+   627	    For Stern-aware configs, ``phi_surface = phi_applied - psi_S``
+   628	    instead of ``phi_applied`` (Phase F fix; see forms_logc.py
+   629	    counterpart for full rationale).
+   630	    """
+   631	    from .picard_ic import solve_stern_split
+   632	
+   633	    try:
+   634	        n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0, phi0, params = solver_params
+   635	    except Exception as exc:
+   636	        raise ValueError("bv_solver expects a list of 11 solver parameters") from exc
+   637	
+   638	    mesh = ctx["mesh"]
+   639	    U_prev = ctx["U_prev"]
+   640	    n = ctx["n_species"]
+   641	    scaling = ctx.get("nondim", {})
+   642	
+   643	    c0_raw = [float(v) for v in ([c0] * n if np.isscalar(c0) else list(c0))][:n]
+   644	    c0_model = scaling.get("c0_model_vals", c0_raw)
+   645	    phi_applied_model = scaling.get("phi_applied_model", float(phi_applied))
+   646	    em = float(scaling.get("electromigration_prefactor", 1.0))
+   647	
+   648	    mu_h_idx = _resolve_mu_h_index(list(z_vals))
+   649	    mu_species = {mu_h_idx}
+   650	
+   651	    # Stern-aware anchoring (Phase F).
+   652	    stern_capacitance_model = scaling.get("bv_stern_capacitance_model")
+   653	    use_stern_at_ic = (
+   654	        stern_capacitance_model is not None
+   655	        and float(stern_capacitance_model) > 0
+   656	    )
+   657	    phi_surface = float(phi_applied_model)
+   658	    if use_stern_at_ic and n >= 3 and len(c0_model) >= 3:
+   659	        counterions = _get_bv_boltzmann_counterions_cfg(params)
+   660	        c_clo4_bulk = None
+   661	        a_cl_bulk = 0.0
+   662	        if counterions:
+   663	            c_clo4_bulk = max(float(counterions[0]["c_bulk_nondim"]), 1e-300)
+   664	            for e in counterions:
+   665	                if e.get("steric_mode", "ideal") == "bikerman":
+   666	                    a_cl_bulk = float(e.get("a_nondim", 0.0))
+   667	                    break
+   668	        elif n == 4 and len(c0_model) >= 4:
+   669	            c_clo4_bulk = max(float(c0_model[3]), 1e-300)
+   670	            a_vals_full = list(solver_params[6])
+   671	            if len(a_vals_full) >= 4:
+   672	                a_cl_bulk = float(a_vals_full[3])
+   673	        if c_clo4_bulk is not None:
+   674	            H_b = max(float(c0_model[2]), 1e-300)
+   675	            phi_o_bulk = math.log(H_b / c_clo4_bulk)
+   676	            poisson_coefficient = float(scaling.get("poisson_coefficient", 1.0))
+   677	            lambda_D_bulk = math.sqrt(max(poisson_coefficient, 1e-300))
+   678	            _, _, phi_surface = solve_stern_split(
+   679	                phi_applied_model=float(phi_applied_model),
+   680	                phi_o=phi_o_bulk,
+   681	                lambda_D=lambda_D_bulk,
+   682	                c_clo4_bulk=c_clo4_bulk,
+   683	                a_cl=a_cl_bulk,
+   684	                stern_coeff_nondim=float(stern_capacitance_model),
+   685	                eps_nondim=poisson_coefficient,
+   686	            )
+   687	
+   688	    coords = fd.SpatialCoordinate(mesh)
+   689	    ndim = mesh.geometric_dimension()
+   690	    if ndim == 1:
+   691	        spatial_var = coords[0]
+   692	    else:
+   693	        spatial_var = coords[1]
+   694	
+   695	    phi_init_expr = fd.Constant(phi_surface) * (1.0 - spatial_var)
+   696	
+   697	    _C_FLOOR = 1e-20
+   698	    for i in range(n):
+   699	        c0_i = max(float(c0_model[i]), _C_FLOOR)
+   700	        if i in mu_species:
+   701	            # mu_H_init(y) = ln(c0_H) + em*z_H*phi_init(y)
+   702	            # -> reconstructs c_H = c0_H pointwise (when bulk phi=0).
+   703	            U_prev.sub(i).interpolate(
+   704	                fd.Constant(np.log(c0_i))
+   705	                + fd.Constant(em * float(z_vals[i])) * phi_init_expr
+   706	            )
+   707	        else:
+   708	            U_prev.sub(i).assign(fd.Constant(np.log(c0_i)))
+   709	
+   710	    U_prev.sub(n).interpolate(phi_init_expr)
+
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/grid_per_voltage.py | sed -n '184,370p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+   184	    from .dispatch import build_context, build_forms, set_initial_conditions
+   185	    from .forms_logc import set_initial_conditions_logc
+   186	    from .observables import _build_bv_observable_form
+   187	    from .solvers import _clone_params_with_phi
+   188	    from .diagnostics import collect_diagnostics
+   189	    from Forward.params import SolverParams
+   190	
+   191	    phi_applied_values = np.asarray(phi_applied_values, dtype=float)
+   192	    n_points = len(phi_applied_values)
+   193	
+   194	    # Unpack solver_params just to grab n_species and z_nominal.
+   195	    try:
+   196	        n_s, order, dt, t_end, z_v, D_v, a_v, _, c0, phi0, params = solver_params
+   197	    except Exception as exc:
+   198	        raise ValueError(
+   199	            "solve_grid_per_voltage_cold_with_warm_fallback expects an "
+   200	            "11-element solver_params"
+   201	        ) from exc
+   202	
+   203	    z_nominal = [float(v) for v in (
+   204	        [z_v] * n_s if np.isscalar(z_v) else list(z_v)
+   205	    )][:n_s]
+   206	
+   207	    def _params_with_phi(phi_applied_target: float):
+   208	        """Return solver_params with phi_applied (index 7) replaced."""
+   209	        if isinstance(solver_params, SolverParams):
+   210	            return solver_params.with_phi_applied(float(phi_applied_target))
+   211	        return list(_clone_params_with_phi(
+   212	            solver_params, phi_applied=float(phi_applied_target)
+   213	        ))
+   214	
+   215	    # ------------------------------------------------------------------
+   216	    # Per-voltage build helper
+   217	    # ------------------------------------------------------------------
+   218	    def _build_for_voltage(phi_applied_target: float):
+   219	        """Fresh context + forms + IC + solver + observable for V_target.
+   220	
+   221	        Returns ``(ctx, solver, of_cd)`` — observable used for SS
+   222	        convergence detection.
+   223	        """
+   224	        sp = _params_with_phi(phi_applied_target)
+   225	        ctx = build_context(sp, mesh=mesh)
+   226	        ctx = build_forms(ctx, sp)
+   227	        set_initial_conditions(ctx, sp)
+   228	        problem = fd.NonlinearVariationalProblem(
+   229	            ctx["F_res"], ctx["U"], bcs=ctx["bcs"], J=ctx["J_form"]
+   230	        )
+   231	        # Filter out non-PETSc sub-dicts (bv_bc, bv_convergence, nondim,
+   232	        # robin_bc) so they don't pollute the PETSc options database with
+   233	        # flattened "unknown option" warnings.
+   234	        _NON_PETSC_KEYS = {"bv_bc", "bv_convergence", "nondim", "robin_bc"}
+   235	        _items = params.items() if isinstance(params, dict) else []
+   236	        solve_opts = {k: v for k, v in _items if k not in _NON_PETSC_KEYS}
+   237	        # Force SNES to raise on non-convergence so run_ss's try/except
+   238	        # actually catches divergent Newton iterates (Firedrake's default
+   239	        # silently accepts them, which would let a non-converged state
+   240	        # be declared "steady" by the plateau detector).
+   241	        solve_opts.setdefault("snes_error_if_not_converged", True)
+   242	        solver = fd.NonlinearVariationalSolver(
+   243	            problem, solver_parameters=solve_opts,
+   244	        )
+   245	        ctx["_last_solver"] = solver
+   246	        of_cd = _build_bv_observable_form(
+   247	            ctx, mode="current_density", reaction_index=None, scale=1.0,
+   248	        )
+   249	        return ctx, solver, of_cd
+   250	
+   251	    # ------------------------------------------------------------------
+   252	    # SS time-stepping loop with SER adaptive dt
+   253	    # ------------------------------------------------------------------
+   254	    def _make_run_ss(ctx, solver, of_cd):
+   255	        U = ctx["U"]
+   256	        U_prev = ctx["U_prev"]
+   257	        dt_const = ctx["dt_const"]
+   258	        dt_max = float(dt_init) * float(dt_max_ratio)
+   259	
+   260	        def run_ss(max_steps: int) -> bool:
+   261	            dt_val = float(dt_init)
+   262	            dt_const.assign(dt_val)
+   263	            prev_flux = None
+   264	            prev_delta = None
+   265	            steady_count = 0
+   266	            for _ in range(1, max_steps + 1):
+   267	                try:
+   268	                    solver.solve()
+   269	                except Exception:
+   270	                    return False
+   271	                U_prev.assign(U)
+   272	                fv = float(fd.assemble(of_cd))
+   273	                if prev_flux is not None:
+   274	                    delta = abs(fv - prev_flux)
+   275	                    sv = max(abs(fv), abs(prev_flux), ss_abs_tol)
+   276	                    is_steady = (delta / sv <= ss_rel_tol) or (delta <= ss_abs_tol)
+   277	                    steady_count = steady_count + 1 if is_steady else 0
+   278	                    if prev_delta is not None and delta > 0:
+   279	                        ratio = prev_delta / delta
+   280	                        if ratio > 1.0:
+   281	                            grow = min(ratio, dt_growth_cap)
+   282	                            dt_val = min(dt_val * grow, dt_max)
+   283	                        else:
+   284	                            dt_val = max(dt_val * 0.5, float(dt_init))
+   285	                        dt_const.assign(dt_val)
+   286	                    prev_delta = delta
+   287	                else:
+   288	                    steady_count = 0
+   289	                prev_flux = fv
+   290	                if steady_count >= ss_consec:
+   291	                    return True
+   292	            return False
+   293	
+   294	        return run_ss
+   295	
+   296	    # ------------------------------------------------------------------
+   297	    # Helper: scale all charges (dynamic species + Boltzmann ion)
+   298	    # ------------------------------------------------------------------
+   299	    def _set_z_factor(ctx: dict, z_val: float) -> None:
+   300	        for i in range(n_s):
+   301	            ctx["z_consts"][i].assign(z_nominal[i] * z_val)
+   302	        boltz = ctx.get("boltzmann_z_scale")
+   303	        if boltz is not None:
+   304	            boltz.assign(float(z_val))
+   305	
+   306	    # ------------------------------------------------------------------
+   307	    # Initializer flag (read once for orchestrator-level dispatch).
+   308	    # ------------------------------------------------------------------
+   309	    if isinstance(params, dict):
+   310	        _bv_conv_for_init = params.get("bv_convergence", {})
+   311	        _initializer_flag = (
+   312	            str(_bv_conv_for_init.get("initializer", "linear_phi")).strip().lower()
+   313	            if isinstance(_bv_conv_for_init, dict) else "linear_phi"
+   314	        )
+   315	    else:
+   316	        _initializer_flag = "linear_phi"
+   317	
+   318	    # ------------------------------------------------------------------
+   319	    # Phase 1 (C): per-voltage cold-start with internal z-ramp
+   320	    # ------------------------------------------------------------------
+   321	    def _solve_cold(orig_idx: int, V_target_eta: float):
+   322	        ctx, solver, of_cd = _build_for_voltage(V_target_eta)
+   323	        run_ss = _make_run_ss(ctx, solver, of_cd)
+   324	        U = ctx["U"]
+   325	        U_prev = ctx["U_prev"]
+   326	        # IC already at V_target_eta from set_initial_conditions (linear-phi
+   327	        # or debye_boltzmann depending on params).  Belt-and-suspenders:
+   328	        # set phi_applied_func explicitly too.
+   329	        ctx["phi_applied_func"].assign(float(V_target_eta))
+   330	
+   331	        # Path B: analytical IC -> try direct z=1 SS; the IC already encodes
+   332	        # the depleted-H+/enriched-counterion state, so the z=0 stage that
+   333	        # the linear-phi path needs (to discover charge balance from a
+   334	        # bulk-flat guess) would *erase* the analytical state and is skipped.
+   335	        # Fall back to linear-phi z-ramp on Newton failure.
+   336	        if _initializer_flag != "linear_phi" and not ctx.get(
+   337	            "initializer_fallback", False
+   338	        ):
+   339	            _set_z_factor(ctx, 1.0)
+   340	            if run_ss(max_ss_steps_z):
+   341	                return _snapshot_U(U), 1.0, ctx
+   342	            # Direct z=1 failed -- reset to linear-phi IC and use the
+   343	            # standard z-ramp path below (bypass dispatcher to avoid
+   344	            # routing back to the analytical IC).
+   345	            ctx["initializer_fallback"] = True
+   346	            ctx["initializer_fallback_reason"] = (
+   347	                ctx.get("initializer_fallback_reason", "")
+   348	                + ";cold_z1_diverged"
+   349	            )
+   350	            set_initial_conditions_logc(ctx, _params_with_phi(V_target_eta))
+   351	
+   352	        # Path A: linear-phi (or fallback).  Step 0: zero all charges,
+   353	        # run SS at z=0 to find the neutral-electrolyte fixed point.
+   354	        _set_z_factor(ctx, 0.0)
+   355	        if not run_ss(max_ss_steps_cold):
+   356	            return None, 0.0, ctx
+   357	
+   358	        # Step 1..max_z_steps: linearly ramp z to 1 with checkpoint+rollback
+   359	        achieved_z = 0.0
+   360	        for z_val in np.linspace(0.0, 1.0, max_z_steps + 1)[1:]:
+   361	            ckpt = _snapshot_U(U)
+   362	            _set_z_factor(ctx, float(z_val))
+   363	            if run_ss(max_ss_steps_z):
+   364	                achieved_z = float(z_val)
+   365	            else:
+   366	                _restore_U(ckpt, U, U_prev)
+   367	                _set_z_factor(ctx, achieved_z)
+   368	                break
+   369	
+   370	        if achieved_z < 1.0 - 1e-3:
+
+exec
+/bin/zsh -lc 'git status --short' in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+ M .claude/scheduled_tasks.lock
+ M StudyResults/mms_convergence/convergence_data.json
+ M StudyResults/mms_convergence/mms_3sp_logc_boltzmann.png
+ M StudyResults/mms_convergence/mms_convergence.png
+?? StudyResults/mangan_p15_comparison/
+?? StudyResults/parallel_2e_4e_diagnostic_m3a2/
+?? StudyResults/parallel_2e_4e_k0_ladder_probe/
+?? StudyResults/parallel_2e_4e_warmstart_probe/
+?? StudyResults/profile_3sp_bikerman_muh_stern/
+?? StudyResults/profile_3sp_bikerman_muh_stern_ny100/
+?? "data/EChem Reactor Modeling-Seitz-Mangan/"
+?? docs/CHATGPT_HANDOFF_21_multi_ion_recovery/
+
+codex
+1. WHAT: Your proposed `set_initial_conditions(ctx, sp)` fix at `grid_per_voltage.py:350` is wrong as written. The dispatcher reads `initializer`; if `sp` still says `debye_boltzmann`, it routes right back to the analytical IC.
+WHY: The existing code intentionally bypasses dispatch there to force linear fallback, even though it picked the wrong formulation-specific function.
+WHAT TO DO: Dispatch with a cloned params object whose `bv_convergence.initializer = "linear_phi"`, or directly call `set_initial_conditions_logc_muh` / `set_initial_conditions_logc` by formulation. Do not call the raw dispatcher with unchanged `sp`.
+
+2. WHAT: Your z=0 analysis has a factual error: `logc_muh` reconstruction does not use immutable “global z”. It uses the same `z` Constants stored as `ctx["z_consts"]`; `_set_z_factor()` mutates them at `grid_per_voltage.py:299-304`.
+WHY: At z=0, `c_H = exp(mu_H - em*z_H*phi)` becomes `exp(mu_H)`, not `exp(mu_H - phi)`. So the wrong LOGC fallback does not artificially deplete H at z=0; it likely leaves H bulk-like while BV/Stern still generate a hard boundary problem.
+WHAT TO DO: Re-evaluate z=0 diagnostics after fixing fallback. Your explanation of why z=0 “should work” is not reliable.
+
+3. WHAT: Phase 5α must patch the initialization electrostatics too, not only the loop update. Current Picard computes the first `psi_D/eta_list` with `solve_stern_split()` before the loop at `picard_ic.py:1102-1126`.
+WHY: If the first Picard rate prefactors are wrong by many orders, relaxation can settle into the wrong basin or report misleading convergence.
+WHAT TO DO: Factor a helper like `update_electrostatics(c_s)` and use it both before `eta_list` initialization and after each `c_s` update.
+
+4. WHAT: Optional `multi_ion_ctx` is acceptable, but only if you isolate the branch behind helpers. Sprinkling `if multi_ion_ctx is not None` at `1138`, `1212`, and `1228` will make this loop brittle.
+WHY: Single-ion byte-equivalence depends on preserving update order exactly; mixed branch edits inside the loop are easy to get subtly wrong.
+WHAT TO DO: Keep one `picard_outer_loop_general`, but add small closures/helpers for `phi_o`, `gamma_s`, and Stern split. Separate full duplicate function is worse unless the helper approach becomes unreadable.
+
+5. WHAT: The multi-ion helper is not fully residual-equivalent for large potentials. `boltzmann.py` clamps each ion’s `phi` at `phi_clamp` in the residual, while `multi_ion.py` uses unclamped `_safe_exp`.
+WHY: If any root search or surface reconstruction approaches `|phi| > 50`, Picard and residual solve different analytic-ion laws.
+WHAT TO DO: Either apply the same per-ion `phi_clamp` in `multi_ion.py` or assert/log that all Picard/IC potentials stay well inside clamp for the page-15 grid.
+
+6. WHAT: Multiple roots are probably not the Cs/SO4 production problem, but monotonicity is not guaranteed for arbitrary unequal steric sizes.
+WHY: Bisection on a global `[-50,+50]` bracket can return an unintended root if the residual ever becomes non-monotone or if exp caps flatten it.
+WHAT TO DO: Add a monotonic scan test for Cs/SO4 over the expected phi range, check `dρ/dφ < 0` at the root, and in Picard prefer a local bracket around the previous `phi_o`.
+
+7. WHAT: `k0_R2e_init = 1e-12` is small enough. The bigger issue is the 1000x ramp.
+WHY: The hard transition is near mass-transport limitation; a 1000x step can jump directly across the basin boundary.
+WHAT TO DO: Use adaptive continuation: start with factors 10 or 32, rollback and bisect on failure. Four hard-coded 1000x jumps are too coarse.
+
+8. WHAT: Building the solver with tiny `k0` has metadata consistency risks. Picard reads `ctx["nondim"]["bv_reactions"]`, while the residual uses mutable `bv_k0_funcs`.
+WHY: If you later assign `bv_k0_funcs` upward, residual and Picard metadata diverge unless you rebuild or explicitly override Picard k0 inputs.
+WHAT TO DO: Prefer building with target positive `k0`, then assign the mutable function down before the first solve; or add a real k0-continuation hook that updates both Picard input and residual.
+
+9. WHAT: Current C+D does not have a k0 homotopy hook.
+WHY: It rebuilds a fresh context per voltage at `_build_for_voltage()` and then immediately solves. A driver-side assignment has nowhere to run unless you extend the orchestrator or write a custom anchor solve.
+WHAT TO DO: Add a pre-solve homotopy callback or create a separate anchor builder that performs k0/dt continuation and returns the converged snapshot to C+D.
+
+10. WHAT: `dt_init=1e-4` will not ramp to `0.25` under current SER defaults. `dt_max = dt_init * dt_max_ratio` at `grid_per_voltage.py:258`.
+WHY: With default ratio 20, max dt is `2e-3`, not `0.25`.
+WHAT TO DO: Add `dt_max_abs`, pass `dt_max_ratio=2500`, or implement an explicit dt ladder.
+
+11. WHAT: Above-Eeq homotopy is plausible, but your “zero crossing at E_eq” language is too clean. The implemented reversible rate has cathodic O/H factors and anodic H2O2, so net zero is concentration-dependent.
+WHY: At `V=E_eq`, net R2e is not automatically zero unless surface concentrations satisfy the configured reaction quotient.
+WHAT TO DO: Treat `+0.85 → +0.55` as empirical voltage homotopy, not as guaranteed anodic-to-cathodic crossing.
+
+12. WHAT: Stern homotopy is still under-specified. “No Stern” changes the residual form and BV eta semantics; large finite Stern keeps the Robin form but can make `eta ≈ -E_eq`.
+WHY: This is not a one-parameter smooth path unless you stay inside the positive-Stern Robin branch.
+WHAT TO DO: If you use it, use finite positive `C_S`: start very large, ramp down to `0.10`, and expose `stern_coeff` as mutable or accept rebuild/state-copy. Defer behind k0/dt.
+
+13. WHAT: Phase 5β byte-equivalence is safe only for logc if you force linear dispatch correctly. For legacy `logc_muh`, behavior will change.
+WHY: Current fallback is wrong for muh; fixing it may alter old convergence baselines.
+WHAT TO DO: Add regression tests: logc single-ClO4 fallback remains byte-equivalent; logc_muh single-ClO4 fallback is intentionally changed and must still pass the legacy sweep.
+
+14. WHAT: Phase 5ζ diagnostics should not be purely post-convergence if you use failure JSON to steer decisions.
+WHY: Current multi-ion counterion diagnostics use per-ion theta, not shared theta, so saturation and surface counterion numbers can mislead failure triage.
+WHAT TO DO: Patch diagnostics before relying on them to choose between 5γ/5δ/5ε. It need not block the first Picard/fallback patch.
+
+15. WHAT: Your Phase 5α test criterion “sensible R/c_s” is too vague.
+WHY: A wrong Picard can look sensible while being inconsistent with the assembled boundary residual.
+WHAT TO DO: Add a rate-consistency test: evaluate the residual BV rate at the IC surface and compare to Picard `R_list` within tolerance for Cs/SO4 at `+0.55`.
+
+VERDICT: ISSUES_REMAIN
+tokens used
+336,908
+1. WHAT: Your proposed `set_initial_conditions(ctx, sp)` fix at `grid_per_voltage.py:350` is wrong as written. The dispatcher reads `initializer`; if `sp` still says `debye_boltzmann`, it routes right back to the analytical IC.
+WHY: The existing code intentionally bypasses dispatch there to force linear fallback, even though it picked the wrong formulation-specific function.
+WHAT TO DO: Dispatch with a cloned params object whose `bv_convergence.initializer = "linear_phi"`, or directly call `set_initial_conditions_logc_muh` / `set_initial_conditions_logc` by formulation. Do not call the raw dispatcher with unchanged `sp`.
+
+2. WHAT: Your z=0 analysis has a factual error: `logc_muh` reconstruction does not use immutable “global z”. It uses the same `z` Constants stored as `ctx["z_consts"]`; `_set_z_factor()` mutates them at `grid_per_voltage.py:299-304`.
+WHY: At z=0, `c_H = exp(mu_H - em*z_H*phi)` becomes `exp(mu_H)`, not `exp(mu_H - phi)`. So the wrong LOGC fallback does not artificially deplete H at z=0; it likely leaves H bulk-like while BV/Stern still generate a hard boundary problem.
+WHAT TO DO: Re-evaluate z=0 diagnostics after fixing fallback. Your explanation of why z=0 “should work” is not reliable.
+
+3. WHAT: Phase 5α must patch the initialization electrostatics too, not only the loop update. Current Picard computes the first `psi_D/eta_list` with `solve_stern_split()` before the loop at `picard_ic.py:1102-1126`.
+WHY: If the first Picard rate prefactors are wrong by many orders, relaxation can settle into the wrong basin or report misleading convergence.
+WHAT TO DO: Factor a helper like `update_electrostatics(c_s)` and use it both before `eta_list` initialization and after each `c_s` update.
+
+4. WHAT: Optional `multi_ion_ctx` is acceptable, but only if you isolate the branch behind helpers. Sprinkling `if multi_ion_ctx is not None` at `1138`, `1212`, and `1228` will make this loop brittle.
+WHY: Single-ion byte-equivalence depends on preserving update order exactly; mixed branch edits inside the loop are easy to get subtly wrong.
+WHAT TO DO: Keep one `picard_outer_loop_general`, but add small closures/helpers for `phi_o`, `gamma_s`, and Stern split. Separate full duplicate function is worse unless the helper approach becomes unreadable.
+
+5. WHAT: The multi-ion helper is not fully residual-equivalent for large potentials. `boltzmann.py` clamps each ion’s `phi` at `phi_clamp` in the residual, while `multi_ion.py` uses unclamped `_safe_exp`.
+WHY: If any root search or surface reconstruction approaches `|phi| > 50`, Picard and residual solve different analytic-ion laws.
+WHAT TO DO: Either apply the same per-ion `phi_clamp` in `multi_ion.py` or assert/log that all Picard/IC potentials stay well inside clamp for the page-15 grid.
+
+6. WHAT: Multiple roots are probably not the Cs/SO4 production problem, but monotonicity is not guaranteed for arbitrary unequal steric sizes.
+WHY: Bisection on a global `[-50,+50]` bracket can return an unintended root if the residual ever becomes non-monotone or if exp caps flatten it.
+WHAT TO DO: Add a monotonic scan test for Cs/SO4 over the expected phi range, check `dρ/dφ < 0` at the root, and in Picard prefer a local bracket around the previous `phi_o`.
+
+7. WHAT: `k0_R2e_init = 1e-12` is small enough. The bigger issue is the 1000x ramp.
+WHY: The hard transition is near mass-transport limitation; a 1000x step can jump directly across the basin boundary.
+WHAT TO DO: Use adaptive continuation: start with factors 10 or 32, rollback and bisect on failure. Four hard-coded 1000x jumps are too coarse.
+
+8. WHAT: Building the solver with tiny `k0` has metadata consistency risks. Picard reads `ctx["nondim"]["bv_reactions"]`, while the residual uses mutable `bv_k0_funcs`.
+WHY: If you later assign `bv_k0_funcs` upward, residual and Picard metadata diverge unless you rebuild or explicitly override Picard k0 inputs.
+WHAT TO DO: Prefer building with target positive `k0`, then assign the mutable function down before the first solve; or add a real k0-continuation hook that updates both Picard input and residual.
+
+9. WHAT: Current C+D does not have a k0 homotopy hook.
+WHY: It rebuilds a fresh context per voltage at `_build_for_voltage()` and then immediately solves. A driver-side assignment has nowhere to run unless you extend the orchestrator or write a custom anchor solve.
+WHAT TO DO: Add a pre-solve homotopy callback or create a separate anchor builder that performs k0/dt continuation and returns the converged snapshot to C+D.
+
+10. WHAT: `dt_init=1e-4` will not ramp to `0.25` under current SER defaults. `dt_max = dt_init * dt_max_ratio` at `grid_per_voltage.py:258`.
+WHY: With default ratio 20, max dt is `2e-3`, not `0.25`.
+WHAT TO DO: Add `dt_max_abs`, pass `dt_max_ratio=2500`, or implement an explicit dt ladder.
+
+11. WHAT: Above-Eeq homotopy is plausible, but your “zero crossing at E_eq” language is too clean. The implemented reversible rate has cathodic O/H factors and anodic H2O2, so net zero is concentration-dependent.
+WHY: At `V=E_eq`, net R2e is not automatically zero unless surface concentrations satisfy the configured reaction quotient.
+WHAT TO DO: Treat `+0.85 → +0.55` as empirical voltage homotopy, not as guaranteed anodic-to-cathodic crossing.
+
+12. WHAT: Stern homotopy is still under-specified. “No Stern” changes the residual form and BV eta semantics; large finite Stern keeps the Robin form but can make `eta ≈ -E_eq`.
+WHY: This is not a one-parameter smooth path unless you stay inside the positive-Stern Robin branch.
+WHAT TO DO: If you use it, use finite positive `C_S`: start very large, ramp down to `0.10`, and expose `stern_coeff` as mutable or accept rebuild/state-copy. Defer behind k0/dt.
+
+13. WHAT: Phase 5β byte-equivalence is safe only for logc if you force linear dispatch correctly. For legacy `logc_muh`, behavior will change.
+WHY: Current fallback is wrong for muh; fixing it may alter old convergence baselines.
+WHAT TO DO: Add regression tests: logc single-ClO4 fallback remains byte-equivalent; logc_muh single-ClO4 fallback is intentionally changed and must still pass the legacy sweep.
+
+14. WHAT: Phase 5ζ diagnostics should not be purely post-convergence if you use failure JSON to steer decisions.
+WHY: Current multi-ion counterion diagnostics use per-ion theta, not shared theta, so saturation and surface counterion numbers can mislead failure triage.
+WHAT TO DO: Patch diagnostics before relying on them to choose between 5γ/5δ/5ε. It need not block the first Picard/fallback patch.
+
+15. WHAT: Your Phase 5α test criterion “sensible R/c_s” is too vague.
+WHY: A wrong Picard can look sensible while being inconsistent with the assembled boundary residual.
+WHAT TO DO: Add a rate-consistency test: evaluate the residual BV rate at the IC surface and compare to Picard `R_list` within tolerance for Cs/SO4 at `+0.55`.
+
+VERDICT: ISSUES_REMAIN
