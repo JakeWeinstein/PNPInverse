@@ -78,7 +78,14 @@ from .water_ionization import (
     is_water_ionization_enabled,
     resolve_h_index,
 )
+from .cation_hydrolysis import (
+    build_cation_hydrolysis_terms,
+    build_pka_shift,
+    build_proton_boundary_source,
+    is_cation_hydrolysis_enabled,
+)
 from .forms_logc import build_context_logc, set_initial_conditions_logc
+from .forms_indexing import unpack_dof_indices
 
 
 # ---------------------------------------------------------------------------
@@ -285,13 +292,20 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
 
     # Split mixed function: u_i (non-mu) or mu_H (mu_h_idx) for species,
     # phi for potential.  Note: ui[mu_h_idx] is mu_H, NOT u_H.
-    ui = fd.split(U)[:-1]
-    phi = fd.split(U)[-1]
-    ui_prev = fd.split(U_prev)[:-1]
-    phi_prev = fd.split(U_prev)[-1]   # NEW for muh: c_H_old reconstruction
+    # Phase 6β v9 Gate 3A: use the layout-aware index helper so the
+    # mixed-space slicing works for both the legacy ``species + phi``
+    # layout and the Γ-augmented ``species + phi + Γ`` layout.  The
+    # indices object lives on ctx (set by ``build_context_logc``).
+    indices = ctx.get("mixed_space_indices") or unpack_dof_indices(
+        has_gamma=False
+    )
+    ui = fd.split(U)[indices.species_slice]
+    phi = fd.split(U)[indices.phi_index]
+    ui_prev = fd.split(U_prev)[indices.species_slice]
+    phi_prev = fd.split(U_prev)[indices.phi_index]   # NEW for muh: c_H_old reconstruction
     v_tests = fd.TestFunctions(W)
-    v_list = v_tests[:-1]
-    w = v_tests[-1]
+    v_list = v_tests[indices.species_slice]
+    w = v_tests[indices.phi_index]
 
     # Electromigration prefactor and dt -- moved up from forms_logc.py
     # (line 214) so we can reference em when reconstructing log(c_H) for
@@ -656,6 +670,85 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
         stern_coeff = None
 
     # ---------------------------------------------------------------
+    # Phase 6β v9 Gate 3 — cation hydrolysis (Γ as external coefficient)
+    # ---------------------------------------------------------------
+    cation_hydrolysis_bundle = None
+    if is_cation_hydrolysis_enabled(conv_cfg):
+        h_idx_for_cation = (
+            h_idx_water
+            if water_ion_enabled
+            else resolve_h_index(list(z_vals), roles=species_roles)
+        )
+        cation_hydrolysis_bundle = build_cation_hydrolysis_terms(
+            ctx=ctx,
+            conv_cfg=conv_cfg,
+            z_vals=z_vals,
+            roles=species_roles,
+            h_idx=h_idx_for_cation,
+            R_space=R_space,
+        )
+
+        # σ_S for the Singh formula — bare Stern surface charge per R4#5
+        # in **physical** C/m² (Singh's Eq. (4) is unit-specific).
+        if stern_coeff is not None:
+            from Nondim.constants import FARADAY_CONSTANT as _F
+            length_scale = float(scaling.get("length_scale_m", 1.0))
+            concentration_scale = float(
+                scaling.get("concentration_scale_mol_m3", 1.0)
+            )
+            sigma_phys_per_nondim = float(_F) * concentration_scale * length_scale
+            sigma_S_expr = (
+                stern_coeff
+                * (phi_applied_func - phi)
+                * fd.Constant(sigma_phys_per_nondim)
+            )
+        else:
+            sigma_S_expr = fd.Constant(0.0)
+        ctx["_cation_hydrolysis_sigma_S_expr"] = sigma_S_expr
+
+        # On the muh backend the proton primary is mu_H, but the
+        # boundary concentration we want is c_H = exp(u_exprs[mu_h_idx])
+        # which is ci[mu_h_idx] — same convention as Phase 6α.
+        c_M_bdy_expr = ci[cation_hydrolysis_bundle.counterion_idx]
+        c_H_bdy_expr = ci[h_idx_for_cation]
+
+        pka_shift_expr = build_pka_shift(
+            cation_params=cation_hydrolysis_bundle.cation_params,
+            sigma_S=sigma_S_expr,
+            r_H_El_func=cation_hydrolysis_bundle.r_H_El_pm_func,
+        )
+
+        R_net_default = build_proton_boundary_source(
+            bundle=cation_hydrolysis_bundle,
+            c_M_bdy_expr=c_M_bdy_expr,
+            c_H_bdy_expr=c_H_bdy_expr,
+            pka_shift_expr=pka_shift_expr,
+        )
+
+        manufactured_R_inj = conv_cfg.get("manufactured_R_inj", None)
+        if manufactured_R_inj is not None:
+            R_net = fd.Constant(float(manufactured_R_inj))
+        else:
+            R_net = R_net_default
+
+        # Proton + cation boundary residuals — wrapped in
+        # ``λ_hydrolysis`` so λ=0 byte-zeros every hydrolysis
+        # contribution.  Combined with ``bundle.gamma_func = 0`` at
+        # λ=0 this restores the disabled-feature baseline up to
+        # discretisation error.
+        lam_func = cation_hydrolysis_bundle.lambda_hydrolysis_func
+        F_res -= (
+            lam_func * R_net
+            * v_list[h_idx_for_cation]
+            * ds(electrode_marker)
+        )
+        F_res -= (
+            lam_func * (-R_net)
+            * v_list[cation_hydrolysis_bundle.counterion_idx]
+            * ds(electrode_marker)
+        )
+
+    # ---------------------------------------------------------------
     # Boundary conditions
     # ---------------------------------------------------------------
     # Concentration BCs:
@@ -723,6 +816,7 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
         "_diag_eps_c": float(conv_cfg.get("conc_floor", 1e-8)),
         "steric_boltzmann": steric_boltz,
         "water_ionization": water_bundle,  # None when feature disabled
+        "cation_hydrolysis": cation_hydrolysis_bundle,  # None when feature disabled
     })
     # Ideal-path Boltzmann counterions (bikerman entries handled above
     # by build_steric_boltzmann_expressions).

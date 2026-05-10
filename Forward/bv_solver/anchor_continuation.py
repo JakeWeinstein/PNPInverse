@@ -491,6 +491,166 @@ def get_stern_capacitance_model(ctx: dict) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Phase 6β v9 Gate 3C — cation hydrolysis continuation accessors
+# ---------------------------------------------------------------------------
+
+
+def _require_cation_hydrolysis_bundle(ctx: dict):
+    """Fetch ``ctx['cation_hydrolysis']`` or raise with a helpful message."""
+    bundle = ctx.get("cation_hydrolysis")
+    if bundle is None:
+        raise ValueError(
+            "ctx has no 'cation_hydrolysis' bundle — was the form built "
+            "with enable_cation_hydrolysis=True on bv_convergence?  The "
+            "Gate 3C accessors are no-ops without that flag."
+        )
+    return bundle
+
+
+def set_reaction_lambda_hydrolysis_model(ctx: dict, lambda_value: float) -> None:
+    """Set the cation-hydrolysis ``λ`` continuation knob.
+
+    Mirrors :func:`set_reaction_kw_eff_model`: writes to BOTH the
+    metadata layer (``ctx['bv_convergence']['lambda_hydrolysis']``)
+    and the live UFL Function
+    (``ctx['cation_hydrolysis'].lambda_hydrolysis_func``) so the form
+    residual sees the same value Picard / diagnostics see.
+
+    Parameters
+    ----------
+    ctx
+        Firedrake context built with ``enable_cation_hydrolysis=True``.
+    lambda_value
+        New activation knob value, must lie in ``[0, 1]``.
+
+    Raises
+    ------
+    ValueError
+        ``lambda_value`` outside ``[0, 1]`` or no cation_hydrolysis
+        bundle on ``ctx``.
+    """
+    if not (0.0 <= float(lambda_value) <= 1.0):
+        raise ValueError(
+            f"lambda_value must lie in [0, 1] (got {lambda_value!r}); "
+            "outside this range the Γ smooth-blend residual loses "
+            "its monotone Newton path."
+        )
+    bundle = _require_cation_hydrolysis_bundle(ctx)
+    val = float(lambda_value)
+    if "bv_convergence" in ctx and isinstance(ctx["bv_convergence"], dict):
+        new_cfg = dict(ctx["bv_convergence"])
+        new_cfg["lambda_hydrolysis"] = val
+        ctx["bv_convergence"] = new_cfg
+    bundle.lambda_hydrolysis_func.assign(val)
+
+
+def get_reaction_lambda_hydrolysis_model(ctx: dict) -> float:
+    """Read the current ``λ`` value from the live FE Function."""
+    bundle = _require_cation_hydrolysis_bundle(ctx)
+    return float(bundle.lambda_hydrolysis_func)
+
+
+def _set_kinetic_rate(
+    ctx: dict, attr_name: str, config_key: str, value: float,
+    *, allow_zero: bool = True,
+) -> None:
+    """Internal helper: write a kinetic-rate Function + metadata in lockstep.
+
+    Mirrors the ``set_reaction_kw_eff_model`` two-layer update: writes
+    the dict layer (``ctx['bv_convergence']['cation_hydrolysis_config'][config_key]``)
+    AND the live FE Function (``getattr(bundle, attr_name)``).
+    """
+    val = float(value)
+    if val < 0.0:
+        raise ValueError(
+            f"{config_key} must be non-negative (got {val!r})"
+        )
+    if not allow_zero and val == 0.0:
+        raise ValueError(
+            f"{config_key} must be positive (got {val!r}); zero leaves "
+            f"the corresponding kinetic branch undefined."
+        )
+    bundle = _require_cation_hydrolysis_bundle(ctx)
+    if "bv_convergence" in ctx and isinstance(ctx["bv_convergence"], dict):
+        new_cfg = dict(ctx["bv_convergence"])
+        sub_cfg = dict(new_cfg.get("cation_hydrolysis_config") or {})
+        sub_cfg[config_key] = val
+        new_cfg["cation_hydrolysis_config"] = sub_cfg
+        ctx["bv_convergence"] = new_cfg
+    getattr(bundle, attr_name).assign(val)
+
+
+def set_reaction_k_hyd_model(ctx: dict, k_hyd_value: float) -> None:
+    """Set the forward hydrolysis rate ``k_hyd`` in BOTH metadata + Function."""
+    _set_kinetic_rate(ctx, "k_hyd_func", "k_hyd", k_hyd_value)
+
+
+def set_reaction_k_prot_model(ctx: dict, k_prot_value: float) -> None:
+    """Set the reverse protonation rate ``k_prot`` in BOTH metadata + Function."""
+    _set_kinetic_rate(ctx, "k_prot_func", "k_prot", k_prot_value)
+
+
+def set_reaction_k_des_model(ctx: dict, k_des_value: float) -> None:
+    """Set the desorption rate ``k_des`` in BOTH metadata + Function.
+
+    ``k_des = 0`` is rejected because the Γ residual at λ=1 reduces to
+    ``R_net = 0`` (forces ``R_net = 0`` for any γ), giving Newton an
+    indeterminate state.
+    """
+    _set_kinetic_rate(
+        ctx, "k_des_func", "k_des", k_des_value, allow_zero=False,
+    )
+
+
+def set_reaction_delta_ohp_model(ctx: dict, delta_ohp_value: float) -> None:
+    """Set the OHP thickness ``δ_OHP`` (nondim) in BOTH metadata + Function."""
+    _set_kinetic_rate(
+        ctx, "delta_ohp_func", "delta_ohp_hat", delta_ohp_value,
+        allow_zero=False,
+    )
+
+
+def set_reaction_r_H_El_pm_model(ctx: dict, r_H_El_pm_value: float) -> None:
+    """Set Singh's hydration-shell H to electrode distance r_H_El (pm).
+
+    Phase 6β v9 Gate 4B sweep accessor.  Mirrors the kinetic-rate
+    setters: writes the live FE Function plus the metadata layer
+    (``cation_hydrolysis_config['pka_shift_params']['r_H_El_pm']``)
+    so downstream readers see the current value.
+
+    Raises
+    ------
+    ValueError
+        ``r_H_El_pm_value <= 0`` (geometric distance must be positive)
+        or no cation_hydrolysis bundle on ``ctx``.
+    """
+    val = float(r_H_El_pm_value)
+    if val <= 0.0:
+        raise ValueError(
+            f"r_H_El_pm must be positive (got {val!r}); the Singh "
+            "geometric factor diverges as r_H_El → 0."
+        )
+    bundle = _require_cation_hydrolysis_bundle(ctx)
+    if "bv_convergence" in ctx and isinstance(ctx["bv_convergence"], dict):
+        new_cfg = dict(ctx["bv_convergence"])
+        sub_cfg = dict(new_cfg.get("cation_hydrolysis_config") or {})
+        # Mutate the nested pka_shift_params if present.
+        nested = sub_cfg.get("pka_shift_params")
+        if isinstance(nested, dict):
+            new_nested = dict(nested)
+            new_nested["r_H_El_pm"] = val
+            sub_cfg["pka_shift_params"] = new_nested
+        new_cfg["cation_hydrolysis_config"] = sub_cfg
+        ctx["bv_convergence"] = new_cfg
+    bundle.r_H_El_pm_func.assign(val)
+    # Keep the bundle's cation_params dict in sync — readers (Picard
+    # update, diagnostics) may inspect it.
+    new_params = dict(bundle.cation_params)
+    new_params["r_H_El_pm"] = val
+    object.__setattr__(bundle, "cation_params", new_params)
+
+
+# ---------------------------------------------------------------------------
 # AdaptiveLadder — geometric scale ramp with sqrt-mean rollback
 # ---------------------------------------------------------------------------
 
@@ -644,6 +804,7 @@ def solve_anchor_with_continuation(
     rung_callback: Optional[Callable] = None,
     kw_eff_ladder: Optional[Tuple[float, ...]] = None,
     c_s_ladder: Optional[Tuple[float, ...]] = None,
+    lambda_hydrolysis_ladder: Optional[Tuple[float, ...]] = None,
 ) -> AnchorContinuationResult:
     """Solve a single voltage with k0 continuation.
 
@@ -718,6 +879,21 @@ def solve_anchor_with_continuation(
         supports C_S without Kw_eff (combining both is deferred).
         Requires the form to have been built with
         ``stern_capacitance_f_m2 > 0`` (otherwise the helper raises).
+    lambda_hydrolysis_ladder
+        Optional Phase 6β v9 Gate 3C cation-hydrolysis activation
+        ladder.  When ``None`` (default), no λ ramp is performed —
+        λ stays pinned at whatever value was on
+        ``bv_convergence['lambda_hydrolysis']`` (typically 0).  When
+        provided, must be a strictly-increasing positive sequence
+        whose last value is ``1.0`` (the production target).  The
+        orchestrator walks this ladder OUTER to the k0 ladder; at the
+        first rung the full k0 ladder runs (so k0 reaches production
+        at λ=floor), then subsequent λ rungs warm-start from the
+        previous successful λ at production k0.  Combining with
+        ``kw_eff_ladder`` or ``c_s_ladder`` is deferred (raises
+        ``NotImplementedError``); each ladder is individually
+        supported.  Requires the form to have been built with
+        ``enable_cation_hydrolysis=True``.
 
     Returns
     -------
@@ -760,6 +936,18 @@ def solve_anchor_with_continuation(
         raise NotImplementedError(
             "Combining c_s_ladder + kw_eff_ladder is deferred for the "
             "Gate 2 MVP.  Run them independently."
+        )
+    # Phase 6β v9 Gate 3C — disallow combining lambda_hydrolysis ladder
+    # with the other two.  Each is independently supported.
+    if lambda_hydrolysis_ladder is not None and (
+        kw_eff_ladder is not None or c_s_ladder is not None
+    ):
+        raise NotImplementedError(
+            "Combining lambda_hydrolysis_ladder with kw_eff_ladder or "
+            "c_s_ladder is deferred for the Gate 3C MVP.  Run them "
+            "independently — typical pattern is anchor + warm-walk "
+            "with kw_eff_ladder at λ=0, then a separate λ ramp at the "
+            "Gate 4 target voltage."
         )
 
     # ----- 2. Build context + forms, set IC at target k0 (or floor).
@@ -824,6 +1012,48 @@ def solve_anchor_with_continuation(
     last_success_snap = snapshot_U(ctx["U"])
 
     rungs: List[Dict[str, Any]] = []
+
+    def _run_gamma_picard(label: str) -> None:
+        """Outer Picard for ``Γ_MOH`` after a successful inner solve.
+
+        Phase 6β v9 Gate 3: Γ is an external R-space coefficient
+        updated by ``update_gamma_from_solution`` between continuation
+        rungs.  The closed-form formula has Γ depending on
+        boundary-averaged c_M, c_H — so once Γ changes, the FE
+        solution must be re-solved.  We iterate until either Γ
+        stabilises (relative tolerance ``1e-4``) or the cap of
+        ``8`` Picard iterations is hit.
+
+        At λ=0 (the disabled-feature pin) the formula returns Γ=0
+        immediately and the loop is a no-op.
+        """
+        if ctx.get("cation_hydrolysis") is None:
+            return
+        from .cation_hydrolysis import update_gamma_from_solution
+        picard_max_iters = 8
+        picard_rel_tol = 1e-4
+        gamma_history = []
+        for _it in range(picard_max_iters):
+            gamma_old = float(ctx["cation_hydrolysis"].gamma_func)
+            gamma_new = update_gamma_from_solution(ctx)
+            gamma_history.append(float(gamma_new))
+            lam_active = float(
+                ctx["cation_hydrolysis"].lambda_hydrolysis_func
+            )
+            if lam_active == 0.0:
+                break
+            rel = abs(gamma_new - gamma_old) / max(
+                abs(gamma_new), abs(gamma_old), 1e-30
+            )
+            if rel < picard_rel_tol:
+                break
+            ok = run_ss(max_ss_steps_per_rung)
+            if not ok:
+                # Picard step de-stabilised; stop and accept the
+                # previous Γ.  Continuation orchestrator will surface
+                # this as a non-converged outcome.
+                break
+        ctx[f"gamma_picard_history_{label}"] = gamma_history
 
     def _run_k0_ladder(
         rung_label: str,
@@ -972,6 +1202,159 @@ def solve_anchor_with_continuation(
                 final_k0_ladder = k0_lad
             converged_to_target = True
             ctx["c_s_ladder_history"] = list(cs_history)
+        elif lambda_hydrolysis_ladder is not None:
+            # Phase 6β v9 Gate 3C — cation hydrolysis activation ladder.
+            # Mirrors the kw_eff_ladder pattern: floor branch optionally
+            # at λ=0, then walks positive λ rungs at production k0.  At
+            # each positive λ rung we run an OUTER PICARD on Γ (the
+            # cation hydrolysis surface coverage) — Newton solves the
+            # FE system at fixed Γ, then ``update_gamma_from_solution``
+            # recomputes Γ from the converged boundary integrals; the
+            # iteration runs until Γ stops changing.
+            from .cation_hydrolysis import update_gamma_from_solution
+
+            lam_seq = list(lambda_hydrolysis_ladder)
+            if not lam_seq:
+                raise ValueError(
+                    "lambda_hydrolysis_ladder must be non-empty when provided"
+                )
+            lam_target = float(lam_seq[-1])
+            if lam_target != 1.0:
+                raise ValueError(
+                    f"lambda_hydrolysis_ladder must end at the production "
+                    f"target 1.0 (got {lam_target!r})"
+                )
+            for v in lam_seq:
+                if float(v) < 0.0:
+                    raise ValueError(
+                        f"lambda_hydrolysis_ladder entries must be >= 0 "
+                        f"(got {v!r})"
+                    )
+                if float(v) > 1.0:
+                    raise ValueError(
+                        f"lambda_hydrolysis_ladder entries must be <= 1 "
+                        f"(got {v!r})"
+                    )
+            for a, b in zip(lam_seq[:-1], lam_seq[1:]):
+                if not (float(b) > float(a)):
+                    raise ValueError(
+                        "lambda_hydrolysis_ladder must be strictly "
+                        f"monotonic increasing (got {lam_seq!r})"
+                    )
+
+            # Floor branch: if the ladder includes 0.0, run the full k0
+            # ladder there first (λ=0 → Γ pinned to 0 by the explicit
+            # branch in update_gamma_from_solution; matches the
+            # disabled-feature baseline).
+            lam_positive = [float(v) for v in lam_seq if float(v) > 0.0]
+            if float(lam_seq[0]) == 0.0:
+                set_reaction_lambda_hydrolysis_model(ctx, 0.0)
+                # Force Γ = 0 explicitly before the floor solve.
+                ctx["cation_hydrolysis"].gamma_func.assign(0.0)
+                ok, k0_lad, _ = _run_k0_ladder("lambda=0.0")
+                final_k0_ladder = k0_lad
+                if not ok:
+                    raise LadderExhausted(
+                        f"k0 ladder exhausted at λ=0; "
+                        f"history={k0_lad.history()!r}"
+                    )
+
+            lam_scales = tuple(v / lam_target for v in lam_positive)
+            if not lam_scales or lam_scales[-1] != 1.0:
+                raise ValueError(
+                    "lambda_hydrolysis_ladder positive entries must end "
+                    f"at the target (last entry / target != 1.0; "
+                    f"ladder={lam_seq!r})"
+                )
+            lam_ladder = AdaptiveLadder(
+                initial_scales=lam_scales,
+                max_inserts_per_step=max_inserts_per_step,
+            )
+            lam_last_success_snap = last_success_snap
+
+            # Pin k0 at production for every λ>0 rung — same rationale
+            # as the kw_eff ladder.
+            for j, k_target in k0_targets.items():
+                set_reaction_k0_model(ctx, j, float(k_target))
+
+            picard_max_iters = 8
+            picard_rel_tol = 1e-4
+
+            while not lam_ladder.is_done():
+                lam_scale = lam_ladder.current_scale
+                lam_val = lam_scale * lam_target
+                set_reaction_lambda_hydrolysis_model(ctx, lam_val)
+
+                t_rung = time.time()
+                # Outer Picard for Γ.  Each Newton solve at fixed Γ
+                # produces a converged FE state; the Picard step then
+                # updates Γ from the boundary integrals.  Convergence
+                # is measured on the relative change in Γ.
+                gamma_picard_history: List[float] = []
+                ok = False
+                for picard_iter in range(picard_max_iters):
+                    ok = run_ss(max_ss_steps_per_rung)
+                    if not ok:
+                        break
+                    gamma_old = float(
+                        ctx["cation_hydrolysis"].gamma_func
+                    )
+                    gamma_new = update_gamma_from_solution(ctx)
+                    gamma_picard_history.append(float(gamma_new))
+                    rel = abs(gamma_new - gamma_old) / max(
+                        abs(gamma_new), abs(gamma_old), 1e-30
+                    )
+                    if rel < picard_rel_tol:
+                        break
+                rung_diag: Dict[str, Any] = {
+                    "rung_label": f"lambda={lam_val:.3e}",
+                    "scale": float(lam_scale),
+                    "lambda_hydrolysis": float(lam_val),
+                    "snes_converged": bool(ok),
+                    "gamma_picard_iters": len(gamma_picard_history),
+                    "gamma_picard_history": gamma_picard_history,
+                    "gamma_final": (
+                        gamma_picard_history[-1]
+                        if gamma_picard_history
+                        else None
+                    ),
+                    "wall_seconds": float(time.time() - t_rung),
+                }
+                if ok:
+                    try:
+                        rung_diag["cd_observable"] = float(fd.assemble(of_cd))
+                    except Exception as exc:
+                        rung_diag["cd_observable_error"] = (
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                rungs.append(rung_diag)
+
+                if rung_callback is not None:
+                    try:
+                        rung_callback(lam_scale, ok, ctx, rung_diag)
+                    except Exception as exc:
+                        rung_diag["rung_callback_error"] = (
+                            f"{type(exc).__name__}: {exc}"
+                        )
+
+                if ok:
+                    lam_last_success_snap = snapshot_U(ctx["U"])
+                    last_success_snap = lam_last_success_snap
+                    lam_ladder.record_success()
+                    if lam_ladder.is_done():
+                        converged_to_target = True
+                else:
+                    if not lam_ladder.record_failure_and_insert():
+                        raise LadderExhausted(
+                            f"λ_hydrolysis ladder exhausted at "
+                            f"λ={lam_val:.3e}; "
+                            f"lam_history={lam_ladder.history()!r}"
+                        )
+                    restore_U(
+                        lam_last_success_snap, ctx["U"], ctx["U_prev"]
+                    )
+
+            ctx["lambda_hydrolysis_ladder_history"] = lam_ladder.history()
         elif kw_eff_ladder is None:
             # No water-ionization continuation requested.  Run a single
             # k0 ladder under whatever Kw_eff the form was built with
@@ -983,6 +1366,7 @@ def solve_anchor_with_continuation(
                 raise LadderExhausted(
                     f"k0 ladder exhausted; history={k0_lad.history()!r}"
                 )
+            _run_gamma_picard("bare")
         else:
             kw_lad_seq = list(kw_eff_ladder)
             if not kw_lad_seq:
@@ -1090,6 +1474,11 @@ def solve_anchor_with_continuation(
             # Stash the Kw_eff history alongside the k0 history so callers
             # can reconstruct provenance.
             ctx["kw_eff_ladder_history"] = kw_ladder.history()
+            # Phase 6β v9 Gate 3D — outer Picard for Γ at the final
+            # Kw_eff target.  At λ=0 (the default initial value when
+            # not running the lambda ladder explicitly) this is a no-op.
+            if converged_to_target:
+                _run_gamma_picard("kw")
 
     return AnchorContinuationResult(
         converged=bool(converged_to_target),
@@ -1097,6 +1486,343 @@ def solve_anchor_with_continuation(
         ladder_history=(
             final_k0_ladder.history() if final_k0_ladder is not None else []
         ),
+        rungs=rungs,
+        ctx=ctx,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 6β v9 Gate 4B — solve_lambda_ramp_from_warm_start
+# ---------------------------------------------------------------------------
+
+
+def solve_lambda_ramp_from_warm_start(
+    sp,
+    *,
+    mesh,
+    U_warmstart: tuple,
+    k0_targets: Dict[int, float],
+    lambda_hydrolysis_ladder: Tuple[float, ...],
+    parameter_overrides: Optional[Dict[str, Any]] = None,
+    reconverge_at_ss: bool = True,
+    max_inserts_per_step: int = 4,
+    ss_rel_tol: float = 1e-4,
+    ss_abs_tol: float = 1e-8,
+    ss_consec: int = 4,
+    max_ss_steps_per_rung: int = 200,
+    dt_init: float = 0.25,
+    dt_growth_cap: float = 4.0,
+    dt_max_ratio: float = 20.0,
+    rung_callback: Optional[Callable] = None,
+) -> "AnchorContinuationResult":
+    """Run a λ_hydrolysis ramp on a fresh ctx warm-started from a U snapshot.
+
+    Phase 6β v9 Gate 4B optimization helper.  Designed for sweeps
+    where the anchor + warm-walk pipeline has already produced a
+    converged solution at some target voltage and we want to amortize
+    that cost across many parameter combinations.  Each combination
+    gets:
+
+      1. A fresh ctx + form (cheap: ~10–30 s)
+      2. ``U`` restored from the cached snapshot (no IC, no k0 ramp)
+      3. Optional parameter overrides applied to the new ctx (Stern
+         capacitance, kinetic rates, r_H_El, etc.)
+      4. Optional SS re-converge (default ``True``) — needed when
+         parameter changes affect the FE residual at fixed V_RHE
+         (e.g. ``C_S`` change)
+      5. λ ladder walked with outer Picard for Γ at every rung
+
+    Note: the form is rebuilt because some parameters (the bv_bc
+    config block, the IC routine path) are baked at form-build time.
+    Reusing the existing solver_params with parameter overrides via
+    ``with_solver_options`` is the cleanest way to swap them.
+
+    Parameters
+    ----------
+    sp
+        ``SolverParams`` already configured for the target voltage
+        and combination parameters.  This is the fresh sp built per
+        combination — caller threads in the new C_S / r_H_El /
+        k_des etc. via the standard ``make_bv_solver_params`` factory.
+    mesh
+        Firedrake mesh shared with the cached snapshot.  Must match
+        ``ctx['U'].function_space().dim()`` of the snapshot or the
+        restore will raise.
+    U_warmstart
+        ``tuple(d.data_ro.copy() for d in U.dat)`` from a
+        prior converged solve.  Restored verbatim; must match the
+        new ctx's mixed-space layout.
+    k0_targets
+        Production nondim k0 per reaction index.  Pinned at production
+        before the SS reconverge (no ramp).
+    lambda_hydrolysis_ladder
+        Strictly-increasing positive sequence ending at 1.0.  Same
+        validation rules as ``solve_anchor_with_continuation``.
+    parameter_overrides
+        Optional ``{accessor_name: value}`` dict applied AFTER the
+        warm-start and BEFORE the optional SS re-converge.  Supported
+        accessor names map to ``set_reaction_*_model``:
+        ``"stern_capacitance_f_m2"``, ``"k_hyd"``, ``"k_prot"``,
+        ``"k_des"``, ``"delta_ohp_hat"``, ``"r_H_El_pm"``,
+        ``"kw_eff_hat"``.  Useful when the same ``sp`` is reused
+        across combinations and only specific knobs need swapping.
+    reconverge_at_ss
+        When True (default), runs ``run_ss(max_ss_steps_per_rung)``
+        before the λ ramp to absorb any parameter-induced residual
+        change.  Set False to skip when the warm-start is exact for
+        the new parameters (e.g. only k_des changed — k_des doesn't
+        appear in the FE residual).
+    rung_callback
+        Optional ``callback(scale, ok, ctx, rung_diag)`` invoked
+        after each λ rung.
+
+    Returns
+    -------
+    AnchorContinuationResult
+        Same shape as ``solve_anchor_with_continuation`` so callers
+        can reuse the diagnostic plumbing.
+
+    Raises
+    ------
+    LadderExhausted
+        If the SS re-converge or any λ rung fails.
+    ValueError
+        Mesh DOF mismatch, ladder validation failure, or unknown
+        ``parameter_overrides`` key.
+    """
+    import firedrake as fd
+    import firedrake.adjoint as adj
+
+    from .dispatch import build_context, build_forms
+    from .observables import _build_bv_observable_form
+    from .grid_per_voltage import snapshot_U, restore_U, make_run_ss
+    from .cation_hydrolysis import update_gamma_from_solution
+
+    # ----- Validate ladder up-front
+    lam_seq = list(lambda_hydrolysis_ladder)
+    if not lam_seq:
+        raise ValueError(
+            "lambda_hydrolysis_ladder must be non-empty when provided"
+        )
+    lam_target = float(lam_seq[-1])
+    if lam_target != 1.0:
+        raise ValueError(
+            f"lambda_hydrolysis_ladder must end at 1.0 (got {lam_target!r})"
+        )
+    for v in lam_seq:
+        if not (0.0 <= float(v) <= 1.0):
+            raise ValueError(
+                f"lambda_hydrolysis_ladder entries must be in [0, 1] "
+                f"(got {v!r})"
+            )
+    for a, b in zip(lam_seq[:-1], lam_seq[1:]):
+        if not (float(b) > float(a)):
+            raise ValueError(
+                "lambda_hydrolysis_ladder must be strictly monotonic "
+                f"increasing (got {lam_seq!r})"
+            )
+
+    # ----- Build fresh ctx + form
+    ctx = build_context(sp, mesh=mesh)
+    ctx = build_forms(ctx, sp)
+
+    # ----- Restore U from snapshot (mesh-DOF assertion)
+    U = ctx["U"]
+    U_prev = ctx["U_prev"]
+    if U.function_space().dim() != sum(arr.size for arr in U_warmstart):
+        raise ValueError(
+            "solve_lambda_ramp_from_warm_start: U_warmstart DOF count "
+            f"({sum(arr.size for arr in U_warmstart)}) does not match "
+            f"new ctx U DOFs ({U.function_space().dim()})"
+        )
+    restore_U(U_warmstart, U, U_prev)
+
+    # ----- Apply parameter overrides
+    if parameter_overrides is None:
+        parameter_overrides = {}
+    _OVERRIDE_DISPATCH = {
+        "stern_capacitance_f_m2": set_stern_capacitance_model,
+        "kw_eff_hat": set_reaction_kw_eff_model,
+        "lambda_hydrolysis": set_reaction_lambda_hydrolysis_model,
+        "k_hyd": set_reaction_k_hyd_model,
+        "k_prot": set_reaction_k_prot_model,
+        "k_des": set_reaction_k_des_model,
+        "delta_ohp_hat": set_reaction_delta_ohp_model,
+        "r_H_El_pm": set_reaction_r_H_El_pm_model,
+    }
+    for key, value in parameter_overrides.items():
+        if key not in _OVERRIDE_DISPATCH:
+            raise ValueError(
+                f"Unknown parameter_overrides key {key!r}; supported: "
+                f"{list(_OVERRIDE_DISPATCH)}"
+            )
+        _OVERRIDE_DISPATCH[key](ctx, float(value))
+
+    # ----- Pin k0 at production (no ramp; we're warm-started)
+    rxn_count = len(ctx.get("nondim", {}).get("bv_reactions", []))
+    for j, k_target in k0_targets.items():
+        if j < 0 or j >= rxn_count:
+            raise IndexError(
+                f"k0_targets index {j} out of range "
+                f"(N_reactions={rxn_count})"
+            )
+        set_reaction_k0_model(ctx, j, float(k_target))
+
+    # ----- Build solver + SS loop
+    params_block = sp[10] if hasattr(sp, "__getitem__") else {}
+    items = (
+        params_block.items() if isinstance(params_block, dict) else []
+    )
+    solve_opts = {k: v for k, v in items if k not in NON_PETSC_KEYS}
+    solve_opts.setdefault("snes_error_if_not_converged", True)
+    problem = fd.NonlinearVariationalProblem(
+        ctx["F_res"], ctx["U"], bcs=ctx["bcs"], J=ctx["J_form"]
+    )
+    solver = fd.NonlinearVariationalSolver(
+        problem, solver_parameters=solve_opts
+    )
+    ctx["_last_solver"] = solver
+    of_cd = _build_bv_observable_form(
+        ctx, mode="current_density", reaction_index=None, scale=1.0
+    )
+    run_ss = make_run_ss(
+        ctx=ctx, solver=solver, of_cd=of_cd,
+        dt_init=dt_init, dt_growth_cap=dt_growth_cap,
+        dt_max_ratio=dt_max_ratio,
+        ss_rel_tol=ss_rel_tol, ss_abs_tol=ss_abs_tol,
+        ss_consec=ss_consec,
+    )
+
+    rungs: List[Dict[str, Any]] = []
+    last_success_snap = snapshot_U(ctx["U"])
+
+    with adj.stop_annotating():
+        # ----- Optional SS re-converge to absorb parameter changes
+        if reconverge_at_ss:
+            t0 = time.time()
+            ok = run_ss(max_ss_steps_per_rung)
+            rungs.append({
+                "rung_label": "warm_reconverge",
+                "snes_converged": bool(ok),
+                "wall_seconds": float(time.time() - t0),
+            })
+            if not ok:
+                raise LadderExhausted(
+                    "warm-start SS re-converge failed; the parameter "
+                    "overrides may have moved the system too far from "
+                    "the cached snapshot."
+                )
+            last_success_snap = snapshot_U(ctx["U"])
+
+        # ----- λ ladder
+        lam_positive = [float(v) for v in lam_seq if float(v) > 0.0]
+        if float(lam_seq[0]) == 0.0:
+            set_reaction_lambda_hydrolysis_model(ctx, 0.0)
+            ctx["cation_hydrolysis"].gamma_func.assign(0.0)
+            t0 = time.time()
+            ok = run_ss(max_ss_steps_per_rung)
+            rungs.append({
+                "rung_label": "lambda=0.0",
+                "lambda_hydrolysis": 0.0,
+                "snes_converged": bool(ok),
+                "wall_seconds": float(time.time() - t0),
+            })
+            if not ok:
+                raise LadderExhausted(
+                    "λ=0 floor solve failed after warm restore"
+                )
+            last_success_snap = snapshot_U(ctx["U"])
+
+        if not lam_positive:
+            return AnchorContinuationResult(
+                converged=True,
+                U_data=last_success_snap,
+                ladder_history=[],
+                rungs=rungs,
+                ctx=ctx,
+            )
+
+        lam_scales = tuple(v / lam_target for v in lam_positive)
+        if not lam_scales or lam_scales[-1] != 1.0:
+            raise ValueError(
+                "lambda_hydrolysis_ladder positive entries must end "
+                f"at the target (last entry / target != 1.0; "
+                f"ladder={lam_seq!r})"
+            )
+        lam_ladder = AdaptiveLadder(
+            initial_scales=lam_scales,
+            max_inserts_per_step=max_inserts_per_step,
+        )
+
+        picard_max_iters = 8
+        picard_rel_tol = 1e-4
+
+        while not lam_ladder.is_done():
+            lam_scale = lam_ladder.current_scale
+            lam_val = lam_scale * lam_target
+            set_reaction_lambda_hydrolysis_model(ctx, lam_val)
+
+            t_rung = time.time()
+            gamma_history: List[float] = []
+            ok = False
+            for _picard_iter in range(picard_max_iters):
+                ok = run_ss(max_ss_steps_per_rung)
+                if not ok:
+                    break
+                gamma_old = float(ctx["cation_hydrolysis"].gamma_func)
+                gamma_new = update_gamma_from_solution(ctx)
+                gamma_history.append(float(gamma_new))
+                rel = abs(gamma_new - gamma_old) / max(
+                    abs(gamma_new), abs(gamma_old), 1e-30
+                )
+                if rel < picard_rel_tol:
+                    break
+
+            try:
+                cd_obs = float(fd.assemble(of_cd))
+            except Exception:
+                cd_obs = None
+
+            rung_diag: Dict[str, Any] = {
+                "rung_label": f"lambda={lam_val:.3e}",
+                "scale": float(lam_scale),
+                "lambda_hydrolysis": float(lam_val),
+                "snes_converged": bool(ok),
+                "gamma_picard_iters": len(gamma_history),
+                "gamma_picard_history": gamma_history,
+                "gamma_final": (
+                    gamma_history[-1] if gamma_history else None
+                ),
+                "cd_observable": cd_obs,
+                "wall_seconds": float(time.time() - t_rung),
+            }
+            rungs.append(rung_diag)
+
+            if rung_callback is not None:
+                try:
+                    rung_callback(lam_scale, ok, ctx, rung_diag)
+                except Exception as exc:
+                    rung_diag["rung_callback_error"] = (
+                        f"{type(exc).__name__}: {exc}"
+                    )
+
+            if ok:
+                last_success_snap = snapshot_U(ctx["U"])
+                lam_ladder.record_success()
+            else:
+                if not lam_ladder.record_failure_and_insert():
+                    raise LadderExhausted(
+                        f"λ_hydrolysis ramp exhausted at λ={lam_val:.3e}; "
+                        f"history={lam_ladder.history()!r}"
+                    )
+                restore_U(last_success_snap, ctx["U"], ctx["U_prev"])
+
+        ctx["lambda_hydrolysis_ladder_history"] = lam_ladder.history()
+
+    return AnchorContinuationResult(
+        converged=True,
+        U_data=last_success_snap,
+        ladder_history=lam_ladder.history(),
         rungs=rungs,
         ctx=ctx,
     )
@@ -1115,5 +1841,14 @@ __all__ = [
     "get_reaction_kw_eff_model",
     "set_stern_capacitance_model",
     "get_stern_capacitance_model",
+    # Phase 6β v9 Gate 3C — cation hydrolysis accessors.
+    "set_reaction_lambda_hydrolysis_model",
+    "get_reaction_lambda_hydrolysis_model",
+    "set_reaction_k_hyd_model",
+    "set_reaction_k_prot_model",
+    "set_reaction_k_des_model",
+    "set_reaction_delta_ohp_model",
+    "set_reaction_r_H_El_pm_model",
+    "solve_lambda_ramp_from_warm_start",
     "solve_anchor_with_continuation",
 ]

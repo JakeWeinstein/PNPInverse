@@ -48,6 +48,7 @@ from typing import Any
 import firedrake as fd
 
 from .config import _get_bv_boltzmann_counterions_cfg
+from .forms_indexing import unpack_dof_indices
 
 
 @dataclass(frozen=True)
@@ -327,8 +328,15 @@ def add_boltzmann_counterion_residual(
     U = ctx["U"]
     scaling = ctx.get("nondim", {})
 
-    phi = fd.split(U)[-1]
-    w = fd.TestFunctions(W)[-1]
+    # Phase 6β v9 Gate 3A: layout-aware DOF indexing.  Pre-Gate-3 ctx
+    # objects do not carry ``mixed_space_indices`` — fall back to the
+    # legacy ``has_gamma=False`` layout so existing callers keep
+    # byte-equivalent behaviour.
+    indices = ctx.get("mixed_space_indices") or unpack_dof_indices(
+        has_gamma=False
+    )
+    phi = fd.split(U)[indices.phi_index]
+    w = fd.TestFunctions(W)[indices.phi_index]
     dx = fd.Measure("dx", domain=mesh)
 
     charge_rhs_val = float(scaling.get("charge_rhs_prefactor", 1.0))

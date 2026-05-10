@@ -18,7 +18,7 @@ The production forward stack (May 2026):
   counterion(s)** (`steric_mode='bikerman'`, residual-side closure +
   Bikerman-consistent IC). Reference scripts use ClO₄⁻; deck-aligned
   sweeps use Cs⁺ + SO₄²⁻ (deck-baseline is **K⁺**, not Cs⁺ — see
-  `docs/CONJECTURE_AUDIT_2026-05-09.md`).
+  `docs/phase6/CONJECTURE_AUDIT_2026-05-09.md`).
 - **`formulation='logc_muh'`** with proton electrochemical-potential
   primary variable (`mu_H = u_H + em·z_H·phi`).
 - **Log-rate Butler–Volmer** with **parallel R2e + R4e** (E°_R2e =
@@ -35,38 +35,38 @@ warm-walk to +1.00 V).
 `solve_anchor_with_continuation` + `solve_grid_with_anchor` in
 `Forward/bv_solver/anchor_continuation.py`. 8/8 sweep convergence
 but P3 surface-pH gate fails at 10.58. See
-`docs/PHASE_6A_INVESTIGATION_SUMMARY.md`.
+`docs/phase6/PHASE_6A_INVESTIGATION_SUMMARY.md`.
 
 **Phase 6β scope (current):** cation hydrolysis at the OHP
 (`M(H₂O)ₙ⁺ ⇌ M(OH)⁰ + H⁺` with field-dependent pKa per Singh 2016
 JACS). **Not sulfate buffering** — retired after grepping the data
-folder. See `docs/phase6b_next_steps_plan.md`.
+folder. See `docs/phase6/phase6b_next_steps_plan.md`.
 
 ## Inverse status: paused
 
 All inverse scripts (`scripts/studies/v*.py`, `scripts/Inference/`) are
 non-operational. When work resumes, start from
-`docs/CHATGPT_HANDOFF_10_LM_TIKHONOV_BASIN_GEOMETRY.md` +
-`docs/noise_model_conventions.md`.
+`docs/inverse/CHATGPT_HANDOFF_10_LM_TIKHONOV_BASIN_GEOMETRY.md` +
+`docs/inverse/noise_model_conventions.md`.
 
 ## Source-of-truth docs (read before opining on status)
 
 | File | Purpose |
 |---|---|
-| `data/EChem Reactor Modeling-Seitz-Mangan/` | **PRIMARY EXPERIMENTAL DATA DROP** from the Seitz/Mangan group. Read this BEFORE conjecturing about deck physics. Per-file inventory in `docs/data_folder_code_inventory.md`; deep audit in `docs/seitz_mangan_data_folder_audit_2026-05-08.md` |
+| `data/EChem Reactor Modeling-Seitz-Mangan/` | **PRIMARY EXPERIMENTAL DATA DROP** from the Seitz/Mangan group. Read this BEFORE conjecturing about deck physics. Per-file inventory in `docs/papers/data_folder_code_inventory.md`; deep audit in `docs/papers/seitz_mangan_data_folder_audit_2026-05-08.md` |
 | `writeups/WeekOfApr27/PNP Inverse Solver Revised.pdf` | Forward-solver rebuild narrative |
 | `writeups/ForwardSolverChangesMay26/forward_solver_changes_may2026.pdf` | May 2026 production-target writeup |
-| `docs/bv_solver_unified_api.md` | How to call the production stack |
-| `docs/4sp_bikerman_ic_option_2b_results.md` | Production-target reference sweep (15/15 V_RHE [−0.5, +1.0]) |
-| `docs/steric_analytic_clo4_reduction_handoff.md` | Derivation of the Bikerman analytic-counterion residual closure |
-| `docs/clipping_conventions.md` | The three distinct BV-related clips and the `exponent_clip` 50 → 100 raise |
-| `docs/Mangan2025_experimental_alignment.md` | Gap audit between the model and the Mangan 2025 deck |
-| `docs/Ruggiero2022_JCatal_source_paper.md` | Peer-reviewed source paper underlying the Mangan deck. Load-bearing: K₂SO₄ not ClO₄⁻, parallel 2e⁻ (0.695 V) + 4e⁻ (1.23 V) ORR not sequential R₀/R₁, N=0.224, 1600 rpm, I=0.3 M. PDF at `docs/Ruggiero2022_JCatal_manuscript.pdf` |
-| `docs/PHASE_6A_INVESTIGATION_SUMMARY.md` | State of Phase 6α (2026-05-09): water-ionization landed, 8/8 convergence, P3 surface-pH gate fails at 10.58, mechanism correction (cation hydrolysis, not water, not sulfate). Expanded planning in `docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md` §9 |
-| `docs/CONJECTURE_AUDIT_2026-05-09.md` | Audit of `fast-realignment-2026-05-08` for Claude/GPT-conjecture vs. grounded changes. HIGH-risk: Cs⁺ vs deck-baseline K⁺. Read before scoping new physics or kinetics calibration |
-| `docs/phase6b_next_steps_plan.md` | Current Phase 6β plan (cation hydrolysis at OHP). Survived 5-round GPT critique; two architectural items unresolved |
-| `docs/CONTINUATION_STRATEGY_HANDOFF.md` | Why C+D over A/B for the logc+counterion stack |
-| `docs/forward_solver_test_coverage.md` | What the bv_solver test suite covers |
+| `docs/solver/bv_solver_unified_api.md` | How to call the production stack |
+| `docs/ic_studies/4sp_bikerman_ic_option_2b_results.md` | Production-target reference sweep (15/15 V_RHE [−0.5, +1.0]) |
+| `docs/solver/steric_analytic_clo4_reduction_handoff.md` | Derivation of the Bikerman analytic-counterion residual closure |
+| `docs/solver/clipping_conventions.md` | The three distinct BV-related clips and the `exponent_clip` 50 → 100 raise |
+| `docs/realignment/Mangan2025_experimental_alignment.md` | Gap audit between the model and the Mangan 2025 deck |
+| `docs/papers/Ruggiero2022_JCatal_source_paper.md` | Peer-reviewed source paper underlying the Mangan deck. Load-bearing: K₂SO₄ not ClO₄⁻, parallel 2e⁻ (0.695 V) + 4e⁻ (1.23 V) ORR not sequential R₀/R₁, N=0.224, 1600 rpm, I=0.3 M. PDF at `docs/papers/Ruggiero2022_JCatal_manuscript.pdf` |
+| `docs/phase6/PHASE_6A_INVESTIGATION_SUMMARY.md` | State of Phase 6α (2026-05-09): water-ionization landed, 8/8 convergence, P3 surface-pH gate fails at 10.58, mechanism correction (cation hydrolysis, not water, not sulfate). Expanded planning in `docs/handoffs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md` §9 |
+| `docs/phase6/CONJECTURE_AUDIT_2026-05-09.md` | Audit of `fast-realignment-2026-05-08` for Claude/GPT-conjecture vs. grounded changes. HIGH-risk: Cs⁺ vs deck-baseline K⁺. Read before scoping new physics or kinetics calibration |
+| `docs/phase6/phase6b_next_steps_plan.md` | Current Phase 6β plan (cation hydrolysis at OHP). Survived 5-round GPT critique; two architectural items unresolved |
+| `docs/solver/CONTINUATION_STRATEGY_HANDOFF.md` | Why C+D over A/B for the logc+counterion stack |
+| `docs/solver/forward_solver_test_coverage.md` | What the bv_solver test suite covers |
 
 ## Environment
 
@@ -96,7 +96,7 @@ non-operational. When work resumes, start from
    R2 unclips at V_RHE > −0.79 V (production grid fully unclipped).
    At clip=50 (historical), clipped R2 produces fictitious peroxide
    current — don't trust PC there. `u_clamp = 100` for the same
-   reason. Full breakdown in `docs/clipping_conventions.md`.
+   reason. Full breakdown in `docs/solver/clipping_conventions.md`.
 
 3. **The IC and the residual must agree about steric saturation.**
    `set_initial_conditions_debye_boltzmann_*` seeds composite-ψ +
@@ -114,7 +114,7 @@ non-operational. When work resumes, start from
    **R4e (E° = 1.23 V vs RHE)** in parallel, configured in
    `scripts/_bv_common.py:660-690`. Solver convergence window is
    V_RHE ∈ [−0.5, +1.0] V via C+D (cold ceiling +0.60 V; warm-walk
-   to +1.00 V — see `docs/4sp_bikerman_ic_option_2b_results.md`).
+   to +1.00 V — see `docs/ic_studies/4sp_bikerman_ic_option_2b_results.md`).
    Never use `E_eq = 0`.
 
 5. **Check `data/EChem Reactor Modeling-Seitz-Mangan/` BEFORE
@@ -123,7 +123,7 @@ non-operational. When work resumes, start from
    mechanism, local pH driver, rate law, cation effect, transport
    bottleneck, missing physics — first grep the group's documents
    and the cited literature in that folder. Per-file inventory in
-   `docs/data_folder_code_inventory.md`.
+   `docs/papers/data_folder_code_inventory.md`.
 
    The group has a documented hypothesis for buffering chemistry:
    **cation hydrolysis at the polarized OHP** (`M(H₂O)ₙ⁺ ⇌ M(OH)⁰ +
@@ -133,7 +133,7 @@ non-operational. When work resumes, start from
    chemistry from textbook intuition without checking — the
    2026-05-09 Phase 6α handoff briefly pointed Phase 6β at HSO₄⁻/SO₄²⁻
    buffering before this folder was checked, and that was wrong. See
-   `docs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md`
+   `docs/handoffs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md`
    §9 for the corrected scope. Reading order for Phase 6β background:
    Singh 2016 JACS (`10.1021/jacs.6b07612`, functional form for
    field-dependent pKa) → Co-Zhang 2019 Angewandte (cation-pH
@@ -232,7 +232,7 @@ sp = make_bv_solver_params(
 | `scripts/studies/mangan_full_grid_csplus_so4.py` | Cs⁺/SO₄²⁻ multi-ion + parallel 2e/4e | Deck page-15 V_RHE band, single L_eff |
 | `scripts/studies/peroxide_window_3sp_bikerman_muh.py` | ClO₄⁻ single-counterion + sequential R1/R2 | Legacy ClO₄⁻ reference |
 
-Full API in `docs/bv_solver_unified_api.md`.
+Full API in `docs/solver/bv_solver_unified_api.md`.
 
 ### Gotchas
 
@@ -240,10 +240,10 @@ Full API in `docs/bv_solver_unified_api.md`.
   the four cations the deck investigates, but the deck *baseline* is
   K⁺/SO₄²⁻ (Linsey 2025 deck slide 9: `[SO₄²⁻]=0.1 M & [K⁺]=0.2 M`).
   Apples-to-apples deck comparisons should swap to a K⁺ entry. See
-  `docs/CONJECTURE_AUDIT_2026-05-09.md`.
+  `docs/phase6/CONJECTURE_AUDIT_2026-05-09.md`.
 - **Phase 6α opt-in**: `enable_water_ionization=True` plus the
   `kw_eff_ladder` outer loop on `solve_anchor_with_continuation` —
-  see `docs/PHASE_6A_INVESTIGATION_SUMMARY.md`. Default-off path is
+  see `docs/phase6/PHASE_6A_INVESTIGATION_SUMMARY.md`. Default-off path is
   byte-equivalent to pre-Phase-6α.
 - **`multi_ion_enabled=True` is required** when passing ≥2 bikerman
   counterions (the factory raises if not set; the multi-ion shared-θ

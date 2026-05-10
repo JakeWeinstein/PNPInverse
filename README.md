@@ -54,7 +54,7 @@ work, and the FluxCurve adjoint pipeline are reference-only.
    clip is on `η_scaled` *before* the `α·n_e` multiplication;
    `exponent_clip = 100` is the only PC-trustworthy default
    (clip=50 produces a fictitious peroxide current — see
-   `docs/clipping_conventions.md`).
+   `docs/solver/clipping_conventions.md`).
 4. **Bikerman-consistent IC** (`initializer = "debye_boltzmann"`):
    composite-ψ (BKSA matched-asymptotic, saturated zone + outer
    exponential) plus multispecies-γ. The IC's surface activity and
@@ -73,8 +73,8 @@ V_RHE ∈ [−0.5, +1.0] via the C+D orchestrator
 (`solve_grid_per_voltage_cold_with_warm_fallback`). Cross-stack
 equivalence with the 4sp dynamic reference holds to ~10⁻⁹ in the
 cathodic regime and ~5·10⁻³ at the +0.5 V edge. See
-`docs/4sp_bikerman_ic_option_2b_results.md` for the sweep and
-`docs/4sp_drop_boltzmann_investigation.md` for the investigation log.
+`docs/ic_studies/4sp_bikerman_ic_option_2b_results.md` for the sweep and
+`docs/ic_studies/4sp_drop_boltzmann_investigation.md` for the investigation log.
 
 ### Recent forward-solver bugfixes (2026-05-07)
 
@@ -161,8 +161,8 @@ Two adjacent improvements landed alongside the IC fixes:
   `Forward/bv_solver/rrde_observables.py` and serialised by
   `scripts/studies/peroxide_window_3sp_bikerman_muh.py`. Tests live in
   `tests/test_rrde_observables.py`. See
-  `docs/Mangan2025_experimental_alignment.md` and
-  `docs/m0_target_extraction.md` for the deck-alignment plan.
+  `docs/realignment/Mangan2025_experimental_alignment.md` and
+  `docs/realignment/m0_target_extraction.md` for the deck-alignment plan.
 
 ### Direct PDE Inverse Status — paused
 
@@ -173,9 +173,9 @@ scripts (`scripts/studies/v*.py`), the FluxCurve adjoint pipeline,
 and the FIM tooling as historical reference only.
 
 When the inverse work resumes, start from
-`docs/CHATGPT_HANDOFF_10_LM_TIKHONOV_BASIN_GEOMETRY.md`,
-`docs/Next Steps After Basin Geometry.md`, and
-`docs/noise_model_conventions.md`. The headline result going into
+`docs/inverse/CHATGPT_HANDOFF_10_LM_TIKHONOV_BASIN_GEOMETRY.md`,
+`docs/inverse/Next Steps After Basin Geometry.md`, and
+`docs/inverse/noise_model_conventions.md`. The headline result going into
 the pause was:
 
 - Local Fisher information is good on the log-rate G0 grid
@@ -208,27 +208,27 @@ back to the project cold:
 | `CLAUDE.md` | Project-specific conventions, hard rules (E_eq, clip, C+D, IC/residual saturation match). |
 | `writeups/ForwardSolverChangesMay26/forward_solver_changes_may2026.pdf` | May 2026 production-target writeup. |
 | `writeups/WeekOfApr27/PNP Inverse Solver Revised.pdf` | Forward-solver rebuild narrative. |
-| `docs/bv_solver_unified_api.md` | How to call the dispatcher and configure the production stack. |
-| `docs/4sp_bikerman_ic_option_2b_results.md` | Production-target reference sweep: bikerman + Stern + muh + debye_boltzmann IC = 15/15 over V_RHE [−0.5, +1.0]. |
-| `docs/4sp_drop_boltzmann_investigation.md` | §11–§13: investigation log behind the production target. |
-| `docs/steric_analytic_clo4_reduction_handoff.md` | Derivation of the Bikerman analytic-counterion residual closure. |
-| `docs/clipping_conventions.md` | Three distinct BV-related clips and the operational rule that PC is fictitious at clip=50. |
-| `docs/CONTINUATION_STRATEGY_HANDOFF.md` | Why C+D over A/B for the logc+counterion stack. |
-| `docs/CHATGPT_HANDOFF_12_IC_PICARD_BUGS.md` | Diagnosis of the Stern-η + Bikerman-γ Picard bugs (the May 2026-05-07 IC bugfix). |
-| `docs/CHATGPT_HANDOFF_13_RESPONSE_TO_CODEX_REVIEW.md` | Resolution plan and review response for those bugs. |
+| `docs/solver/bv_solver_unified_api.md` | How to call the dispatcher and configure the production stack. |
+| `docs/ic_studies/4sp_bikerman_ic_option_2b_results.md` | Production-target reference sweep: bikerman + Stern + muh + debye_boltzmann IC = 15/15 over V_RHE [−0.5, +1.0]. |
+| `docs/ic_studies/4sp_drop_boltzmann_investigation.md` | §11–§13: investigation log behind the production target. |
+| `docs/solver/steric_analytic_clo4_reduction_handoff.md` | Derivation of the Bikerman analytic-counterion residual closure. |
+| `docs/solver/clipping_conventions.md` | Three distinct BV-related clips and the operational rule that PC is fictitious at clip=50. |
+| `docs/solver/CONTINUATION_STRATEGY_HANDOFF.md` | Why C+D over A/B for the logc+counterion stack. |
+| `docs/handoffs/CHATGPT_HANDOFF_12_IC_PICARD_BUGS.md` | Diagnosis of the Stern-η + Bikerman-γ Picard bugs (the May 2026-05-07 IC bugfix). |
+| `docs/handoffs/CHATGPT_HANDOFF_13_RESPONSE_TO_CODEX_REVIEW.md` | Resolution plan and review response for those bugs. |
 | `.verification/REPORT.md` | Multi-agent correctness verification of the production codepath. |
-| `docs/Mangan2025_experimental_alignment.md` | Gap audit between the model and the Mangan 2025 deck. |
-| `docs/m0_target_extraction.md` | M0 target-extraction plan for deck-quantitative comparison. |
-| `docs/forward_solver_test_coverage.md` | What the bv_solver test suite covers. |
+| `docs/realignment/Mangan2025_experimental_alignment.md` | Gap audit between the model and the Mangan 2025 deck. |
+| `docs/realignment/m0_target_extraction.md` | M0 target-extraction plan for deck-quantitative comparison. |
+| `docs/solver/forward_solver_test_coverage.md` | What the bv_solver test suite covers. |
 | `StudyResults/peroxide_window_3sp_bikerman_muh_2b/` | Reference 2b sweep on the production target stack. |
 | `StudyResults/iv_curve_post_fix123/` | I-V curve regenerated after the IC bugfix. |
 | `writeups/WeekOfMay4/debye_boltzmann_ic_walkthrough.pdf` | Walkthrough of the composite-ψ + multispecies-γ IC. |
 
 When the inverse pipeline resumes, also read:
-`docs/CHATGPT_HANDOFF_10_LM_TIKHONOV_BASIN_GEOMETRY.md`,
-`docs/Next Steps After Basin Geometry.md`,
-`docs/noise_model_conventions.md`,
-`docs/TODO_extend_inverse_v_range_negative.md`. Older
+`docs/inverse/CHATGPT_HANDOFF_10_LM_TIKHONOV_BASIN_GEOMETRY.md`,
+`docs/inverse/Next Steps After Basin Geometry.md`,
+`docs/inverse/noise_model_conventions.md`,
+`docs/inverse/TODO_extend_inverse_v_range_negative.md`. Older
 `CHATGPT_HANDOFF*` files are useful chronology but reflect the
 pre-pause inverse state.
 
@@ -480,7 +480,7 @@ Recorded for when the inverse work resumes. Default to
 `local_rel + abs_floor` together when feasible. `global_max`
 rotations are suspect when CD/PC spans many decades across the
 voltage grid (the negative-V FIM study is the cautionary example).
-See `docs/noise_model_conventions.md`.
+See `docs/inverse/noise_model_conventions.md`.
 
 ## Known Gotchas
 

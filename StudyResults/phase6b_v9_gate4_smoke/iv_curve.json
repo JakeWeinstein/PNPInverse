@@ -1,0 +1,781 @@
+{
+  "stack": "phase6b_v9_gate4_finite_hydrolysis",
+  "v_anchor": 0.55,
+  "v_lambda_target": -0.4,
+  "v_rhe_grid_primary": [
+    0.55,
+    0.5,
+    0.4,
+    0.3,
+    0.2,
+    0.1,
+    0.0,
+    -0.1,
+    -0.2,
+    -0.3,
+    -0.4
+  ],
+  "lambda_ladder_default": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+  ],
+  "k0_initial_scales": [
+    1e-12,
+    1e-09,
+    1e-06,
+    0.001,
+    1.0
+  ],
+  "kw_eff_ladder": [
+    0.0,
+    6.944444444444445e-15,
+    6.944444444444445e-12,
+    6.944444444444446e-10,
+    6.944444444444445e-09
+  ],
+  "mesh_ny": 80,
+  "l_eff_m": 1.6e-05,
+  "stern_baseline_f_m2": 0.1,
+  "r_H_El_baseline_pm": 200.98,
+  "k_des_baseline_nondim": 1.0,
+  "quick_mode": false,
+  "use_cache": true,
+  "baseline_walk": {
+    "loaded_from_disk": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_v9_gate4_smoke/u_warmstart_at_v_target.npz",
+    "n_arrays": 5
+  },
+  "combinations": [
+    {
+      "label": "baseline",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "converged": true,
+      "error": null,
+      "wall": 37.79450511932373,
+      "cd_mA_cm2": -5.531719700930331,
+      "pc_mA_cm2": 2.7658598504651657,
+      "gamma_final": 0.5552092804236116,
+      "rungs": [
+        {
+          "rung_label": "warm_reconverge",
+          "snes_converged": true,
+          "wall_seconds": 5.0318520069122314
+        },
+        {
+          "rung_label": "lambda=0.0",
+          "lambda_hydrolysis": 0.0,
+          "snes_converged": true,
+          "wall_seconds": 1.6841237545013428
+        },
+        {
+          "rung_label": "lambda=2.500e-01",
+          "scale": 0.25,
+          "lambda_hydrolysis": 0.25,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.13882405886045257,
+            0.13882405886842014
+          ],
+          "gamma_final": 0.13882405886842014,
+          "cd_observable": 12.572848225303492,
+          "wall_seconds": 8.011022090911865
+        },
+        {
+          "rung_label": "lambda=5.000e-01",
+          "scale": 0.5,
+          "lambda_hydrolysis": 0.5,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.27763362810639536,
+            0.2776336281384697
+          ],
+          "gamma_final": 0.2776336281384697,
+          "cd_observable": 12.572851632622227,
+          "wall_seconds": 7.568749189376831
+        },
+        {
+          "rung_label": "lambda=7.500e-01",
+          "scale": 0.75,
+          "lambda_hydrolysis": 0.75,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.41642870341282273,
+            0.41642870348545097
+          ],
+          "gamma_final": 0.41642870348545097,
+          "cd_observable": 12.572855023013023,
+          "wall_seconds": 7.4425787925720215
+        },
+        {
+          "rung_label": "lambda=1.000e+00",
+          "scale": 1.0,
+          "lambda_hydrolysis": 1.0,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.5552092802936673,
+            0.5552092804236116
+          ],
+          "gamma_final": 0.5552092804236116,
+          "cd_observable": 12.57285837319857,
+          "wall_seconds": 7.737941026687622
+        }
+      ]
+    },
+    {
+      "label": "r_H_El=180.00pm",
+      "r_H_El_pm": 180.0,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "converged": true,
+      "error": null,
+      "wall": 33.978435754776,
+      "cd_mA_cm2": -5.5317198593583905,
+      "pc_mA_cm2": 2.7658599296791953,
+      "gamma_final": 0.5703180173098481,
+      "rungs": [
+        {
+          "rung_label": "warm_reconverge",
+          "snes_converged": true,
+          "wall_seconds": 2.0930368900299072
+        },
+        {
+          "rung_label": "lambda=0.0",
+          "lambda_hydrolysis": 0.0,
+          "snes_converged": true,
+          "wall_seconds": 1.7108309268951416
+        },
+        {
+          "rung_label": "lambda=2.500e-01",
+          "scale": 0.25,
+          "lambda_hydrolysis": 0.25,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.14260249202364236,
+            0.14260249203207448
+          ],
+          "gamma_final": 0.14260249203207448,
+          "cd_observable": 12.572848318209072,
+          "wall_seconds": 7.4901628494262695
+        },
+        {
+          "rung_label": "lambda=5.000e-01",
+          "scale": 0.5,
+          "lambda_hydrolysis": 0.5,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.28518966193413886,
+            0.2851896619680889
+          ],
+          "gamma_final": 0.2851896619680889,
+          "cd_observable": 12.572851817679542,
+          "wall_seconds": 7.137856960296631
+        },
+        {
+          "rung_label": "lambda=7.500e-01",
+          "scale": 0.75,
+          "lambda_hydrolysis": 0.75,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.4277615052144668,
+            0.4277615052913552
+          ],
+          "gamma_final": 0.4277615052913552,
+          "cd_observable": 12.572855298564015,
+          "wall_seconds": 7.452523946762085
+        },
+        {
+          "rung_label": "lambda=1.000e+00",
+          "scale": 1.0,
+          "lambda_hydrolysis": 1.0,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.5703180171722577,
+            0.5703180173098481
+          ],
+          "gamma_final": 0.5703180173098481,
+          "cd_observable": 12.572858733284345,
+          "wall_seconds": 7.776299715042114
+        }
+      ]
+    },
+    {
+      "label": "r_H_El=195.00pm",
+      "r_H_El_pm": 195.0,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "converged": true,
+      "error": null,
+      "wall": 36.3383207321167,
+      "cd_mA_cm2": -5.531719743886168,
+      "pc_mA_cm2": 2.765859871943084,
+      "gamma_final": 0.5593007964190876,
+      "rungs": [
+        {
+          "rung_label": "warm_reconverge",
+          "snes_converged": true,
+          "wall_seconds": 1.750504970550537
+        },
+        {
+          "rung_label": "lambda=0.0",
+          "lambda_hydrolysis": 0.0,
+          "snes_converged": true,
+          "wall_seconds": 1.6916239261627197
+        },
+        {
+          "rung_label": "lambda=2.500e-01",
+          "scale": 0.25,
+          "lambda_hydrolysis": 0.25,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.13984727247781437,
+            0.13984727248590642
+          ],
+          "gamma_final": 0.13984727248590642,
+          "cd_observable": 12.572848250463757,
+          "wall_seconds": 7.211896896362305
+        },
+        {
+          "rung_label": "lambda=5.000e-01",
+          "scale": 0.5,
+          "lambda_hydrolysis": 0.5,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.27967983229699256,
+            0.27967983232956956
+          ],
+          "gamma_final": 0.27967983232956956,
+          "cd_observable": 12.57285168274092,
+          "wall_seconds": 7.859477996826172
+        },
+        {
+          "rung_label": "lambda=7.500e-01",
+          "scale": 0.75,
+          "lambda_hydrolysis": 0.75,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.41949767508065644,
+            0.41949767515442565
+          ],
+          "gamma_final": 0.41949767515442565,
+          "cd_observable": 12.572855097658561,
+          "wall_seconds": 9.225113153457642
+        },
+        {
+          "rung_label": "lambda=1.000e+00",
+          "scale": 1.0,
+          "lambda_hydrolysis": 1.0,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.5593007962870953,
+            0.5593007964190876
+          ],
+          "gamma_final": 0.5593007964190876,
+          "cd_observable": 12.572858470831436,
+          "wall_seconds": 8.532819032669067
+        }
+      ]
+    },
+    {
+      "label": "r_H_El=215.00pm",
+      "r_H_El_pm": 215.0,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "converged": true,
+      "error": null,
+      "wall": 34.10856795310974,
+      "cd_mA_cm2": -5.531719605976383,
+      "pc_mA_cm2": 2.7658598029881913,
+      "gamma_final": 0.5461774940467553,
+      "rungs": [
+        {
+          "rung_label": "warm_reconverge",
+          "snes_converged": true,
+          "wall_seconds": 1.8259708881378174
+        },
+        {
+          "rung_label": "lambda=0.0",
+          "lambda_hydrolysis": 0.0,
+          "snes_converged": true,
+          "wall_seconds": 1.777724266052246
+        },
+        {
+          "rung_label": "lambda=2.500e-01",
+          "scale": 0.25,
+          "lambda_hydrolysis": 0.25,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.13656538307051602,
+            0.1365653830782126
+          ],
+          "gamma_final": 0.1365653830782126,
+          "cd_observable": 12.572848169760976,
+          "wall_seconds": 7.455016136169434
+        },
+        {
+          "rung_label": "lambda=5.000e-01",
+          "scale": 0.5,
+          "lambda_hydrolysis": 0.5,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.27311676258030715,
+            0.27311676261128726
+          ],
+          "gamma_final": 0.27311676261128726,
+          "cd_observable": 12.572851521976649,
+          "wall_seconds": 7.586870193481445
+        },
+        {
+          "rung_label": "lambda=7.500e-01",
+          "scale": 0.75,
+          "lambda_hydrolysis": 0.75,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.4096541343185061,
+            0.40965413438864906
+          ],
+          "gamma_final": 0.40965413438864906,
+          "cd_observable": 12.572854858174292,
+          "wall_seconds": 7.560433864593506
+        },
+        {
+          "rung_label": "lambda=1.000e+00",
+          "scale": 1.0,
+          "lambda_hydrolysis": 1.0,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.54617749392127,
+            0.5461774940467553
+          ],
+          "gamma_final": 0.5461774940467553,
+          "cd_observable": 12.57285815738096,
+          "wall_seconds": 7.83347487449646
+        }
+      ]
+    },
+    {
+      "label": "r_H_El=250.00pm",
+      "r_H_El_pm": 250.0,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 1.0,
+      "converged": true,
+      "error": null,
+      "wall": 34.440898180007935,
+      "cd_mA_cm2": -5.531719396446535,
+      "pc_mA_cm2": 2.7658596982232675,
+      "gamma_final": 0.52630386897178,
+      "rungs": [
+        {
+          "rung_label": "warm_reconverge",
+          "snes_converged": true,
+          "wall_seconds": 1.7600550651550293
+        },
+        {
+          "rung_label": "lambda=0.0",
+          "lambda_hydrolysis": 0.0,
+          "snes_converged": true,
+          "wall_seconds": 1.722339153289795
+        },
+        {
+          "rung_label": "lambda=2.500e-01",
+          "scale": 0.25,
+          "lambda_hydrolysis": 0.25,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.13159541801587468,
+            0.13159541802299216
+          ],
+          "gamma_final": 0.13159541802299216,
+          "cd_observable": 12.572848047531698,
+          "wall_seconds": 7.551986932754517
+        },
+        {
+          "rung_label": "lambda=5.000e-01",
+          "scale": 0.5,
+          "lambda_hydrolysis": 0.5,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.2631778714943153,
+            0.2631778715229579
+          ],
+          "gamma_final": 0.2631778715229579,
+          "cd_observable": 12.572851278457788,
+          "wall_seconds": 7.712530136108398
+        },
+        {
+          "rung_label": "lambda=7.500e-01",
+          "scale": 0.75,
+          "lambda_hydrolysis": 0.75,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.3947473564736204,
+            0.39474735653845644
+          ],
+          "gamma_final": 0.39474735653845644,
+          "cd_observable": 12.572854495174127,
+          "wall_seconds": 7.494395971298218
+        },
+        {
+          "rung_label": "lambda=1.000e+00",
+          "scale": 1.0,
+          "lambda_hydrolysis": 1.0,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.5263038688558157,
+            0.52630386897178
+          ],
+          "gamma_final": 0.52630386897178,
+          "cd_observable": 12.572857681147664,
+          "wall_seconds": 8.131942987442017
+        }
+      ]
+    },
+    {
+      "label": "C_S=0.050",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.05,
+      "k_des_nondim": 1.0,
+      "converged": true,
+      "error": null,
+      "wall": 33.084680795669556,
+      "cd_mA_cm2": -5.531717904839974,
+      "pc_mA_cm2": 2.765858952419987,
+      "gamma_final": 0.3130970466948319,
+      "rungs": [
+        {
+          "rung_label": "warm_reconverge",
+          "snes_converged": true,
+          "wall_seconds": 6.0705506801605225
+        },
+        {
+          "rung_label": "lambda=0.0",
+          "lambda_hydrolysis": 0.0,
+          "snes_converged": true,
+          "wall_seconds": 1.6887989044189453
+        },
+        {
+          "rung_label": "lambda=2.500e-01",
+          "scale": 0.25,
+          "lambda_hydrolysis": 0.25,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.07828409454366164,
+            0.07828409454422883
+          ],
+          "gamma_final": 0.07828409454422883,
+          "cd_observable": 12.572848530434257,
+          "wall_seconds": 5.2895448207855225
+        },
+        {
+          "rung_label": "lambda=5.000e-01",
+          "scale": 0.5,
+          "lambda_hydrolysis": 0.5,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.15656163400014553,
+            0.15656163400820228
+          ],
+          "gamma_final": 0.15656163400820228,
+          "cd_observable": 12.57285045509688,
+          "wall_seconds": 7.3570568561553955
+        },
+        {
+          "rung_label": "lambda=7.500e-01",
+          "scale": 0.75,
+          "lambda_hydrolysis": 0.75,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.23483261812328662,
+            0.2348326181410607
+          ],
+          "gamma_final": 0.2348326181410607,
+          "cd_observable": 12.572852375204711,
+          "wall_seconds": 5.330150127410889
+        },
+        {
+          "rung_label": "lambda=1.000e+00",
+          "scale": 1.0,
+          "lambda_hydrolysis": 1.0,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.3130970466623783,
+            0.3130970466948319
+          ],
+          "gamma_final": 0.3130970466948319,
+          "cd_observable": 12.57285429092563,
+          "wall_seconds": 7.280271768569946
+        }
+      ]
+    },
+    {
+      "label": "C_S=0.200",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.2,
+      "k_des_nondim": 1.0,
+      "converged": true,
+      "error": null,
+      "wall": 44.589412212371826,
+      "cd_mA_cm2": -5.531723464690059,
+      "pc_mA_cm2": 2.7658617323450296,
+      "gamma_final": 1.3215410819502968,
+      "rungs": [
+        {
+          "rung_label": "warm_reconverge",
+          "snes_converged": true,
+          "wall_seconds": 5.970799207687378
+        },
+        {
+          "rung_label": "lambda=0.0",
+          "lambda_hydrolysis": 0.0,
+          "snes_converged": true,
+          "wall_seconds": 1.724203109741211
+        },
+        {
+          "rung_label": "lambda=2.500e-01",
+          "scale": 0.25,
+          "lambda_hydrolysis": 0.25,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.330460781132574,
+            0.33046078120173933
+          ],
+          "gamma_final": 0.33046078120173933,
+          "cd_observable": 12.572847752756827,
+          "wall_seconds": 8.339600801467896
+        },
+        {
+          "rung_label": "lambda=5.000e-01",
+          "scale": 0.5,
+          "lambda_hydrolysis": 0.5,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.6608712854691204,
+            0.6608712857501989
+          ],
+          "gamma_final": 0.6608712857501989,
+          "cd_observable": 12.572855692648634,
+          "wall_seconds": 8.34814715385437
+        },
+        {
+          "rung_label": "lambda=7.500e-01",
+          "scale": 0.75,
+          "lambda_hydrolysis": 0.75,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.9912314173519587,
+            0.9912314179946051
+          ],
+          "gamma_final": 0.9912314179946051,
+          "cd_observable": 12.572862634368159,
+          "wall_seconds": 9.262180089950562
+        },
+        {
+          "rung_label": "lambda=1.000e+00",
+          "scale": 1.0,
+          "lambda_hydrolysis": 1.0,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            1.3215410807891312,
+            1.3215410819502968
+          ],
+          "gamma_final": 1.3215410819502968,
+          "cd_observable": 12.572866927720597,
+          "wall_seconds": 10.87617802619934
+        }
+      ]
+    },
+    {
+      "label": "k_des=1e-01",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 0.1,
+      "converged": true,
+      "error": null,
+      "wall": 35.31177282333374,
+      "cd_mA_cm2": -5.53171970068959,
+      "pc_mA_cm2": 2.765859850344795,
+      "gamma_final": 5.551863839417888,
+      "rungs": [
+        {
+          "rung_label": "warm_reconverge",
+          "snes_converged": true,
+          "wall_seconds": 1.7718520164489746
+        },
+        {
+          "rung_label": "lambda=0.0",
+          "lambda_hydrolysis": 0.0,
+          "snes_converged": true,
+          "wall_seconds": 1.7072618007659912
+        },
+        {
+          "rung_label": "lambda=2.500e-01",
+          "scale": 0.25,
+          "lambda_hydrolysis": 0.25,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.1791277594155304,
+            0.1791277594287969
+          ],
+          "gamma_final": 0.1791277594287969,
+          "cd_observable": 12.572848225302307,
+          "wall_seconds": 7.711771249771118
+        },
+        {
+          "rung_label": "lambda=5.000e-01",
+          "scale": 0.5,
+          "lambda_hydrolysis": 0.5,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.5047874802105193,
+            0.5047874803473742
+          ],
+          "gamma_final": 0.5047874803473742,
+          "cd_observable": 12.572851632609602,
+          "wall_seconds": 7.588339328765869
+        },
+        {
+          "rung_label": "lambda=7.500e-01",
+          "scale": 0.75,
+          "lambda_hydrolysis": 0.75,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            1.2813099980185336,
+            1.2813099992699464
+          ],
+          "gamma_final": 1.2813099992699464,
+          "cd_observable": 12.572855022941042,
+          "wall_seconds": 7.543403148651123
+        },
+        {
+          "rung_label": "lambda=1.000e+00",
+          "scale": 1.0,
+          "lambda_hydrolysis": 1.0,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            5.551863799225804,
+            5.551863839417888
+          ],
+          "gamma_final": 5.551863839417888,
+          "cd_observable": 12.572858372651401,
+          "wall_seconds": 8.921097993850708
+        }
+      ]
+    },
+    {
+      "label": "k_des=1e+01",
+      "r_H_El_pm": 200.98,
+      "c_s_f_m2": 0.1,
+      "k_des_nondim": 10.0,
+      "converged": true,
+      "error": null,
+      "wall": 33.87733721733093,
+      "cd_mA_cm2": -5.531719700954429,
+      "pc_mA_cm2": 2.7658598504772147,
+      "gamma_final": 0.05552115701783129,
+      "rungs": [
+        {
+          "rung_label": "warm_reconverge",
+          "snes_converged": true,
+          "wall_seconds": 1.77738618850708
+        },
+        {
+          "rung_label": "lambda=0.0",
+          "lambda_hydrolysis": 0.0,
+          "snes_converged": true,
+          "wall_seconds": 1.714827060699463
+        },
+        {
+          "rung_label": "lambda=2.500e-01",
+          "scale": 0.25,
+          "lambda_hydrolysis": 0.25,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.042715128281735994,
+            0.04271512828248996
+          ],
+          "gamma_final": 0.04271512828248996,
+          "cd_observable": 12.572848225306101,
+          "wall_seconds": 7.635947942733765
+        },
+        {
+          "rung_label": "lambda=5.000e-01",
+          "scale": 0.5,
+          "lambda_hydrolysis": 0.5,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.05047893492473078,
+            0.05047893492505648
+          ],
+          "gamma_final": 0.05047893492505648,
+          "cd_observable": 12.572851632634746,
+          "wall_seconds": 7.296734809875488
+        },
+        {
+          "rung_label": "lambda=7.500e-01",
+          "scale": 0.75,
+          "lambda_hydrolysis": 0.75,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.05373289576185475,
+            0.0537328957620738
+          ],
+          "gamma_final": 0.0537328957620738,
+          "cd_observable": 12.572855023043163,
+          "wall_seconds": 7.251765012741089
+        },
+        {
+          "rung_label": "lambda=1.000e+00",
+          "scale": 1.0,
+          "lambda_hydrolysis": 1.0,
+          "snes_converged": true,
+          "gamma_picard_iters": 2,
+          "gamma_picard_history": [
+            0.05552115701766447,
+            0.05552115701783129
+          ],
+          "gamma_final": 0.05552115701783129,
+          "cd_observable": 12.572858373253347,
+          "wall_seconds": 8.132181167602539
+        }
+      ]
+    }
+  ]
+}

@@ -43,6 +43,13 @@ from .water_ionization import (
     is_water_ionization_enabled,
     resolve_h_index,
 )
+from .cation_hydrolysis import (
+    build_cation_hydrolysis_terms,
+    build_pka_shift,
+    build_proton_boundary_source,
+    is_cation_hydrolysis_enabled,
+)
+from .forms_indexing import unpack_dof_indices
 
 
 # ---------------------------------------------------------------------------
@@ -52,8 +59,27 @@ from .water_ionization import (
 def build_context_logc(solver_params: Any, *, mesh: Any = None) -> dict[str, Any]:
     """Build mesh and function spaces for log-c BV PNP solver.
 
-    The mixed function space is [V_scalar^{n_species+1}] where the first
-    n_species components are u_i = ln(c_i) and the last is phi.
+    The mixed function space is ``[V_scalar^{n_species+1}]`` where the
+    first ``n_species`` components are ``u_i = ln(c_i)`` and the last is
+    ``phi``.
+
+    Phase 6β v9 Gate 3A — when
+    ``solver_options['bv_convergence']['enable_cation_hydrolysis']`` is
+    True, the form-build code attaches a Γ_MOH R-space Function to
+    ``ctx['cation_hydrolysis']`` as a *coefficient* (not a Newton
+    unknown).  Γ is updated by the orchestrator between continuation
+    rungs via an outer Picard fixed-point iteration on
+    ``Γ_ss(λ) = λ·⟨R_net⟩ / (λ·k_des + (1−λ) + λ·k_prot⟨c_H⟩/δ_OHP)``.
+    The architectural template is exactly Phase 6α's water-ionization
+    ``kw_eff_func``: an R-space Function the residual reads but Newton
+    does not solve for monolithically.  This avoids the
+    R-space-in-mixed-space matnest format limitation in Firedrake while
+    preserving the Γ continuation knob the plan calls for.
+
+    The mixed-space layout is therefore the legacy ``species + phi``
+    in both the cation-hydrolysis-disabled and -enabled paths;
+    ``mixed_space_indices`` is published on ctx for downstream slicing
+    consistency but always reports ``has_gamma=False``.
     """
     try:
         n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0, phi0, params = solver_params
@@ -66,12 +92,22 @@ def build_context_logc(solver_params: Any, *, mesh: Any = None) -> dict[str, Any
             f"got lengths {len(z_vals)}, {len(D_vals)}, {len(a_vals)}"
         )
 
+    # Phase 6β v9 Gate 3A — read the cation-hydrolysis flag (just for
+    # diagnostics; the mixed-space layout is unchanged because Γ is
+    # an external coefficient, not a Newton unknown).
+    conv_cfg = _get_bv_convergence_cfg(params)
+    cation_hydrolysis_enabled = bool(
+        conv_cfg.get("enable_cation_hydrolysis", False)
+    )
+
     if mesh is None:
         mesh = fd.UnitSquareMesh(32, 32)
     V_scalar = fd.FunctionSpace(mesh, "CG", order)
     W = fd.MixedFunctionSpace([V_scalar for _ in range(n_species)] + [V_scalar])
     U = fd.Function(W)
     U_prev = fd.Function(W)
+
+    indices = unpack_dof_indices(has_gamma=False)
 
     return {
         "mesh": mesh,
@@ -81,6 +117,11 @@ def build_context_logc(solver_params: Any, *, mesh: Any = None) -> dict[str, Any
         "U_prev": U_prev,
         "n_species": n_species,
         "logc_transform": True,  # flag for downstream code
+        # Phase 6β v9 Gate 3A: layout-aware DOF indexing.  Always the
+        # legacy ``has_gamma=False`` layout because Γ is an external
+        # R-space coefficient, not a Newton unknown.
+        "mixed_space_indices": indices,
+        "cation_hydrolysis_enabled": cation_hydrolysis_enabled,
     }
 
 
@@ -197,13 +238,20 @@ def build_forms_logc(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
     U = ctx["U"]
     U_prev = ctx["U_prev"]
 
-    # Split: u_i = ln(c_i) for species, phi for potential
-    ui = fd.split(U)[:-1]      # log-concentrations
-    phi = fd.split(U)[-1]
-    ui_prev = fd.split(U_prev)[:-1]
+    # Split: u_i = ln(c_i) for species, phi for potential.
+    # Phase 6β v9 Gate 3A: use the layout-aware index helper so the
+    # mixed-space slicing works for both the legacy ``species + phi``
+    # layout and the Γ-augmented ``species + phi + Γ`` layout.  The
+    # indices object lives on ctx (set by ``build_context_logc``).
+    indices = ctx.get("mixed_space_indices") or unpack_dof_indices(
+        has_gamma=False
+    )
+    ui = fd.split(U)[indices.species_slice]      # log-concentrations
+    phi = fd.split(U)[indices.phi_index]
+    ui_prev = fd.split(U_prev)[indices.species_slice]
     v_tests = fd.TestFunctions(W)
-    v_list = v_tests[:-1]
-    w = v_tests[-1]
+    v_list = v_tests[indices.species_slice]
+    w = v_tests[indices.phi_index]
 
     # Reconstruct concentrations from log-transform.
     # c_i = exp(u_i), clamped symmetrically to avoid floating-point overflow
@@ -585,6 +633,95 @@ def build_forms_logc(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
         stern_coeff = None
 
     # ---------------------------------------------------------------
+    # Phase 6β v9 Gate 3 — cation hydrolysis (Γ as external coefficient)
+    # ---------------------------------------------------------------
+    cation_hydrolysis_bundle = None
+    if is_cation_hydrolysis_enabled(conv_cfg):
+        # Resolve proton index up-front so the bundle stores it for
+        # the orchestrator's Picard update step
+        # (update_gamma_from_solution).
+        h_idx_for_cation = (
+            h_idx_water
+            if water_ion_enabled
+            else resolve_h_index(list(z_vals), roles=species_roles)
+        )
+        cation_hydrolysis_bundle = build_cation_hydrolysis_terms(
+            ctx=ctx,
+            conv_cfg=conv_cfg,
+            z_vals=z_vals,
+            roles=species_roles,
+            h_idx=h_idx_for_cation,
+            R_space=R_space,
+        )
+
+        # σ_S for the Singh formula — bare Stern surface charge per R4#5
+        # in **physical** C/m² (Singh's Eq. (4) is unit-specific).
+        # Conversion chain: σ_S_nondim = stern_coeff_nondim · ψ_S_nondim;
+        # σ_S_phys = σ_S_nondim · (F · C_SCALE · L_SCALE).  When Stern
+        # is disabled, σ_S falls back to a zero Constant; Gate 4A's
+        # Singh path is anode-clamped so this is fine.
+        if stern_coeff is not None:
+            from Nondim.constants import FARADAY_CONSTANT as _F
+            length_scale = float(scaling.get("length_scale_m", 1.0))
+            concentration_scale = float(
+                scaling.get("concentration_scale_mol_m3", 1.0)
+            )
+            sigma_phys_per_nondim = float(_F) * concentration_scale * length_scale
+            sigma_S_expr = (
+                stern_coeff
+                * (phi_applied_func - phi)
+                * fd.Constant(sigma_phys_per_nondim)
+            )
+        else:
+            sigma_S_expr = fd.Constant(0.0)
+        # Stash for the Picard update — it reads σ_S to recompute
+        # the pka_factor with the latest converged solution.
+        ctx["_cation_hydrolysis_sigma_S_expr"] = sigma_S_expr
+
+        c_M_bdy_expr = ci[cation_hydrolysis_bundle.counterion_idx]
+        c_H_bdy_expr = ci[h_idx_for_cation]
+
+        pka_shift_expr = build_pka_shift(
+            cation_params=cation_hydrolysis_bundle.cation_params,
+            sigma_S=sigma_S_expr,
+            r_H_El_func=cation_hydrolysis_bundle.r_H_El_pm_func,
+        )
+
+        R_net_default = build_proton_boundary_source(
+            bundle=cation_hydrolysis_bundle,
+            c_M_bdy_expr=c_M_bdy_expr,
+            c_H_bdy_expr=c_H_bdy_expr,
+            pka_shift_expr=pka_shift_expr,
+        )
+
+        # Gate 3D — manufactured-source override for unit tests.
+        manufactured_R_inj = conv_cfg.get("manufactured_R_inj", None)
+        if manufactured_R_inj is not None:
+            R_net = fd.Constant(float(manufactured_R_inj))
+        else:
+            R_net = R_net_default
+
+        # Proton + cation boundary residuals — wrapped in
+        # ``λ_hydrolysis`` so λ=0 byte-zeros every hydrolysis
+        # contribution.  Combined with ``bundle.gamma_func = 0`` at
+        # λ=0 (set by the orchestrator's Picard update) this restores
+        # the disabled-feature baseline up to discretisation error.
+        # Sign convention matches the BV residual block above:
+        # ``F_res -= stoi * R * v * ds``, with stoi[H]=+1 (proton
+        # produced) and stoi[M]=-1 (cation consumed).
+        lam_func = cation_hydrolysis_bundle.lambda_hydrolysis_func
+        F_res -= (
+            lam_func * R_net
+            * v_list[h_idx_for_cation]
+            * ds(electrode_marker)
+        )
+        F_res -= (
+            lam_func * (-R_net)
+            * v_list[cation_hydrolysis_bundle.counterion_idx]
+            * ds(electrode_marker)
+        )
+
+    # ---------------------------------------------------------------
     # Boundary conditions
     # ---------------------------------------------------------------
     # Concentration BCs: u_i = ln(c0_i) at bulk boundary
@@ -638,6 +775,7 @@ def build_forms_logc(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
         "logc_transform": True,
         "steric_boltzmann": steric_boltz,  # None for ideal-only configs
         "water_ionization": water_bundle,  # None when feature disabled
+        "cation_hydrolysis": cation_hydrolysis_bundle,  # None when feature disabled
     })
     # Ideal-path Boltzmann counterions (bikerman entries are wired above
     # via build_steric_boltzmann_expressions; skip them here).

@@ -422,7 +422,10 @@ def _make_bv_convergence_cfg(*, softplus: bool = False,
                               enable_water_ionization: bool = False,
                               kw_eff_hat: float = KW_HAT,
                               d_oh_hat: float = D_OH_HAT,
-                              a_oh_hat: float = A_OH_HAT) -> Dict[str, Any]:
+                              a_oh_hat: float = A_OH_HAT,
+                              enable_cation_hydrolysis: bool = False,
+                              cation_hydrolysis_config: Optional[Dict[str, Any]] = None,
+                              lambda_hydrolysis: float = 0.0) -> Dict[str, Any]:
     """Standard BV convergence config sub-dict.
 
     Parameters
@@ -492,6 +495,9 @@ def _make_bv_convergence_cfg(*, softplus: bool = False,
         "kw_eff_hat": float(kw_eff_hat),
         "d_oh_hat": float(d_oh_hat),
         "a_oh_hat": float(a_oh_hat),
+        "enable_cation_hydrolysis": bool(enable_cation_hydrolysis),
+        "cation_hydrolysis_config": cation_hydrolysis_config,
+        "lambda_hydrolysis": float(lambda_hydrolysis),
     }
     if softplus:
         cfg["softplus_regularization"] = True
@@ -882,6 +888,101 @@ PARALLEL_2E_4E_REACTIONS_4SP: List[Dict[str, Any]] = [
 
 
 # ---------------------------------------------------------------------------
+# Singh 2016 SI cation hydrolysis constants (Phase 6β v9 Gate 4A — 2026-05-10)
+# ---------------------------------------------------------------------------
+#
+# Per ``docs/singh_2016_pka_formula.md``, Singh 2016 SI Section 1
+# extracts:
+#
+#   Eq. (3):  pKa_bulk  =  B − A · z² / r_M-O
+#   Eq. (4):  ΔpKa(σ)   =  +2 · A · z · σ · r_H-El · (1 − r_M-O² / r_H-El²)
+#
+# with ``r_M-O = r_M + r_O`` (cation radius + O-atom radius = 63 pm),
+# ``z`` the effective cation charge from Singh Table S1, and Singh's
+# σ in counts/pm² (cathode-side magnitude).  Tables S1 + S3 verify
+# the constants below within rounding.
+
+SINGH_A_PM = 620.32          # slope, units of pm
+SINGH_B = 17.154             # intercept, dimensionless
+SINGH_R_O_PM = 63.0          # O-atom radius (Eq. 3 + 4 use r_M + r_O)
+
+# Per-cation Singh Table S1 + Cu r_H_El back-fit (`docs/singh_2016_pka_formula.md`
+# §4 + §7).  These are the prior values for ORR-on-CMK-3-carbon
+# (Linsey 2025 deck slide 27 cites Singh's Cu values directly).  Gate 4B
+# treats r_H_El_pm as a calibration sweep parameter.
+SINGH_2016_CATION_PARAMS: Dict[str, Dict[str, float]] = {
+    "Li+": {
+        "r_M_pm": 69.0,  "z_eff": 0.864, "n_hyd": 5.2,
+        "pKa_bulk": 13.6, "r_H_El_pm_Cu": 132.00,
+    },
+    "Na+": {
+        "r_M_pm": 102.0, "z_eff": 0.900, "n_hyd": 3.5,
+        "pKa_bulk": 14.2, "r_H_El_pm_Cu": 164.99,
+    },
+    "K+": {
+        "r_M_pm": 138.0, "z_eff": 0.919, "n_hyd": 2.6,
+        "pKa_bulk": 14.5, "r_H_El_pm_Cu": 200.98,
+    },
+    "Rb+": {
+        "r_M_pm": 149.0, "z_eff": 0.923, "n_hyd": 2.4,
+        "pKa_bulk": 14.6, "r_H_El_pm_Cu": 211.98,
+    },
+    "Cs+": {
+        "r_M_pm": 170.0, "z_eff": 0.930, "n_hyd": 2.1,
+        "pKa_bulk": 14.8, "r_H_El_pm_Cu": 232.97,
+    },
+}
+
+
+def make_singh_pka_shift_params(
+    cation: str = "K+",
+    *,
+    r_H_El_pm: Optional[float] = None,
+    anode_clamp: bool = True,
+) -> Dict[str, Any]:
+    """Build a ``pka_shift_params`` dict for ``cation_hydrolysis_config``.
+
+    Combines the per-cation Singh Table S1 row (z_eff, r_M, pKa_bulk)
+    with the global Singh constants (A, B, r_O) and an explicit
+    ``r_H_El_pm`` value.  Default ``r_H_El_pm`` is the Cu prior from
+    Singh Table S3; Gate 4B's calibration sweep overrides this with
+    the cathode-material-specific value for ORR-on-carbon.
+
+    Parameters
+    ----------
+    cation
+        Cation key into :data:`SINGH_2016_CATION_PARAMS` (e.g.
+        ``"K+"``, ``"Cs+"``).  Determines z_eff, r_M, pKa_bulk.
+    r_H_El_pm
+        Distance from the hydration-shell H atom to the electrode
+        surface, in pm.  Default: Cu Table S3 back-fit value.
+    anode_clamp
+        Whether to anode-clamp ΔpKa to 0 at anodic bias.  Default
+        True.
+
+    Returns
+    -------
+    Dict suitable as ``cation_hydrolysis_config['pka_shift_params']``.
+    """
+    if cation not in SINGH_2016_CATION_PARAMS:
+        raise ValueError(
+            f"Unknown cation {cation!r}; valid: "
+            f"{list(SINGH_2016_CATION_PARAMS.keys())}"
+        )
+    row = SINGH_2016_CATION_PARAMS[cation]
+    rh = float(row["r_H_El_pm_Cu"]) if r_H_El_pm is None else float(r_H_El_pm)
+    return {
+        "z_eff": float(row["z_eff"]),
+        "r_M_pm": float(row["r_M_pm"]),
+        "r_H_El_pm": rh,
+        "A_pm": float(SINGH_A_PM),
+        "B": float(SINGH_B),
+        "r_O_pm": float(SINGH_R_O_PM),
+        "anode_clamp": bool(anode_clamp),
+    }
+
+
+# ---------------------------------------------------------------------------
 # SolverParams factory
 # ---------------------------------------------------------------------------
 
@@ -917,6 +1018,9 @@ def make_bv_solver_params(
     kw_eff_hat: float = KW_HAT,
     d_oh_hat: float = D_OH_HAT,
     a_oh_hat: float = A_OH_HAT,
+    enable_cation_hydrolysis: bool = False,
+    cation_hydrolysis_config: Optional[Dict[str, Any]] = None,
+    lambda_hydrolysis: float = 0.0,
 ) -> "SolverParams":
     """Build SolverParams for multi-species BV with graded rectangle mesh markers.
 
@@ -1014,6 +1118,29 @@ def make_bv_solver_params(
         callers usually accept the defaults.  All three are stored on
         ``solver_options['bv_convergence']`` and consumed by the forms
         modules; ignored unless ``enable_water_ionization`` is True.
+    enable_cation_hydrolysis:
+        Phase 6β v9 Gate 3 opt-in.  When False (default), the residual
+        and mixed function space are byte-equivalent to the pre-Gate-3
+        stack.  When True, the mixed space is extended with one extra
+        R-space slot for the global ``Γ_MOH`` Newton unknown (Gate 3A)
+        and the ``cation_hydrolysis`` bundle wires the proton-boundary
+        source + Γ residual (Gate 3B/4A).  Combined with
+        ``enable_water_ionization=True`` for the production cation-
+        hydrolysis-on-OHP physics.  See
+        ``.claude/plans/write-up-the-formal-joyful-papert.md`` and
+        ``docs/singh_2016_pka_formula.md``.
+    cation_hydrolysis_config:
+        Per-cation Singh 2016 SI Eq. (4) parameters + finite-rate
+        kinetics dict (Gate 4A).  Required when
+        ``enable_cation_hydrolysis=True``; ignored otherwise.  Schema
+        documented in Gate 4A's ``cation_hydrolysis.py`` module
+        docstring.
+    lambda_hydrolysis:
+        Continuation knob for the cation-hydrolysis source term, ramped
+        from 0 to 1 by ``lambda_hydrolysis_ladder`` (Gate 3C).  Default
+        ``0.0`` so a freshly-built form with the Γ slot but no λ
+        override pins ``Γ_MOH = 0`` at steady state — Gate 3D's
+        Dirichlet-pin invariant.
 
     Returns
     -------
@@ -1056,6 +1183,9 @@ def make_bv_solver_params(
         kw_eff_hat=kw_eff_hat,
         d_oh_hat=d_oh_hat,
         a_oh_hat=a_oh_hat,
+        enable_cation_hydrolysis=enable_cation_hydrolysis,
+        cation_hydrolysis_config=cation_hydrolysis_config,
+        lambda_hydrolysis=lambda_hydrolysis,
     )
     params["nondim"] = _make_nondim_cfg()
     params["bv_bc"] = _make_bv_bc_cfg(

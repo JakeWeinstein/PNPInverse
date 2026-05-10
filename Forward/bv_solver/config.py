@@ -195,6 +195,32 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
                 f"enable_water_ionization=True; got {a_oh_hat}"
             )
 
+    # Phase 6β v9 Gate 3 — cation hydrolysis keys.  The flag gates the
+    # mixed-space Γ slot (Gate 3A) and the cation_hydrolysis bundle
+    # (Gate 3B).  ``cation_hydrolysis_config`` carries the per-cation
+    # Singh parameters + finite-rate kinetics (filled in by Gate 4A);
+    # at Gate 3 the flag is enough to extend the mixed space.
+    enable_cation_hydrolysis = _bool(raw.get("enable_cation_hydrolysis", False))
+    cation_hydrolysis_config = raw.get("cation_hydrolysis_config", None)
+    if enable_cation_hydrolysis:
+        if cation_hydrolysis_config is not None and not isinstance(
+            cation_hydrolysis_config, dict
+        ):
+            raise ValueError(
+                "cation_hydrolysis_config must be a dict (or None) when "
+                f"enable_cation_hydrolysis=True; got "
+                f"{type(cation_hydrolysis_config).__name__}"
+            )
+    # Manufactured-source override for Gate 3D unit tests: when set,
+    # the form replaces R_net with this Constant value.  ``None`` (the
+    # default) leaves the production R_net wired up.  Surfaced via the
+    # parser so the form-build code can read it from conv_cfg.
+    manufactured_R_inj_raw = raw.get("manufactured_R_inj", None)
+    manufactured_R_inj = (
+        None if manufactured_R_inj_raw is None
+        else float(manufactured_R_inj_raw)
+    )
+
     return {
         "clip_exponent":              _bool(raw.get("clip_exponent", True)),
         "exponent_clip":              exponent_clip,
@@ -211,6 +237,17 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
         "kw_eff_hat":                 kw_eff_hat,
         "d_oh_hat":                   d_oh_hat,
         "a_oh_hat":                   a_oh_hat,
+        "enable_cation_hydrolysis":   enable_cation_hydrolysis,
+        "cation_hydrolysis_config":   cation_hydrolysis_config,
+        # Phase 6β v9 Gate 3C — λ continuation knob; ramps cation
+        # hydrolysis source from 0 → 1.  Default 0.0 so a freshly-
+        # built form with the Γ slot but no λ override is the same
+        # as the disabled-feature baseline (Γ pinned to 0).
+        "lambda_hydrolysis":          float(raw.get("lambda_hydrolysis", 0.0)),
+        # Phase 6β v9 Gate 3D — manufactured-source override for
+        # unit tests.  ``None`` (default) leaves the production
+        # R_net wired up.
+        "manufactured_R_inj":         manufactured_R_inj,
     }
 
 
