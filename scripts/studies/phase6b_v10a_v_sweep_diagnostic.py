@@ -169,9 +169,13 @@ Tracks the local scale so a V with a genuinely huge slope isn't
 flagged just because FD has a coarser response.
 """
 
-# Smoke kinetics — locked baseline per the acceptance bundle.
+# Smoke kinetics -- frozen V10A historical baseline.  Per the v10b
+# acceptance bundle (2026-05-10), v10b production paths read from
+# V10B_KINETICS; SMOKE_KINETICS_V10A is preserved for historical
+# reproduction only.  See ``calibration/v10b.py`` and the v10b
+# deprecation comment block below for the alias semantics.
 
-SMOKE_KINETICS: Dict[str, float] = {
+SMOKE_KINETICS_V10A: Dict[str, float] = {
     "k_hyd_nondim":     1e-3,
     "k_prot_nondim":    1e-3,
     "k_des_nondim":     1.0,
@@ -179,6 +183,20 @@ SMOKE_KINETICS: Dict[str, float] = {
     "gamma_max_nondim": 0.047,                     # 1 monolayer MOH
     "r_H_El_pm":        200.98,                    # Singh Cu prior
 }
+
+# v10b production kinetics imported from the top-level Firedrake-free
+# ``calibration`` package (2026-05-10).  All v10b factory defaults
+# below read V10B_KINETICS; historical reproduction scripts may opt
+# back to SMOKE_KINETICS_V10A by passing kwargs explicitly.
+from calibration.v10b import V10B_KINETICS
+
+# DEPRECATED 2026-05-10: SMOKE_KINETICS is preserved as an alias to
+# SMOKE_KINETICS_V10A (frozen historical) for one-cycle backward
+# compatibility.  NEW callers MUST use V10B_KINETICS (production) or
+# SMOKE_KINETICS_V10A (explicit historical reproduction).  NEVER alias
+# SMOKE_KINETICS to V10B_KINETICS -- that is silent provenance theft.
+# Removal scheduled post-step-9 (B.2).
+SMOKE_KINETICS = SMOKE_KINETICS_V10A
 
 # Mesh / solver constants.
 
@@ -818,12 +836,12 @@ def _scale_k0_r4e_in_reactions(
 def _build_sp(
     *,
     stern_capacitance_f_m2: float = STERN_F_M2_BASELINE,
-    r_H_El_pm: float = SMOKE_KINETICS["r_H_El_pm"],
-    k_des_nondim: float = SMOKE_KINETICS["k_des_nondim"],
-    k_hyd_nondim: float = SMOKE_KINETICS["k_hyd_nondim"],
-    k_prot_nondim: float = SMOKE_KINETICS["k_prot_nondim"],
-    delta_ohp_hat: float = SMOKE_KINETICS["delta_ohp_hat"],
-    gamma_max_nondim: float = SMOKE_KINETICS["gamma_max_nondim"],
+    r_H_El_pm: float = V10B_KINETICS["r_H_El_pm"],
+    k_des_nondim: float = V10B_KINETICS["k_des_nondim"],
+    k_hyd_nondim: float = V10B_KINETICS["k_hyd_nondim"],
+    k_prot_nondim: float = V10B_KINETICS["k_prot_nondim"],
+    delta_ohp_hat: float = V10B_KINETICS["delta_ohp_hat"],
+    gamma_max_nondim: float = V10B_KINETICS["gamma_max_nondim"],
     lambda_hydrolysis: float = 0.0,
     l_eff_m: float = L_EFF_M_BASELINE,
     k0_r4e_factor: float = 1.0,
@@ -1597,7 +1615,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "v_anchor":              args.v_anchor,
         "lambda_ladder":         list(LAMBDA_LADDER),
         "k0_initial_scales":     list(K0_INITIAL_SCALES),
-        "smoke_kinetics":        SMOKE_KINETICS,
+        "v10b_kinetics":         V10B_KINETICS,
         "stern_capacitance_f_m2": STERN_F_M2_BASELINE,
         "l_eff_m":               L_EFF_M_BASELINE,
         "perturb_fraction":      PERTURB_FRACTION,

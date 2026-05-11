@@ -229,17 +229,41 @@ _DEFAULT_CATION_PARAMS = {
 }
 
 
-# Phase 6β v10a Langmuir cap smoke baseline.  One monolayer of hydrated
-# MOH at the OHP, hard-sphere areal coverage with r ≈ 2.3 Å (matches
-# the K⁺ hydrated-radius monolayer):
+# Phase 6β v10a Langmuir cap smoke baseline (frozen historical).
+# One monolayer of hydrated MOH at the OHP, hard-sphere areal coverage
+# with r ≈ 2.3 Å (matches the K⁺ hydrated-radius monolayer):
 #     Γ_max_phys  ≈ 1 / (π · (2.3e-10 m)² · N_A) ≈ 5.6e-6 mol/m²
 # Nondim conversion uses the same scaling chain as ``c_HAT · L_HAT``:
 #     Γ_max_hat = Γ_max_phys / (C_SCALE · L_REF)
 #                = 5.6e-6 / (1.2 · 1e-4)
 #                ≈ 0.047
-# The literature-calibrated replacement (Γ_max, k_des, C_S) lands in
-# v10b alongside ``docs/phase6/CMK3_capacitance_literature.md``.
-GAMMA_MAX_HAT_SMOKE: float = 0.047
+# v10b (2026-05-10) tightens this V10A derivation chain rather than
+# replacing the value -- the 4-test compatibility check finds no peer-
+# reviewed source that reports MOH adsorbate coverage at the OHP in
+# K2SO4 / sp2-carbon (Singh 2016 reports K_eq; Iamprasertkun 2019
+# reports HOPG specific capacitance; Bohra 2019 uses variable Booth
+# permittivity).  GAMMA_MAX_HAT_V10B = GAMMA_MAX_HAT_V10A_SMOKE = 0.047.
+GAMMA_MAX_HAT_V10A_SMOKE: float = 0.047
+
+# v10b literature-calibrated constants imported from the top-level
+# Firedrake-free ``calibration`` package.  See
+# ``calibration/v10b.py`` and
+# ``docs/phase6/v10b_calibration_summary.md`` for the per-parameter
+# decision rules + provenance.
+from calibration.v10b import (
+    GAMMA_MAX_HAT_V10B,
+    K_DES_NONDIM_V10B,
+    V10B_CALIBRATION_METADATA,
+)
+
+# DEPRECATED 2026-05-10: GAMMA_MAX_HAT_SMOKE is preserved as an alias
+# to GAMMA_MAX_HAT_V10A_SMOKE (frozen historical 0.047) for one-cycle
+# backward compatibility with v9/v10a callers.  NEW callers MUST use
+# GAMMA_MAX_HAT_V10B (production) or GAMMA_MAX_HAT_V10A_SMOKE
+# (explicit historical reproduction).  NEVER alias SMOKE to a V10B
+# value -- that is silent provenance theft.  Removal scheduled post-
+# step-9 (B.2).
+GAMMA_MAX_HAT_SMOKE = GAMMA_MAX_HAT_V10A_SMOKE
 
 
 def build_cation_hydrolysis_terms(
@@ -290,9 +314,11 @@ def build_cation_hydrolysis_terms(
 
     k_hyd_init = float(raw_cfg.get("k_hyd", 0.0))
     k_prot_init = float(raw_cfg.get("k_prot", 0.0))
-    k_des_init = float(raw_cfg.get("k_des", 1.0))
+    k_des_init = float(raw_cfg.get("k_des", K_DES_NONDIM_V10B))
     delta_ohp_init = float(raw_cfg.get("delta_ohp_hat", 1.0))
-    gamma_max_init = float(raw_cfg.get("gamma_max_nondim", GAMMA_MAX_HAT_SMOKE))
+    gamma_max_init = float(
+        raw_cfg.get("gamma_max_nondim", GAMMA_MAX_HAT_V10B)
+    )
     if delta_ohp_init <= 0.0:
         raise ValueError(
             f"delta_ohp_hat must be positive (got {delta_ohp_init!r}); "
@@ -1409,7 +1435,11 @@ def collect_v10a_rung_diagnostics(
 
 __all__ = [
     "CationHydrolysisBundle",
-    "GAMMA_MAX_HAT_SMOKE",
+    "GAMMA_MAX_HAT_SMOKE",            # deprecated alias (= V10A_SMOKE)
+    "GAMMA_MAX_HAT_V10A_SMOKE",
+    "GAMMA_MAX_HAT_V10B",
+    "K_DES_NONDIM_V10B",
+    "V10B_CALIBRATION_METADATA",
     "build_cation_hydrolysis_terms",
     "build_forward_branch",
     "build_forward_branch_uncapped",

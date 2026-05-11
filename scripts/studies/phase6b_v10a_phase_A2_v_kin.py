@@ -370,6 +370,18 @@ def augment_rung_diagnostics(
     snapshot["mass_balance_residual_rel"] = (
         compute_mass_balance_residual_rel(snapshot)
     )
+
+    # R_net at steady state equals k_des * Gamma by the closed-form
+    # Langmuir residual (per cation_hydrolysis.update_gamma_from_solution
+    # docstring).  Emit as a first-class field so the v10b audit can
+    # gate on it without recomputing.  See plan D6.
+    k_des_val = snapshot.get("k_des")
+    gamma_val = snapshot.get("gamma")
+    if k_des_val is not None and gamma_val is not None:
+        snapshot["R_net"] = float(k_des_val) * float(gamma_val)
+    else:
+        snapshot["R_net"] = None
+
     return snapshot
 
 
@@ -817,11 +829,33 @@ def _convergence_audit(
     per_k_hyd_records: List[Dict[str, Any]],
     lambda_zero_baseline_at_v_kin: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """Run the three-criterion convergence audit per plan §Convergence audit."""
+    """Run the three-criterion convergence audit per plan §Convergence audit.
+
+    v10b D5 refactor (2026-05-10): split into ``hard_gates`` (escalation
+    gates -- failure escalates to v10c) and ``soft_deltas`` (informative
+    deltas, logged but never gated).  ``overall_pass`` is driven ONLY by
+    ``hard_gates``.
+
+    Hard gates (any failure -> escalate to v10c):
+    * 10/10 k_hyd rungs converge at lambda=1 (saturation_coverage rows
+      + transition_coverage convergence).
+    * Mass-balance residual < MASS_BALANCE_RESIDUAL_REL_MAX everywhere.
+    * Picard converges everywhere.
+    * Locked rule at V_kin (delegated to v10b_priorities block elsewhere).
+    * Saturation coverage's slope < SATURATION_SLOPE_MAX_LN.
+
+    Soft deltas (informative, logged not gated):
+    * cd_mA_cm2 / x_2e / theta(k_hyd=1e-1) deltas vs v10a' baseline.
+    * Baseline reproduction relative diffs at k_hyd=1e-3 (the V10A
+      reference numbers shift slightly under V10B parameters; the
+      delta is informative, not a HARD gate).
+    """
     audit: Dict[str, Any] = {
         "baseline_reproduction": None,
         "transition_coverage": None,
         "saturation_coverage": None,
+        "hard_gates": None,
+        "soft_deltas": None,
         "overall_pass": None,
     }
     # Baseline reproduction at k_hyd=1e-3 — compare λ=1 rung to v10a' record.
@@ -951,7 +985,39 @@ def _convergence_audit(
         "pass": bool(sat_theta_ok and sat_slope_ok),
     }
 
-    audit["overall_pass"] = bool(
+    # v10b D5 HARD/SOFT split.  hard_gates carries the escalation
+    # criteria.  Failure here -> escalate to v10c.  soft_deltas
+    # is informative only.
+    convergence_hard = (
+        audit["transition_coverage"]["pass"]
+        and audit["saturation_coverage"]["pass"]
+    )
+    br = audit["baseline_reproduction"] or {}
+    picard_hard = bool(br.get("picard_ok", True))
+    mb_hard = bool(br.get("mass_balance_ok", True))
+    audit["hard_gates"] = {
+        "convergence_coverage_pass": convergence_hard,
+        "picard_ok": picard_hard,
+        "mass_balance_ok": mb_hard,
+        "pass": bool(convergence_hard and picard_hard and mb_hard),
+    }
+    audit["soft_deltas"] = {
+        "baseline_reproduction_within_tol": bool(
+            br.get("within_tol", False)
+        ),
+        "baseline_reproduction_relative_diffs": br.get("relative_diffs"),
+        "note": (
+            "baseline_reproduction at k_hyd=1e-3 lambda=1 is "
+            "INFORMATIVE in v10b -- the V10A reference numbers may "
+            "shift under V10B parameters.  Movement here does NOT "
+            "fail v10b; only hard_gates can."
+        ),
+    }
+    audit["overall_pass"] = audit["hard_gates"]["pass"]
+
+    # Preserve the legacy strict-pass for back-compat tooling.  v10b
+    # consumers should read hard_gates / soft_deltas / overall_pass.
+    audit["legacy_strict_pass"] = bool(
         audit["baseline_reproduction"].get("pass", False)
         and audit["transition_coverage"]["pass"]
         and audit["saturation_coverage"]["pass"]
@@ -1104,9 +1170,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Lazy imports — keep test imports free of Firedrake.
     from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
         L_EFF_M_BASELINE, STERN_F_M2_BASELINE, STERN_F_M2_ANCHOR,
-        SMOKE_KINETICS, MESH_NX, MESH_NY, MESH_BETA, LAMBDA_LADDER,
+        MESH_NX, MESH_NY, MESH_BETA, LAMBDA_LADDER,
         K0_INITIAL_SCALES, _build_sp, _make_mesh, _serialize,
         _i_lim_4e_mA_cm2, _walk_lambda_zero_capture_snapshots,
+    )
+    from calibration.v10b import (
+        V10B_KINETICS, V10B_CALIBRATION_METADATA,
     )
     from scripts._bv_common import (
         I_SCALE, K0_HAT_R2E, K0_HAT_R4E, V_T,
@@ -1129,7 +1198,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     sp = _build_sp(
         lambda_hydrolysis=0.0,
         k0_r4e_factor=k0_r4e_factor,
-        # All other kinetics at SMOKE_KINETICS defaults.
+        # All other kinetics at V10B_KINETICS defaults (factory
+        # signature defaults now V10B-anchored per v10b D4').
     )
     mesh = _make_mesh(l_eff_m=L_EFF_M_BASELINE)
 
@@ -1257,7 +1327,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         "saturation_grid": list(SATURATION_GRID),
         "warm_walk_grid": list(warm_grid_t),
         "lambda_ladder": list(LAMBDA_LADDER),
-        "smoke_kinetics": SMOKE_KINETICS,
+        "v10b_kinetics": V10B_KINETICS,
+        "v10b_calibration_metadata": V10B_CALIBRATION_METADATA,
         "l_eff_m": L_EFF_M_BASELINE,
         "domain_height_hat": domain_height_hat,
         "electrode_area_nondim": electrode_area_nondim,
@@ -1290,7 +1361,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         _make_plot(
             out_dir=out_dir,
             per_k_hyd_records=per_k_hyd_records,
-            gamma_max_nondim=float(SMOKE_KINETICS["gamma_max_nondim"]),
+            gamma_max_nondim=float(V10B_KINETICS["gamma_max_nondim"]),
             v_kin=v_kin,
         )
 

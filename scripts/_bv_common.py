@@ -934,14 +934,30 @@ SINGH_2016_CATION_PARAMS: Dict[str, Dict[str, float]] = {
 }
 
 
-# Phase 6β v10a Langmuir cap smoke baseline.  Mirrors the in-module
-# constant from ``Forward.bv_solver.cation_hydrolysis`` so callers
-# that import this module directly do not need to reach across into
-# the solver package for a single scalar.  See
-# ``Forward.bv_solver.cation_hydrolysis.GAMMA_MAX_HAT_SMOKE`` for the
-# nondim conversion derivation (≈ 1 monolayer of MOH at the OHP at
-# C_SCALE = 1.2 mol/m³ and L_REF = 100 µm).
-GAMMA_MAX_HAT_SMOKE: float = 0.047
+# Phase 6β v10a Langmuir cap smoke baseline (frozen historical).
+# Mirrors the in-module constant from
+# ``Forward.bv_solver.cation_hydrolysis`` so callers that import this
+# module directly do not need to reach across into the solver package
+# for a single scalar.  See
+# ``Forward.bv_solver.cation_hydrolysis.GAMMA_MAX_HAT_V10A_SMOKE``
+# for the nondim conversion derivation (≈ 1 monolayer of MOH at the
+# OHP at C_SCALE = 1.2 mol/m³ and L_REF = 100 µm).
+GAMMA_MAX_HAT_V10A_SMOKE: float = 0.047
+
+# v10b literature-calibrated constants imported from the top-level
+# Firedrake-free ``calibration`` package (2026-05-10).  See
+# ``calibration/v10b.py`` and
+# ``docs/phase6/v10b_calibration_summary.md``.
+from calibration.v10b import GAMMA_MAX_HAT_V10B
+
+# DEPRECATED 2026-05-10: GAMMA_MAX_HAT_SMOKE is preserved as an alias
+# to GAMMA_MAX_HAT_V10A_SMOKE (frozen historical 0.047) for one-cycle
+# backward compatibility with v9/v10a callers.  NEW callers MUST use
+# GAMMA_MAX_HAT_V10B (production) or GAMMA_MAX_HAT_V10A_SMOKE
+# (explicit historical reproduction).  NEVER alias SMOKE to a V10B
+# value -- that is silent provenance theft.  Removal scheduled post-
+# step-9 (B.2).
+GAMMA_MAX_HAT_SMOKE = GAMMA_MAX_HAT_V10A_SMOKE
 
 
 def make_cation_hydrolysis_config(
@@ -954,7 +970,7 @@ def make_cation_hydrolysis_config(
     r_H_El_pm: Optional[float] = None,
     anode_clamp: bool = True,
     pka_shift_form: str = "singh_2016_eq_4",
-    gamma_max_nondim: float = GAMMA_MAX_HAT_SMOKE,
+    gamma_max_nondim: float = GAMMA_MAX_HAT_V10B,
 ) -> Dict[str, Any]:
     """Build a ``cation_hydrolysis_config`` sub-dict for ``make_bv_solver_params``.
 
@@ -978,10 +994,13 @@ def make_cation_hydrolysis_config(
         ``"placeholder"`` (Gate 3B) or ``"singh_2016_eq_4"`` (Gate 4A
         default).  v10a does not change the Singh form.
     gamma_max_nondim
-        Langmuir saturation cap (Phase 6β v10a, 2026-05-10).  Defaults
-        to :data:`GAMMA_MAX_HAT_SMOKE` (≈ 1 monolayer of MOH).  Replace
-        with the literature-anchored value once v10b's CMK-3
-        capacitance note lands.
+        Langmuir saturation cap (Phase 6β v10a Langmuir cap, v10b
+        derivation-chain freeze 2026-05-10).  Defaults to
+        :data:`calibration.v10b.GAMMA_MAX_HAT_V10B` (= the same numeric
+        value as ``GAMMA_MAX_HAT_V10A_SMOKE``; the v10b 4-test
+        compatibility check tightened the V10A chain rather than
+        replacing the value).  See
+        ``docs/phase6/v10b_calibration_summary.md`` section 2.
 
     Returns
     -------

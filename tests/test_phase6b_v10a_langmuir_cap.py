@@ -43,22 +43,43 @@ if _ROOT not in sys.path:
 
 
 class TestSmokeConstantConsistency:
-    """The ``GAMMA_MAX_HAT_SMOKE`` constant must agree between the
+    """The ``GAMMA_MAX_HAT_V10A_SMOKE`` constant must agree between the
     solver module and the script-level helper, so the gate4 driver
     and the bundle never disagree on the default.
+
+    v10b refactor (2026-05-10): references the explicit V10A frozen
+    historical constant rather than the deprecated SMOKE alias to keep
+    this test stable across future calibration cycles.
     """
 
     def test_constants_agree(self):
         from Forward.bv_solver.cation_hydrolysis import (
-            GAMMA_MAX_HAT_SMOKE as SOLVER_SMOKE,
+            GAMMA_MAX_HAT_V10A_SMOKE as SOLVER_V10A,
         )
         from scripts._bv_common import (
-            GAMMA_MAX_HAT_SMOKE as SCRIPT_SMOKE,
+            GAMMA_MAX_HAT_V10A_SMOKE as SCRIPT_V10A,
         )
-        assert SOLVER_SMOKE == pytest.approx(SCRIPT_SMOKE, rel=1e-15)
+        assert SOLVER_V10A == pytest.approx(SCRIPT_V10A, rel=1e-15)
         # Sanity: ~0.047 nondim ≈ 1 monolayer at C_SCALE=1.2, L_REF=1e-4.
         # (See module docstring derivation.)
-        assert SOLVER_SMOKE == pytest.approx(0.047, rel=1e-2)
+        assert SOLVER_V10A == pytest.approx(0.047, rel=1e-2)
+
+    def test_smoke_alias_still_points_at_v10a_smoke(self):
+        """The deprecated SMOKE alias keeps backward compat by pointing
+        at V10A_SMOKE -- never at V10B."""
+        from Forward.bv_solver.cation_hydrolysis import (
+            GAMMA_MAX_HAT_SMOKE,
+            GAMMA_MAX_HAT_V10A_SMOKE,
+            GAMMA_MAX_HAT_V10B,
+        )
+        assert GAMMA_MAX_HAT_SMOKE == pytest.approx(
+            GAMMA_MAX_HAT_V10A_SMOKE, rel=1e-15
+        )
+        # V10B is currently numerically equal to V10A (the v10b 4-test
+        # compatibility check tightened the V10A chain rather than
+        # replacing the value), but the alias semantic is still
+        # SMOKE -> V10A_SMOKE, NEVER SMOKE -> V10B.
+        assert GAMMA_MAX_HAT_V10B == pytest.approx(0.047, rel=1e-15)
 
 
 # ===================================================================
@@ -82,12 +103,15 @@ class TestLangmuirClosedForm:
     def test_lambda_zero_returns_zero(self):
         """Dirichlet pin invariant: λ=0 ⇒ Γ_ss = 0 (Gate 3D
         invariant survives the v10a cap)."""
-        from Forward.bv_solver.cation_hydrolysis import gamma_ss_langmuir
+        from Forward.bv_solver.cation_hydrolysis import (
+            GAMMA_MAX_HAT_V10A_SMOKE,
+            gamma_ss_langmuir,
+        )
         g, g_un, _ = gamma_ss_langmuir(
             lambda_val=0.0,
             k_hyd=1e-3, k_prot=1e-3, k_des=1.0,
             delta_ohp=4e-6, forward_avg=2.5,
-            c_H_avg=0.0833, gamma_max=0.047,
+            c_H_avg=0.0833, gamma_max=GAMMA_MAX_HAT_V10A_SMOKE,
         )
         assert g == pytest.approx(0.0, abs=1e-30)
         assert g_un == pytest.approx(0.0, abs=1e-30)
@@ -119,8 +143,11 @@ class TestLangmuirClosedForm:
 
     def test_saturates_to_gamma_max_as_k_hyd_diverges(self):
         """F₀ → ∞ at fixed λ > 0 ⇒ Γ_ss → Γ_max (the cap actually saturates)."""
-        from Forward.bv_solver.cation_hydrolysis import gamma_ss_langmuir
-        gamma_max = 0.047
+        from Forward.bv_solver.cation_hydrolysis import (
+            GAMMA_MAX_HAT_V10A_SMOKE,
+            gamma_ss_langmuir,
+        )
+        gamma_max = GAMMA_MAX_HAT_V10A_SMOKE
         # Sweep k_hyd over six orders of magnitude.
         ks = [1e0, 1e2, 1e4, 1e6, 1e8, 1e10]
         prev_g = 0.0
@@ -143,8 +170,11 @@ class TestLangmuirClosedForm:
     def test_vacancy_factor_nonneg_implied_by_clamp(self):
         """The closed form respects (1 − Γ/Γ_max) ≥ 0 for any inputs
         in the supported parameter ranges."""
-        from Forward.bv_solver.cation_hydrolysis import gamma_ss_langmuir
-        gamma_max = 0.047
+        from Forward.bv_solver.cation_hydrolysis import (
+            GAMMA_MAX_HAT_V10A_SMOKE,
+            gamma_ss_langmuir,
+        )
+        gamma_max = GAMMA_MAX_HAT_V10A_SMOKE
         for lam in (0.1, 0.25, 0.5, 0.75, 1.0):
             for k_hyd in (1e-6, 1e-3, 1e0, 1e3, 1e6):
                 g, _, _ = gamma_ss_langmuir(

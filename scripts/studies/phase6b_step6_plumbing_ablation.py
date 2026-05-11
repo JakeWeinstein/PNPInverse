@@ -442,6 +442,17 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--out-subdir", default=OUT_SUBDIR_DEFAULT,
     )
+    parser.add_argument(
+        "--a2-baseline-json", default=None,
+        help=(
+            "Path to the committed Phase A.2 baseline JSON used for "
+            "the A0 byte-equivalence audit at λ=1, k_hyd=k_hyd_baseline, "
+            "V_kin (D6).  Defaults to "
+            "StudyResults/phase6b_v10a_phase_A2_v_kin/phase_a2_v_kin.json "
+            "for backward compat; v10b runs pass "
+            "StudyResults/phase6b_v10b_phase_A2_v_kin/phase_a2_v_kin.json."
+        ),
+    )
     parser.add_argument("--plot", dest="plot", action="store_true", default=True)
     parser.add_argument("--no-plot", dest="plot", action="store_false")
     args = parser.parse_args(argv)
@@ -1330,6 +1341,7 @@ def _baseline_reproduction_audit(
         "gamma", "theta", "sigma_S_C_per_m2", "cd_mA_cm2",
         "c_H_boundary_avg", "c_K_boundary_avg",
         "R_2e_current_nondim", "R_4e_current_nondim",
+        "R_net",                            # v10b D6 -- per plan section D6
     )
     per_observable: Dict[str, Any] = {}
     worst_tier = "pass"
@@ -1454,9 +1466,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Lazy imports — keep test imports free of Firedrake.
     from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
         L_EFF_M_BASELINE, STERN_F_M2_BASELINE, STERN_F_M2_ANCHOR,
-        SMOKE_KINETICS, MESH_NX, MESH_NY, MESH_BETA, LAMBDA_LADDER,
+        MESH_NX, MESH_NY, MESH_BETA, LAMBDA_LADDER,
         _build_sp, _make_mesh, _serialize,
         _i_lim_4e_mA_cm2, _walk_lambda_zero_capture_snapshots,
+    )
+    from calibration.v10b import (
+        V10B_KINETICS, V10B_CALIBRATION_METADATA,
     )
     from scripts._bv_common import (
         I_SCALE, K0_HAT_R2E, K0_HAT_R4E, V_T,
@@ -1624,10 +1639,15 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # A0 baseline reproduction audit (compare to committed A.2 record).
     if a0_record is not None:
-        a2_json_path = os.path.join(
-            _ROOT, "StudyResults", "phase6b_v10a_phase_A2_v_kin",
-            "phase_a2_v_kin.json",
-        )
+        if args.a2_baseline_json is not None:
+            a2_json_path = args.a2_baseline_json
+            if not os.path.isabs(a2_json_path):
+                a2_json_path = os.path.join(_ROOT, a2_json_path)
+        else:
+            a2_json_path = os.path.join(
+                _ROOT, "StudyResults", "phase6b_v10a_phase_A2_v_kin",
+                "phase_a2_v_kin.json",
+            )
         a0_record["baseline_reproduction_audit"] = (
             _baseline_reproduction_audit(
                 a0_record=a0_record, a2_baseline_json=a2_json_path,
@@ -1656,7 +1676,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         "K0_HAT_R4E_effective": float(K0_HAT_R4E) * k0_r4e_factor,
         "warm_walk_grid": list(warm_grid_t),
         "lambda_ladder": list(LAMBDA_LADDER),
-        "smoke_kinetics": SMOKE_KINETICS,
+        "v10b_kinetics": V10B_KINETICS,
+        "v10b_calibration_metadata": V10B_CALIBRATION_METADATA,
         "l_eff_m": L_EFF_M_BASELINE,
         "domain_height_hat": domain_height_hat,
         "electrode_area_nondim": electrode_area_nondim,
