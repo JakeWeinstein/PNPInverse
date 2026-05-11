@@ -361,14 +361,30 @@ If Phase D's Δ_β differs by > 30 % between the two conventions,
   `docs/handoffs/CHATGPT_HANDOFF_35_phase6b-step6-plumbing-ablation/`
   (5 rounds of GPT critique, **APPROVED**; 54 issues addressed).
 
-* **Next action:** step 7 (CMK-3 capacitance literature note —
-  mostly landed in `.research/cmk3-stern-capacitance/SUMMARY.md`;
-  small lift to publish
-  `docs/phase6/CMK3_capacitance_literature.md`) → step 8 (v10b
-  literature calibration of Γ_max + k_des + C_S).  v10b is
-  MANDATORY in all routing branches per the acceptance bundle's
-  "v10a → E sequence" §; A.2 + step 6 inform v10b priority but
-  do not cancel v10b.
+* **Step 7 CMK-3 capacitance literature note landed:**
+  2026-05-10.  Published
+  `docs/phase6/CMK3_capacitance_literature.md` — distillation of
+  the `.research/cmk3-stern-capacitance/` research trail into a
+  canonical reference: `C_S = 0.20 F/m²` derivation (Bohra-Koper-
+  Choi consensus, `L_S=5 Å` + `ε_S=11.3`), citation chain
+  (Bohra 2024 / Choi 2024 / Pillai 2024 / CatINT / Kilic-Bazant
+  2007), three Pillai-2024 regimes, the four load-bearing
+  caveats (per-local-surface-element interpretation; Singh's
+  51 µF/cm² is total C_dl not Stern-only; carbon-specific
+  narrowing pulls slightly below 20 µF/cm²; constant `C_S` is
+  field-averaged), and the locked sensitivity bracket
+  `C_S ∈ {0.05, 0.10, 0.20, 0.30} F/m²` for v10b.  CLAUDE.md
+  hard rule #6 + the source-of-truth table now point here as
+  the canonical reference; full research trail (agent-by-agent
+  evidence + four supporting notes) remains at
+  `.research/cmk3-stern-capacitance/SUMMARY.md`.
+
+* **Next action:** step 8 — v10b literature calibration of
+  `Γ_max + k_des + C_S` (~1-2 weeks).  Plan via `/sci-planner`
+  recommended (real multi-day calibration effort with several
+  literature interpretation calls).  v10b is MANDATORY in all
+  routing branches per the "v10a → E sequence" §; A.2 + step 6
+  inform v10b priority but do not cancel v10b.
 
 ## v10a delivery summary (2026-05-10)
 

@@ -91,36 +91,29 @@ the audit trail.
 
 ### M2. C_S (Stern compact-layer specific capacitance) for CMK-3 carbon under ORR conditions
 
-- **Status:** `OPEN — UNREQUESTED`
-- **Source:** Seitz group (Brianna's experimental measurements) or
-  an external CMK-3 capacitance reference
-- **What we'd need:** measured `C_S` value (in F/m² or µF/cm²) for
-  the CMK-3 carbon catalyst at the operating points of interest
-  (V_RHE in [−0.4, +0.55], 0.1 M K₂SO₄ at pH 4). Ideally a single
-  number, possibly with a V-dependence if it varies across the
-  scan window.
-- **Why we need it:** the production solver currently uses
-  `C_S = 0.10 F/m²` which has **no Ruggiero / deck citation**
-  (verified by full-text grep — see `docs/CONJECTURE_AUDIT_2026-05-09.md` §5.3).
-  It traces to `docs/stern_layer_physics_and_next_steps.md`
-  (2026-05-03) line 214 — a sweep design picked from the
-  textbook 5–100 µF/cm² range; the May 2026 sweep selected
-  0.10 because it was the smallest finite-Stern that crossed the
-  +1.0 V wall. It's a convergence-pinned engineering choice, NOT
-  a deck-calibrated parameter.
-- **What's blocked:** Phase 6β v9 ledger L7 (Stern capacitance
-  calibration). Currently being treated as a labelled tunable
-  with sensitivity sweep `C_S ∈ {0.05, 0.10, 0.20}` at Gate 4B.
-- **Workaround in progress:** sensitivity sweep at Gate 4B + 6β.2.
-  If the v9 architecture works robustly across the [0.05, 0.20]
-  bracket, we don't strictly need a measured value. If sensitivity
-  is high, we'd want either a measured value or a Bohra 2019-style
-  literature anchor.
-- **How to request:** future ask; lower priority than M1 because
-  the sensitivity sweep gives partial cover. Bohra 2019
-  (`10.1039/c9ee02485a`, already in `data/.../Articles/`) may
-  provide a literature-anchored Cu/CO₂RR value that informs but
-  doesn't directly transfer (different cathode material).
+- **Status:** `RESOLVED — LITERATURE-ANCHORED` (2026-05-10).
+- **Resolution:** Step 7 of the acceptance-bundle sequence landed
+  `docs/phase6/CMK3_capacitance_literature.md` with the
+  **Bohra-Koper-Choi consensus value `C_S = 0.20 F/m²`**
+  (`L_S = 5 Å` × Booth-saturated `ε_S = 11.3`). Backed by Bohra
+  2024 *JPC C* PMC11215773, Choi 2024 *JPC C*
+  `10.1021/acs.jpcc.4c03469`, Pillai 2024 *JPC C*
+  `10.1021/acs.jpcc.3c05364`, CatINT default, Kilic-Bazant 2007
+  *Phys Rev E* 75:021503. Sensitivity bracket for v10b:
+  `C_S ∈ {0.05, 0.10, 0.20, 0.30} F/m²` (all inside Pillai's
+  safe band 10–50 µF/cm²). The pre-2026-05-10 `C_S = 0.10 F/m²`
+  is now interpreted as the carbon-conservative low rung of the
+  bracket.
+- **Caveats carried forward** (see canonical doc § 3): `C_S` is
+  per-local-surface-element (no roughness factor in BC; CMK-3
+  RF ≈ 6000 is implicit in fitted k₀); Singh's `51 µF/cm²` Cu is
+  total `C_dl` not Stern-only, so Risk #5 needs re-derivation
+  with the Bohra-Koper Stern-only value before being treated as
+  load-bearing; constant `C_S` is a field-averaged effective
+  value (Booth variable-`ε_S` is out of scope for v10b).
+- **Outstanding open asks** (separate from M2 closure): Bohra
+  2019 EES `10.1039/c9ee02485a` not in `Articles/` despite being
+  cited by Ruggiero ref 71 and Linsey slide 13.
 
 ### M3. IrOx local-pH probe measurements (ring-current → ring-pH calibration)
 

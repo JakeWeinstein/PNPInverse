@@ -21,7 +21,8 @@ Production forward stack (May 2026):
 - **Log-rate Butler–Volmer**, parallel **R2e (E°=0.695 V)** + **R4e
   (E°=1.23 V vs RHE)** per Ruggiero 2022 §1.
 - **Stern capacitance `C_S = 0.20 F/m²`** (Bohra-Koper-Choi
-  consensus; full trail in `.research/cmk3-stern-capacitance/SUMMARY.md`).
+  consensus; canonical reference
+  `docs/phase6/CMK3_capacitance_literature.md`).
 - **`debye_boltzmann` IC** (composite-ψ + multispecies-γ).
 - Reaches V_RHE = +1.0 V at 15/15 via C+D.
 
@@ -56,7 +57,7 @@ non-operational. When resumed, start from
 | `docs/phase6/CONJECTURE_AUDIT_2026-05-09.md` | Cs⁺ vs deck-baseline K⁺ audit. Read before new physics or kinetics calibration |
 | `docs/phase6/phase6b_next_steps_plan.md` | Live Phase 6β plan |
 | `docs/phase6/singh_2016_pka_formula.md` | Singh 2016 SI Eq. (3)/(4) + σ-mapping convention |
-| `.research/cmk3-stern-capacitance/SUMMARY.md` | Stern-capacitance literature trail |
+| `docs/phase6/CMK3_capacitance_literature.md` | `C_S = 0.20 F/m²` citation chain + caveats. Full trail: `.research/cmk3-stern-capacitance/SUMMARY.md` |
 
 ## Environment
 
@@ -107,12 +108,11 @@ non-operational. When resumed, start from
    `docs/handoffs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md` §9.
 
 6. **`stern_capacitance_f_m2 = 0.20` F/m² is the literature-anchored
-   production target** (Bohra-Koper-Choi consensus,
-   `C_S = ε_S·ε₀/L_S = 20 µF/cm²`). `C_S` is
+   production target** (Bohra-Koper-Choi consensus). `C_S` is
    **per-local-surface-element**, not per-geometric area (CMK-3
    RF ≈ 6000 is implicit in fitted k₀). Sensitivity bracket for
-   v10b: `C_S ∈ {0.05, 0.10, 0.20, 0.30}` F/m². Full caveats +
-   literature trail in `.research/cmk3-stern-capacitance/SUMMARY.md`.
+   v10b: `C_S ∈ {0.05, 0.10, 0.20, 0.30}` F/m². Citation chain +
+   caveats: `docs/phase6/CMK3_capacitance_literature.md`.
 
 ## Calling the production solver
 
