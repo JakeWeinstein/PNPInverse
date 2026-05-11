@@ -474,3 +474,38 @@ Pre-merge verification (all green):
   `TestProtonBoundarySourceSignConvention`, `TestSinghPkaShiftUFL`,
   `TestLambdaHydrolysisAccessorRoundtrip`,
   `TestCationHydrolysisBundleBuild`, `TestMixedSpaceLayout*` — all pass.
+
+* **Step 9 B.2 densified k_hyd × λ ramp landed:** 2026-05-11.
+  Published `docs/phase6/phase6b_step9_B2_summary.md` with the
+  full 14 × 10 = 140-rung grid at V_kin = −0.10 V using v10b
+  kinetics.  All HARD gates pass: 14/14 k_hyd converge at λ=1,
+  mass-balance ≤ 5.085e-13 across the grid (machine precision),
+  cd monotonically increasing in magnitude through the
+  cap-saturation transition (-3.12 → -3.124 mA/cm²), θ
+  asymptotes to 1.0 cleanly across the 4-point plateau
+  extension past A.2's upper bound.  Baseline reproduction at
+  (k_hyd=1e-3, λ=1) byte-equivalent to v10b A.2 record (rel
+  ≤ 1e-3 on all 9 comparison fields).  `convergence_audit.
+  overall_pass = False` is the documented R4 threshold-narrowness
+  artifact (transition-grid θ_max = 0.9253 below the 0.93
+  cutoff) — known cosmetic miss, not a HARD-gate failure.
+
+  Required infrastructure prerequisite **step 9.5**: extend
+  `AdaptiveLadder` with optional `warm_start_floor` parameter
+  for arithmetic-bisection first-rung-failure recovery.  Without
+  it the initial step 9 B.2 run (2026-05-11) failed Newton at
+  λ=0.10 for the three highest-k_hyd extension points (k_hyd ∈
+  {2e-1, 5e-1, 1e0}) because the pre-9.5 ladder fail-fasted on
+  `previous_scale = None` (geometric bisection ill-defined at
+  λ=0).  Step 9.5 opt-in changes only `solve_lambda_ramp_from_warm_start`
+  (line 1803-area: `warm_start_floor=0.0`); k0 and kw_eff ladder
+  instantiations keep the default `None` (byte-equivalence
+  preserved).  5 new fast tests in
+  `tests/test_anchor_continuation.py` + regression on existing
+  10 AdaptiveLadder tests.  Floor bisection cost on the re-run:
+  1 insert each for k_hyd ∈ {2e-1, 5e-1}, 2 inserts for k_hyd=1.0
+  — all within `max_inserts_per_step=4` budget.  Total wall:
+  2012.9s (~33.5 min).  Plan:
+  `~/.claude/plans/phase6b-step9-B2-densified-ramp.md` (step 9)
+  + `~/.claude/plans/phase6b-step9-5-adaptive-lambda-floor-bisection.md`
+  (step 9.5; no critique loop — change is small and bounded).
