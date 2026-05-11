@@ -3,43 +3,46 @@
 Live log for overnight execution of phase6b-step8-v10b-calibration plan
 (v7-FINAL).
 
-## Phase tracking
+## Phase tracking (FINAL -- v10b SHIPPED)
 
-- [x] Phase A — Literature pass (A1 Gamma_max [tightened V10A chain],
-      A2 k_des [engineering choice with Eyring prior], A3 C_S [locked
-      from step 7])
-- [x] Phase B — Code changes + unit tests (255/255 fast tests pass,
-      13/13 new v10b tests pass, V10B_KINETICS production-driver AST
-      audit green)
-- [~] Phase C — A.2 driver re-run COMPLETE (wall 21.6 min,
-      10/10 rungs converged, mass-balance 1e-17 to 1e-14, baseline
-      reproduction rel diffs all < 1e-3); step 6 driver re-run IN
-      FLIGHT against the new A.2 baseline.
+ALL 11 D-gates CLOSED.  v10b complete.
 
-      A.2 v10b key outcomes (in StudyResults/phase6b_v10b_phase_A2_v_kin/):
-        * 10/10 k_hyd rungs converged at λ=1
-        * Picard converges everywhere
-        * mass_balance_residual_rel: 0 to 1e-14 (HARD gate PASS)
-        * baseline_reproduction relative diffs at k_hyd=1e-3:
-          gamma=8e-4, theta=2.5e-6, sigma_S=6e-5, cd=8.7e-4 (V10B
-          ~= V10A as expected since GAMMA_MAX_HAT_V10B = V10A)
-        * k_hyd_route = 0.1 (same as v10a)
-        * convergence_audit.overall_pass: False (HARD gate
-          convergence_coverage_pass: False) -- this is the
-          documented Risk R4 threshold-narrowness artifact:
-          max(theta_lambda=1) in transition_grid = 0.9253, just
-          below the 0.93 cutoff.  Plan section 5 Risk R4 explicitly:
-          "HIGH likelihood, LOW severity, known artifact -- document;
-          do not change transition_grid_threshold."
-        * No HARD-gate escalation triggered: 10/10 convergence +
-          Picard + mass-balance + analytic-Gamma-rel ALL pass.
-- [x] Phase D — Drivers landed (phase6b_v10b_cs_bracket.py +
-      phase6b_v10b_gamma_kdes_matrix.py + 14 unit tests); solver
-      runs of these drivers ARE PENDING after Phase C completes
+- [x] Phase A — Literature pass COMPLETE
+- [x] Phase B — Code changes + unit tests COMPLETE (255/255 fast
+      tests pass, 27 new v10b fast tests pass, V10B_KINETICS
+      production-driver AST audit green)
+- [x] Phase C — A.2 + step 6 regression COMPLETE
+      * A.2 v10b: 10/10 rungs converged, mass-balance 1e-17 to 1e-14,
+        baseline reproduction rel diffs all < 1e-3.  Wall 21.6 min.
+      * Step 6 v10b: 5/5 ablations PASS (A0, A0b, A1, A2, A3).  A0
+        baseline_reproduction_audit byte-equivalent at MACHINE
+        precision (rel=0.0 for all 9 keys including R_net).  Wall
+        23.2 min.  routing_decision:
+        plumbing_verified_proceed_to_step7_then_step8.
+- [x] Phase D — Sensitivity sweeps COMPLETE
+      * D7-D1 C_S bracket: 4/4 PASS (C_S in {0.05, 0.10, 0.20, 0.30}
+        F/m^2).  All HARD gates green; analytic_rel = 0.0 at every
+        rung.  Trend: |cd| monotonically increasing in C_S
+        (2.80 -> 3.32 mA/cm^2).  Wall 17.9 min.
+      * D7-D4 Gamma_max x k_des matrix: 30/30 PASS (3 x 5 x 2 grid).
+        All HARD gates green; analytic_rel = 0.0 at every rung.
+        Wall 39.9 min.
 - [x] Phase E — Writeup + acceptance bundle published
       (docs/phase6/v10b_calibration_summary.md;
       acceptance bundle § Status appended; CLAUDE.md updated;
       memory entry written)
+
+## Final solver-run wall budget
+
+* A.2: 21.6 min
+* Step 6: 23.2 min
+* C_S bracket: 17.9 min
+* Gamma_max x k_des matrix: 39.9 min
+* Total solver wall: 102.6 min (~1.7 hours)
+
+## Total v10b commit count: 8
+
+(plus a few status-only commits)
 
 ## Phase A outcome summary
 
