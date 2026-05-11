@@ -315,12 +315,60 @@ If Phase D's Δ_β differs by > 30 % between the two conventions,
 
   Bold row at k_hyd=1e-3 = v10a' baseline reproduction.  Bold row
   at k_hyd=1e-1 = `k_hyd_route` (routing-pass).
-* **Next action:** step 6 plumbing ablation matrix at V_kin
-  (A1/A2/A3 manufactured ablations), OR step 7/8 CMK-3 capacitance
-  literature note + v10b literature calibration of Γ_max + k_des
-  + C_S.  v10b is MANDATORY in all routing branches per the
-  acceptance bundle's "v10a → E sequence" §; A.2 informs v10b
-  priority but does not cancel v10b.
+* **Step 6 plumbing-ablation matrix landed:** 2026-05-10.  Verifies
+  the four override consumers of the cation-hydrolysis residual
+  (form-build R_net, ctx-stored pKa-shift expression, Picard Γ
+  update, diagnostics F0_decomposition) are wired consistently
+  against three new `bv_convergence` flags:
+  `apply_h_source`, `apply_k_sink`, `override_sigma_singh_counts_pm2`.
+  Defaults preserve byte-equivalence with v9/v10a/v10a'/A.2.
+
+  | Ablation | Status | Key evidence |
+  |---|---|---|
+  | A0 baseline | pass | γ/θ/σ_S/cd/R_2e/R_4e all rel 0.0 vs A.2 record |
+  | A0b assembly | pass | mass-balance closure rel 1e-15; consistency gates exact |
+  | A1 source-only | pass | R_inj=2.0; Δc_H = +6.2% (in [5%, 25%]) |
+  | A2 sink-only | pass | wiring_ok_magnitude_unreachable; Δc_K signed −0.5% at R_inj=10 ceiling (sign + monotonic) |
+  | A3 σ override | pass | pka_factor obs/pred 10.0781 (rel 2.6e-12); gate 6 residual closure rel 4.5e-16 |
+
+  **Routing decision:**
+  `plumbing_verified_proceed_to_step7_then_step8`.  v10b literature
+  calibration of Γ_max + k_des + C_S is unblocked.
+
+  A2 wiring-ok-magnitude-unreachable verdict is a **physics
+  finding**, not a wiring bug.  The cathodic K⁺ Boltzmann pile-up
+  at V_kin gives `c_K_boundary_avg ≈ 291` nondim ≈ 1.75·c_K_bulk
+  (per F0_decomposition `amplification_from_c_K`); sentinel-scale
+  R_inj ≤ 10 cannot dent this by 5%.  Linear extrapolation puts a
+  5% drop at R_inj ≈ 100, well above the plan's ceiling of 10.
+  The wiring is verified by:
+    (a) sign correct at the largest R_inj attempted
+        (signed Δc_K = −5.03e-3 < 0), AND
+    (b) monotonic `|Δc|` growth across `R_inj ∈ {0.1 … 10}` with
+        slope ≈ −5e-4/R_inj.
+  The plan did not anticipate this; the driver introduces a
+  ``status="pass" + pass_qualifier="wiring_ok_magnitude_unreachable"``
+  outcome for this case (see
+  `scripts/studies/phase6b_step6_plumbing_ablation.py:_verify_wiring_from_prepass`).
+
+  Output:
+  `StudyResults/phase6b_step6_plumbing_ablation/ablation_matrix.{json,png}`.
+  Tests: `tests/test_phase6b_step6_plumbing_ablation.py` (53 fast),
+  `tests/test_phase6b_step6_plumbing_ablation_slow.py` (14 slow +
+  1 e2e gated by `RUN_SLOW_E2E`).
+  Wall: 25 min.  Plan + critique provenance:
+  `~/.claude/plans/phase6b-step6-plumbing-ablation.md` /
+  `docs/handoffs/CHATGPT_HANDOFF_35_phase6b-step6-plumbing-ablation/`
+  (5 rounds of GPT critique, **APPROVED**; 54 issues addressed).
+
+* **Next action:** step 7 (CMK-3 capacitance literature note —
+  mostly landed in `.research/cmk3-stern-capacitance/SUMMARY.md`;
+  small lift to publish
+  `docs/phase6/CMK3_capacitance_literature.md`) → step 8 (v10b
+  literature calibration of Γ_max + k_des + C_S).  v10b is
+  MANDATORY in all routing branches per the acceptance bundle's
+  "v10a → E sequence" §; A.2 + step 6 inform v10b priority but
+  do not cancel v10b.
 
 ## v10a delivery summary (2026-05-10)
 

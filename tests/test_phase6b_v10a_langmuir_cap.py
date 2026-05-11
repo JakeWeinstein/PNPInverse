@@ -293,11 +293,25 @@ class TestSigmaUnitHelper:
         # Magnitude matches up to sign.
         assert sigma_C_m2_to_counts_pm2(-1.0) == -sigma_C_m2_to_counts_pm2(+1.0)
 
-    def test_singh_table_s3_cu_k_value_round_trip(self):
-        """Singh Table S3 Cu(K⁺): σ ≈ 0.226 C/m² → ~1.4e-6 counts/pm²
-        (within 1% of 6.243e-6 · 0.226).  This is the canonical
-        cross-check; we don't need to match Singh's own digit but the
-        magnitude must be right."""
+    def test_round_trip_at_generic_cross_check_value(self):
+        """Generic round-trip cross-check at σ = 0.226 C/m² →
+        ~1.41e-6 counts/pm² (= 0.226 · 6.2415e-6).
+
+        NOTE: 0.226 C/m² is NOT Singh Table S3's K⁺/Cu σ value.
+        Singh's Table S3 σ is 0.141 counts/pm² in Singh's
+        cell-level convention (cell-level σ from C_dl·Δφ_cell;
+        see `docs/phase6/singh_2016_pka_formula.md` §5.2 +
+        acceptance bundle § "Σ_S mapping convention").  The
+        equivalent Stern-σ-in-C/m² for Singh's 0.141 counts/pm²
+        is `0.141 / 6.2415e-6 ≈ 22,591 C/m²` — unphysically large
+        for a local Stern σ_S.  Our PNP-Stern model uses the LOCAL
+        Stern σ_S convention (~0.017 C/m² magnitude at V_kin),
+        which produces `pka_shift_avg ≈ −4.88e-6` per A.2 record
+        — a different physical quantity than Singh's table value.
+
+        The conversion-factor algebra round-trips regardless of
+        which σ convention is in use; that's what this test pins.
+        """
         from Forward.bv_solver.units import sigma_C_m2_to_counts_pm2
         val = sigma_C_m2_to_counts_pm2(0.226)
         # 0.226 C/m² · 6.2415e-6 ≈ 1.4106e-6 counts/pm².

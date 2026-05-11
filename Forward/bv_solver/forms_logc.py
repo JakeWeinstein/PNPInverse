@@ -681,25 +681,43 @@ def build_forms_logc(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
         c_M_bdy_expr = ci[cation_hydrolysis_bundle.counterion_idx]
         c_H_bdy_expr = ci[h_idx_for_cation]
 
-        pka_shift_expr = build_pka_shift(
-            cation_params=cation_hydrolysis_bundle.cation_params,
-            sigma_S=sigma_S_expr,
-            r_H_El_func=cation_hydrolysis_bundle.r_H_El_pm_func,
-        )
-
-        R_net_default = build_proton_boundary_source(
-            bundle=cation_hydrolysis_bundle,
-            c_M_bdy_expr=c_M_bdy_expr,
-            c_H_bdy_expr=c_H_bdy_expr,
-            pka_shift_expr=pka_shift_expr,
-        )
-
-        # Gate 3D — manufactured-source override for unit tests.
+        # Phase 6β step 6 plumbing-ablation flags.  Mirror of
+        # forms_logc_muh.py; cross-validation done in config.py.
         manufactured_R_inj = conv_cfg.get("manufactured_R_inj", None)
+        apply_h_source = bool(conv_cfg.get("apply_h_source", True))
+        apply_k_sink = bool(conv_cfg.get("apply_k_sink", True))
+        sigma_singh_override = conv_cfg.get(
+            "override_sigma_singh_counts_pm2", None
+        )
+
+        if sigma_singh_override is not None:
+            inv_factor_C_m2_per_count_pm2 = 1.602176634e-19 / 1.0e-24
+            fake_signed_sigma_S = fd.Constant(
+                -float(sigma_singh_override) * inv_factor_C_m2_per_count_pm2
+            )
+            pka_shift_expr = build_pka_shift(
+                cation_params=cation_hydrolysis_bundle.cation_params,
+                sigma_S=fake_signed_sigma_S,
+                r_H_El_func=cation_hydrolysis_bundle.r_H_El_pm_func,
+            )
+            pka_sigma_S_for_storage = fake_signed_sigma_S
+        else:
+            pka_shift_expr = build_pka_shift(
+                cation_params=cation_hydrolysis_bundle.cation_params,
+                sigma_S=sigma_S_expr,
+                r_H_El_func=cation_hydrolysis_bundle.r_H_El_pm_func,
+            )
+            pka_sigma_S_for_storage = sigma_S_expr
+
         if manufactured_R_inj is not None:
             R_net = fd.Constant(float(manufactured_R_inj))
         else:
-            R_net = R_net_default
+            R_net = build_proton_boundary_source(
+                bundle=cation_hydrolysis_bundle,
+                c_M_bdy_expr=c_M_bdy_expr,
+                c_H_bdy_expr=c_H_bdy_expr,
+                pka_shift_expr=pka_shift_expr,
+            )
 
         # Proton + cation boundary residuals — wrapped in
         # ``λ_hydrolysis`` so λ=0 byte-zeros every hydrolysis
@@ -710,16 +728,37 @@ def build_forms_logc(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
         # ``F_res -= stoi * R * v * ds``, with stoi[H]=+1 (proton
         # produced) and stoi[M]=-1 (cation consumed).
         lam_func = cation_hydrolysis_bundle.lambda_hydrolysis_func
-        F_res -= (
+        H_residual_term = (
             lam_func * R_net
             * v_list[h_idx_for_cation]
             * ds(electrode_marker)
         )
-        F_res -= (
+        K_residual_term = (
             lam_func * (-R_net)
             * v_list[cation_hydrolysis_bundle.counterion_idx]
             * ds(electrode_marker)
         )
+        R_net_scalar_form = lam_func * R_net * ds(electrode_marker)
+        H_flux_scalar_form = R_net_scalar_form
+        K_flux_scalar_form = lam_func * (-R_net) * ds(electrode_marker)
+
+        if apply_h_source:
+            F_res -= H_residual_term
+        if apply_k_sink:
+            F_res -= K_residual_term
+
+        _step6_cation_hydrolysis_artifacts = {
+            "_cation_hydrolysis_R_net_expr": R_net,
+            "_cation_hydrolysis_pka_shift_expr": pka_shift_expr,
+            "_cation_hydrolysis_pka_sigma_S_expr": pka_sigma_S_for_storage,
+            "_cation_hydrolysis_H_residual_term": H_residual_term,
+            "_cation_hydrolysis_K_residual_term": K_residual_term,
+            "_cation_hydrolysis_R_net_scalar_form": R_net_scalar_form,
+            "_cation_hydrolysis_H_flux_scalar_form": H_flux_scalar_form,
+            "_cation_hydrolysis_K_flux_scalar_form": K_flux_scalar_form,
+        }
+    else:
+        _step6_cation_hydrolysis_artifacts = {}
 
     # ---------------------------------------------------------------
     # Boundary conditions
@@ -777,6 +816,8 @@ def build_forms_logc(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
         "water_ionization": water_bundle,  # None when feature disabled
         "cation_hydrolysis": cation_hydrolysis_bundle,  # None when feature disabled
     })
+    # Phase 6β step 6 — canonical cation-hydrolysis artifacts.
+    ctx.update(_step6_cation_hydrolysis_artifacts)
     # Ideal-path Boltzmann counterions (bikerman entries are wired above
     # via build_steric_boltzmann_expressions; skip them here).
     add_boltzmann_counterion_residual(ctx, params, skip_bikerman=True)

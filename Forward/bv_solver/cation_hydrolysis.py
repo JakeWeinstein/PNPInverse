@@ -868,14 +868,22 @@ def update_gamma_from_solution(
         # Physical R_net: integrate the uncapped forward branch (F₀)
         # and ⟨c_H⟩ against the boundary measure, then delegate to the
         # pure-Python closed-form helper.
-        sigma_S_expr = ctx.get("_cation_hydrolysis_sigma_S_expr")
-        if sigma_S_expr is None:
-            sigma_S_expr = fd.Constant(0.0)
-        pka_shift_expr = build_pka_shift(
-            cation_params=bundle.cation_params,
-            sigma_S=sigma_S_expr,
-            r_H_El_func=bundle.r_H_El_pm_func,
-        )
+        #
+        # Phase 6β step 6 — consume ctx-stored ``_cation_hydrolysis_
+        # pka_shift_expr`` so Picard sees the same pKa expression as
+        # the residual (R3 #8 single source of truth).  Backward-
+        # compat fallback for legacy callers that built ctx without
+        # the step 6 artifacts.
+        pka_shift_expr = ctx.get("_cation_hydrolysis_pka_shift_expr")
+        if pka_shift_expr is None:
+            sigma_S_expr = ctx.get("_cation_hydrolysis_sigma_S_expr")
+            if sigma_S_expr is None:
+                sigma_S_expr = fd.Constant(0.0)
+            pka_shift_expr = build_pka_shift(
+                cation_params=bundle.cation_params,
+                sigma_S=sigma_S_expr,
+                r_H_El_func=bundle.r_H_El_pm_func,
+            )
         pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
         forward_avg = float(
             fd.assemble(c_M_expr * pka_factor * ds(electrode_marker))
@@ -1051,27 +1059,110 @@ def collect_v10a_rung_diagnostics(
     if sigma_S_expr is None:
         sigma_S_expr = fd.Constant(0.0)
 
-    pka_shift_expr = build_pka_shift(
-        cation_params=bundle.cation_params,
-        sigma_S=sigma_S_expr,
-        r_H_El_func=bundle.r_H_El_pm_func,
-    )
+    # Always-emitted: top-level boundary concentrations + Stern σ.
+    # These are independent of manufactured/physical mode (R5 #3).
+    try:
+        c_H_boundary_avg = (
+            float(fd.assemble(c_H_expr * ds(electrode_marker))) / area
+        )
+        c_K_boundary_avg = (
+            float(fd.assemble(c_M_expr * ds(electrode_marker))) / area
+        )
+        sigma_S_avg = (
+            float(fd.assemble(sigma_S_expr * ds(electrode_marker))) / area
+        )
+    except Exception as exc:
+        diag["v10a_diag_error"] = f"{type(exc).__name__}: {exc}"
+        return diag
+
+    diag["c_H_boundary_avg"] = c_H_boundary_avg
+    diag["c_K_boundary_avg"] = c_K_boundary_avg
+    diag["sigma_S_C_per_m2"] = sigma_S_avg
+    if sigma_C_m2_to_counts_pm2 is not None:
+        try:
+            diag["sigma_S_counts_per_pm2"] = sigma_C_m2_to_counts_pm2(
+                sigma_S_avg
+            )
+        except Exception as exc:
+            diag["sigma_S_counts_per_pm2_error"] = (
+                f"{type(exc).__name__}: {exc}"
+            )
+
+    # Per-reaction current contributions (always emitted; used by the
+    # Phase A.2 / D / E ablation matrix to confirm the parallel-2e +
+    # 4e topology behaves as expected as Γ saturates).
+    bv_rate_exprs = ctx.get("bv_rate_exprs") or []
+    try:
+        for idx, R_expr in enumerate(bv_rate_exprs):
+            key = (
+                "R_2e_current_nondim"
+                if idx == 0
+                else "R_4e_current_nondim"
+                if idx == 1
+                else f"R_{idx}_current_nondim"
+            )
+            diag[key] = float(
+                fd.assemble(R_expr * ds(electrode_marker))
+            )
+    except Exception as exc:
+        diag["per_reaction_current_error"] = (
+            f"{type(exc).__name__}: {exc}"
+        )
+
+    # Phase 6β step 6 — manufactured mode bypasses the physical R_net
+    # path entirely (apply_h_source / apply_k_sink half-physical
+    # ablations require manufactured_R_inj to keep Picard consistent;
+    # see config.py cross-validation).  Set physical-path fields to
+    # None so downstream JSON readers don't mistake a manufactured
+    # rung for a physical one.
+    bv_conv = ctx.get("bv_convergence", {})
+    manufactured_R_inj = bv_conv.get("manufactured_R_inj", None)
+    apply_h_source = bv_conv.get("apply_h_source", True)
+    apply_k_sink = bv_conv.get("apply_k_sink", True)
+
+    if manufactured_R_inj is not None:
+        diag["manufactured_run"] = True
+        diag["manufactured_R_inj"] = float(manufactured_R_inj)
+        diag["apply_h_source_active"] = bool(apply_h_source)
+        diag["apply_k_sink_active"] = bool(apply_k_sink)
+        for key in (
+            "F0_avg", "forward_avg_no_k_hyd", "c_H_avg", "pka_shift_avg",
+            "R_forward_capped",
+            "denominator_constant", "denominator_kdes",
+            "denominator_kprot", "denominator_cap", "denominator_total",
+            "denominator_cap_to_total_ratio", "numerator",
+            "F0_decomposition", "R_4e_decomposition_log",
+        ):
+            diag[key] = None
+        return diag
+
+    diag["manufactured_run"] = False
+
+    # Physical-path: consume ctx-stored pKa shift expression so
+    # residual, Picard, and diagnostics all see the same UFL object
+    # (R3 #8 single source of truth).  Backward-compat fallback for
+    # legacy callers that built ctx without the step 6 artifacts.
+    pka_shift_expr = ctx.get("_cation_hydrolysis_pka_shift_expr")
+    if pka_shift_expr is None:
+        pka_shift_expr = build_pka_shift(
+            cation_params=bundle.cation_params,
+            sigma_S=sigma_S_expr,
+            r_H_El_func=bundle.r_H_El_pm_func,
+        )
     pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
 
     try:
         forward_avg = float(
             fd.assemble(c_M_expr * pka_factor * ds(electrode_marker))
         ) / area
-        c_H_avg = float(fd.assemble(c_H_expr * ds(electrode_marker))) / area
-        sigma_S_avg = (
-            float(fd.assemble(sigma_S_expr * ds(electrode_marker))) / area
-        )
         pka_shift_avg = (
             float(fd.assemble(pka_shift_expr * ds(electrode_marker))) / area
         )
     except Exception as exc:
         diag["v10a_diag_error"] = f"{type(exc).__name__}: {exc}"
         return diag
+
+    c_H_avg = c_H_boundary_avg  # alias retained for v10a record compat.
 
     F0 = k_hyd * forward_avg
     diag["F0_avg"] = F0
@@ -1110,41 +1201,6 @@ def collect_v10a_rung_diagnostics(
         diag["denominator_cap_to_total_ratio"] = denom_cap / denom_total
     else:
         diag["denominator_cap_to_total_ratio"] = None
-
-    # σ_S converted to Singh's counts/pm² units (signed).  Diagnostic
-    # callers may apply max(0, -value) for the anode-clamped Singh
-    # magnitude separately.
-    diag["sigma_S_C_per_m2"] = sigma_S_avg
-    if sigma_C_m2_to_counts_pm2 is not None:
-        try:
-            diag["sigma_S_counts_per_pm2"] = sigma_C_m2_to_counts_pm2(
-                sigma_S_avg
-            )
-        except Exception as exc:
-            diag["sigma_S_counts_per_pm2_error"] = (
-                f"{type(exc).__name__}: {exc}"
-            )
-
-    # Per-reaction current contributions.  Used by the Phase A.2 / D /
-    # E ablation matrix to confirm the parallel-2e + 4e topology
-    # behaves as expected as Γ saturates.
-    bv_rate_exprs = ctx.get("bv_rate_exprs") or []
-    try:
-        for idx, R_expr in enumerate(bv_rate_exprs):
-            key = (
-                "R_2e_current_nondim"
-                if idx == 0
-                else "R_4e_current_nondim"
-                if idx == 1
-                else f"R_{idx}_current_nondim"
-            )
-            diag[key] = float(
-                fd.assemble(R_expr * ds(electrode_marker))
-            )
-    except Exception as exc:
-        diag["per_reaction_current_error"] = (
-            f"{type(exc).__name__}: {exc}"
-        )
 
     # ---- Phase 6β v10a' enhanced decompositions ---------------------------
     # F0 boundary-averaged decomposition (Jensen-safe per critique session

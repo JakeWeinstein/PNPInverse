@@ -145,6 +145,11 @@ def _default_bv_convergence_cfg() -> dict:
         "u_clamp":                  100.0,
         "formulation":              "logc",
         "initializer":              "linear_phi",
+        # Phase 6β step 6 plumbing-ablation defaults (preserve
+        # byte-equivalence with v9/v10a/v10a'/A.2).
+        "apply_h_source":           True,
+        "apply_k_sink":             True,
+        "override_sigma_singh_counts_pm2": None,
     }
 
 
@@ -221,6 +226,54 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
         else float(manufactured_R_inj_raw)
     )
 
+    # Phase 6β step 6 — plumbing-ablation flags.  Defaults preserve
+    # byte-equivalence with v9/v10a/v10a'/A.2.
+    #
+    #   apply_h_source : gates the cation-hydrolysis proton residual
+    #       term.  Valid only with manufactured_R_inj is not None.
+    #   apply_k_sink : gates the cation-hydrolysis K+ residual term.
+    #       Valid only with manufactured_R_inj is not None.
+    #   override_sigma_singh_counts_pm2 : when set (non-negative finite
+    #       scalar in Singh counts/pm² units), replaces σ_S in
+    #       build_pka_shift with a fake-signed σ that, after the
+    #       existing anode clamp + 6.2415e-6 conversion, equals the
+    #       override.  Valid only with manufactured_R_inj is None.
+    apply_h_source = _bool(raw.get("apply_h_source", True))
+    apply_k_sink = _bool(raw.get("apply_k_sink", True))
+    override_raw = raw.get("override_sigma_singh_counts_pm2", None)
+    if override_raw is None:
+        override_sigma_singh_counts_pm2 = None
+    else:
+        override_sigma_singh_counts_pm2 = float(override_raw)
+        import math
+        if (
+            not math.isfinite(override_sigma_singh_counts_pm2)
+            or override_sigma_singh_counts_pm2 < 0.0
+        ):
+            raise ValueError(
+                "override_sigma_singh_counts_pm2 must be a finite "
+                "non-negative scalar (post-clamp σ_singh is "
+                f"non-negative by convention); got {override_raw!r}"
+            )
+    half_physical = (not apply_h_source) or (not apply_k_sink)
+    if half_physical and manufactured_R_inj is None:
+        raise ValueError(
+            "apply_h_source=False or apply_k_sink=False requires "
+            "manufactured_R_inj to be set; half-physical ablations "
+            "would otherwise give Picard a physically inconsistent "
+            "Γ update.  The manufactured path's closed-form Γ_ss "
+            "is well-defined regardless."
+        )
+    if (
+        override_sigma_singh_counts_pm2 is not None
+        and manufactured_R_inj is not None
+    ):
+        raise ValueError(
+            "override_sigma_singh_counts_pm2 is a physical-path "
+            "imposition; manufactured_R_inj bypasses the physical "
+            "path entirely.  Set at most one of the two."
+        )
+
     return {
         "clip_exponent":              _bool(raw.get("clip_exponent", True)),
         "exponent_clip":              exponent_clip,
@@ -248,6 +301,10 @@ def _get_bv_convergence_cfg(params: Any) -> dict:
         # unit tests.  ``None`` (default) leaves the production
         # R_net wired up.
         "manufactured_R_inj":         manufactured_R_inj,
+        # Phase 6β step 6 plumbing-ablation flags (see prose above).
+        "apply_h_source":             apply_h_source,
+        "apply_k_sink":               apply_k_sink,
+        "override_sigma_singh_counts_pm2": override_sigma_singh_counts_pm2,
     }
 
 

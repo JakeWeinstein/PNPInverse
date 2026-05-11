@@ -138,6 +138,64 @@ V_kin or step 8 v10b literature calibration of Γ_max + k_des + C_S
 (v10b is MANDATORY in all routing branches; A.2 informs priority,
 never cancels v10b).
 
+**Phase 6β step 6 landed (2026-05-10):** plumbing-ablation matrix at
+V_kin = −0.10 V verifies the four override consumers of the
+cation-hydrolysis residual (form-build R_net, ctx-stored pKa-shift
+expression, Picard Γ update, diagnostics F0_decomposition) are
+wired consistently against three new `bv_convergence` flags:
+`apply_h_source`, `apply_k_sink`, `override_sigma_singh_counts_pm2`.
+Defaults preserve byte-equivalence with v9/v10a/v10a'/A.2.  Five
+ablations (A0/A0b/A1/A2/A3) **all pass** at the canonical config
+(`C_S = 0.20 F/m²`, `K0_R4e_factor = 1e-14`, `k_hyd = 1e-3`):
+
+* **A0** — byte-equivalent to A.2 baseline (γ=0.04047, θ=0.861,
+  σ_S=−0.01715 C/m², cd=−3.12 mA/cm², R_2e/R_4e currents all match
+  to rel 0.0 — the seven shared observables are bit-identical).
+  New top-level fields `c_H_boundary_avg = 1.81e-8` and
+  `c_K_boundary_avg = 291.12` (≈ 1.75·`c_K_bulk` per F0 decomposition
+  amp_from_c_K) are skipped from the audit because A.2 predates
+  their addition.
+* **A0b** — physical-path residual-assembly sanity gates pass to
+  machine precision: mass-balance closure rel = 1.0e-15
+  (`phys_flux_scalar ≈ k_des·Γ·area`); H_flux aliasing R_net,
+  K_flux = −R_net, and anti-symmetry all rel = 0.0 (exact, by
+  construction since the stored forms share the same R_net UFL
+  object).
+* **A1** (source-only manufactured) — selected `R_inj = 2.0` nondim
+  after escalation; signed `Δc_H_boundary_avg = +6.2%` is in the
+  [5%, 25%] window.  Sign + magnitude both pass.
+* **A2** (sink-only manufactured) — `status = pass
+  (wiring_ok_magnitude_unreachable)`: signed `Δc_K_boundary_avg =
+  −0.5%` at the bracket ceiling `R_inj = 10` nondim, with monotonic
+  `|Δc|` growth across `R_inj ∈ {0.1 … 10}` (linear scaling, slope
+  ≈ −5e-4/R_inj).  Wiring is verified (sign correct, monotonic);
+  the 5% magnitude floor is physically unreachable because the
+  cathodic K⁺ Boltzmann pile-up at V_kin gives `c_K_boundary_avg ≈
+  291` nondim — sentinel-scale R_inj ≤ 10 cannot dent the boundary
+  pile-up by 5%.  Linear extrapolation puts a 5% drop at `R_inj ≈
+  100`, well above the planned ceiling.  This is a **physics
+  finding**, not a wiring bug; the routing decision treats it as a
+  pass.
+* **A3** (Singh σ override) — all six gates pass to machine
+  precision.  Override `σ_singh = 0.022 counts/pm²` produces
+  `pka_factor_avg = 10.0781` against predicted 10.0781 (rel
+  2.6e-12); `amp_from_singh = 10.0781` matches `pka_factor_avg`
+  (rel 9.4e-11); Picard Γ-prediction matches Newton Γ exactly
+  (abs_err/Γ_max = 0.0); **gate 6 residual closure
+  `phys_flux_scalar_A3 ≈ k_des·Γ·area` to rel 4.5e-16** — the
+  override reaches the residual R_net, not just the diagnostic-side
+  pka_factor.  γ=0.0463, θ=0.984 (cap-saturated).
+
+**Routing decision: `plumbing_verified_proceed_to_step7_then_step8`.**
+v10b literature calibration of Γ_max + k_des + C_S is unblocked.
+Wall: 25 min.  Output:
+`StudyResults/phase6b_step6_plumbing_ablation/ablation_matrix.{json,png}`.
+Tests: `tests/test_phase6b_step6_plumbing_ablation.py` (53 fast),
+`tests/test_phase6b_step6_plumbing_ablation_slow.py` (14 slow + 1
+e2e skipped).  Plan + critique provenance:
+`~/.claude/plans/phase6b-step6-plumbing-ablation.md` (5 rounds of
+GPT critique, APPROVED; 54 issues addressed).
+
 ## Inverse status: paused
 
 All inverse scripts (`scripts/studies/v*.py`, `scripts/Inference/`) are

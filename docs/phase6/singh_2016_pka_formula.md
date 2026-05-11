@@ -242,6 +242,22 @@ derived from the assumed adsorbed-CO geometry. Back-fitting Eq.
 | Rb⁺ | 212 | 0.146 | −7.37 | 211.98 |
 | Cs⁺ | 233 | 0.158 | −10.48 | 232.97 |
 
+**Unit clarification (added 2026-05-10, GPT critique session 35
+P1):** the σ column is in Singh's cell-level convention
+(counts/pm² at the cell-level σ from C_dl·Δφ_cell; see §5.2).
+This is **not** the local Stern σ_S that the PNP-Stern forward
+solver computes from `C_S·(φ_metal − φ_OHP)`.  The conversion
+between conventions uses the same `6.2415e-6 counts/pm² per
+C/m²` factor (`Forward/bv_solver/units.py:sigma_C_m2_to_counts_pm2`),
+but the two σ scalars represent different physical quantities and
+differ in magnitude by ~10⁵× at typical cathodic conditions
+(Singh's 0.141 counts/pm² K⁺ → 22,591 C/m² equivalent; our local
+Stern σ_S at V_kin ≈ −0.017 C/m² → 1.07e-7 counts/pm² →
+`pka_shift_avg ≈ −4.88e-6` per A.2).  See acceptance bundle §
+"Σ_S mapping convention (locked default)" for the choice between
+"local Stern σ_S" (default) and the imposed-Singh-σ ablation
+(`override_sigma_singh_counts_pm2`).
+
 Pattern: **r_H-El ≈ r_M-O − (small δ)** for every cation, with the
 small δ varying smoothly (Cu: ~0.00–0.03 pm). This suggests Singh's
 formula is highly fine-tuned at the geometric level — the
