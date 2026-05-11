@@ -57,6 +57,65 @@ Live log for overnight execution of phase6b-step8-v10b-calibration plan
 * All v10b production paths route through V10B_KINETICS; V10A
   preserved as frozen historical alias.
 
+## End-of-session note (for user to read in morning)
+
+As of session end (overnight execution):
+
+* Phase A through E PUBLISHED.  6 commits on main, all phase-boundary
+  commit messages with HEREDOC + co-author trailer.
+* A.2 v10b regression COMPLETE.  10/10 rungs converged, baseline
+  reproduction within rel 1e-3 of v10a' targets.  Plot saved to
+  StudyResults/phase6b_v10b_phase_A2_v_kin/phase_a2_v_kin.png.
+* Step 6 v10b regression IN FLIGHT at session end.  Expected wall
+  ~24 min based on v10a baseline.  Output will land at
+  StudyResults/phase6b_v10b_step6_plumbing_ablation/ when complete.
+
+## Remaining solver runs (pending after session end)
+
+These can be run sequentially as a follow-up.  All drivers exist;
+Phase D solver outputs are NOT yet generated.
+
+1. **C_S sensitivity bracket** (D7-D1 -- 4 rungs).  Wall ~16 min.
+   ```
+   python -u -m scripts.studies.phase6b_v10b_cs_bracket \
+       --out-subdir phase6b_v10b_cs_bracket
+   ```
+2. **Gamma_max x k_des matrix** (D7-D4 -- 30 rungs).  Wall ~30 min.
+   ```
+   python -u -m scripts.studies.phase6b_v10b_gamma_kdes_matrix \
+       --out-subdir phase6b_v10b_gamma_kdes_matrix
+   ```
+
+Both drivers carry the per-rung analytic-vs-solver HARD gate via
+``gamma_ss_langmuir`` (plan section D5/D7 HARD gates).  Failures
+trigger v10c escalation per the plan.
+
+## DoD audit (D1-D11)
+
+* D1 Calibration metadata schema -- CLOSED (V10B_CALIBRATION_METADATA
+  in calibration/v10b.py)
+* D2 Writeup published -- CLOSED
+  (docs/phase6/v10b_calibration_summary.md)
+* D3 Solver-layer constants -- CLOSED
+  (Forward/bv_solver/cation_hydrolysis.py)
+* D4 _bv_common.py constants -- CLOSED
+* D4' V-sweep driver constants -- CLOSED
+* D5 Phase A.2 regression (HARD/SOFT split) -- CLOSED (HARD gates
+  pass; SOFT baseline reproduction within rel 1e-3; legacy
+  overall_pass = False is the Risk R4 audit-threshold artifact,
+  not an escalation trigger)
+* D6 Step 6 plumbing-ablation regression -- IN FLIGHT (driver
+  running; --a2-baseline-json CLI flag wired; R_net in audit keys)
+* D7 Sensitivity bracket sweeps -- DRIVERS LANDED, solver runs
+  PENDING
+* D8 Unit-test green at v10b constants -- CLOSED (50/50 v10b + v10a
+  tests; 255/255 phase6b/cation fast-suite)
+* D9 Acceptance bundle Status appended -- CLOSED
+* D10 CLAUDE.md updated -- CLOSED (203 lines, under 200-line budget
+  after consolidating workflow conventions)
+* D11 Memory entry -- CLOSED
+  (project_v10b_calibration_outcome.md + MEMORY.md pointer)
+
 ## Execution log
 
 Started: 2026-05-10 (overnight; user is asleep)
