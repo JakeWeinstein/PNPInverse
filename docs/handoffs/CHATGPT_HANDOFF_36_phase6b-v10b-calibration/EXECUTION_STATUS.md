@@ -70,25 +70,43 @@ As of session end (overnight execution):
   ~24 min based on v10a baseline.  Output will land at
   StudyResults/phase6b_v10b_step6_plumbing_ablation/ when complete.
 
-## Remaining solver runs (pending after session end)
+## Remaining solver runs (CHAINED in background after step 6)
 
-These can be run sequentially as a follow-up.  All drivers exist;
-Phase D solver outputs are NOT yet generated.
+A chained shell script `/tmp/v10b_remaining.sh` is running in the
+background.  When the in-flight step 6 process finishes, the script
+will sequentially run:
 
 1. **C_S sensitivity bracket** (D7-D1 -- 4 rungs).  Wall ~16 min.
-   ```
-   python -u -m scripts.studies.phase6b_v10b_cs_bracket \
-       --out-subdir phase6b_v10b_cs_bracket
-   ```
+   Output: `StudyResults/phase6b_v10b_cs_bracket/cs_bracket.{json,png}`.
+   Log: `/tmp/v10b_cs_bracket.log`.
 2. **Gamma_max x k_des matrix** (D7-D4 -- 30 rungs).  Wall ~30 min.
-   ```
-   python -u -m scripts.studies.phase6b_v10b_gamma_kdes_matrix \
-       --out-subdir phase6b_v10b_gamma_kdes_matrix
-   ```
+   Output:
+   `StudyResults/phase6b_v10b_gamma_kdes_matrix/matrix.{json,png}`.
+   Log: `/tmp/v10b_matrix.log`.
+
+Chained script's own log: `/tmp/v10b_chained.log`.
 
 Both drivers carry the per-rung analytic-vs-solver HARD gate via
 ``gamma_ss_langmuir`` (plan section D5/D7 HARD gates).  Failures
 trigger v10c escalation per the plan.
+
+## Morning checklist for the user
+
+1. Check `/tmp/v10b_chained.log` -- the script prints "ALL v10b PHASE D
+   solver runs COMPLETE" when both bracket and matrix finish.
+2. Check `StudyResults/phase6b_v10b_step6_plumbing_ablation/` for the
+   step 6 JSON + ablation matrix PNG; A0 baseline-reproduction audit
+   should pass (R_net field added to audit keys).  Expected: all 5
+   ablations PASS (same as v10a' since V10B = V10A numerically).
+3. Check the bracket + matrix JSONs for the `summary.all_pass` flag.
+   If False, look at `rungs[i].hard_gates.pass` for the failing rung
+   to identify which gate (cd / R_4e sign / R_net / analytic-Gamma
+   mass-balance) tripped.  Failures trigger v10c per the plan.
+4. Commit StudyResults/ + a final completion-of-Phase-C-and-D commit.
+   Suggested message:
+   `feat(v10b): Phase C step 6 + Phase D D7-D1/D7-D4 solver outputs`.
+5. Update EXECUTION_STATUS.md Phase C and D from [~] / pending to
+   [x] complete.
 
 ## DoD audit (D1-D11)
 
