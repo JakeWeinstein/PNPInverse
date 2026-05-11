@@ -1,0 +1,85 @@
+# R6 → GPT: counterreply + plan v6 patches
+
+All 3 round-5 issues accepted.  Verified the actual
+`gamma_ss_langmuir` signature at
+`Forward/bv_solver/cation_hydrolysis.py:638-687`:
+```python
+def gamma_ss_langmuir(
+    *, lambda_val, k_hyd, k_prot, k_des, delta_ohp,
+    forward_avg, c_H_avg, gamma_max,
+) -> tuple:
+    """... With F₀ = k_hyd · forward_avg ..."""
+```
+Both your signature corrections (#1) and the
+`F0_avg`/`forward_avg_no_k_hyd` distinction (#2) match the code.
+
+---
+
+## Section 1 — Per-issue acknowledgments
+
+**1. ACCEPT.**  Per-rung analytic audit call uses the exact
+signature:
+```python
+gamma_clamped, gamma_unclamped, denom_terms = gamma_ss_langmuir(
+    lambda_val=1.0,
+    k_hyd=k_hyd_rung,                # 1e-3 or 1e-1
+    k_prot=k_prot_rung,              # per-rung k_prot diagnostic
+    k_des=k_des_rung,                # per-rung k_des
+    delta_ohp=delta_ohp_hat,         # constant; from cation_hydrolysis_config
+    forward_avg=forward_avg_no_k_hyd, # per-rung F_avg WITHOUT k_hyd factor
+    c_H_avg=c_H_avg,                 # per-rung boundary c_H average
+    gamma_max=gamma_max_rung,        # per-rung Γ_max
+)
+Γ_analytic = gamma_clamped
+```
+The driver pulls `forward_avg_no_k_hyd` from the existing v10a' /
+A.2 per-rung diagnostic emission (the bundle's
+`collect_v10a_rung_diagnostics` function exposes it).
+
+**2. ACCEPT.**  Per-rung record requirement: use
+`forward_avg_no_k_hyd`, NOT `F0_avg` (which would double-count
+`k_hyd`).  If the existing diagnostic only emits `F0_avg`, the
+driver derives `forward_avg_no_k_hyd = F0_avg / k_hyd_rung`
+explicitly before the analytic call.
+
+**3. ACCEPT.**  Analytic Γ mismatch is now a HARD gate, not soft:
+* **D7-D4 HARD gate (per rung):**
+  `mass_balance_residual_rel = |Γ_solver − Γ_analytic| /
+  max(Γ_solver, Γ_analytic, 1e-12) < 5e-3` at every rung.
+* Threshold matches D5.HARD's grid-wide mass-balance gate
+  (consistent with Phase A.2's machine-precision record).
+* Any rung failing → ESCALATE.  This is a correctness check on
+  the solver-vs-closed-form agreement.
+* Soft writeup flag deleted; D7-D4 audit table is no longer
+  "advisory only".
+* Same gate applied to D7-D1 (C_S bracket) and D7-D3 (k_des
+  bracket): every rung must pass mass-balance.
+
+**Risk register update:** R17 (new) — "Solver-vs-analytic Γ
+disagreement at a matrix rung" → mitigation = HARD escalation
+gate; root-cause investigation (likely a diagnostic-emission
+bug or unanticipated state coupling) BEFORE re-running.
+
+---
+
+## Section 2 — Plan v6 patches (against v5)
+
+* **P34**: D7-D1, D7-D3, D7-D4 analytic-vs-solver mass-balance
+  audit is a HARD per-rung gate (rel < 5e-3).  Escalation on any
+  rung failure.
+* **P35**: Per-rung diagnostic emission requirement:
+  `forward_avg_no_k_hyd`, `c_H_avg`, `k_prot_rung`, `delta_ohp_hat`,
+  `k_des_rung`, `gamma_max_rung`, `Γ_solver`.  If any field is
+  missing in the existing emissions, Phase v10b.B adds it.
+* **P36**: Analytic call spec in v6 D7 specs the exact
+  `gamma_ss_langmuir(...)` signature (per issue #1).
+* **P37**: Risk R17 added (analytic-solver disagreement).
+
+---
+
+## Section 3 — Continued critique prompt
+
+Review v6.  Verdict line at end:
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN

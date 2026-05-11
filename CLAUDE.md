@@ -28,12 +28,19 @@ Production forward stack (May 2026):
 
 ## Recent progress (Phase 6α/6β)
 
-Latest landed: **step 6 plumbing-ablation matrix (2026-05-10, all
-5 ablations pass; v10b unblocked)**. Full Phase 6α/6β chronology
-(v9 A/B, v10a Langmuir cap, v10a' V-sweep, Phase A.2, step 6) in
+Latest landed: **v10b literature calibration (2026-05-10)** —
+`GAMMA_MAX_HAT_V10B = 0.047` (tightened V10A chain; 4-test
+compatibility check found no peer-reviewed MOH-coverage anchor),
+`K_DES_NONDIM_V10B = 1.0` (engineering choice; Eyring prior
+`[1e-2, 1e2]` ↔ `ΔG_des ∈ [0.69, 0.94] eV`), `C_S_F_M2_V10B = 0.20`
+(locked at step 7). New top-level Firedrake-free
+`calibration/v10b.py`. Deprecation alias `SMOKE = V10A_SMOKE`
+(NEVER `SMOKE = V10B`). Writeup:
+`docs/phase6/v10b_calibration_summary.md`. Full Phase 6α/6β
+chronology (v9 A/B → v10a → v10a' → Phase A.2 → step 6 → v10b) in
 `docs/phase6/PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md § Status`.
-Current scope: **cation hydrolysis at the polarized OHP** (Singh
-2016 field-dependent pKa). Live plan:
+Current scope: **cation hydrolysis at polarized OHP** (Singh 2016
+field-dependent pKa). Live plan:
 `docs/phase6/phase6b_next_steps_plan.md`. Per-investigation
 findings: `~/.claude/projects/.../memory/MEMORY.md`.
 
@@ -56,8 +63,9 @@ non-operational. When resumed, start from
 | `docs/phase6/PHASE_6A_INVESTIGATION_SUMMARY.md` | Phase 6α water-ionization outcome + Phase 6β scoping handoff |
 | `docs/phase6/CONJECTURE_AUDIT_2026-05-09.md` | Cs⁺ vs deck-baseline K⁺ audit. Read before new physics or kinetics calibration |
 | `docs/phase6/phase6b_next_steps_plan.md` | Live Phase 6β plan |
-| `docs/phase6/singh_2016_pka_formula.md` | Singh 2016 SI Eq. (3)/(4) + σ-mapping convention |
-| `docs/phase6/CMK3_capacitance_literature.md` | `C_S = 0.20 F/m²` citation chain + caveats. Full trail: `.research/cmk3-stern-capacitance/SUMMARY.md` |
+| `docs/phase6/singh_2016_pka_formula.md` | Singh 2016 SI Eq. (3)/(4) + σ-mapping |
+| `docs/phase6/CMK3_capacitance_literature.md` | `C_S = 0.20 F/m²` citation chain |
+| `docs/phase6/v10b_calibration_summary.md` | v10b Γ_max + k_des + C_S calibration |
 
 ## Environment
 
@@ -116,12 +124,11 @@ non-operational. When resumed, start from
 
 ## Calling the production solver
 
-Use the canonical factory + dispatcher; don't reinvent flag wiring.
-**Don't** add inline `add_boltzmann(ctx)` while *also* setting
+Use canonical factory + dispatcher; don't reinvent flag wiring.
+**Don't** add inline `add_boltzmann(ctx)` while setting
 `bv_bc.boltzmann_counterions` (double-counts). **Don't** pass
-`bv_reactions=...` while passing `k0_hat_r1`/`k0_hat_r2`/etc. (the
-reactions list takes precedence; the legacy bundle is silently
-ignored).
+`bv_reactions=...` with `k0_hat_r1`/`k0_hat_r2`/etc. (reactions list
+takes precedence; legacy bundle silently ignored).
 
 Multi-ion deck-aligned stack (current production target):
 
@@ -161,39 +168,36 @@ Phase-1 cold-start fails 13/13 around V ≈ +0.55 V):
 
 ### Gotchas
 
-- **K⁺ vs Cs⁺**: deck *baseline* is K⁺/SO₄²⁻ (Linsey 2025 deck slide
-  9: `[SO₄²⁻]=0.1 M & [K⁺]=0.2 M`). Use a K⁺ entry for apples-to-
-  apples deck comparisons. See `CONJECTURE_AUDIT_2026-05-09.md`.
-- **Phase 6α opt-in**: `enable_water_ionization=True` plus the
-  `kw_eff_ladder` outer loop on `solve_anchor_with_continuation`.
-  Default-off path is byte-equivalent to pre-Phase-6α.
-- **`multi_ion_enabled=True` is required** when passing ≥2 bikerman
-  counterions (the multi-ion shared-θ closure has different math).
-- **`debye_boltzmann` IC requires** a `steric_mode='bikerman'`
-  entry; `steric_mode='ideal'` falls back to tanh-Gouy-Chapman.
+- **K⁺ vs Cs⁺**: deck baseline is K⁺/SO₄²⁻ (Linsey 2025 deck slide 9:
+  `[SO₄²⁻]=0.1 M & [K⁺]=0.2 M`). Use K⁺ entry for apples-to-apples
+  comparisons. See `CONJECTURE_AUDIT_2026-05-09.md`.
+- **Phase 6α opt-in**: `enable_water_ionization=True` + `kw_eff_ladder`
+  outer loop on `solve_anchor_with_continuation`. Default-off path is
+  byte-equivalent to pre-Phase-6α.
+- **`multi_ion_enabled=True` required** for ≥2 bikerman counterions
+  (multi-ion shared-θ closure has different math).
+- **`debye_boltzmann` IC requires** `steric_mode='bikerman'` entry;
+  `steric_mode='ideal'` falls back to tanh-Gouy-Chapman.
 - **`l_eff_m` is read at form-build time** via
-  `bv_convergence['domain_height_hat']`; the mesh y-extent must
-  match (`make_graded_rectangle_mesh(domain_height_hat=...)`) or
-  the IC and residual disagree on the bulk anchor location.
+  `bv_convergence['domain_height_hat']`; mesh y-extent must match.
 - **`validate_solution_state` on muh** needs `is_logc=...`,
-  `mu_species=ctx.get('mu_species')`, and
+  `mu_species=ctx.get('mu_species')`,
   `em=ctx['nondim'].get('electromigration_prefactor', 1.0)`.
 - **Step 6 ablation flags** (`apply_h_source`, `apply_k_sink`,
-  `override_sigma_singh_counts_pm2`) default to byte-equivalent v9
-  behaviour. Cross-validation rules in
-  `Forward/bv_solver/config.py:_get_bv_convergence_cfg`.
+  `override_sigma_singh_counts_pm2`) default to v9 byte-equivalent.
+  Cross-validation in `Forward/bv_solver/config.py:_get_bv_convergence_cfg`.
+- **v10b constants live in `calibration/v10b.py`** (top-level
+  Firedrake-free). `GAMMA_MAX_HAT_V10B = 0.047`, `K_DES_NONDIM_V10B
+  = 1.0`, `C_S_F_M2_V10B = 0.20`. Deprecation alias `SMOKE =
+  V10A_SMOKE` (NEVER `SMOKE = V10B`).
 
 ## Path + workflow conventions
 
-- Run scripts from `PNPInverse/`. `scripts/Inference/` is
-  **uppercase**. `StudyResults/` is part of the working record —
-  check existing `summary.md` files before regenerating expensive
-  studies. `archive/` is reference-only.
-- **Plan before non-trivial forward-solver changes.** Live
-  backends: `forms_logc.py` and `forms_logc_muh.py` (concentration
-  backend removed May 2026).
-- **Long-running studies cost minutes-to-hours.** Confirm before
-  regenerating expensive runs.
-- **Adjoint tape hygiene** (when inverse resumes): wrap
-  unannotated cold-ramp / continuation work in
-  `with adj.stop_annotating():`.
+- Run scripts from `PNPInverse/`. `scripts/Inference/` is **uppercase**.
+  `StudyResults/` is the working record — check existing `summary.md`
+  before regenerating expensive studies. `archive/` is reference-only.
+- **Plan before non-trivial forward-solver changes.** Live backends:
+  `forms_logc.py` + `forms_logc_muh.py` (conc backend removed May 2026).
+- **Long-running studies cost minutes-to-hours.** Confirm first.
+- **Adjoint tape hygiene** (when inverse resumes): wrap unannotated
+  cold-ramp / continuation work in `with adj.stop_annotating():`.

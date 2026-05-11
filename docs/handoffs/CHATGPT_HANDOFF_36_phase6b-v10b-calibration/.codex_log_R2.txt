@@ -1,0 +1,1560 @@
+OpenAI Codex v0.129.0 (research preview)
+--------
+workdir: /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/jakeweinstein/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e157e-d5b1-7483-8014-8337e417fdb8
+--------
+user
+# R2 → GPT: counterreply + plan v2
+
+Thanks — round 1 was substantive.  I cross-checked the codebase to
+verify your specific claims before deciding accept vs. defend.
+Findings (so you can judge whether I'm being honest):
+
+* **#3 confirmed**: `Forward/bv_solver/cation_hydrolysis.py:293`
+  has `k_des_init = float(raw_cfg.get("k_des", 1.0))`, and line 295
+  has `gamma_max_init = float(raw_cfg.get("gamma_max_nondim",
+  GAMMA_MAX_HAT_SMOKE))`.  Both solver-layer defaults exist.
+* **#4 partially confirmed**: `phase6b_step6_plumbing_ablation.py:
+  1296` *does* accept `a2_baseline_json` as an argument; I need to
+  verify whether the driver's `main()` exposes it via CLI and what
+  the default path is.  Treating as accept regardless.
+* **#13 confirmed**: a fresh grep for `stern_capacitance_f_m2.*0.10`
+  (excluding StudyResults, .git, archive, Inference) returns 348
+  lines, not the 12 I claimed.  Most are tests and docs; my §3.1
+  scope was wrong.
+
+I'm **accepting all 20 issues**.  Below: per-issue response, then a
+delta summary, then the full revised plan (v2).
+
+---
+
+## Section 1 — Per-issue acknowledgments
+
+**1. (k_des detailed-balance route is wrong) — ACCEPT.**
+Singh's pKa constrains the equilibrium `M(H₂O)ₙ⁺ ⇌ M(OH)⁰ + H⁺`
+(hydrolysis ↔ protonation), i.e. `K_eq = k_hyd / k_prot`.  MOH
+desorption `M(OH)⁰(ad) → M(OH)⁰(bulk)` is a separate kinetic step
+not constrained by Singh.  Strategy 1 in §3.3 removed.  The
+Singh-derived constraint now lives in a new audit-only section: if
+the v10a `k_prot` value can be checked against Singh's `K_eq`, do
+so — it's a `k_prot` consistency check, not a `k_des` anchor.
+
+**2. (no nondim map for k_des) — ACCEPT.**
+`τ_REF = L_REF² / D_REF` per `scripts/_bv_common.py:131-134` —
+`L_REF = 1e-4 m`, `D_REF = D_O2 ≈ 2e-9 m²/s` → `τ_REF ≈ 5 s`.
+So `k_des_nondim = k_des_phys · τ_REF` with `k_des_phys` in `1/s`.
+Diffusion-limited upper bound at the OHP: `D_K+/δ_OHP² ≈ 4e10
+nondim` — effectively instantaneous, so the kinetics are barrier-
+limited.  Eyring: `k_des_phys = (k_BT/h) · exp(−ΔG_des/RT)`,
+`k_BT/h ≈ 6e12 /s` at 298 K.  ΔG_des ≈ 0.9 eV → `k_des_phys ≈ 0.2
+/s` ≈ 1.0 nondim (i.e. the smoke value implies a moderate-barrier
+desorption).  Added §3.3.0 (nondim map) to plan v2.
+
+**3. (solver default `k_des` not updated) — ACCEPT.**
+Plan v2 D3 adds a `K_DES_NONDIM_V10B` constant in
+`Forward/bv_solver/cation_hydrolysis.py` and updates the
+`raw_cfg.get("k_des", 1.0)` default to `raw_cfg.get("k_des",
+K_DES_NONDIM_V10B)`.  Symmetric to `GAMMA_MAX_HAT_V10B` handling.
+Both go into the module `__all__`.
+
+**4. (step 6 A0 audit baseline path) — ACCEPT.**
+Plan v2 D6 requires explicit `--a2-baseline-json` CLI override
+pointing at the new v10b A.2 JSON.  If the driver's `main()`
+doesn't already expose this CLI flag, Phase v10b.C step 4 adds it.
+
+**5. (D6 audit fields do not actually include R_net) — ACCEPT.**
+Plan v2 D6 contract: verify `_baseline_reproduction_audit` keys
+during Phase v10b.C step 4.  If `R_net` is not in the audit, add
+it (the canonical λ=1 source-term diagnostic) — that's a small
+edit to `_baseline_reproduction_audit` plus a regression test.
+Adding to D8 fast-test scope.
+
+**6. (`SMOKE_* = V10B_*` aliases destroy provenance) — ACCEPT FULLY.**
+The alias plan was wrong.  Plan v2:
+* **Freeze** `GAMMA_MAX_HAT_V10A_SMOKE = 0.047`,
+  `K_DES_NONDIM_V10A_SMOKE = 1.0`, `SMOKE_KINETICS_V10A = {…}`
+  in their *existing* locations.  These are immutable historical
+  constants.
+* **Introduce** `GAMMA_MAX_HAT_V10B`, `K_DES_NONDIM_V10B`,
+  `V10B_KINETICS` with the v10b values.  Symmetric naming.
+* **Update v10b production callers + factory defaults** to point
+  at the V10B constants.  v9/v10a scripts and tests stay on V10A.
+* **No `SMOKE = V10B` aliases anywhere.**  After step 9 (B.2)
+  lands, optionally delete `*_SMOKE` from the public surface IF
+  grep confirms zero callers — but never alias to v10b.
+
+**7. (alias/export/test plan incomplete) — ACCEPT.**
+Plan v2 D3, D4, D8 add explicit `__all__` updates + dedicated
+tests:
+* `test_cation_hydrolysis_v10a_v10b_constants_coexist` —
+  asserts both constants importable, distinct, with the v10b
+  value not equal to the v10a value (unless physics says they
+  must agree; if it does, the test asserts the equality with
+  citation).
+* `test_factory_default_uses_v10b` — `make_cation_hydrolysis_config()`
+  default `gamma_max_nondim` equals `GAMMA_MAX_HAT_V10B`.
+
+**8. (k_des bracket diagnostic contradicts itself) — ACCEPT.**
+Plan v2 D7-D3 runs BOTH `k_hyd_baseline = 1e-3` AND
+`k_hyd_route = 1e-1` (cap-saturated) at each `k_des` rung; reports
+θ AND R_net per rung.  `R_net = k_des · Γ` at λ=1 is the most
+direct k_des sensitivity diagnostic.
+
+**9. (no coupled Γ_max × k_des sensitivity) — ACCEPT.**
+Plan v2 D7-D4 adds a coupled 3×3 matrix sweep:
+`Γ_max ∈ {Γ_max_lo, Γ_max_v10b, Γ_max_hi}`
+× `k_des ∈ {0.1, 1.0, 10.0}` at λ=1, V=V_kin, evaluated at
+**both** `k_hyd_baseline = 1e-3` and `k_hyd_route = 1e-1`.
+Report θ, R_net, R_2e, R_4e, σ_S per cell.  18 rungs total;
+each rung is a Newton resolve from the warm anchor (~30 s wall
+each) → ~10 min total.  Tease out ridges and compensating pairs.
+
+**10. (D5 ±20% tolerance can reject valid calibration) — ACCEPT.**
+Plan v2 D5 split into:
+* **D5.HARD (escalate on failure):** convergence (10/10 at λ=1.0,
+  Picard converges, no Newton failures); mass-balance < 5e-3;
+  invariants preserved (V_kin σ_S sign is cathodic; the locked
+  rule still applies — `σ_S<0`, `cd_ok`, `branch_ok` at V_kin).
+* **D5.SOFT (document, no escalation):** cd, x_2e, θ-shape
+  numeric deltas vs v10a' — logged in the writeup, no gate.
+Escalation triggered ONLY by D5.HARD failures.  Selectivity-gap
+movement is data, not a verdict.
+
+**11. (C_S sweep monotonicity brittle) — ACCEPT.**
+Plan v2 D7-D1 replaces "no sign flips, σ_S monotonic":
+* **R_4e magnitude floor:** sign-flip detection requires
+  `|R_4e| > 1e-6 nondim` at both adjacent C_S rungs; below floor,
+  no flip claim (numerical noise at `K0_R4e_factor = 1e-14`).
+* **Sign convention:** R_net should be cathodic at V_kin
+  (negative for cathodic source).  A cathodic→anodic flip
+  between adjacent C_S rungs DOES warrant escalation.
+* **σ_S monotonicity prediction:** at fixed V_RHE, larger C_S
+  shifts more of the drop to the diffuse layer → |σ_S| increases
+  monotonically in C_S.  So `σ_S(C_S=0.05) > σ_S(C_S=0.10) >
+  σ_S(C_S=0.20) > σ_S(C_S=0.30)` (all cathodic = negative;
+  inequalities reverse on signed value).  Violation flags
+  numerical/coupled-solve issue.
+
+**12. (R3 contradicts D7) — ACCEPT.**
+Plan v2 D7-D1: **4/4 C_S rungs converge is mandatory**.  R3
+mitigation rewritten: if any rung fails, ESCALATE to v10c — do
+not pass with 3/4.  Document the failing rung's diagnostic in
+the writeup.
+
+**13. (legacy C_S audit stale and too broad) — ACCEPT.**
+Plan v2 §3.1 step 2 redone: a fresh grep returns 348 lines.
+Per-occurrence classification is out of v10b scope (see #14).
+v10b's C_S-related code touch is ONLY:
+* `Forward/bv_solver/cation_hydrolysis.py` — constants + default.
+* `scripts/_bv_common.py` — constants + factory default.
+* `scripts/studies/phase6b_v10a_v_sweep_diagnostic.py` — already
+  uses `STERN_F_M2_BASELINE = 0.20` (no change needed).
+* `scripts/studies/phase6b_v10a_phase_A2_v_kin.py` — already
+  uses the v10a' two-stage anchor pattern (no change needed).
+* `scripts/studies/phase6b_step6_plumbing_ablation.py` — same.
+* New `scripts/studies/phase6b_v10b_cs_bracket.py` — uses the
+  V10B constants and two-stage anchor.
+
+**14. (legacy script updates in Phase E = scope creep) — ACCEPT.**
+Plan v2 removes the legacy-script-audit from Phase E entirely.
+Create a separate post-v10b cleanup task tracked as v10b-cleanup
+(NOT part of v10b's definition of done; carried as an open ask
+in the writeup).
+
+**15. (`engineering_choice = True` flag has no schema) — ACCEPT.**
+Plan v2 D1 defines a `v10b_calibration_metadata` block:
+```python
+V10B_CALIBRATION_METADATA: Dict[str, Dict[str, Any]] = {
+    "gamma_max": {
+        "value": GAMMA_MAX_HAT_V10B,
+        "source_type": "literature" | "engineering" | "literature_chain",
+        "engineering_choice": bool,
+        "citation": str | None,   # e.g. "Singh 2016 Table S1" or None
+        "bracket": list[float],
+        "prior": str | None,      # e.g. "Eyring ΔG_des ∈ [0.7, 1.1] eV"
+        "compatibility": {
+            "mechanism": "MOH at OHP",
+            "electrode": "sp²-carbon-cathode" | "metal-cathode-transferred",
+            "electrolyte": "aqueous K2SO4",
+            "dimensional": "Γ_phys / (C_SCALE · L_REF) verified",
+        },
+    },
+    "k_des": {…same shape…},
+    "C_S": {…same shape, sourced from CMK3_capacitance_literature.md…},
+}
+```
+Stored in `Forward/bv_solver/cation_hydrolysis.py` module scope;
+emitted in every v10b result JSON; quoted in the writeup §5
+(Implementation status).  Public via `__all__`.
+
+**16. ("data-constrained in Phase D" not justified) — ACCEPT.**
+Phase D is K-only Δ_β fit per acceptance bundle § "v10a → E
+sequence" step 10.  Plan v2 rewords engineering-choice note to
+"open parameter for post-v10b; if a future scope expansion fits
+`k_des` against per-cation data, this calibration becomes the
+initial prior."  Explicitly NOT promised by Phase D as locked.
+
+**17. (Γ_max decision rule too naive) — ACCEPT.**
+Plan v2 §3.2 decision rule strengthened to require:
+* **Mechanism compatibility:** source must report MOH adsorbate
+  coverage or equivalently constrained surface site density.
+  Not generic capacitance-derived packing.  Not bare-cation
+  Stern occupancy.
+* **Electrode compatibility:** sp²-carbon-cathode preferred;
+  metal-cathode acceptable with explicit "site-density transfer"
+  note (e.g. polycrystalline Au → CMK-3 not automatic).
+* **Electrolyte compatibility:** aqueous K⁺-containing; alkali-
+  cation sub-tabling acceptable if K⁺ entry present.
+* **Dimensional equivalence:** source's Γ must be transportable
+  to nondim Γ_max via `Γ_phys / (C_SCALE · L_REF) = Γ_phys /
+  (1.2e-4 mol/m²)`.
+Falling any of these → cannot lock; either tighten chain
+(option B) or engineering choice (option C).
+
+**18. ("Likely outcome" bias) — ACCEPT.**
+Plan v2 §3.2 removes the "Likely v10b outcome" paragraph.  The
+decision rule decides; no priors stated.
+
+**19. (Result JSON "smoke_kinetics" provenance) — ACCEPT.**
+Plan v2 D5 + D6 + D7 require renaming `"smoke_kinetics"` →
+`"v10b_kinetics"` in driver result payloads:
+* `phase6b_v10a_phase_A2_v_kin.py` line 1600 → `"v10b_kinetics"`
+  when run under v10b.  (Driver becomes dual-mode: emit
+  `"v10a_smoke_kinetics"` only if explicitly invoked with the
+  historical constants via a CLI flag; otherwise `"v10b_kinetics"`.)
+* `phase6b_step6_plumbing_ablation.py` line 1659 — same.
+* `phase6b_v10a_v_sweep_diagnostic.py` — same.
+* New bracket driver writes `"v10b_kinetics"`.
+
+**20. (new bracket driver lacks test requirements) — ACCEPT.**
+Plan v2 D8 + D7 add fast-test contract for the new driver:
+* `test_phase6b_v10b_cs_bracket_cli_parses` — argparse smoke.
+* `test_phase6b_v10b_cs_bracket_target_grid` — confirms the 4
+  C_S rungs are scheduled with the two-stage anchor pattern.
+* `test_phase6b_v10b_cs_bracket_output_schema` — JSON keys
+  match the spec.
+* For coupled D7-D4 matrix: `test_phase6b_v10b_gamma_kdes_matrix_*`
+  three analogous tests.
+
+---
+
+## Section 2 — Delta summary (v1 → v2)
+
+Major changes (driven by your issues):
+
+* **§3.3 k_des**: detailed-balance strategy removed (was wrong);
+  new §3.3.0 (nondim map: `k_des_nondim = k_des_phys · τ_REF`,
+  τ_REF ≈ 5 s); strategy list reordered (analog adsorbate-desorption
+  → diffusion/Eyring → engineering choice); engineering-choice
+  fallback unchanged.
+* **§3.2 Γ_max**: "likely outcome" bias removed; decision rule
+  tightened with mechanism/electrode/electrolyte/dimensional
+  compatibility tests.
+* **§3.1 C_S legacy audit**: removed from v10b; deferred to post-
+  v10b cleanup task.
+* **D1**: new `V10B_CALIBRATION_METADATA` block schema specified.
+* **D3, D4**: alias scheme rewritten — freeze V10A, introduce V10B,
+  no SMOKE = V10B aliases.
+* **D5**: split into HARD (escalate) and SOFT (document) gates.
+* **D6**: explicit baseline-path CLI requirement; verify
+  `_baseline_reproduction_audit` includes R_net (add if not).
+* **D7**: monotonicity criterion replaced with magnitude-floor +
+  sign-convention + signed-σ_S-monotonicity-prediction; 4/4
+  mandatory; conditional matrix expanded.
+* **D7-D3 / D7-D4**: coupled Γ_max × k_des matrix added; k_des
+  rungs evaluated at BOTH `k_hyd_baseline` and `k_hyd_route`.
+* **D8**: fast-test contract added for new driver + coexistence
+  test for v10a / v10b constants.
+* **D9, D10, D11**: unchanged.
+* **Phase E**: legacy script audit removed entirely (moved to
+  post-v10b cleanup).
+* **R3, R10, R5**: updated to match new gate semantics.
+
+Three open verification items the executor handles in Phase v10b.C:
+1. Verify `_baseline_reproduction_audit` actually has the
+   `--a2-baseline-json` CLI flag (or add it).
+2. Verify the audit keys include R_net at λ=1 (add if not).
+3. Verify Phase A.2 driver's result-JSON `"smoke_kinetics"` key
+   path is renameable without breaking the convergence-audit
+   consumer.
+
+---
+
+## Section 3 — Plan v2 (full revised text)
+
+````````````````````````markdown
+# Phase 6β Step 8 — v10b Literature Calibration of Γ_max + k_des + C_S (v2)
+
+**Author:** Claude (planner).  **Date:** 2026-05-10.
+**Status:** v2 — after R1 critique (20 issues accepted).
+**Source handoff:** `docs/handoffs/v10b_planning_handoff.md`.
+
+---
+
+## 0. One-paragraph framing
+
+v9/v10a used three smoke values that have not been pinned to peer-
+reviewed literature: `Γ_max_hat = 0.047` (1-monolayer K⁺ MOH at the
+OHP, hard-sphere derivation), `k_des_nondim = 1.0` (no anchor), and
+`C_S = 0.10 F/m²` (a convergence-pinned engineering value).  Step 7
+locked `C_S = 0.20 F/m²` per
+`docs/phase6/CMK3_capacitance_literature.md`.  v10b delivers
+literature-anchored numeric values (or explicit `engineering_choice`
+flags with documented priors) for all three parameters, updates the
+solver-layer + driver-layer defaults under a clean V10A/V10B
+provenance scheme (no aliases), regenerates Phase A.2 + step 6
+plumbing baselines at v10b parameters, runs a C_S sensitivity
+bracket sweep and a coupled Γ_max × k_des matrix, and publishes
+`docs/phase6/v10b_calibration_summary.md`.  Selectivity-gap
+improvement is **not** a v10b pass criterion (Phase D's job).
+
+---
+
+## 1. Definition of done
+
+v10b is **done** iff every box ticks:
+
+- [ ] **D1.** Each of `Γ_max`, `k_des`, `C_S` carries a per-parameter
+      record in `V10B_CALIBRATION_METADATA` with the schema:
+      ```python
+      {
+        "value": float,                     # nondim
+        "source_type": "literature" | "literature_chain" | "engineering",
+        "engineering_choice": bool,
+        "citation": str | None,
+        "bracket": list[float],             # sensitivity-sweep grid
+        "prior": str | None,                # required if engineering_choice
+        "compatibility": {                  # required for literature/chain
+            "mechanism": str,
+            "electrode": str,
+            "electrolyte": str,
+            "dimensional": str,
+        },
+      }
+      ```
+      The metadata block lives in
+      `Forward/bv_solver/cation_hydrolysis.py` module scope and is
+      emitted verbatim in every v10b result JSON.
+- [ ] **D2.** `docs/phase6/v10b_calibration_summary.md` published.
+      Three-parameter analog of `CMK3_capacitance_literature.md`:
+      per-parameter citation chain + caveats + sensitivity bracket
+      + implementation status (metadata block quoted) + open asks
+      + cross-references.
+- [ ] **D3.** Solver-layer constants in
+      `Forward/bv_solver/cation_hydrolysis.py`:
+      * **Freeze** `GAMMA_MAX_HAT_V10A_SMOKE = 0.047` (renamed
+        from `GAMMA_MAX_HAT_SMOKE`).  Add docstring "frozen
+        historical".
+      * **Add** `GAMMA_MAX_HAT_V10B` with the v10b value (or
+        rationale = "kept = V10A; chain tightened").
+      * **Add** `K_DES_NONDIM_V10A_SMOKE = 1.0` (frozen).
+      * **Add** `K_DES_NONDIM_V10B` with the v10b value.
+      * Update `raw_cfg.get("k_des", 1.0)` →
+        `raw_cfg.get("k_des", K_DES_NONDIM_V10B)` at line 293.
+      * Update `raw_cfg.get("gamma_max_nondim", GAMMA_MAX_HAT_SMOKE)`
+        →
+        `raw_cfg.get("gamma_max_nondim", GAMMA_MAX_HAT_V10B)` at
+        line 295.
+      * Add all four constants + `V10B_CALIBRATION_METADATA` to
+        `__all__`.
+      * **No `SMOKE = V10B` aliases.**  After step 9 (B.2) lands,
+        the V10A-frozen constants may be deleted IF grep confirms
+        zero callers (separate decision; not part of v10b DoD).
+- [ ] **D4.** `scripts/_bv_common.py`:
+      * **Freeze** `GAMMA_MAX_HAT_V10A_SMOKE = 0.047` at line 944
+        (renamed).
+      * **Add** `GAMMA_MAX_HAT_V10B` (mirror of solver-layer
+        value; sanity-test enforces equality).
+      * `make_cation_hydrolysis_config` default at line 957
+        switches from `GAMMA_MAX_HAT_SMOKE` to
+        `GAMMA_MAX_HAT_V10B`.
+- [ ] **D4'.** `scripts/studies/phase6b_v10a_v_sweep_diagnostic.py`:
+      * **Freeze** `SMOKE_KINETICS_V10A = {…}` at line 174
+        (renamed from `SMOKE_KINETICS`).
+      * **Add** `V10B_KINETICS = {…}` with v10b values + same
+        key set.
+      * Update factory signature default args from
+        `SMOKE_KINETICS["X"]` → `V10B_KINETICS["X"]` at lines
+        821-826, 866-871.
+      * Driver `main()` reads from `V10B_KINETICS` by default;
+        keep a `--use-v10a-smoke` CLI flag for historical
+        reproduction.
+- [ ] **D5.HARD (escalation gates).**  Phase A.2 driver re-run at
+      v10b params with output subdir
+      `phase6b_v10b_phase_A2_v_kin`:
+      * 10/10 k_hyd rungs converge at λ=1.0.
+      * Picard converges everywhere (no `iter_cap_hit_unconverged`).
+      * Mass-balance residual < 5e-3 across the grid.
+      * V_kin = −0.10 V still satisfies the locked rule: at
+        V_kin, `σ_S < 0` ∧ `cd_ok` ∧ `branch_ok` (i.e. the v10a'
+        decision-tree precedence guards still hold).
+      * `K0_R4e_factor = 1e-14` still produces non-zero R_4e at
+        V_kin (`|R_4e| > 1e-9` nondim at λ=1).
+      Failure of any HARD gate → ESCALATE to v10c; do not push past.
+- [ ] **D5.SOFT (informative deltas, logged not gated).**
+      * `cd_mA_cm²` at λ=1: report delta vs v10a' record.
+      * `x_2e` at λ=1: report delta vs v10a' record.
+      * `θ(k_hyd=1e-1)`: report value and delta vs v10a' record.
+      * `single_v_selectivity_gap_pp`: report; movement is data
+        for Phase D, not a v10b verdict.
+- [ ] **D6.** Step 6 plumbing-ablation driver re-run at v10b
+      params with output subdir
+      `phase6b_v10b_step6_plumbing_ablation` and explicit
+      `--a2-baseline-json
+      StudyResults/phase6b_v10b_phase_A2_v_kin/phase_a2_v_kin.json`.
+      All 5 ablations pass.  A0 byte-equivalent (rel ≤ 1e-6 in
+      cd, R_net, σ_S, θ) to the new v10b A.2 baseline.  Step 6
+      driver: verify (and add if missing) the `--a2-baseline-json`
+      CLI flag; verify `_baseline_reproduction_audit` keys
+      include `R_net` at λ=1 (add if not).  Both modifications
+      land in Phase v10b.C step 4.
+- [ ] **D7-D1 (C_S sensitivity bracket; ALWAYS REQUIRED).**
+      `C_S ∈ {0.05, 0.10, 0.20, 0.30} F/m²` at V_kin = −0.10 V,
+      λ=1, k_hyd = `k_hyd_baseline = 1e-3`.  Pass criteria:
+      * **4/4 mandatory.**  If any rung fails to converge,
+        ESCALATE to v10c (no 3/4 fallback).
+      * Sign convention: R_net cathodic at V_kin (negative).
+        cathodic→anodic flip between adjacent C_S rungs → escalate.
+      * Magnitude floor on R_4e: sign flips claimed only when
+        `|R_4e| > 1e-6` nondim at both adjacent C_S rungs.
+      * σ_S monotonicity prediction: `signed_σ_S` strictly
+        decreasing (i.e. `|σ_S|` strictly increasing) in `C_S`.
+        Violation flags coupled-solve issue → escalate.
+- [ ] **D7-D2 (Γ_max sensitivity bracket; CONDITIONAL).**
+      Skip if §3.2 locks a single value.  Run if engineering
+      choice or "keep V10A value with bracket evidence".
+      `Γ_max ∈ {Γ_max/2, Γ_max, Γ_max·2, Γ_max·4}` nondim, anchor
+      at C_S = 0.10 + bump to 0.20.  Same convergence + smoothness
+      criteria as D7-D1.
+- [ ] **D7-D3 (k_des sensitivity bracket; CONDITIONAL).**
+      Required if §3.3 lands on engineering choice (likely).
+      `k_des ∈ {0.1, 1.0, 10.0}` nondim at V_kin, anchor at C_S =
+      0.10 + bump to 0.20.  **Run at both** `k_hyd_baseline =
+      1e-3` AND `k_hyd_route = 1e-1` (cap-saturated).  Report
+      θ AND R_net (= k_des · Γ at λ=1) per rung.
+- [ ] **D7-D4 (coupled Γ_max × k_des matrix; ALWAYS REQUIRED).**
+      9-rung matrix at λ=1, V=V_kin, anchored at C_S = 0.20:
+      `Γ_max ∈ {Γ_max/2, Γ_max, Γ_max·2}` × `k_des ∈ {0.1, 1.0,
+      10.0}` evaluated at both `k_hyd ∈ {1e-3, 1e-1}` → 18
+      total rungs.  Pass: 18/18 converge; no sign flip on R_net
+      that crosses both `|R_4e| > 1e-6` and the sign convention.
+      Output: 2D heatmap of θ and R_net.
+- [ ] **D8.** `pytest -m "not slow" -k "phase6b or cation" -s -vv`
+      green at the new constants.  New fast tests required:
+      * `test_cation_hydrolysis_v10a_v10b_constants_coexist`
+      * `test_factory_default_uses_v10b`
+      * `test_v10b_calibration_metadata_schema` — asserts each
+        of the 3 entries has all required keys.
+      * `test_phase6b_v10b_cs_bracket_cli_parses`,
+        `test_phase6b_v10b_cs_bracket_target_grid`,
+        `test_phase6b_v10b_cs_bracket_output_schema`.
+      * Analogous trio for the Γ_max × k_des matrix driver.
+      * `test_step6_a2_baseline_json_cli_flag`,
+        `test_step6_audit_keys_include_R_net`.
+      Tests with literal `0.047` references in
+      `test_phase6b_v10a_langmuir_cap.py:90,123,132,147`:
+      * Keep the test (it's a v10a sanity check) and rename to
+        `test_v10a_langmuir_cap_*` if not already.
+      * Add parallel v10b tests using `GAMMA_MAX_HAT_V10B`.
+      The two test groups are independent (v10a freezes the V10A
+      constant; v10b tests the V10B constant) — no churn on
+      future calibration cycles.
+- [ ] **D9.** Acceptance bundle § Status appended with the v10b
+      paragraph at
+      `docs/phase6/PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md`.
+- [ ] **D10.** `CLAUDE.md` "Recent progress" updated; total file
+      length ≤ 200 lines.
+- [ ] **D11.** Memory entry `project_v10b_calibration_outcome.md`
+      added with index pointer in `MEMORY.md`.
+
+**Out of v10b's DoD (explicitly):**
+* Selectivity gap improvement — Phase D job.
+* Legacy script `stern_capacitance_f_m2 = 0.10` migration (~348
+  occurrences) — separate post-v10b cleanup task.
+* Phase D `k_des` data fit — step 10's scope is K-only Δ_β,
+  unless explicitly expanded in a future plan.
+
+---
+
+## 2. Hard invariants (unchanged from v1)
+
+| Constant | Value | Source |
+|---|---|---|
+| `V_kin` | `−0.10 V` | step 4 |
+| `K0_R4e_factor` | `1e-14` | step 4 |
+| `k_hyd_baseline` | `1e-3 nondim` | step 5 |
+| `k_hyd_route` | `1e-1 nondim` | A.2 (cap-saturated rung) |
+| `WARM_WALK_GRID` | `(+0.55, +0.40, +0.20, +0.10, −0.10)` | A.2 + step 6 |
+| `LAMBDA_LADDER` | `(0.0, 0.25, 0.50, 0.75, 1.0)` | v10a |
+| Parallel topology | `R2e (E°=0.695 V)` + `R4e (E°=1.23 V)` | Ruggiero 2022 |
+| `exponent_clip` | `100.0` | CLAUDE.md hard rule #2 |
+| `STERN_F_M2_ANCHOR` | `0.10 F/m²` | two-stage anchor pattern |
+| `c_s_ladder + kw_eff_ladder` combo | unsupported | `_PARAMETER_OVERRIDE_SETTERS` |
+| `τ_REF` | `L_REF² / D_REF ≈ 5 s` | `_bv_common.py:131-134` |
+
+Breaking any of these in v10b → escalate to v10c; do not push past.
+
+---
+
+## 3. The three parameters — decision rules
+
+### 3.0. Nondim mapping (new in v2)
+
+`Γ_max_hat = Γ_max_phys / (C_SCALE · L_REF) = Γ_max_phys / (1.2e-4
+mol/m²)`.  Diagnostic: literature `Γ_phys` of `~5.6e-6 mol/m²` →
+`Γ_hat ≈ 0.047`.
+
+`k_des_nondim = k_des_phys · τ_REF`, with `τ_REF = L_REF² / D_REF
+≈ 5 s`.  So `k_des_phys [1/s] = k_des_nondim / 5`.  Smoke value
+`k_des_nondim = 1.0` ↔ `k_des_phys = 0.2 /s` ↔ Eyring with
+ΔG_des ≈ 0.9 eV.  Diffusion-limited upper bound at the OHP is
+`~D_K+/δ_OHP² ≈ 4e10 nondim` (effectively instantaneous; kinetics
+are barrier-limited).
+
+`C_S` is dimensional [F/m²] in the residual; no rescaling.
+
+### 3.1. `C_S` — locked at step 7
+
+**Locked:** `C_S = 0.20 F/m²` per
+`docs/phase6/CMK3_capacitance_literature.md`.
+
+**v10b work:**
+1. No literature search needed.
+2. **Code touch (limited; do NOT batch-update 348 legacy
+   occurrences):**
+   * `Forward/bv_solver/cation_hydrolysis.py` — constants + default.
+   * `scripts/_bv_common.py` — constants + factory default.
+   * (`v_sweep_diagnostic.py`, `phase_A2_v_kin.py`,
+     `step6_plumbing_ablation.py` already use `STERN_F_M2_BASELINE
+     = 0.20` — no change needed.)
+   * `phase6b_v10b_cs_bracket.py` (new) — uses V10B constants.
+3. **Sensitivity bracket sweep** (D7-D1; always required).
+4. **Carry forward step 7 open asks** as items in the v10b
+   writeup §6 — do not block v10b on them:
+   * Bohra 2019 EES pull into `Articles/`.
+   * Risk #5 σ_S mismatch re-derivation with Stern-only 20 µF/cm².
+   * Yash convention disposition.
+
+### 3.2. `Γ_max` — literature search
+
+**Current smoke (V10A-frozen):** `0.047 nondim`.
+
+**Literature search targets:**
+1. Singh 2016 *JACS* (`10.1021/jacs.6b07612`) — Table S1
+   partial-coverage estimates for K⁺ (if any).
+2. Iamprasertkun 2019 *JPCL* (`10.1021/acs.jpclett.8b03523`).
+3. Bohra 2019 EES (`10.1039/c9ee02485a`) — pull first.
+4. Co-Zhang 2019 Angewandte (in `Articles/`).
+5. Yash modeling code at `data/.../Yash-Trends/`.
+6. `Parameters_Seitz_Mangan.xlsx` — group-internal convention.
+
+**Decision rule:**
+* **LOCK to a cited value** ONLY IF the source passes all four
+  compatibility tests:
+  - Mechanism: source reports MOH adsorbate coverage or
+    equivalently constrained surface site density (not generic
+    cation packing, not bare-cation Stern occupancy).
+  - Electrode: sp²-carbon-cathode preferred; metal-cathode
+    acceptable with "site-density transfer" caveat documented.
+  - Electrolyte: aqueous K⁺-containing OR alkali-cation sub-
+    tabling with K⁺ entry present.
+  - Dimensional: `Γ_phys / (C_SCALE · L_REF) = Γ_phys / (1.2e-4
+    mol/m²)` produces a finite nondim value.
+* **ELSE tighten the V10A derivation chain** (no value change;
+  V10B = V10A; document the source for "K⁺ hydrated radius =
+  2.3 Å" with peer-reviewed citation).
+* **ELSE engineering choice** with prior
+  `Γ_max_nondim ∈ {V10A/2, V10A, V10A·2}`; D7-D2 + D7-D4 bracket
+  evidence.
+
+### 3.3. `k_des` — research + likely engineering choice
+
+**Current smoke (V10A-frozen):** `k_des_nondim = 1.0` (no anchor).
+
+**Note (was strategy 1 in v1, removed):** Singh 2016 pKa is
+the equilibrium `M(H₂O)ₙ⁺ ⇌ M(OH)⁰ + H⁺`, i.e. `K_eq = k_hyd /
+k_prot`.  This constrains `k_prot`, not `k_des`.  v10b uses
+Singh pKa ONLY for `k_prot` consistency audit (separate from
+this calibration); for `k_des` it has no bearing.
+
+**Research strategies (in order of attempt):**
+
+1. **Analogous reactions: `OH*` desorption from sp²-carbon.**
+   Read:
+   * Nørskov-Viswanathan 2012 *JPCL* (in `Articles/`).
+   * Co-Billy 2017 ACS Catal (in `Articles/`).
+   * Other Nørskov-group Sabatier-volcano papers via the data-
+     folder index.
+   If a transportable `k_des` order of magnitude with documented
+   uncertainty (1–2 decades) emerges → lock central value +
+   bracket sweep.
+2. **Eyring estimate from cation-OH binding energy.**
+   `k_des_phys = (k_BT/h) · exp(−ΔG_des/RT)`; ΔG_des estimated
+   from cation-OH bond energy literature.  If ΔG_des can be
+   bracketed within ±0.2 eV → corresponds to k_des within ~1
+   decade → lock with bracket.
+3. **Engineering-choice fallback (most honest).**  Mark
+   `engineering_choice = True`; document prior:
+   `k_des_nondim ∈ [10⁻², 10²]` from Eyring with ΔG_des ∈
+   [0.7, 1.1] eV.  Run D7-D3 bracket at `{0.1, 1.0, 10.0}`.
+   Document "open parameter for post-v10b; future scope
+   expansion to fit `k_des` against data would use this
+   calibration as the initial prior."  Do NOT promise Phase D
+   will fit it (locked scope is K-only Δ_β).
+
+**Decision rule:**
+* IF strategy 1 yields a defensible order of magnitude with
+  electrode/electrolyte transferability documented → lock
+  central + bracket.
+* ELSE IF strategy 2 yields ΔG_des within ±0.2 eV → lock with
+  Eyring + bracket.
+* ELSE → strategy 3 fallback.  Do NOT fabricate a citation.
+
+**A2 diagnostic risk flag (from handoff §7, retained):** K⁺
+Boltzmann pile-up at V_kin (`c_K_boundary_avg ≈ 291 · c_K_bulk`)
+means sentinel-scale `R_inj` perturbations cannot dent boundary
+c_K by 5%.  v10b MUST NOT use boundary-c_K perturbation as a
+`k_des` calibration diagnostic.  Use `θ` AND `R_net` at cap-
+saturated `k_hyd_route = 1e-1` instead.
+
+---
+
+## 4. Phase breakdown (with dependencies)
+
+Total estimate: **8–12 working days**.
+
+### Phase v10b.A — Literature pass (~3 days, parallelizable)
+
+**Goal:** decide each parameter's D1 outcome.  Produces draft
+writeup §1-§3 + numeric values for D3/D4.
+
+**Sub-phases (parallel):**
+* **A1. Γ_max literature pass.**  Decision rule §3.2.  Apply 4-
+  test compatibility check before locking.
+* **A2. k_des literature pass.**  Strategies 1→2→3.  Do not stall
+  on infinite search; engineering choice is acceptable.
+* **A3. C_S follow-up.**  Pull Bohra 2019 EES if accessible;
+  re-derive Risk #5 σ_S; document Yash convention.
+
+Run A1+A2+A3 as three parallel Agent calls.  Each agent gets the
+decision rule, file targets, and the writeup section template
+(mirror of `CMK3_capacitance_literature.md` structure).
+
+**Gate at end of A:** writeup draft §1-§3 + `V10B_CALIBRATION_METADATA`
+populated.
+
+### Phase v10b.B — Code change + unit-test regression (~1 day)
+
+**Depends on:** A1, A2 final values.
+
+**Steps:**
+1. Solver-layer constants (D3): freeze V10A, add V10B, update
+   defaults at lines 293, 295.
+2. `scripts/_bv_common.py` constants (D4): freeze V10A, add V10B,
+   factory default switch at line 957.
+3. V-sweep diagnostic constants (D4'): freeze
+   `SMOKE_KINETICS_V10A`, add `V10B_KINETICS`, update factory
+   signature defaults at lines 821-826, 866-871.
+4. Add `V10B_CALIBRATION_METADATA` block (D1).
+5. New fast tests (D8): constants coexistence, factory default,
+   metadata schema, bracket driver schema, step 6 audit fields.
+6. Refactor test literals in
+   `tests/test_phase6b_v10a_langmuir_cap.py:90,123,132,147` to
+   use `GAMMA_MAX_HAT_V10A_SMOKE` constant (frozen, so OK to
+   reference); add parallel v10b tests using
+   `GAMMA_MAX_HAT_V10B`.
+7. Add `--use-v10a-smoke` CLI flag to v-sweep / A.2 / step 6
+   drivers for historical reproduction (optional convenience;
+   land if low-cost, defer otherwise).
+8. Run `pytest -m "not slow" -k "phase6b or cation" -s -vv`.
+
+### Phase v10b.C — A.2 + step 6 regression (~1 day wall)
+
+**Depends on:** Phase B complete.
+
+**Steps:**
+1. Verify / add `--a2-baseline-json` CLI flag on
+   `phase6b_step6_plumbing_ablation.py`.
+2. Verify / add `R_net` to `_baseline_reproduction_audit` keys
+   in step 6 driver (D6 contract).
+3. Re-run Phase A.2 driver with `--out-subdir
+   phase6b_v10b_phase_A2_v_kin`.
+4. Apply D5.HARD gates; if fail → escalate to v10c.
+5. Re-run step 6 driver with `--out-subdir
+   phase6b_v10b_step6_plumbing_ablation
+   --a2-baseline-json
+   StudyResults/phase6b_v10b_phase_A2_v_kin/phase_a2_v_kin.json`.
+6. D6 byte-equivalence rel ≤ 1e-6 in {cd, R_net, σ_S, θ} verified.
+7. Commit regenerated JSONs + PNGs.
+
+### Phase v10b.D — Sensitivity bracket sweeps (~2 days wall, parallelizable with C)
+
+**Depends on:** Phase B complete.
+
+**D1 work:**
+* D7-D1: new driver `scripts/studies/phase6b_v10b_cs_bracket.py`
+  with the two-stage anchor pattern.  4 rungs.
+* D7-D4: coupled Γ_max × k_des matrix driver
+  `scripts/studies/phase6b_v10b_gamma_kdes_matrix.py`.  18 rungs
+  (Γ_max ∈ {V10B/2, V10B, V10B·2} × k_des ∈ {0.1, 1.0, 10.0} ×
+  k_hyd ∈ {1e-3, 1e-1}).
+* D7-D2 (conditional): Γ_max-only bracket if not locked.
+* D7-D3 (conditional, likely required): k_des bracket at both
+  k_hyd values.
+
+### Phase v10b.E — Writeup + acceptance bundle (~1 day)
+
+**Depends on:** A, B, C, D complete.
+
+**Steps:**
+1. Finalize `docs/phase6/v10b_calibration_summary.md` mirroring
+   `CMK3_capacitance_literature.md` structure.  Includes the
+   verbatim `V10B_CALIBRATION_METADATA` block.
+2. Append v10b paragraph to acceptance bundle § Status (D9).
+3. Update `CLAUDE.md` "Recent progress" (D10).  Consolidate
+   v10a' / A.2 / step 6 narrative; budget ≤ 200 lines.
+4. Write `project_v10b_calibration_outcome.md` memory entry
+   (D11) + `MEMORY.md` pointer.
+5. **DO NOT** audit the 348 legacy `C_S = 0.10` occurrences.
+   That's a separate post-v10b cleanup task; documented as an
+   open ask in writeup §6 with the v10b-cleanup tag.
+
+---
+
+## 5. Risk + mitigation register (v2)
+
+| # | Risk | Likelihood | Severity | Mitigation |
+|---|---|---|---|---|
+| R1 | `k_des` literature pass yields nothing | HIGH | LOW | Engineering-choice flag §3.3 strategy 3; D7-D3 + D7-D4 close evidentially. |
+| R2 | New `Γ_max` shifts σ_S manifold so V_kin or `K0_R4e_factor` no longer satisfy the locked rule | LOW | HIGH | Detect in D5.HARD; ESCALATE to v10c. |
+| R3 | C_S sensitivity sweep fails 4/4 convergence | MEDIUM | HIGH | Two-stage anchor pattern.  4/4 IS the contract; failures ESCALATE to v10c (no 3/4 fallback). |
+| R4 | Convergence-audit threshold-narrowness artifact (overall_pass=False at θ_max=0.9253) re-appears | HIGH | LOW (known) | Document; do not change `transition_grid_threshold`. |
+| R5 | V10A test refs break when value changes / V10B coexistence test missing | LOW | LOW | D8 explicit tests; V10A constants frozen, never aliased. |
+| R6 | A0 byte-equivalence broken vs. new v10b A.2 baseline | LOW | HIGH | Step 6 driver gets explicit `--a2-baseline-json` CLI; D6 verifies. |
+| R7 | CLAUDE.md exceeds 200-line budget | MEDIUM | LOW | Consolidate v10a' / A.2 / step 6 narrative in Phase E. |
+| R8 | Adjoint-tape contamination | LOW | HIGH | v10b is forward-only; no `scripts/Inference/` touches. |
+| R9 | Bohra 2019 EES paywalled | LOW | LOW | Step 7 already shipped without it; open ask. |
+| R10 | k_des/Γ_max calibration moves cd by >20% from v10a' | MEDIUM | LOW (data, not gate) | D5 split: HARD gates are convergence/invariants; SOFT gates (cd/x_2e) are informative, not escalation triggers. |
+| R11 | Sign convention or magnitude-floor misapplied in D7 σ_S check | MEDIUM | MEDIUM | Explicit sign convention + 1e-6 floor on R_4e specified in D7-D1. |
+| R12 | k_des bracket diagnostic at wrong k_hyd value | LOW | MEDIUM | D7-D3 explicitly evaluates BOTH `k_hyd_baseline = 1e-3` and `k_hyd_route = 1e-1`. |
+| R13 | Singh pKa consistency check for `k_prot` not done (separate from k_des) | LOW | LOW | Out of v10b scope; carry as open ask in writeup §6. |
+| R14 | Result JSON `smoke_kinetics` key collision in dual-mode drivers | LOW | LOW | Driver writes `v10b_kinetics` when run under V10B; `v10a_smoke_kinetics` only with `--use-v10a-smoke` flag. |
+
+---
+
+## 6. Out of scope (v2; mostly unchanged)
+
+- Phase D (K-only Δ_β fit) — step 10.
+- Cs⁺ / Li⁺ / Na⁺ / Rb⁺ extension — Phase E, step 11.
+- Variable-`ε_S` / Booth-equation refinement — post-v10b.
+- Inverse / adjoint work — paused.
+- V_kin re-selection / `K0_R4e_factor` retune — step 4 invariants.
+- L_Stern parameterization vs `C_S` parameterization choice —
+  open ask from step 7.
+- Selectivity-gap improvement — Phase D's job.
+- **Legacy 348-line `C_S = 0.10` audit + script migration —
+  separate post-v10b cleanup task; carried as open ask.**
+- **Phase D `k_des` fitting — Phase D scope is K-only Δ_β;
+  engineering-choice k_des is a post-v10b open parameter.**
+
+---
+
+## 7. Dependency graph (v2)
+
+```
+v10b.A (parallel)
+├── A1 Γ_max research ──┐
+├── A2 k_des research ──┼──► writeup draft + V10B_CALIBRATION_METADATA
+└── A3 C_S follow-up ───┘                │
+                                          ▼
+                                    v10b.B (serial)
+                                    Code changes + unit tests
+                                          │
+                          ┌──────────────┴──────────────┐
+                          ▼                              ▼
+                     v10b.C (serial)             v10b.D (parallel)
+                     A.2 + step 6                 C_S bracket
+                     regression                   + Γ_max × k_des matrix
+                          │                              │
+                          └──────────────┬──────────────┘
+                                          ▼
+                                    v10b.E (serial)
+                                    Writeup + acceptance bundle
+                                    + CLAUDE.md + memory entry
+```
+
+Critical path: A → B → C → E.  D parallel with C.
+
+---
+
+## 8. Validation checkpoints (v2)
+
+1. **End of A:** writeup §1-§3 draft; `V10B_CALIBRATION_METADATA`
+   populated; engineering-choice flags set where applicable.
+2. **End of B:** `pytest -m "not slow" -k "phase6b or cation"`
+   green (D8); new fast tests passing.
+3. **End of C:** D5.HARD gates close; D6 byte-equivalence verified
+   with new baseline path.  D5.SOFT deltas logged, not gated.
+4. **End of D:** D7-D1 (4/4) closes; D7-D4 (18/18) closes;
+   conditional D7-D2 / D7-D3 close as needed.
+5. **End of E:** D9 + D10 + D11 close.  v10b shipped.
+
+---
+
+## 9. Decision rules summary (v2)
+
+| Parameter | Outcome path |
+|---|---|
+| `C_S` | Locked at 0.20 F/m²; D7-D1 bracket + carry open asks. |
+| `Γ_max` | Compatibility-checked lit anchor → tightened V10A chain (value unchanged) → engineering choice with bracket. |
+| `k_des` | Analogous-reaction order of magnitude → Eyring with ΔG_des bracket → engineering choice with Eyring prior. |
+
+**If in doubt, prefer engineering-choice flag with documented prior
+and bracket evidence over a fabricated citation.**
+
+---
+
+**End of plan v2.**
+````````````````````````
+
+---
+
+## Section 4 — Continued critique prompt
+
+Review the updated plan and my responses to your earlier issues.
+Push back on responses where I defended poorly — name which point.
+Raise any new issues the updated plan creates. Re-issue any earlier
+issue you don't think I addressed. Same numbered format and same
+verdict line at the end:
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN
+
+codex
+I’ll treat v2 as a fresh contract and verify the new physics claims against the current code where possible. The main things I’m checking are the nondim map, sign conventions, default-path changes, and whether the added gates are actually implementable.
+exec
+/bin/zsh -lc "nl -ba scripts/_bv_common.py | sed -n '110,145p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+   110	                              # H18 V4: k0_4e is weakly identified from page-15
+   111	                              # peroxide alone; calibrate against disk current
+   112	                              # / selectivity / Tafel slope in M4.  Sweep
+   113	                              # K0_PHYS_R4E ∈ {1, 5, 10} × K0_PHYS_R1 in
+   114	                              # M3a.2 if magnitude is far off experimental.
+   115	ALPHA_R4E = 0.5              # default placeholder; revisit in M4 with Tafel.
+   116	
+   117	# Physical equilibrium potentials (V vs RHE).  CLAUDE.md Hard Rule 4:
+   118	# "Use physical E_eq (R1 = 0.68 V, R2 = 1.78 V vs RHE), never E_eq = 0."
+   119	E_EQ_R1_V = 0.68
+   120	E_EQ_R2_V = 1.78
+   121	# Ruggiero §1 Eqs 1-2 — parallel 2e/4e equilibrium potentials.
+   122	# Refines the legacy E_EQ_R1_V = 0.68 V to 0.695 V for the 2e channel.
+   123	E_EQ_R2E_V = 0.695   # V vs RHE, Ruggiero 2022 §1 (2e: O₂ + 2H⁺ + 2e⁻ → H₂O₂)
+   124	E_EQ_R4E_V = 1.23    # V vs RHE, Ruggiero 2022 §1 (4e: O₂ + 4H⁺ + 4e⁻ → 2H₂O)
+   125	
+   126	
+   127	# ---------------------------------------------------------------------------
+   128	# Reference scales
+   129	# ---------------------------------------------------------------------------
+   130	
+   131	L_REF = 1.0e-4              # m (100 µm)
+   132	D_REF = D_O2                # m²/s (O₂ diffusivity as reference)
+   133	C_SCALE = C_O2              # mol/m³ (O₂ bulk concentration as reference)
+   134	K_SCALE = D_REF / L_REF     # m/s (velocity scale for k0 nondimensionalization)
+   135	
+   136	
+   137	# ---------------------------------------------------------------------------
+   138	# Dimensionless species properties
+   139	# ---------------------------------------------------------------------------
+   140	
+   141	D_O2_HAT = D_O2 / D_REF
+   142	D_H2O2_HAT = D_H2O2 / D_REF
+   143	D_HP_HAT = D_HP / D_REF
+   144	D_CLO4_HAT = D_CLO4 / D_REF
+   145	
+
+exec
+/bin/zsh -lc 'rg -n "def _extract_R_net_nondim|R_net|R_forward_capped|k_des.*gamma|sigma_S_C_per_m2|R_2e_current_nondim|R_4e_current_nondim" Forward/bv_solver/cation_hydrolysis.py scripts/studies/phase6b_v10a_v_sweep_diagnostic.py scripts/studies/phase6b_v10a_phase_A2_v_kin.py scripts/studies/phase6b_step6_plumbing_ablation.py' in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+scripts/studies/phase6b_step6_plumbing_ablation.py:25:  *residual* R_net (not just the diagnostic-side pka_factor).
+scripts/studies/phase6b_step6_plumbing_ablation.py:195:        "gamma", "theta", "sigma_S_C_per_m2",
+scripts/studies/phase6b_step6_plumbing_ablation.py:197:        "R_2e_current_nondim", "R_4e_current_nondim",
+scripts/studies/phase6b_step6_plumbing_ablation.py:205:        "gamma", "theta", "sigma_S_C_per_m2",
+scripts/studies/phase6b_step6_plumbing_ablation.py:207:        "R_2e_current_nondim", "R_4e_current_nondim",
+scripts/studies/phase6b_step6_plumbing_ablation.py:211:        "gamma", "theta", "sigma_S_C_per_m2",
+scripts/studies/phase6b_step6_plumbing_ablation.py:213:        "R_2e_current_nondim", "R_4e_current_nondim",
+scripts/studies/phase6b_step6_plumbing_ablation.py:217:        "gamma", "theta", "sigma_S_C_per_m2",
+scripts/studies/phase6b_step6_plumbing_ablation.py:219:        "R_2e_current_nondim", "R_4e_current_nondim",
+scripts/studies/phase6b_step6_plumbing_ablation.py:590:        ("phys_flux_scalar", "_cation_hydrolysis_R_net_scalar_form"),
+scripts/studies/phase6b_step6_plumbing_ablation.py:623:    # Gate 1 — physical R_net actually flows at the expected magnitude.
+scripts/studies/phase6b_step6_plumbing_ablation.py:625:        phys_flux is not None and k_des is not None and gamma is not None
+scripts/studies/phase6b_step6_plumbing_ablation.py:628:        expected = float(k_des) * float(gamma) * float(electrode_area_nondim)
+scripts/studies/phase6b_step6_plumbing_ablation.py:633:            "expected_k_des_gamma_area": expected,
+scripts/studies/phase6b_step6_plumbing_ablation.py:641:    # Gate 2 — H_flux_scalar_form aliases R_net_scalar_form.
+scripts/studies/phase6b_step6_plumbing_ablation.py:653:    # Gate 3 — K_flux_scalar_form == -R_net_scalar_form.
+scripts/studies/phase6b_step6_plumbing_ablation.py:1034:    # reach the *residual* R_net, not just the diagnostic-side pka_factor).
+scripts/studies/phase6b_step6_plumbing_ablation.py:1136:        # Gate 6 (NEW, R4 #1): override reaches residual R_net.
+scripts/studies/phase6b_step6_plumbing_ablation.py:1253:    """Verify the override reaches the residual R_net (gate 6).
+scripts/studies/phase6b_step6_plumbing_ablation.py:1255:    At SS the residual R_net flux scalar must equal k_des·Γ·area to
+scripts/studies/phase6b_step6_plumbing_ablation.py:1264:    if k_des is None or gamma_obs is None or electrode_area_nondim <= 0.0:
+scripts/studies/phase6b_step6_plumbing_ablation.py:1266:    expected = float(k_des) * float(gamma_obs) * float(electrode_area_nondim)
+scripts/studies/phase6b_step6_plumbing_ablation.py:1271:        "expected_k_des_gamma_area": expected,
+scripts/studies/phase6b_step6_plumbing_ablation.py:1330:        "gamma", "theta", "sigma_S_C_per_m2", "cd_mA_cm2",
+scripts/studies/phase6b_step6_plumbing_ablation.py:1332:        "R_2e_current_nondim", "R_4e_current_nondim",
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:19:  derivative**, NOT a partial `∂R_net/∂σ_S`.  Renamed accordingly.
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:31:* ``iv_diagnostic.png`` — three subpanels: σ_S(V), R_net(V),
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:225:    R_2e_current_nondim: float,
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:226:    R_4e_current_nondim: float,
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:256:    o2_consumption_nondim = R_2e_current_nondim + R_4e_current_nondim
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:327:    """``ΔR_net / Δσ_S`` for a single (perturbed, unperturbed) pair.
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:351:    R_0 = record.get("R_net_unperturbed")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:352:    R_lo = record.get("R_net_low")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:353:    R_hi = record.get("R_net_high")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:374:        record["R_net_delta_two_sided"] = d_R_central
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:380:        record["R_net_delta_two_sided"] = None
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:406:            and record.get("R_net_delta_two_sided") is not None
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:409:            record["dRnet_dlogCs"] = record["R_net_delta_two_sided"] / log_step
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:446:    sigma_S = record.get("sigma_S_C_per_m2")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:448:    r2e = record.get("R_2e_current_nondim")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:449:    r4e = record.get("R_4e_current_nondim")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:609:        ``sigma_S_C_per_m2``, ``cd_mA_cm2``, ``R_2e_current_nondim``,
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:610:        ``R_4e_current_nondim``, ``perturbation_converged``,
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:612:        ``R_net_unperturbed``, ``R_net_low``, ``R_net_high``,
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:649:            and rec.get("R_2e_current_nondim") is not None
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:650:            and rec.get("R_4e_current_nondim") is not None
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:653:                R_2e_current_nondim=rec["R_2e_current_nondim"],
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:654:                R_4e_current_nondim=rec["R_4e_current_nondim"],
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:749:        sigma = rec.get("sigma_S_C_per_m2")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:750:        r_net = rec.get("R_net_unperturbed")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:763:        sigma_a = prev_rec.get("sigma_S_C_per_m2")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:764:        sigma_b = next_rec.get("sigma_S_C_per_m2")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:765:        r_a = prev_rec.get("R_net_unperturbed")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:766:        r_b = next_rec.get("R_net_unperturbed")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1125:            records[orig_idx]["lambda_zero_sigma_S_C_per_m2"] = (
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1126:                diag.get("sigma_S_C_per_m2")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1131:            records[orig_idx]["lambda_zero_R_2e_current_nondim"] = (
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1132:                diag.get("R_2e_current_nondim")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1134:            records[orig_idx]["lambda_zero_R_4e_current_nondim"] = (
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1135:                diag.get("R_4e_current_nondim")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1202:def _extract_R_net_nondim(diag: Dict[str, Any]) -> Optional[float]:
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1203:    """``R_net = k_des · Γ`` at steady state (mass balance).
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1213:    return float(k_des) * float(gamma)
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1266:            "R_forward_capped",
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1271:            "sigma_S_C_per_m2", "sigma_S_counts_per_pm2",
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1272:            "R_2e_current_nondim", "R_4e_current_nondim",
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1290:        # R_net at λ=1 SS = k_des · Γ (mass balance).
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1291:        rec["R_net_unperturbed"] = _extract_R_net_nondim(final_base)
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1292:        rec["sigma_S_unperturbed"] = final_base.get("sigma_S_C_per_m2")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1339:            final_lo.get("sigma_S_C_per_m2") if ok_lo else None
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1342:            final_hi.get("sigma_S_C_per_m2") if ok_hi else None
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1344:        rec["R_net_low"] = (
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1345:            _extract_R_net_nondim(final_lo) if ok_lo else None
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1347:        rec["R_net_high"] = (
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1348:            _extract_R_net_nondim(final_hi) if ok_hi else None
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1415:    sigma_S = [r.get("sigma_S_C_per_m2") for r in enriched]
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1416:    R_net = [r.get("R_net_unperturbed") for r in enriched]
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1433:    pairs = _x_y(v, R_net)
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1435:    axes[1].set_ylabel("R_net = k_des·Γ (nondim)")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1439:    axes[2].set_ylabel("|dR_net/dσ_S| (Stern-cap. manifold)")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1550:        r2 = rec.get("R_2e_current_nondim")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1551:        r4 = rec.get("R_4e_current_nondim")
+scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1554:                R_2e_current_nondim=r2, R_4e_current_nondim=r4,
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:15:2. Map the ``(k_hyd, λ) → (σ_S, c_H, Γ, θ, R_net, branch ratio,
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:264:    """At λ=1 SS, ``R_forward_capped − denominator_kprot·γ − k_des·γ ≈ 0``.
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:267:    would otherwise mask (the closed-form makes R_net = k_des·Γ a
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:272:    forward_capped = rung_diag.get("R_forward_capped")
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:283:        - float(k_des) * float(gamma)
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:287:        abs(float(k_des) * gamma_max_eff),
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:324:    r2 = snapshot.get("R_2e_current_nondim")
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:325:    r4 = snapshot.get("R_4e_current_nondim")
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:350:                R_2e_current_nondim=float(r2),
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:351:                R_4e_current_nondim=float(r4),
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:830:        "sigma_S_C_per_m2": -0.01715, "cd_mA_cm2": -3.12,
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:993:        (r[1].get("k_des") or 1.0) * (r[1].get("gamma") or 0.0)
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:1039:    # C. R_net(k_hyd) log-log with k_des*Γ_max ref
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:1044:                 label=f"k_des·Γ_max={gamma_max_nondim:.4f}")
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:1045:    ax_c.set_ylabel("R_net = k_des·Γ (nondim)")
+scripts/studies/phase6b_v10a_phase_A2_v_kin.py:1046:    ax_c.set_title("(C) R_net(k_hyd)")
+Forward/bv_solver/cation_hydrolysis.py:10:    R_net  =  k_hyd · c_M⁺(0) · 10^(−ΔpKa(σ_S)) · (1 − Γ/Γ_max)
+Forward/bv_solver/cation_hydrolysis.py:14:The proton boundary residual gains a source ``+λ · R_net`` (one H⁺
+Forward/bv_solver/cation_hydrolysis.py:16:sink ``−λ · R_net``.  The ``(1 − Γ/Γ_max)`` vacancy factor (Phase 6β
+Forward/bv_solver/cation_hydrolysis.py:49:  for ``R_net`` so the form code can plumb it into both the proton
+Forward/bv_solver/cation_hydrolysis.py:407:      Gate 3D manufactured-source unit tests where ``R_net`` is
+Forward/bv_solver/cation_hydrolysis.py:540:    """Return UFL expression for ``R_net`` (the proton boundary source).
+Forward/bv_solver/cation_hydrolysis.py:544:        R_net  =  k_hyd · c_M⁺ · 10^(−ΔpKa) · (1 − Γ/Γ_max)
+Forward/bv_solver/cation_hydrolysis.py:570:    UFL expression for ``R_net``.
+Forward/bv_solver/cation_hydrolysis.py:598:        R_net_forward = k_hyd · c_M⁺ · 10^(−ΔpKa) · (1 − Γ/Γ_max)
+Forward/bv_solver/cation_hydrolysis.py:604:    average of this expression (``R_forward_capped``) and the
+Forward/bv_solver/cation_hydrolysis.py:736:        F_Γ  =  λ · (R_net − k_des · Γ) · v_R · ds_e
+Forward/bv_solver/cation_hydrolysis.py:834:    # is set in conv_cfg, R_net in the residual is replaced by a fixed
+Forward/bv_solver/cation_hydrolysis.py:837:    # override replaces *the whole* R_net (forward AND backward) with a
+Forward/bv_solver/cation_hydrolysis.py:848:        # R_net = const (Γ-independent).  Steady state at λ-blended
+Forward/bv_solver/cation_hydrolysis.py:868:        # Physical R_net: integrate the uncapped forward branch (F₀)
+Forward/bv_solver/cation_hydrolysis.py:987:    * ``R_forward_capped`` — boundary-averaged capped forward branch
+Forward/bv_solver/cation_hydrolysis.py:995:    * ``sigma_S_C_per_m2`` — boundary-averaged signed Stern surface
+Forward/bv_solver/cation_hydrolysis.py:1080:    diag["sigma_S_C_per_m2"] = sigma_S_avg
+Forward/bv_solver/cation_hydrolysis.py:1098:                "R_2e_current_nondim"
+Forward/bv_solver/cation_hydrolysis.py:1100:                else "R_4e_current_nondim"
+Forward/bv_solver/cation_hydrolysis.py:1112:    # Phase 6β step 6 — manufactured mode bypasses the physical R_net
+Forward/bv_solver/cation_hydrolysis.py:1130:            "R_forward_capped",
+Forward/bv_solver/cation_hydrolysis.py:1172:    diag["R_forward_capped"] = (
+Forward/bv_solver/cation_hydrolysis.py:1368:                R4e_measured = diag.get("R_4e_current_nondim")
+
+exec
+/bin/zsh -lc "jq '.per_k_hyd_records[] | select(.k_hyd_target==0.1) | .rungs[] | select(.lambda_hydrolysis==1) | {gamma,theta,k_des,R_net: .R_net_unperturbed, R_forward_capped, R_2e_current_nondim, R_4e_current_nondim, sigma_S_C_per_m2, cd_mA_cm2}' StudyResults/phase6b_v10a_phase_A2_v_kin/phase_a2_v_kin.json" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+exec
+/bin/zsh -lc "jq '.per_k_hyd_records[] | select(.k_hyd_target==0.001) | .rungs[] | select(.lambda_hydrolysis==1) | {gamma,theta,k_des,R_net: .R_net_unperturbed, R_forward_capped, R_2e_current_nondim, R_4e_current_nondim, sigma_S_C_per_m2, cd_mA_cm2}' StudyResults/phase6b_v10a_phase_A2_v_kin/phase_a2_v_kin.json" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+{
+  "gamma": 0.04692424386039794,
+  "theta": 0.9983881672425093,
+  "k_des": 1.0,
+  "R_net": null,
+  "R_forward_capped": 0.04692445593812764,
+  "R_2e_current_nondim": 0.7846924827097732,
+  "R_4e_current_nondim": 3.1574614723520313,
+  "sigma_S_C_per_m2": -0.017148916520424363,
+  "cd_mA_cm2": -3.123639936370567
+}
+
+ succeeded in 0ms:
+{
+  "gamma": 0.040466896857735246,
+  "theta": 0.8609978054837286,
+  "k_des": 1.0,
+  "R_net": null,
+  "R_forward_capped": 0.040467079715245664,
+  "R_2e_current_nondim": 0.7847319562714833,
+  "R_4e_current_nondim": 3.1563933358057703,
+  "sigma_S_C_per_m2": -0.017148927103272066,
+  "cd_mA_cm2": -3.122717400943125
+}
+
+codex
+The new nondim section mostly points in the right direction, but one new hard problem popped up: the plan now imposes a negative/cathodic sign on `R_net`, while the current diagnostic definition is explicitly `R_net = k_des · Γ`, positive by construction. That would make the C_S bracket fail for the wrong reason unless fixed.
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/cation_hydrolysis.py | sed -n '540,610p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+   540	    """Return UFL expression for ``R_net`` (the proton boundary source).
+   541	
+   542	    Layout (Phase 6β v10a)::
+   543	
+   544	        R_net  =  k_hyd · c_M⁺ · 10^(−ΔpKa) · (1 − Γ/Γ_max)
+   545	                  −  k_prot · c_H · Γ / δ_OHP
+   546	
+   547	    Γ is read from ``bundle.gamma_func`` (an R-space *coefficient*,
+   548	    not a Newton unknown).  The orchestrator updates Γ between
+   549	    continuation rungs via :func:`update_gamma_from_solution`.  The
+   550	    Langmuir vacancy factor ``(1 − Γ/Γ_max)`` caps the forward rate
+   551	    once the OHP is saturated with adsorbed MOH (v10a — 2026-05-10).
+   552	    In the limit ``Γ_max → ∞`` the factor goes to 1 and the residual
+   553	    is byte-equivalent to the v9 formulation.
+   554	
+   555	    Parameters
+   556	    ----------
+   557	    bundle
+   558	        Output of :func:`build_cation_hydrolysis_terms`.
+   559	    c_M_bdy_expr
+   560	        UFL expression for ``c_M⁺`` evaluated at the electrode
+   561	        boundary.  Caller passes ``ci[counterion_idx]`` from the
+   562	        forms module.
+   563	    c_H_bdy_expr
+   564	        UFL expression for ``c_H`` at the electrode boundary.
+   565	    pka_shift_expr
+   566	        Output of :func:`build_pka_shift`.  Constant(0.0) at Gate 3B.
+   567	
+   568	    Returns
+   569	    -------
+   570	    UFL expression for ``R_net``.
+   571	    """
+   572	    pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
+   573	    vacancy_factor = (
+   574	        fd.Constant(1.0) - bundle.gamma_func / bundle.gamma_max_func
+   575	    )
+   576	    R_forward = (
+   577	        bundle.k_hyd_func * c_M_bdy_expr * pka_factor * vacancy_factor
+   578	    )
+   579	    R_backward = (
+   580	        bundle.k_prot_func
+   581	        * c_H_bdy_expr
+   582	        * bundle.gamma_func
+   583	        / bundle.delta_ohp_func
+   584	    )
+   585	    return R_forward - R_backward
+   586	
+   587	
+   588	def build_forward_branch(
+   589	    *,
+   590	    bundle: CationHydrolysisBundle,
+   591	    c_M_bdy_expr: Any,
+   592	    pka_shift_expr: Any,
+   593	):
+   594	    """Return UFL expression for the forward branch including the Langmuir cap.
+   595	
+   596	    Phase 6β v10a::
+   597	
+   598	        R_net_forward = k_hyd · c_M⁺ · 10^(−ΔpKa) · (1 − Γ/Γ_max)
+   599	
+   600	    Used by :func:`update_gamma_from_solution` to compute the
+   601	    boundary integral that drives the closed-form Γ_ss formula.
+   602	    Returning the capped branch (rather than the uncapped ``F₀``) is
+   603	    deliberate — the rung_callback diagnostics expose both the
+   604	    average of this expression (``R_forward_capped``) and the
+   605	    average of the uncapped ``F₀`` separately so observers can see
+   606	    how close the OHP is to saturation.
+   607	    """
+   608	    pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
+   609	    vacancy_factor = (
+   610	        fd.Constant(1.0) - bundle.gamma_func / bundle.gamma_max_func
+
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/cation_hydrolysis.py | sed -n '728,745p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+   728	def update_gamma_from_solution(
+   729	    ctx: dict, *, electrode_marker: Optional[int] = None,
+   730	) -> float:
+   731	    """Update ``bundle.gamma_func`` from the current ``ctx['U']``.
+   732	
+   733	    Phase 6β v10a — Langmuir-capped closed form.  Solving the smooth
+   734	    λ-blended residual at steady state::
+   735	
+   736	        F_Γ  =  λ · (R_net − k_des · Γ) · v_R · ds_e
+   737	                − (1 − λ) · Γ · v_R · ds_e
+   738	
+   739	    with the capped forward branch
+   740	    ``R_forward = F₀ · (1 − Γ/Γ_max)`` (Phase 6β v10a vacancy factor)
+   741	    and the unchanged Γ-linear reverse branch
+   742	    ``R_back = k_prot · c_H · Γ / δ`` gives::
+   743	
+   744	        Γ_ss(λ)  =  λ · F₀
+   745	                    /  (λ · k_des + (1 − λ)
+
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/cation_hydrolysis.py | sed -n '1,25p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+     1	"""Cation hydrolysis closure (Phase 6β v9 Gates 3 + 4, v10a Langmuir cap).
+     2	
+     3	Adds a global surface coverage ``Γ_MOH`` representing the cation-
+     4	hydrolysis reservoir at the OHP::
+     5	
+     6	    M⁺(H₂O)ₙ + H₂O  ⇌  MOH⁰(H₂O)ₙ₋₁ + H₃O⁺                     (Singh 2016 Eq. 2)
+     7	
+     8	with field-dependent rate balance::
+     9	
+    10	    R_net  =  k_hyd · c_M⁺(0) · 10^(−ΔpKa(σ_S)) · (1 − Γ/Γ_max)
+    11	              −  k_prot · c_H(0) · Γ / δ_OHP                       (forward − reverse)
+    12	    R_des  =  k_des · Γ                                            (desorption)
+    13	
+    14	The proton boundary residual gains a source ``+λ · R_net`` (one H⁺
+    15	produced per hydrolysis event); the cation boundary residual gains a
+    16	sink ``−λ · R_net``.  The ``(1 − Γ/Γ_max)`` vacancy factor (Phase 6β
+    17	v10a, 2026-05-10) caps surface coverage at one monolayer of MOH at
+    18	the OHP: without it, every v9 result at converged ``k_hyd ≥ 1e-3`` sat
+    19	at Γ ≈ 6+ monolayers (physically invalid; ~64 monolayers at
+    20	``k_hyd=1e-2``).  Steady state for Γ becomes::
+    21	
+    22	    Γ_ss(λ)  =  λ · F₀
+    23	                /  (λ · k_des + (1 − λ) + λ · k_prot · ⟨c_H⟩ / δ_OHP
+    24	                    + λ · F₀ / Γ_max)
+    25	
+
+exec
+/bin/zsh -lc "nl -ba scripts/studies/phase6b_v10a_v_sweep_diagnostic.py | sed -n '1200,1215p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+  1200	
+  1201	
+  1202	def _extract_R_net_nondim(diag: Dict[str, Any]) -> Optional[float]:
+  1203	    """``R_net = k_des · Γ`` at steady state (mass balance).
+  1204	
+  1205	    Returns nondim flux value, or None if Γ is missing.
+  1206	    """
+  1207	    if diag is None:
+  1208	        return None
+  1209	    gamma = diag.get("gamma")
+  1210	    k_des = diag.get("k_des")
+  1211	    if gamma is None or k_des is None:
+  1212	        return None
+  1213	    return float(k_des) * float(gamma)
+  1214	
+  1215	
+
+exec
+/bin/zsh -lc "rg -n \"D_O2|D_K|DEFAULT_SULFATE|K\\+|D_REF\" scripts/_bv_common.py Forward -g'*.py'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+scripts/_bv_common.py:73:D_O2 = 1.9e-9
+scripts/_bv_common.py:132:D_REF = D_O2                # m²/s (O₂ diffusivity as reference)
+scripts/_bv_common.py:134:K_SCALE = D_REF / L_REF     # m/s (velocity scale for k0 nondimensionalization)
+scripts/_bv_common.py:141:D_O2_HAT = D_O2 / D_REF
+scripts/_bv_common.py:142:D_H2O2_HAT = D_H2O2 / D_REF
+scripts/_bv_common.py:143:D_HP_HAT = D_HP / D_REF
+scripts/_bv_common.py:144:D_CLO4_HAT = D_CLO4 / D_REF
+scripts/_bv_common.py:191:# C_SCALE / D_REF / L_REF are defined above; KW_HAT / D_OH_HAT / A_OH_HAT
+scripts/_bv_common.py:194:D_OH_HAT = D_OH / D_REF
+scripts/_bv_common.py:215:    d_ref: float = D_REF,
+scripts/_bv_common.py:376:    d_vals_hat=[D_O2_HAT, D_H2O2_HAT, D_HP_HAT],
+scripts/_bv_common.py:399:    d_vals_hat=[D_O2_HAT, D_H2O2_HAT, D_HP_HAT, D_CLO4_HAT],
+scripts/_bv_common.py:511:        "diffusivity_scale_m2_s": D_REF,
+scripts/_bv_common.py:516:        "time_scale_s": L_REF**2 / D_REF,
+scripts/_bv_common.py:726:DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC: Dict[str, Any] = {
+scripts/_bv_common.py:759:D_KPLUS = 1.96e-9           # m²/s — CRC 25 °C (Atkins / Robinson-Stokes)
+scripts/_bv_common.py:760:D_KPLUS_HAT = D_KPLUS / D_REF
+scripts/_bv_common.py:774:DEFAULT_SULFATE_ANALYTIC_BIKERMAN_FOR_K2SO4: Dict[str, Any] = (
+scripts/_bv_common.py:775:    DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC
+scripts/_bv_common.py:790:    "label": "K+",
+scripts/_bv_common.py:799:# Pair with ``boltzmann_counterions=[DEFAULT_SULFATE_ANALYTIC_BIKERMAN_FOR_K2SO4]``
+scripts/_bv_common.py:803:    z_vals=[0, 0, 1, 1],            # both H+ and K+ at z=+1 (the Gate 1 case)
+scripts/_bv_common.py:804:    d_vals_hat=[D_O2_HAT, D_H2O2_HAT, D_HP_HAT, D_KPLUS_HAT],
+scripts/_bv_common.py:807:    stoichiometry_r1=[-1, +1, -2, 0],   # K+ inert in R1
+scripts/_bv_common.py:808:    stoichiometry_r2=[ 0, -1, -2, 0],   # K+ inert in R2 (legacy R2)
+scripts/_bv_common.py:881:        "stoichiometry": [-1, +1, -2, 0],   # K+ inert
+scripts/_bv_common.py:885:        "stoichiometry": [-1,  0, -4, 0],   # K+ inert
+scripts/_bv_common.py:922:    "K+": {
+scripts/_bv_common.py:953:    cation: str = "K+",
+scripts/_bv_common.py:1010:    cation: str = "K+",
+scripts/_bv_common.py:1027:        ``"K+"``, ``"Cs+"``).  Determines z_eff, r_M, pKa_bulk.
+scripts/_bv_common.py:1187:        (≈ 6.944e-9), ``D_OH_HAT`` (= 5.273e-9 / D_REF), and ``A_OH_HAT``
+Forward/bv_solver/cation_hydrolysis.py:1209:    # F0 growth in the cathodic region is dominated by K+ enrichment vs.
+Forward/bv_solver/cation_hydrolysis.py:1210:    # Singh ΔpKa (R3 #1: K+ enrichment is already load-bearing in v10a).
+Forward/bv_solver/cation_hydrolysis.py:1220:        # Bulk c_K reference for the "K+-stayed-bulk" counterfactual.
+Forward/bv_solver/cation_hydrolysis.py:1241:            # Counterfactual: K+ never depleted/enriched at the OHP.
+Forward/bv_solver/config.py:234:    #   apply_k_sink : gates the cation-hydrolysis K+ residual term.
+
+exec
+/bin/zsh -lc 'rg -n "import firedrake|fd =|try:.*firedrake" Forward/bv_solver/cation_hydrolysis.py' in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+77:import firedrake as fd
+
+exec
+/bin/zsh -lc "nl -ba scripts/studies/phase6b_v10a_phase_A2_v_kin.py | sed -n '780,850p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+   780	        elif augmented_rungs or partial_rungs:
+   781	            exception_phase = "lambda_positive"
+   782	        else:
+   783	            exception_phase = "unknown"
+   784	
+   785	    return {
+   786	        "k_hyd_target": float(k_hyd_target),
+   787	        "ladder_converged": ladder_converged,
+   788	        "exception_phase": exception_phase,
+   789	        "exception": exception_str,
+   790	        "wall_seconds": float(time.time() - t_start),
+   791	        "rungs": augmented_rungs,
+   792	        "partial_rungs": partial_rungs,
+   793	    }
+   794	
+   795	
+   796	def _extract_lambda_zero_baseline(
+   797	    *,
+   798	    warm_walk_records: List[Dict[str, Any]],
+   799	    v_kin: float,
+   800	) -> Optional[Dict[str, Any]]:
+   801	    """Find the V_kin entry in the warm-walk records.
+   802	
+   803	    Plan: λ=0 baseline at V_kin is captured ONCE during the warm-walk
+   804	    via :func:`_walk_lambda_zero_capture_snapshots`'s per_point_callback;
+   805	    stored separately as ``lambda_zero_baseline_at_v_kin`` in the JSON.
+   806	    """
+   807	    for rec in warm_walk_records:
+   808	        v = rec.get("v_rhe")
+   809	        if v is None:
+   810	            continue
+   811	        if abs(float(v) - float(v_kin)) < 1e-9:
+   812	            return dict(rec)
+   813	    return None
+   814	
+   815	
+   816	def _convergence_audit(
+   817	    per_k_hyd_records: List[Dict[str, Any]],
+   818	    lambda_zero_baseline_at_v_kin: Optional[Dict[str, Any]],
+   819	) -> Dict[str, Any]:
+   820	    """Run the three-criterion convergence audit per plan §Convergence audit."""
+   821	    audit: Dict[str, Any] = {
+   822	        "baseline_reproduction": None,
+   823	        "transition_coverage": None,
+   824	        "saturation_coverage": None,
+   825	        "overall_pass": None,
+   826	    }
+   827	    # Baseline reproduction at k_hyd=1e-3 — compare λ=1 rung to v10a' record.
+   828	    baseline_target = {
+   829	        "gamma": 0.0405, "theta": 0.861,
+   830	        "sigma_S_C_per_m2": -0.01715, "cd_mA_cm2": -3.12,
+   831	    }
+   832	    base_rec = None
+   833	    for rec in per_k_hyd_records:
+   834	        if abs(float(rec["k_hyd_target"]) - 1e-3) <= 1e-30:
+   835	            base_rec = rec
+   836	            break
+   837	    if base_rec is not None:
+   838	        lam1 = lambda1_record(base_rec)
+   839	        if lam1 is not None and lam1.get("snes_converged", False):
+   840	            diffs: Dict[str, float] = {}
+   841	            for key, ref in baseline_target.items():
+   842	                obs = lam1.get(key)
+   843	                if obs is None:
+   844	                    diffs[key] = None
+   845	                else:
+   846	                    diffs[key] = (
+   847	                        abs(float(obs) - ref)
+   848	                        / max(abs(ref), 1e-30)
+   849	                    )
+   850	            picard_ok = lam1.get("picard_status") in (
+
+exec
+/bin/zsh -lc "nl -ba scripts/studies/phase6b_v10a_phase_A2_v_kin.py | sed -n '310,360p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+   310	
+   311	    Does NOT mutate the input ``rung_diag``.
+   312	    """
+   313	    snapshot: Dict[str, Any] = dict(rung_diag)
+   314	    snapshot["picard_status"] = classify_picard_status(
+   315	        list(gamma_picard_history or []), bool(snes_converged),
+   316	    )
+   317	
+   318	    cd_obs = snapshot.get("cd_observable")
+   319	    snapshot["cd_mA_cm2"] = (
+   320	        -float(i_scale) * float(cd_obs) if cd_obs is not None else None
+   321	    )
+   322	    snapshot["pc_mA_cm2"] = pc_mA_cm2
+   323	
+   324	    r2 = snapshot.get("R_2e_current_nondim")
+   325	    r4 = snapshot.get("R_4e_current_nondim")
+   326	    if r2 is not None and r4 is not None and abs(float(r2) + float(r4)) > 1e-30:
+   327	        denom = float(r2) + float(r4)
+   328	        x2 = float(r2) / denom
+   329	        x4 = float(r4) / denom
+   330	        snapshot["x_2e"] = x2
+   331	        snapshot["x_4e"] = x4
+   332	        snapshot["H2O2_selectivity_pct"] = 100.0 * x2
+   333	    else:
+   334	        snapshot["x_2e"] = None
+   335	        snapshot["x_4e"] = None
+   336	        snapshot["H2O2_selectivity_pct"] = None
+   337	
+   338	    # o2_flux_levich_ratio — lazy-imported because the helper lives in
+   339	    # the v10a' driver and we want this module importable from tests.
+   340	    if (
+   341	        r2 is not None and r4 is not None
+   342	        and electrode_area_nondim > 0.0
+   343	        and domain_height_hat > 0.0
+   344	    ):
+   345	        try:
+   346	            from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+   347	                _compute_o2_flux_levich_ratio,
+   348	            )
+   349	            snapshot["o2_flux_levich_ratio"] = _compute_o2_flux_levich_ratio(
+   350	                R_2e_current_nondim=float(r2),
+   351	                R_4e_current_nondim=float(r4),
+   352	                electrode_area_nondim=float(electrode_area_nondim),
+   353	                domain_height_hat=float(domain_height_hat),
+   354	            )
+   355	        except Exception as exc:                              # pragma: no cover
+   356	            snapshot["o2_flux_levich_ratio"] = None
+   357	            snapshot["o2_flux_levich_ratio_error"] = (
+   358	                f"{type(exc).__name__}: {exc}"
+   359	            )
+   360	    else:
+
+exec
+/bin/zsh -lc 'head -n 40 Forward/bv_solver/cation_hydrolysis.py' in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+"""Cation hydrolysis closure (Phase 6β v9 Gates 3 + 4, v10a Langmuir cap).
+
+Adds a global surface coverage ``Γ_MOH`` representing the cation-
+hydrolysis reservoir at the OHP::
+
+    M⁺(H₂O)ₙ + H₂O  ⇌  MOH⁰(H₂O)ₙ₋₁ + H₃O⁺                     (Singh 2016 Eq. 2)
+
+with field-dependent rate balance::
+
+    R_net  =  k_hyd · c_M⁺(0) · 10^(−ΔpKa(σ_S)) · (1 − Γ/Γ_max)
+              −  k_prot · c_H(0) · Γ / δ_OHP                       (forward − reverse)
+    R_des  =  k_des · Γ                                            (desorption)
+
+The proton boundary residual gains a source ``+λ · R_net`` (one H⁺
+produced per hydrolysis event); the cation boundary residual gains a
+sink ``−λ · R_net``.  The ``(1 − Γ/Γ_max)`` vacancy factor (Phase 6β
+v10a, 2026-05-10) caps surface coverage at one monolayer of MOH at
+the OHP: without it, every v9 result at converged ``k_hyd ≥ 1e-3`` sat
+at Γ ≈ 6+ monolayers (physically invalid; ~64 monolayers at
+``k_hyd=1e-2``).  Steady state for Γ becomes::
+
+    Γ_ss(λ)  =  λ · F₀
+                /  (λ · k_des + (1 − λ) + λ · k_prot · ⟨c_H⟩ / δ_OHP
+                    + λ · F₀ / Γ_max)
+
+where ``F₀ = k_hyd · ⟨c_M · 10^(−ΔpKa)⟩`` is the boundary-area-averaged
+forward forcing and ``⟨c_H⟩`` is the boundary-averaged proton
+concentration.  In the limit ``Γ_max → ∞`` the cap term ``λ · F₀ / Γ_max``
+vanishes and the formula reduces to the v9 Γ_ss expression.
+
+Architecture mirrors :mod:`Forward.bv_solver.water_ionization`'s
+``kw_eff_func`` *coefficient* pattern:
+
+* Γ is an R-space ``Function`` that the Newton residual reads as a
+  coefficient.  The mixed function space stays at the legacy
+  ``species + phi`` layout (no extra Newton unknown for Γ).  This
+  side-steps the Firedrake R-space-in-mixed-space matnest format
+  limitation that breaks monolithic LU assembly.
+* Between continuation rungs the orchestrator calls
+  :func:`update_gamma_from_solution` to recompute Γ from the
+
+codex
+1. **Your new `R_net` sign convention is wrong.**  
+WHAT: D7-D1 says “R_net cathodic at V_kin (negative)” and D7-D4 talks about R_net sign flips.  
+WHY: Current code defines diagnostic `R_net = k_des · Γ`, positive by construction (`phase6b_v10a_v_sweep_diagnostic.py:1202-1213`). The cation residual gets the negative sign, but `R_net` itself is the hydrolysis/proton-source scalar. This gate will fail correct runs.  
+WHAT TO DO: Replace with `R_net > 0` for physical hydrolysis source, or apply cathodic/anodic sign checks only to `cd_mA_cm2` / branch currents.
+
+2. **Point #2 response has an Eyring math error.**  
+WHAT: You state ΔG_des ≈ 0.9 eV gives `k_des_phys ≈ 0.2/s ≈ 1 nondim`.  
+WHY: At 298 K, `kBT/h * exp(-0.9 eV/kBT)` is about `0.004-0.006/s`, not `0.2/s`; nondim is about `0.02-0.03`, not 1.0. A nondim value near 1 corresponds closer to ~0.8 eV.  
+WHAT TO DO: Recompute the Eyring table and use it consistently in §3.0, §3.3, metadata prior, and brackets.
+
+3. **Your k_des bracket no longer covers your stated engineering prior.**  
+WHAT: §3.3 says engineering prior `k_des_nondim ∈ [10^-2, 10^2]`, but D7-D3 and D7-D4 only sweep `{0.1, 1, 10}`.  
+WHY: If the prior is four decades wide, the bracket evidence omits both endpoints.  
+WHAT TO DO: Either narrow the prior to `[0.1, 10]` with corrected Eyring support, or include `{0.01, 0.1, 1, 10, 100}` in at least an analytic/cheap closed-form bracket.
+
+4. **Metadata schema says every value is nondim, but `C_S` is dimensional.**  
+WHAT: D1 schema comment says `"value": float # nondim`, while §3.0 says `C_S` remains dimensional F/m².  
+WHY: This makes the metadata block internally false for one of the three calibrated parameters.  
+WHAT TO DO: Add `units` / `is_nondim` fields, e.g. `{"value": 0.20, "units": "F/m^2"}` for `C_S`.
+
+5. **No cross-file k_des consistency test.**  
+WHAT: D3 adds solver `K_DES_NONDIM_V10B`; D4' adds script `V10B_KINETICS["k_des_nondim"]`; D8 only explicitly tests gamma factory defaults.  
+WHY: Solver fallback and driver default can silently diverge. That was exactly the class of bug D3 was supposed to close.  
+WHAT TO DO: Add a fast test asserting solver `K_DES_NONDIM_V10B == V10B_KINETICS["k_des_nondim"]`, plus metadata value equality.
+
+6. **“No aliases” is overcorrected and will break existing callers.**  
+WHAT: D3/D4 rename `GAMMA_MAX_HAT_SMOKE` away, but current v9/v10a tests and scripts still import it.  
+WHY: You fixed provenance but risk breaking historical tests/scripts in the same PR.  
+WHAT TO DO: Either update every caller found by grep, or keep a provenance-safe alias `GAMMA_MAX_HAT_SMOKE = GAMMA_MAX_HAT_V10A_SMOKE` with a deprecation comment. The forbidden alias is `SMOKE = V10B`, not `SMOKE = frozen V10A`.
+
+7. **Same alias problem for `SMOKE_KINETICS`.**  
+WHAT: D4' renames `SMOKE_KINETICS` to `SMOKE_KINETICS_V10A`, but A.2 and step 6 currently import `SMOKE_KINETICS`.  
+WHY: If not all importers are updated atomically, Phase B fails before any science runs.  
+WHAT TO DO: Either keep `SMOKE_KINETICS = SMOKE_KINETICS_V10A` as a historical alias, or add an explicit grep/update step for all imports.
+
+8. **Dual-mode CLI is contradictory.**  
+WHAT: D4'/D19 make `--use-v10a-smoke` part of provenance, but Phase B step 7 calls it “optional convenience; defer otherwise.”  
+WHY: If JSON keys depend on dual-mode behavior, the flag is not optional.  
+WHAT TO DO: Decide: either v10b drivers are always v10b-only and historical reproduction uses old constants manually, or the dual-mode CLI is required and tested.
+
+9. **D5 split is not implemented in the existing A.2 audit.**  
+WHAT: The current `_convergence_audit` has hardcoded v10a baseline targets for `gamma`, `theta`, `sigma_S_C_per_m2`, and `cd_mA_cm2`.  
+WHY: Your D5.SOFT deltas can still surface as audit failures unless the code is changed to separate hard convergence gates from informative deltas.  
+WHAT TO DO: Add a Phase B/C step to refactor `_convergence_audit` into `hard_gates` and `soft_deltas`, and test that v10b physical movement does not fail the hard audit.
+
+10. **σ_S monotonicity is still too hard as a pass/fail gate.**  
+WHAT: D7-D1 requires strictly decreasing signed σ_S across C_S.  
+WHY: The heuristic is plausible, but the coupled BV/PNP solve can perturb it; “strictly” also has no tolerance. This is a sensitivity diagnostic, not a mathematical invariant.  
+WHAT TO DO: Use tolerance-based smoothness/expected-trend reporting. Escalate only on large non-smooth jumps or sign inconsistency, not tiny monotonicity violations.
+
+11. **D7-D4 says “anchored at C_S = 0.20,” violating the locked anchor pattern.**  
+WHAT: D7-D4 text says the Γ_max × k_des matrix is “anchored at C_S = 0.20.”  
+WHY: The hard invariant is build anchor at 0.10, then runtime-bump to target 0.20. Direct 0.20 anchor is known fragile.  
+WHAT TO DO: Rewrite D7-D4 to explicitly use the two-stage 0.10 → 0.20 pattern.
+
+12. **D7-D4 sign-floor condition mixes unrelated quantities.**  
+WHAT: “No sign flip on R_net that crosses both `|R_4e| > 1e-6` and the sign convention.”  
+WHY: R_net sign stability should use an R_net magnitude floor, not R4e. Also R_net should be positive, per issue 1.  
+WHAT TO DO: Use `abs(R_net) > floor` for R_net sign checks; use R4e floors only for R4e sign/branch diagnostics.
+
+13. **The Singh `K_eq = k_hyd/k_prot` statement is still too simple.**  
+WHAT: §3.3 says Singh pKa means `K_eq = k_hyd/k_prot`.  
+WHY: In the implemented residual, reverse protonation is `k_prot * c_H * Γ / δ`; any equilibrium audit must carry concentration, surface-volume, δ, and nondim factors.  
+WHAT TO DO: Reword as “Singh may constrain the hydrolysis/protonation balance after deriving the model-specific dimensional identity,” not a bare ratio.
+
+14. **D7-D2 skip rule is inconsistent with D7-D4.**  
+WHAT: D7-D2 says skip Γ_max bracket if a single literature value is locked, but D7-D4 always sweeps Γ_max/2 and Γmax·2.  
+WHY: Not fatal, but the DoD is confusing: Γmax sensitivity is both conditional and mandatory.  
+WHAT TO DO: Drop D7-D2 or define it as an expanded Γmax-only sweep beyond the always-required coupled matrix.
+
+15. **The metadata lives in a Firedrake-importing module.**  
+WHAT: D1 places `V10B_CALIBRATION_METADATA` in `Forward/bv_solver/cation_hydrolysis.py`, which imports `firedrake` at module import.  
+WHY: Scripts/tests that only need metadata may now require Firedrake importability. Existing tests may tolerate this, but metadata is pure provenance and should not depend on FE imports.  
+WHAT TO DO: Prefer a lightweight module, or mirror/export it through `_bv_common.py` if every consumer already sets up the Firedrake environment.
+
+VERDICT: ISSUES_REMAIN
+tokens used
+140,925
+1. **Your new `R_net` sign convention is wrong.**  
+WHAT: D7-D1 says “R_net cathodic at V_kin (negative)” and D7-D4 talks about R_net sign flips.  
+WHY: Current code defines diagnostic `R_net = k_des · Γ`, positive by construction (`phase6b_v10a_v_sweep_diagnostic.py:1202-1213`). The cation residual gets the negative sign, but `R_net` itself is the hydrolysis/proton-source scalar. This gate will fail correct runs.  
+WHAT TO DO: Replace with `R_net > 0` for physical hydrolysis source, or apply cathodic/anodic sign checks only to `cd_mA_cm2` / branch currents.
+
+2. **Point #2 response has an Eyring math error.**  
+WHAT: You state ΔG_des ≈ 0.9 eV gives `k_des_phys ≈ 0.2/s ≈ 1 nondim`.  
+WHY: At 298 K, `kBT/h * exp(-0.9 eV/kBT)` is about `0.004-0.006/s`, not `0.2/s`; nondim is about `0.02-0.03`, not 1.0. A nondim value near 1 corresponds closer to ~0.8 eV.  
+WHAT TO DO: Recompute the Eyring table and use it consistently in §3.0, §3.3, metadata prior, and brackets.
+
+3. **Your k_des bracket no longer covers your stated engineering prior.**  
+WHAT: §3.3 says engineering prior `k_des_nondim ∈ [10^-2, 10^2]`, but D7-D3 and D7-D4 only sweep `{0.1, 1, 10}`.  
+WHY: If the prior is four decades wide, the bracket evidence omits both endpoints.  
+WHAT TO DO: Either narrow the prior to `[0.1, 10]` with corrected Eyring support, or include `{0.01, 0.1, 1, 10, 100}` in at least an analytic/cheap closed-form bracket.
+
+4. **Metadata schema says every value is nondim, but `C_S` is dimensional.**  
+WHAT: D1 schema comment says `"value": float # nondim`, while §3.0 says `C_S` remains dimensional F/m².  
+WHY: This makes the metadata block internally false for one of the three calibrated parameters.  
+WHAT TO DO: Add `units` / `is_nondim` fields, e.g. `{"value": 0.20, "units": "F/m^2"}` for `C_S`.
+
+5. **No cross-file k_des consistency test.**  
+WHAT: D3 adds solver `K_DES_NONDIM_V10B`; D4' adds script `V10B_KINETICS["k_des_nondim"]`; D8 only explicitly tests gamma factory defaults.  
+WHY: Solver fallback and driver default can silently diverge. That was exactly the class of bug D3 was supposed to close.  
+WHAT TO DO: Add a fast test asserting solver `K_DES_NONDIM_V10B == V10B_KINETICS["k_des_nondim"]`, plus metadata value equality.
+
+6. **“No aliases” is overcorrected and will break existing callers.**  
+WHAT: D3/D4 rename `GAMMA_MAX_HAT_SMOKE` away, but current v9/v10a tests and scripts still import it.  
+WHY: You fixed provenance but risk breaking historical tests/scripts in the same PR.  
+WHAT TO DO: Either update every caller found by grep, or keep a provenance-safe alias `GAMMA_MAX_HAT_SMOKE = GAMMA_MAX_HAT_V10A_SMOKE` with a deprecation comment. The forbidden alias is `SMOKE = V10B`, not `SMOKE = frozen V10A`.
+
+7. **Same alias problem for `SMOKE_KINETICS`.**  
+WHAT: D4' renames `SMOKE_KINETICS` to `SMOKE_KINETICS_V10A`, but A.2 and step 6 currently import `SMOKE_KINETICS`.  
+WHY: If not all importers are updated atomically, Phase B fails before any science runs.  
+WHAT TO DO: Either keep `SMOKE_KINETICS = SMOKE_KINETICS_V10A` as a historical alias, or add an explicit grep/update step for all imports.
+
+8. **Dual-mode CLI is contradictory.**  
+WHAT: D4'/D19 make `--use-v10a-smoke` part of provenance, but Phase B step 7 calls it “optional convenience; defer otherwise.”  
+WHY: If JSON keys depend on dual-mode behavior, the flag is not optional.  
+WHAT TO DO: Decide: either v10b drivers are always v10b-only and historical reproduction uses old constants manually, or the dual-mode CLI is required and tested.
+
+9. **D5 split is not implemented in the existing A.2 audit.**  
+WHAT: The current `_convergence_audit` has hardcoded v10a baseline targets for `gamma`, `theta`, `sigma_S_C_per_m2`, and `cd_mA_cm2`.  
+WHY: Your D5.SOFT deltas can still surface as audit failures unless the code is changed to separate hard convergence gates from informative deltas.  
+WHAT TO DO: Add a Phase B/C step to refactor `_convergence_audit` into `hard_gates` and `soft_deltas`, and test that v10b physical movement does not fail the hard audit.
+
+10. **σ_S monotonicity is still too hard as a pass/fail gate.**  
+WHAT: D7-D1 requires strictly decreasing signed σ_S across C_S.  
+WHY: The heuristic is plausible, but the coupled BV/PNP solve can perturb it; “strictly” also has no tolerance. This is a sensitivity diagnostic, not a mathematical invariant.  
+WHAT TO DO: Use tolerance-based smoothness/expected-trend reporting. Escalate only on large non-smooth jumps or sign inconsistency, not tiny monotonicity violations.
+
+11. **D7-D4 says “anchored at C_S = 0.20,” violating the locked anchor pattern.**  
+WHAT: D7-D4 text says the Γ_max × k_des matrix is “anchored at C_S = 0.20.”  
+WHY: The hard invariant is build anchor at 0.10, then runtime-bump to target 0.20. Direct 0.20 anchor is known fragile.  
+WHAT TO DO: Rewrite D7-D4 to explicitly use the two-stage 0.10 → 0.20 pattern.
+
+12. **D7-D4 sign-floor condition mixes unrelated quantities.**  
+WHAT: “No sign flip on R_net that crosses both `|R_4e| > 1e-6` and the sign convention.”  
+WHY: R_net sign stability should use an R_net magnitude floor, not R4e. Also R_net should be positive, per issue 1.  
+WHAT TO DO: Use `abs(R_net) > floor` for R_net sign checks; use R4e floors only for R4e sign/branch diagnostics.
+
+13. **The Singh `K_eq = k_hyd/k_prot` statement is still too simple.**  
+WHAT: §3.3 says Singh pKa means `K_eq = k_hyd/k_prot`.  
+WHY: In the implemented residual, reverse protonation is `k_prot * c_H * Γ / δ`; any equilibrium audit must carry concentration, surface-volume, δ, and nondim factors.  
+WHAT TO DO: Reword as “Singh may constrain the hydrolysis/protonation balance after deriving the model-specific dimensional identity,” not a bare ratio.
+
+14. **D7-D2 skip rule is inconsistent with D7-D4.**  
+WHAT: D7-D2 says skip Γ_max bracket if a single literature value is locked, but D7-D4 always sweeps Γ_max/2 and Γmax·2.  
+WHY: Not fatal, but the DoD is confusing: Γmax sensitivity is both conditional and mandatory.  
+WHAT TO DO: Drop D7-D2 or define it as an expanded Γmax-only sweep beyond the always-required coupled matrix.
+
+15. **The metadata lives in a Firedrake-importing module.**  
+WHAT: D1 places `V10B_CALIBRATION_METADATA` in `Forward/bv_solver/cation_hydrolysis.py`, which imports `firedrake` at module import.  
+WHY: Scripts/tests that only need metadata may now require Firedrake importability. Existing tests may tolerate this, but metadata is pure provenance and should not depend on FE imports.  
+WHAT TO DO: Prefer a lightweight module, or mirror/export it through `_bv_common.py` if every consumer already sets up the Firedrake environment.
+
+VERDICT: ISSUES_REMAIN

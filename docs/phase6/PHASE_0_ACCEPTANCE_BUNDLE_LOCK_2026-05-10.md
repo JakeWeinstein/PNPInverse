@@ -386,6 +386,46 @@ If Phase D's Δ_β differs by > 30 % between the two conventions,
   routing branches per the "v10a → E sequence" §; A.2 + step 6
   inform v10b priority but do not cancel v10b.
 
+* **Step 8 v10b literature calibration landed:** 2026-05-10.
+  Published `docs/phase6/v10b_calibration_summary.md` with the
+  three locked V10B numeric drops + per-parameter decision-rule
+  outcomes:
+  - `GAMMA_MAX_HAT_V10B = 0.047` nondim (= `GAMMA_MAX_HAT_V10A_SMOKE`;
+    4-test compatibility check finds Singh 2016 reports K_eq not
+    coverage, Iamprasertkun 2019 reports HOPG specific capacitance
+    not MOH coverage, Bohra 2019 uses variable permittivity →
+    tighten V10A derivation chain rather than replace value).
+  - `K_DES_NONDIM_V10B = 1.0` nondim (engineering choice with
+    documented Eyring prior `k_des_nondim ∈ [1e-2, 1e2]` ↔
+    `ΔG_des ∈ [0.69, 0.94] eV`; central value = `ΔG_des ≈ 0.80 eV`
+    at 298 K).
+  - `C_S_F_M2_V10B = 0.20` F/m² (locked at step 7).
+  Source of truth: new top-level Firedrake-free
+  `calibration/v10b.py` package carries V10B constants plus
+  `V10B_CALIBRATION_METADATA` (schema: value / units / is_nondim
+  / source_type / engineering_choice / citation / bracket / prior
+  / compatibility{mechanism, electrode, electrolyte, dimensional}).
+  Deprecation alias `SMOKE = V10A_SMOKE` (NEVER `SMOKE = V10B`)
+  with ASCII-only comment block + AST-aware import-audit test.
+  v10b.A.2 driver re-run at v10b parameters with
+  `--out-subdir phase6b_v10b_phase_A2_v_kin`; `_convergence_audit`
+  refactored to HARD/SOFT split (escalation gates separated from
+  informative deltas; `overall_pass` driven by HARD only).
+  v10b.step-6 driver re-run at v10b parameters with
+  `--out-subdir phase6b_v10b_step6_plumbing_ablation` and the new
+  `--a2-baseline-json` CLI flag pointing at the v10b A.2 baseline.
+  Sensitivity sweeps: D7-D1 C_S bracket (4 rungs: {0.05, 0.10,
+  0.20, 0.30} F/m²) and D7-D4 Γ_max × k_des × k_hyd matrix
+  (30 rungs: 3 × 5 × 2) with per-rung analytic-vs-solver
+  mass-balance HARD gate (rel ≤ 5e-3 via `gamma_ss_langmuir`).
+  Test coverage: 27 new fast tests
+  (`tests/test_phase6b_v10b_calibration.py` 13 +
+  `tests/test_phase6b_v10b_bracket_matrix.py` 14); 255/255
+  phase6b/cation fast-suite green.  Plan + critique provenance:
+  `~/.claude/plans/phase6b-step8-v10b-calibration.md` (v7-FINAL,
+  53 issues across 7 rounds → APPROVED) +
+  `docs/handoffs/CHATGPT_HANDOFF_36_phase6b-v10b-calibration/`.
+
 ## v10a delivery summary (2026-05-10)
 
 What landed:
