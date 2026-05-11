@@ -693,6 +693,15 @@ class AdaptiveLadder:
     The insert counter is per-step: :meth:`record_success` resets it
     so each newly-attempted scale gets a fresh budget.
 
+    First-rung failures (``previous_scale is None``) normally return
+    ``False`` from :meth:`record_failure_and_insert` because there is
+    no previous success to interpolate from. When ``warm_start_floor``
+    is set, this behavior changes: first-rung failures **arithmetic-
+    bisect** between ``warm_start_floor`` and the failed scale. This
+    is the appropriate operation for λ-from-warm-start ramps, where
+    the "previous" state is the warm-start (e.g. λ=0) and the search
+    space ``[0, 1]`` is linearly spaced rather than log-spaced.
+
     Parameters
     ----------
     initial_scales
@@ -701,6 +710,14 @@ class AdaptiveLadder:
     max_inserts_per_step
         Cap on midpoints inserted between any single
         previous_scale → current_scale gap. Default 4.
+    warm_start_floor
+        Optional arithmetic-bisection floor for first-rung failures.
+        When ``None`` (default), first-rung failures return ``False``
+        immediately. When set to a float (typically ``0.0``), first-
+        rung failures insert the arithmetic midpoint
+        ``0.5 * (warm_start_floor + scale)``. Must satisfy
+        ``warm_start_floor < initial_scales[0]`` (a strictly-lower
+        floor); otherwise ``ValueError`` is raised.
     """
 
     def __init__(
@@ -708,6 +725,7 @@ class AdaptiveLadder:
         *,
         initial_scales: tuple[float, ...],
         max_inserts_per_step: int = 4,
+        warm_start_floor: Optional[float] = None,
     ) -> None:
         if not initial_scales:
             raise ValueError("initial_scales must be non-empty")
@@ -732,12 +750,22 @@ class AdaptiveLadder:
                 f"max_inserts_per_step must be >= 0 "
                 f"(got {max_inserts_per_step})"
             )
+        if warm_start_floor is not None:
+            if not (float(warm_start_floor) < float(initial_scales[0])):
+                raise ValueError(
+                    f"warm_start_floor must be strictly less than "
+                    f"initial_scales[0] (got floor={warm_start_floor!r}, "
+                    f"first scale={initial_scales[0]!r})"
+                )
 
         self._planned: List[float] = list(initial_scales)
         self._idx: int = 0
         self._inserts_at_current_step: int = 0
         self._max_inserts_per_step: int = int(max_inserts_per_step)
         self._history: List[Tuple[float, str]] = []
+        self._warm_start_floor: Optional[float] = (
+            float(warm_start_floor) if warm_start_floor is not None else None
+        )
 
     @property
     def current_scale(self) -> float:
@@ -767,15 +795,24 @@ class AdaptiveLadder:
         self._inserts_at_current_step = 0
 
     def record_failure_and_insert(self) -> bool:
-        """Record the current rung as failed; insert a geometric midpoint.
+        """Record the current rung as failed; insert a midpoint.
+
+        When ``previous_scale`` is available (post-first-rung), uses
+        the geometric midpoint ``sqrt(prev * scale)``. When at the
+        first rung, returns ``False`` unless ``warm_start_floor`` is
+        configured; in that case, inserts the arithmetic midpoint
+        ``0.5 * (warm_start_floor + scale)``.
 
         Returns
         -------
         bool
             ``True`` if a midpoint was inserted and the orchestrator
             should rollback ``U`` and retry the new ``current_scale``.
-            ``False`` if ``max_inserts_per_step`` is exhausted; the
-            caller should raise :class:`LadderExhausted`.
+            ``False`` if ``max_inserts_per_step`` is exhausted, if no
+            previous-scale anchor exists and no ``warm_start_floor``
+            is set, or if the arithmetic-bisection midpoint would
+            collapse to a numerical floor; the caller should raise
+            :class:`LadderExhausted`.
         """
         if self.is_done():
             raise RuntimeError("cannot record failure after is_done()")
@@ -785,10 +822,24 @@ class AdaptiveLadder:
             return False
         prev = self.previous_scale
         if prev is None:
-            # No previous success — there's nothing to interpolate from.
-            # Fail fast rather than insert an arbitrary fraction of the
-            # floor (which would just be a slightly smaller floor).
-            return False
+            # No previous success — there's nothing to interpolate from
+            # using the geometric path.
+            if self._warm_start_floor is None:
+                # Existing behavior: fail fast.
+                return False
+            # NEW: arithmetic-bisect toward the warm-start floor. λ in
+            # [0, 1] is linearly spaced, and sqrt(0 * x) = 0 is
+            # ill-defined; arithmetic midpoint is the correct probe.
+            midpoint = 0.5 * (self._warm_start_floor + scale)
+            # Guard: midpoint must be strictly between floor and scale.
+            # If the gap has collapsed below float precision, decline
+            # to subdivide further (numerical floor; no infinite-loop
+            # risk).
+            if not (self._warm_start_floor < midpoint < scale):
+                return False
+            self._planned.insert(self._idx, float(midpoint))
+            self._inserts_at_current_step += 1
+            return True
         midpoint = math.sqrt(prev * scale)
         self._planned.insert(self._idx, float(midpoint))
         self._inserts_at_current_step += 1
@@ -1803,6 +1854,7 @@ def solve_lambda_ramp_from_warm_start(
         lam_ladder = AdaptiveLadder(
             initial_scales=lam_scales,
             max_inserts_per_step=max_inserts_per_step,
+            warm_start_floor=0.0,
         )
 
         picard_max_iters = 8

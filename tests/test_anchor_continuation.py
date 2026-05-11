@@ -243,6 +243,106 @@ def test_adaptive_ladder_planned_scales_no_aliasing():
 
 
 # ---------------------------------------------------------------------------
+# Section 2a -- AdaptiveLadder warm_start_floor (Step 9.5)
+# ---------------------------------------------------------------------------
+
+def test_adaptive_ladder_warm_start_floor_default_unchanged():
+    """Without ``warm_start_floor``, behavior must match pre-9.5 code:
+    first-rung failures return False immediately (no insertion)."""
+    L = AdaptiveLadder(initial_scales=(1e-12, 1.0), max_inserts_per_step=4)
+    inserted = L.record_failure_and_insert()
+    assert inserted is False
+    # And the planned sequence is untouched.
+    assert L.planned_scales() == [pytest.approx(1e-12), pytest.approx(1.0)]
+    # History records the failure.
+    h = L.history()
+    assert h == [(pytest.approx(1e-12), "fail")]
+
+
+def test_adaptive_ladder_first_rung_arithmetic_bisect():
+    """With ``warm_start_floor=0.0`` and ``initial_scales=(0.1, 1.0)``,
+    the first failure inserts midpoint 0.05; the second failure (still
+    no previous success) inserts 0.025."""
+    L = AdaptiveLadder(
+        initial_scales=(0.1, 1.0),
+        max_inserts_per_step=4,
+        warm_start_floor=0.0,
+    )
+    assert L.current_scale == pytest.approx(0.1)
+    assert L.previous_scale is None
+
+    inserted = L.record_failure_and_insert()
+    assert inserted is True
+    assert L.current_scale == pytest.approx(0.05)
+    # Still no previous success → previous_scale is None.
+    assert L.previous_scale is None
+
+    inserted = L.record_failure_and_insert()
+    assert inserted is True
+    assert L.current_scale == pytest.approx(0.025)
+    assert L.previous_scale is None
+
+    # Planned sequence contains the inserts in order.
+    planned = L.planned_scales()
+    assert planned[0] == pytest.approx(0.025)
+    assert planned[1] == pytest.approx(0.05)
+    assert planned[2] == pytest.approx(0.1)
+    assert planned[-1] == pytest.approx(1.0)
+
+
+def test_adaptive_ladder_floor_at_nonzero_value():
+    """With ``warm_start_floor=0.5`` and ``initial_scales=(0.7, 1.0)``,
+    the first failure inserts midpoint 0.6."""
+    L = AdaptiveLadder(
+        initial_scales=(0.7, 1.0),
+        max_inserts_per_step=4,
+        warm_start_floor=0.5,
+    )
+    inserted = L.record_failure_and_insert()
+    assert inserted is True
+    assert L.current_scale == pytest.approx(0.6)  # 0.5 * (0.5 + 0.7)
+
+    # Subsequent failure (still first rung) bisects toward 0.5: 0.55.
+    inserted = L.record_failure_and_insert()
+    assert inserted is True
+    assert L.current_scale == pytest.approx(0.55)  # 0.5 * (0.5 + 0.6)
+
+
+def test_adaptive_ladder_max_inserts_exhausted_at_floor():
+    """Verify the ladder eventually returns False (no infinite loop)
+    when ``max_inserts_per_step`` is exhausted."""
+    L = AdaptiveLadder(
+        initial_scales=(0.1, 1.0),
+        max_inserts_per_step=4,
+        warm_start_floor=0.0,
+    )
+    # Four failures consume the insert budget.
+    assert L.record_failure_and_insert() is True   # insert 0.05
+    assert L.record_failure_and_insert() is True   # insert 0.025
+    assert L.record_failure_and_insert() is True   # insert 0.0125
+    assert L.record_failure_and_insert() is True   # insert 0.00625
+    # Fifth failure: budget exhausted.
+    assert L.record_failure_and_insert() is False
+
+
+def test_adaptive_ladder_floor_above_scale_rejects():
+    """Constructing with ``warm_start_floor >= initial_scales[0]``
+    must raise ``ValueError``."""
+    with pytest.raises(ValueError, match="warm_start_floor"):
+        AdaptiveLadder(
+            initial_scales=(0.1, 1.0),
+            warm_start_floor=2.0,
+        )
+    # Boundary case: floor equal to first scale also rejected
+    # (must be strictly less than).
+    with pytest.raises(ValueError, match="warm_start_floor"):
+        AdaptiveLadder(
+            initial_scales=(0.1, 1.0),
+            warm_start_floor=0.1,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Section 2b -- PreconvergedAnchor + extract_preconverged_anchor
 # ---------------------------------------------------------------------------
 
