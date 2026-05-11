@@ -298,25 +298,52 @@ Frozen before fitting:
    * Hold v10a/A.2/D/E until contract returns OR user
      explicitly authorizes proceeding unconditionally.
 
-2. **v10a — Langmuir cap + integrated diagnostics (~5-7 days).**
+2. **v10a — Langmuir cap + integrated diagnostics (~5-7 days).
+   ✅ LANDED 2026-05-10.**
    * Code: `(1 − Γ/Γ_max)` factor in `build_forward_branch` and
-     `build_proton_boundary_source`.
+     `build_proton_boundary_source`
+     (`Forward/bv_solver/cation_hydrolysis.py`).
    * Langmuir Picard formula:
      `Γ_ss(λ) = λ·F₀ / ((1−λ) + λ·k_des + λ·B + λ·F₀/Γ_max)`
      where F₀ = k_hyd·⟨c_M·10^(−ΔpKa)⟩, B = k_prot·⟨c_H⟩/δ_OHP.
-     Reduces to v9 when Γ_max → ∞.
+     Reduces to v9 when Γ_max → ∞ (tested via
+     `test_reduces_to_v9_when_gamma_max_large` with Γ_max=1e10 →
+     rel-diff < 1e-12).  Helper extracted as standalone
+     `gamma_ss_langmuir` for unit-testability.
    * Γ clamp [0, Γ_max] after every Picard update with a
-     `RuntimeWarning` if the unclamped value leaves bounds
-     (the formula should naturally bound; warning surfaces
-     bugs).  Warm-restart clamp is silent.
-   * Integrated diagnostics in rung_callback: F₀_avg, Γ, θ =
-     Γ/Γ_max, R_forward_capped, denominator terms,
-     R_2e/R_4e separately, σ_S from solved fields.
-   * Smoke values for Γ_max (= 1 monolayer, computed from
-     a_MOH and δ_OHP) and k_des (= smoke baseline 1.0); these
-     are placeholders for v10b.
-   * Tests: (a) Γ → Γ_max as k_hyd → ∞; (b) Γ_max → ∞ recovers
-     v9 byte-equivalent.
+     `RuntimeWarning` if the unclamped value leaves bounds.
+     Warm-restart clamp via `clamp_gamma_to_max(ctx)` is silent
+     (orchestrator calls it in `solve_lambda_ramp_from_warm_start`
+     before Picard runs).
+   * Integrated diagnostics via `collect_v10a_rung_diagnostics(ctx)`
+     in rung_callback: F₀_avg, Γ, θ = Γ/Γ_max, R_forward_capped,
+     denominator decomposition (constant + k_des + k_prot proton
+     flux + cap), per-reaction R_2e/R_4e currents, σ_S in both
+     C/m² and Singh counts/pm² (via new
+     `Forward/bv_solver/units.py::sigma_C_m2_to_counts_pm2`).
+   * Smoke values for Γ_max (= 1 monolayer at OHP, `5.6e-6 mol/m²
+     / (C_SCALE · L_REF) ≈ 0.047`) and k_des (= smoke baseline
+     1.0); these are placeholders for v10b.
+   * Tests: 22 fast + 14 slow regression tests in
+     `tests/test_phase6b_v10a_langmuir_cap.py` cover:
+     - (a) Γ → Γ_max as k_hyd → ∞ ✓
+     - (b) Γ_max → ∞ recovers v9 byte-equivalent ✓
+     - vacancy factor (1 − θ) ≥ 0 across parameter sweep ✓
+     - σ unit helper round-trips Singh Cu values ✓
+     - anode-clamp invariant (σ_S > 0 → ΔpKa = 0) ✓
+     - β sign-guard (cathodic σ_S → ΔpKa < 0 for K⁺) ✓
+     - bisection cross-check on closed form at λ=1 ✓
+     - clamp_gamma_to_max silent / setter round-trips ✓
+   * Public surface additions to `Forward/bv_solver/anchor_continuation.py`:
+     `set_reaction_gamma_max_model` accessor + the
+     `gamma_max_nondim` key in
+     `solve_lambda_ramp_from_warm_start`'s `parameter_overrides`
+     dispatch.
+   * Config builder helper `make_cation_hydrolysis_config(...)` in
+     `scripts/_bv_common.py` so drivers do not silently omit
+     `gamma_max_nondim`; gate4 driver
+     (`scripts/studies/phase6b_v9_gate4_finite_hydrolysis_smoke.py`)
+     migrated to the builder.
 
 3. **Minimum V-sweep diagnostic (~1 day).**  Run v10a across
    the V_RHE walk at smoke kinetics + λ=0 baseline AND λ=1 with

@@ -1,4 +1,4 @@
-"""Cation hydrolysis closure (Phase 6β v9 Gates 3 + 4).
+"""Cation hydrolysis closure (Phase 6β v9 Gates 3 + 4, v10a Langmuir cap).
 
 Adds a global surface coverage ``Γ_MOH`` representing the cation-
 hydrolysis reservoir at the OHP::
@@ -7,20 +7,26 @@ hydrolysis reservoir at the OHP::
 
 with field-dependent rate balance::
 
-    R_net  =  k_hyd · c_M⁺(0) · 10^(−ΔpKa(σ_S))
+    R_net  =  k_hyd · c_M⁺(0) · 10^(−ΔpKa(σ_S)) · (1 − Γ/Γ_max)
               −  k_prot · c_H(0) · Γ / δ_OHP                       (forward − reverse)
     R_des  =  k_des · Γ                                            (desorption)
 
 The proton boundary residual gains a source ``+λ · R_net`` (one H⁺
 produced per hydrolysis event); the cation boundary residual gains a
-sink ``−λ · R_net``.  Steady state for Γ is::
+sink ``−λ · R_net``.  The ``(1 − Γ/Γ_max)`` vacancy factor (Phase 6β
+v10a, 2026-05-10) caps surface coverage at one monolayer of MOH at
+the OHP: without it, every v9 result at converged ``k_hyd ≥ 1e-3`` sat
+at Γ ≈ 6+ monolayers (physically invalid; ~64 monolayers at
+``k_hyd=1e-2``).  Steady state for Γ becomes::
 
-    Γ_ss(λ)  =  λ · ⟨R_net_forward⟩
-                /  (λ · k_des + (1 − λ) + λ · k_prot · ⟨c_H⟩ / δ_OHP)
+    Γ_ss(λ)  =  λ · F₀
+                /  (λ · k_des + (1 − λ) + λ · k_prot · ⟨c_H⟩ / δ_OHP
+                    + λ · F₀ / Γ_max)
 
-where ``⟨·⟩`` denotes the boundary-area-averaged value of the
-forward branch
-``R_net_forward = k_hyd · c_M · 10^(−ΔpKa)`` and ``⟨c_H⟩``.
+where ``F₀ = k_hyd · ⟨c_M · 10^(−ΔpKa)⟩`` is the boundary-area-averaged
+forward forcing and ``⟨c_H⟩`` is the boundary-averaged proton
+concentration.  In the limit ``Γ_max → ∞`` the cap term ``λ · F₀ / Γ_max``
+vanishes and the formula reduces to the v9 Γ_ss expression.
 
 Architecture mirrors :mod:`Forward.bv_solver.water_ionization`'s
 ``kw_eff_func`` *coefficient* pattern:
@@ -63,6 +69,8 @@ References
 """
 from __future__ import annotations
 
+import math
+import warnings
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
@@ -109,6 +117,16 @@ class CationHydrolysisBundle:
         it but does not include it in the monolithic system.  The
         orchestrator updates it via :func:`update_gamma_from_solution`
         between continuation rungs (outer Picard).
+    gamma_max_func
+        R-space ``Function`` holding the Langmuir saturation cap
+        ``Γ_max`` (Phase 6β v10a, 2026-05-10).  The residual reads
+        ``(1 − Γ / Γ_max)`` as the vacancy factor on the forward
+        branch so coverage saturates at one monolayer.  Mutable via
+        the ``set_reaction_gamma_max_model`` accessor.  Default at
+        bundle build time is ``cation_hydrolysis_config['gamma_max_nondim']``
+        or the smoke baseline ``0.047`` (1 monolayer of MOH at the
+        OHP; ``5.6e-6 mol/m² / (C_SCALE · L_REF)``).  The v10b
+        literature-calibration step will replace the default.
     cation_params
         Per-cation Singh 2016 Table S1 row + r_H_El plus solver-side
         switches (anode_clamp).  Held verbatim as a Python dict.
@@ -126,6 +144,7 @@ class CationHydrolysisBundle:
     lambda_hydrolysis_func: Any
     r_H_El_pm_func: Any
     gamma_func: Any
+    gamma_max_func: Any
     cation_params: dict
 
 
@@ -210,6 +229,19 @@ _DEFAULT_CATION_PARAMS = {
 }
 
 
+# Phase 6β v10a Langmuir cap smoke baseline.  One monolayer of hydrated
+# MOH at the OHP, hard-sphere areal coverage with r ≈ 2.3 Å (matches
+# the K⁺ hydrated-radius monolayer):
+#     Γ_max_phys  ≈ 1 / (π · (2.3e-10 m)² · N_A) ≈ 5.6e-6 mol/m²
+# Nondim conversion uses the same scaling chain as ``c_HAT · L_HAT``:
+#     Γ_max_hat = Γ_max_phys / (C_SCALE · L_REF)
+#                = 5.6e-6 / (1.2 · 1e-4)
+#                ≈ 0.047
+# The literature-calibrated replacement (Γ_max, k_des, C_S) lands in
+# v10b alongside ``docs/phase6/CMK3_capacitance_literature.md``.
+GAMMA_MAX_HAT_SMOKE: float = 0.047
+
+
 def build_cation_hydrolysis_terms(
     *,
     ctx: dict,
@@ -260,6 +292,7 @@ def build_cation_hydrolysis_terms(
     k_prot_init = float(raw_cfg.get("k_prot", 0.0))
     k_des_init = float(raw_cfg.get("k_des", 1.0))
     delta_ohp_init = float(raw_cfg.get("delta_ohp_hat", 1.0))
+    gamma_max_init = float(raw_cfg.get("gamma_max_nondim", GAMMA_MAX_HAT_SMOKE))
     if delta_ohp_init <= 0.0:
         raise ValueError(
             f"delta_ohp_hat must be positive (got {delta_ohp_init!r}); "
@@ -270,6 +303,12 @@ def build_cation_hydrolysis_terms(
         raise ValueError(
             f"k_des must be positive (got {k_des_init!r}); k_des = 0 "
             "leaves Γ unbounded at λ=1."
+        )
+    if gamma_max_init <= 0.0:
+        raise ValueError(
+            f"gamma_max_nondim must be positive (got {gamma_max_init!r}); "
+            "Γ_max = 0 forces the vacancy factor (1 − Γ/Γ_max) to "
+            "diverge."
         )
 
     cation_params = dict(_DEFAULT_CATION_PARAMS)
@@ -310,6 +349,14 @@ def build_cation_hydrolysis_terms(
     gamma_func = fd.Function(R_space, name="cation_hydrolysis_gamma")
     gamma_func.assign(0.0)
 
+    # Phase 6β v10a Langmuir saturation cap.  Mutable R-space Function
+    # so the v10b literature-calibration sweep + diagnostics drivers can
+    # swap values without rebuilding the form.
+    gamma_max_func = fd.Function(
+        R_space, name="cation_hydrolysis_gamma_max",
+    )
+    gamma_max_func.assign(gamma_max_init)
+
     # r_H_El_pm — Singh's hydration-shell H to electrode distance.
     # Promoted to a live R-space Function so the Gate 4B sensitivity
     # sweep can swap values without rebuilding the form.
@@ -333,6 +380,7 @@ def build_cation_hydrolysis_terms(
         lambda_hydrolysis_func=lambda_hydrolysis_func,
         r_H_El_pm_func=r_H_El_pm_func,
         gamma_func=gamma_func,
+        gamma_max_func=gamma_max_func,
         cation_params=cation_params,
     )
     ctx["cation_hydrolysis"] = bundle
@@ -491,14 +539,18 @@ def build_proton_boundary_source(
 ):
     """Return UFL expression for ``R_net`` (the proton boundary source).
 
-    Layout::
+    Layout (Phase 6β v10a)::
 
-        R_net  =  k_hyd · c_M⁺ · 10^(−ΔpKa)
+        R_net  =  k_hyd · c_M⁺ · 10^(−ΔpKa) · (1 − Γ/Γ_max)
                   −  k_prot · c_H · Γ / δ_OHP
 
     Γ is read from ``bundle.gamma_func`` (an R-space *coefficient*,
     not a Newton unknown).  The orchestrator updates Γ between
-    continuation rungs via :func:`update_gamma_from_solution`.
+    continuation rungs via :func:`update_gamma_from_solution`.  The
+    Langmuir vacancy factor ``(1 − Γ/Γ_max)`` caps the forward rate
+    once the OHP is saturated with adsorbed MOH (v10a — 2026-05-10).
+    In the limit ``Γ_max → ∞`` the factor goes to 1 and the residual
+    is byte-equivalent to the v9 formulation.
 
     Parameters
     ----------
@@ -518,7 +570,12 @@ def build_proton_boundary_source(
     UFL expression for ``R_net``.
     """
     pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
-    R_forward = bundle.k_hyd_func * c_M_bdy_expr * pka_factor
+    vacancy_factor = (
+        fd.Constant(1.0) - bundle.gamma_func / bundle.gamma_max_func
+    )
+    R_forward = (
+        bundle.k_hyd_func * c_M_bdy_expr * pka_factor * vacancy_factor
+    )
     R_backward = (
         bundle.k_prot_func
         * c_H_bdy_expr
@@ -534,11 +591,40 @@ def build_forward_branch(
     c_M_bdy_expr: Any,
     pka_shift_expr: Any,
 ):
-    """Return UFL expression for the forward (Γ-independent) branch only.
+    """Return UFL expression for the forward branch including the Langmuir cap.
 
-    ``R_net_forward = k_hyd · c_M⁺ · 10^(−ΔpKa)``.  Used by
-    :func:`update_gamma_from_solution` to compute the boundary
-    integral that drives the closed-form Γ_ss formula.
+    Phase 6β v10a::
+
+        R_net_forward = k_hyd · c_M⁺ · 10^(−ΔpKa) · (1 − Γ/Γ_max)
+
+    Used by :func:`update_gamma_from_solution` to compute the
+    boundary integral that drives the closed-form Γ_ss formula.
+    Returning the capped branch (rather than the uncapped ``F₀``) is
+    deliberate — the rung_callback diagnostics expose both the
+    average of this expression (``R_forward_capped``) and the
+    average of the uncapped ``F₀`` separately so observers can see
+    how close the OHP is to saturation.
+    """
+    pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
+    vacancy_factor = (
+        fd.Constant(1.0) - bundle.gamma_func / bundle.gamma_max_func
+    )
+    return (
+        bundle.k_hyd_func * c_M_bdy_expr * pka_factor * vacancy_factor
+    )
+
+
+def build_forward_branch_uncapped(
+    *,
+    bundle: CationHydrolysisBundle,
+    c_M_bdy_expr: Any,
+    pka_shift_expr: Any,
+):
+    """Return UFL expression for the Γ-independent forward forcing ``F₀``.
+
+    ``F₀ = k_hyd · c_M⁺ · 10^(−ΔpKa)`` — the v9 forward branch, used
+    by the Langmuir closed-form Γ_ss formula and by diagnostics that
+    want to see the saturated-coverage limit.  Independent of Γ.
     """
     pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
     return bundle.k_hyd_func * c_M_bdy_expr * pka_factor
@@ -549,43 +635,152 @@ def build_forward_branch(
 # ---------------------------------------------------------------------------
 
 
+def gamma_ss_langmuir(
+    *,
+    lambda_val: float,
+    k_hyd: float,
+    k_prot: float,
+    k_des: float,
+    delta_ohp: float,
+    forward_avg: float,
+    c_H_avg: float,
+    gamma_max: float,
+) -> tuple:
+    """Pure-Python closed-form Γ_ss for the Langmuir-capped residual.
+
+    Phase 6β v10a — the formula that
+    :func:`update_gamma_from_solution` evaluates after assembling the
+    boundary integrals on the converged FE state.  Lifted to a
+    standalone helper so unit tests can exercise the arithmetic
+    without standing up a Firedrake mesh.
+
+    With ``F₀ = k_hyd · forward_avg`` the closed form is::
+
+        Γ_ss(λ) = λ · F₀ / (
+            λ · k_des
+            + (1 − λ)
+            + λ · k_prot · ⟨c_H⟩ / δ_OHP
+            + λ · F₀ / Γ_max
+        )
+
+    Returns
+    -------
+    tuple
+        ``(gamma_clamped, gamma_unclamped, denominator_terms)`` where
+        ``denominator_terms`` is a dict with keys
+        ``{'constant', 'kdes', 'kprot', 'cap', 'total'}`` so tests
+        can verify the v9-equivalence and saturation limits term by
+        term.
+
+    Raises
+    ------
+    ValueError
+        If ``gamma_max <= 0`` (the Langmuir cap is required) or any
+        kinetic rate is negative.  The closed form is undefined
+        outside those bounds.
+    RuntimeError
+        Denominator collapses to a non-positive value — should never
+        happen for non-negative kinetic rates and ``λ ∈ [0, 1]``, so
+        signals a calling-site bug.
+    """
+    if gamma_max <= 0.0:
+        raise ValueError(
+            f"gamma_max must be positive (got {gamma_max!r})"
+        )
+    if not (0.0 <= lambda_val <= 1.0):
+        raise ValueError(
+            f"lambda_val must lie in [0, 1] (got {lambda_val!r})"
+        )
+    for name, val in (
+        ("k_hyd", k_hyd), ("k_prot", k_prot), ("k_des", k_des),
+    ):
+        if val < 0.0:
+            raise ValueError(f"{name} must be non-negative (got {val!r})")
+    if delta_ohp <= 0.0:
+        raise ValueError(
+            f"delta_ohp must be positive (got {delta_ohp!r})"
+        )
+
+    F0 = k_hyd * forward_avg
+    numerator = lambda_val * F0
+    denom_constant = 1.0 - lambda_val
+    denom_kdes = lambda_val * k_des
+    denom_kprot = lambda_val * k_prot * c_H_avg / delta_ohp
+    denom_cap = lambda_val * F0 / gamma_max
+    denominator = denom_constant + denom_kdes + denom_kprot + denom_cap
+    if denominator <= 0.0:
+        raise RuntimeError(
+            "gamma_ss_langmuir: denominator non-positive "
+            f"(λ={lambda_val}, k_des={k_des}, k_prot={k_prot}, "
+            f"Γ_max={gamma_max})"
+        )
+    gamma_unclamped = numerator / denominator
+    gamma_clamped = max(0.0, min(gamma_max, gamma_unclamped))
+    return gamma_clamped, gamma_unclamped, {
+        "constant": denom_constant,
+        "kdes": denom_kdes,
+        "kprot": denom_kprot,
+        "cap": denom_cap,
+        "total": denominator,
+    }
+
+
 def update_gamma_from_solution(
     ctx: dict, *, electrode_marker: Optional[int] = None,
 ) -> float:
     """Update ``bundle.gamma_func`` from the current ``ctx['U']``.
 
-    Closed-form ``Γ_ss(λ)`` solving ``F_Γ = 0`` with the smooth
-    λ-blended residual::
+    Phase 6β v10a — Langmuir-capped closed form.  Solving the smooth
+    λ-blended residual at steady state::
 
         F_Γ  =  λ · (R_net − k_des · Γ) · v_R · ds_e
                 − (1 − λ) · Γ · v_R · ds_e
 
-    Substituting ``R_net = k_hyd · c_M · 10^(−ΔpKa) − k_prot · c_H · Γ / δ``
-    and integrating over the electrode boundary::
+    with the capped forward branch
+    ``R_forward = F₀ · (1 − Γ/Γ_max)`` (Phase 6β v10a vacancy factor)
+    and the unchanged Γ-linear reverse branch
+    ``R_back = k_prot · c_H · Γ / δ`` gives::
 
-        Γ  =  λ · k_hyd · ⟨c_M · 10^(−ΔpKa)⟩
-              /  (λ · k_des + (1 − λ) + λ · k_prot · ⟨c_H⟩ / δ_OHP)
+        Γ_ss(λ)  =  λ · F₀
+                    /  (λ · k_des + (1 − λ)
+                        + λ · k_prot · ⟨c_H⟩ / δ_OHP
+                        + λ · F₀ / Γ_max)
 
-    where ``⟨·⟩`` is the boundary-area-averaged value of the
-    integrand on the electrode marker.  The denominator stays
-    strictly positive for any ``λ ∈ [0, 1]`` and ``k_des, k_prot ≥ 0``,
-    so the formula is unambiguously evaluable.
+    where ``F₀ = k_hyd · ⟨c_M · 10^(−ΔpKa)⟩`` is the boundary-area
+    average of the uncapped forward forcing.  In the limit
+    ``Γ_max → ∞`` the cap term vanishes and the v9 formula is
+    recovered; in the limit ``F₀ → ∞`` (very fast hydrolysis)
+    Γ_ss → Γ_max so coverage saturates at one monolayer instead of
+    diverging as in v9.
 
-    At ``λ = 0`` the formula returns ``Γ = 0`` exactly (matches the
-    Dirichlet pin invariant from Gate 3D).  At ``λ = 1`` the formula
-    returns ``Γ = ⟨R_net_forward⟩ / (k_des + k_prot · ⟨c_H⟩ / δ_OHP)``
-    — the closed-form steady state.
+    Sanity:
+
+    * λ → 0 ⇒ Γ_ss → 0 (Dirichlet pin invariant from Gate 3D
+      survives the Langmuir cap).
+    * Γ_max → ∞ ⇒ ``λ · F₀ / Γ_max → 0`` (byte-recovers v9 formula).
+    * F₀ → ∞ at fixed λ > 0 ⇒ Γ_ss → Γ_max (saturation).
+
+    After the closed-form evaluation the result is clamped into
+    ``[0, Γ_max]``.  The denominator's structure already keeps Γ in
+    that interval for non-negative kinetic rates, so any clamp event
+    signals either a numerical issue (e.g. a stale boundary average
+    from a non-converged Newton state) or a formula bug.  A clamp
+    emits ``RuntimeWarning`` so observers can see it during the
+    Picard loop; warm-restart clamps (called by the orchestrator
+    *before* the Picard loop, with the Function already populated by
+    a previous sp) are silent and handled separately.
 
     Parameters
     ----------
     ctx
         Firedrake context built with ``enable_cation_hydrolysis=True``.
     electrode_marker
-        Boundary marker integer.  Defaults to ``ctx['bv_settings']['electrode_marker']``.
+        Boundary marker integer.  Defaults to
+        ``ctx['bv_settings']['electrode_marker']``.
 
     Returns
     -------
-    The new Γ value (also assigned to ``bundle.gamma_func``).
+    The new (clamped) Γ value (also assigned to ``bundle.gamma_func``).
     """
     bundle = ctx.get("cation_hydrolysis")
     if bundle is None:
@@ -609,6 +804,13 @@ def update_gamma_from_solution(
     c_M_expr = ci[bundle.counterion_idx]
     c_H_expr = ci[bundle.h_idx]
 
+    gamma_max = float(bundle.gamma_max_func)
+    if gamma_max <= 0.0:
+        raise RuntimeError(
+            "update_gamma_from_solution: bundle.gamma_max_func ≤ 0 "
+            f"(got {gamma_max}); Γ_max must be strictly positive."
+        )
+
     lam_val = float(bundle.lambda_hydrolysis_func)
     if lam_val == 0.0:
         # Hard zero — avoids a needless boundary integral when the
@@ -631,7 +833,12 @@ def update_gamma_from_solution(
     # Gate 3D — manufactured-source override: when ``manufactured_R_inj``
     # is set in conv_cfg, R_net in the residual is replaced by a fixed
     # constant.  The Picard formula must use the same R_inj so the Γ
-    # steady state matches what Newton sees.
+    # steady state matches what Newton sees.  Because the manufactured
+    # override replaces *the whole* R_net (forward AND backward) with a
+    # Γ-independent constant in the residual, the closed-form Γ_ss has
+    # NO Langmuir cap term: the cap only enters through the forward
+    # branch, which the override bypasses.  Keeping the Picard formula
+    # in lockstep with what Newton sees is the load-bearing invariant.
     bv_conv = ctx.get("bv_convergence", {})
     manufactured_R_inj = bv_conv.get("manufactured_R_inj") if isinstance(
         bv_conv, dict
@@ -640,13 +847,27 @@ def update_gamma_from_solution(
     if manufactured_R_inj is not None:
         # R_net = const (Γ-independent).  Steady state at λ-blended
         # residual ``λ·(R_inj − k_des·Γ) − (1−λ)·Γ = 0`` gives
-        # ``Γ = λ·R_inj / (λ·k_des + (1−λ))``.
+        # ``Γ = λ·R_inj / (λ·k_des + (1−λ))``.  No Langmuir cap term —
+        # the override bypasses the forward branch that carries the
+        # cap, so the Picard formula must match.  Manufactured R_inj < 0
+        # is a *legitimate* test fixture (it drives Γ negative on
+        # purpose to check the proton-sink sign convention); the clamp
+        # silently pulls Γ into ``[0, Γ_max]`` and we do NOT emit a
+        # RuntimeWarning here.
         R_inj_const = float(manufactured_R_inj)
         numerator = lam_val * R_inj_const
         denominator = lam_val * k_des + (1.0 - lam_val)
+        if denominator <= 0.0:
+            raise RuntimeError(
+                "update_gamma_from_solution: denominator non-positive "
+                f"(λ={lam_val}, k_des={k_des}, manufactured branch)."
+            )
+        gamma_unclamped = numerator / denominator
+        gamma_clamped = max(0.0, min(gamma_max, gamma_unclamped))
     else:
-        # Physical R_net: integrate the forward branch and ⟨c_H⟩
-        # against the boundary measure for the closed-form formula.
+        # Physical R_net: integrate the uncapped forward branch (F₀)
+        # and ⟨c_H⟩ against the boundary measure, then delegate to the
+        # pure-Python closed-form helper.
         sigma_S_expr = ctx.get("_cation_hydrolysis_sigma_S_expr")
         if sigma_S_expr is None:
             sigma_S_expr = fd.Constant(0.0)
@@ -661,21 +882,60 @@ def update_gamma_from_solution(
         ) / area
         c_H_avg = float(fd.assemble(c_H_expr * ds(electrode_marker))) / area
 
-        numerator = lam_val * k_hyd * forward_avg
-        denominator = (
-            lam_val * k_des
-            + (1.0 - lam_val)
-            + lam_val * k_prot * c_H_avg / delta_ohp
+        gamma_clamped, gamma_unclamped, _ = gamma_ss_langmuir(
+            lambda_val=lam_val,
+            k_hyd=k_hyd,
+            k_prot=k_prot,
+            k_des=k_des,
+            delta_ohp=delta_ohp,
+            forward_avg=forward_avg,
+            c_H_avg=c_H_avg,
+            gamma_max=gamma_max,
         )
-    if denominator <= 0.0:
-        raise RuntimeError(
-            "update_gamma_from_solution: denominator non-positive "
-            f"(λ={lam_val}, k_des={k_des}, k_prot={k_prot}).  Check "
-            "kinetic rates and λ are configured consistently."
-        )
-    gamma_new = numerator / denominator
-    bundle.gamma_func.assign(gamma_new)
-    return float(gamma_new)
+        # Only the physical path raises a warning on clamp — the
+        # closed-form Langmuir formula should respect [0, Γ_max] for
+        # non-negative kinetic rates and λ ∈ [0, 1], so a clamp event
+        # here signals a numerical issue (stale boundary average from
+        # a non-converged Newton state) or a formula bug.
+        if gamma_clamped != gamma_unclamped:
+            warnings.warn(
+                "update_gamma_from_solution: clamped Γ "
+                f"{gamma_unclamped:.6e} → {gamma_clamped:.6e} "
+                f"(out of [0, {gamma_max}]; λ={lam_val}, "
+                f"k_hyd={k_hyd}, k_prot={k_prot}, k_des={k_des}).  "
+                "The closed-form formula should never leave bounds — "
+                "investigate the boundary averages.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+    bundle.gamma_func.assign(gamma_clamped)
+    return float(gamma_clamped)
+
+
+def clamp_gamma_to_max(ctx: dict) -> float:
+    """Clamp ``bundle.gamma_func`` into ``[0, Γ_max]`` silently.
+
+    Helper for warm-restart paths in the orchestrator: when a fresh
+    ctx is built with a smaller ``Γ_max`` than the snapshot, the
+    restored Γ value may sit above the new cap.  The orchestrator
+    calls this *before* the Picard loop runs so the first Newton
+    solve sees a vacancy factor in ``[0, 1]``.  Unlike
+    :func:`update_gamma_from_solution`, no warning is emitted — this
+    clamp is *expected* on cross-parameter restores.
+
+    Returns the new clamped Γ value as a float.
+    """
+    bundle = ctx.get("cation_hydrolysis")
+    if bundle is None:
+        return 0.0
+    gamma = float(bundle.gamma_func)
+    gamma_max = float(bundle.gamma_max_func)
+    if gamma_max <= 0.0:
+        return gamma
+    gamma_clamped = max(0.0, min(gamma_max, gamma))
+    if gamma_clamped != gamma:
+        bundle.gamma_func.assign(gamma_clamped)
+    return float(gamma_clamped)
 
 
 # ---------------------------------------------------------------------------
@@ -699,13 +959,410 @@ def extract_gamma_value(ctx: dict) -> float:
     return float(bundle.gamma_func)
 
 
+def collect_v10a_rung_diagnostics(
+    ctx: dict, *, electrode_marker: Optional[int] = None,
+) -> dict:
+    """Build the v10a diagnostic payload for a single rung_callback.
+
+    Phase 6β v10a — extends the rung_diag dict that
+    :func:`Forward.bv_solver.anchor_continuation.solve_anchor_with_continuation`
+    and :func:`solve_lambda_ramp_from_warm_start` emit per rung.
+    Captures everything an observer needs to reason about whether the
+    Langmuir cap is active and how the closed-form Γ_ss denominator
+    decomposes:
+
+    * ``F0_avg`` — boundary-averaged uncapped forward forcing
+      ``k_hyd · ⟨c_M · 10^(−ΔpKa)⟩``.
+    * ``gamma`` — current Γ value (post-Picard).
+    * ``gamma_max`` — current Γ_max cap.
+    * ``theta`` — fractional coverage ``Γ / Γ_max``.
+    * ``R_forward_capped`` — boundary-averaged capped forward branch
+      ``F₀ · (1 − θ)``.  (Diagnostic, not residual-side.)
+    * ``denominator_*`` — each term of the Langmuir denominator
+      (constant, k_des, k_prot proton-flux, F₀/Γ_max).  Their sum is
+      ``denominator_total``.
+    * ``R_2e_current`` / ``R_4e_current`` — per-reaction nondim
+      current densities (no I_SCALE).  Returns ``None`` if the
+      reaction layout is not the expected 2-reaction parallel set.
+    * ``sigma_S_C_per_m2`` — boundary-averaged signed Stern surface
+      charge in C/m² (physical).  ``None`` when Stern is disabled.
+    * ``sigma_S_counts_per_pm2`` — same converted via
+      :func:`Forward.bv_solver.units.sigma_C_m2_to_counts_pm2`.
+
+    Returns an empty dict if the cation_hydrolysis bundle is missing
+    (the caller will append a "rung_callback_error"-style note rather
+    than crashing).
+    """
+    bundle = ctx.get("cation_hydrolysis")
+    if bundle is None:
+        return {}
+
+    diag: dict = {}
+    try:
+        from .units import sigma_C_m2_to_counts_pm2
+    except Exception:    # pragma: no cover — defensive
+        sigma_C_m2_to_counts_pm2 = None       # type: ignore[assignment]
+
+    if electrode_marker is None:
+        bv_cfg = ctx.get("bv_settings", {})
+        electrode_marker = bv_cfg.get("electrode_marker")
+    if electrode_marker is None:
+        return {}
+
+    mesh = ctx.get("mesh")
+    if mesh is None:
+        return {}
+
+    ds = fd.Measure("ds", domain=mesh)
+    try:
+        area = float(fd.assemble(fd.Constant(1.0) * ds(electrode_marker)))
+    except Exception as exc:
+        diag["v10a_diag_error"] = f"{type(exc).__name__}: {exc}"
+        return diag
+    if area <= 0.0:
+        diag["v10a_diag_error"] = "electrode boundary has zero area"
+        return diag
+
+    gamma = float(bundle.gamma_func)
+    gamma_max = float(bundle.gamma_max_func)
+    lam_val = float(bundle.lambda_hydrolysis_func)
+    k_hyd = float(bundle.k_hyd_func)
+    k_prot = float(bundle.k_prot_func)
+    k_des = float(bundle.k_des_func)
+    delta_ohp = float(bundle.delta_ohp_func)
+
+    diag["gamma"] = gamma
+    diag["gamma_max"] = gamma_max
+    diag["theta"] = gamma / gamma_max if gamma_max > 0.0 else None
+    diag["lambda_hydrolysis"] = lam_val
+    diag["k_hyd"] = k_hyd
+    diag["k_prot"] = k_prot
+    diag["k_des"] = k_des
+    diag["delta_ohp_hat"] = delta_ohp
+
+    ci = ctx.get("ci_exprs")
+    if ci is None:
+        diag["v10a_diag_error"] = "ctx missing ci_exprs"
+        return diag
+
+    c_M_expr = ci[bundle.counterion_idx]
+    c_H_expr = ci[bundle.h_idx]
+    sigma_S_expr = ctx.get("_cation_hydrolysis_sigma_S_expr")
+    if sigma_S_expr is None:
+        sigma_S_expr = fd.Constant(0.0)
+
+    pka_shift_expr = build_pka_shift(
+        cation_params=bundle.cation_params,
+        sigma_S=sigma_S_expr,
+        r_H_El_func=bundle.r_H_El_pm_func,
+    )
+    pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
+
+    try:
+        forward_avg = float(
+            fd.assemble(c_M_expr * pka_factor * ds(electrode_marker))
+        ) / area
+        c_H_avg = float(fd.assemble(c_H_expr * ds(electrode_marker))) / area
+        sigma_S_avg = (
+            float(fd.assemble(sigma_S_expr * ds(electrode_marker))) / area
+        )
+        pka_shift_avg = (
+            float(fd.assemble(pka_shift_expr * ds(electrode_marker))) / area
+        )
+    except Exception as exc:
+        diag["v10a_diag_error"] = f"{type(exc).__name__}: {exc}"
+        return diag
+
+    F0 = k_hyd * forward_avg
+    diag["F0_avg"] = F0
+    diag["forward_avg_no_k_hyd"] = forward_avg
+    diag["c_H_avg"] = c_H_avg
+    diag["pka_shift_avg"] = pka_shift_avg
+    diag["R_forward_capped"] = (
+        F0 * (1.0 - gamma / gamma_max) if gamma_max > 0.0 else None
+    )
+
+    # Langmuir denominator decomposition.  Mirrors the structure in
+    # update_gamma_from_solution so observers can verify the formula
+    # term-by-term.
+    denom_constant = (1.0 - lam_val)
+    denom_kdes = lam_val * k_des
+    denom_kprot = lam_val * k_prot * c_H_avg / delta_ohp if delta_ohp > 0 else 0.0
+    denom_cap = lam_val * F0 / gamma_max if gamma_max > 0.0 else None
+    denom_total = (
+        denom_constant + denom_kdes + denom_kprot
+        + (denom_cap if denom_cap is not None else 0.0)
+    )
+    diag["denominator_constant"] = denom_constant
+    diag["denominator_kdes"] = denom_kdes
+    diag["denominator_kprot"] = denom_kprot
+    diag["denominator_cap"] = denom_cap
+    diag["denominator_total"] = denom_total
+    diag["numerator"] = lam_val * F0
+    # Phase 6β v10a' v10b-routing threshold support: ratio of cap term
+    # to total denominator.  Critique session 33 R2 #6 / R3 pinned the
+    # routing rule to >0.8 AND θ>0.9 AND |sensS|<0.10 — the ratio is
+    # the load-bearing "cap dominates" indicator.
+    if (
+        denom_cap is not None and denom_total is not None
+        and denom_total > 0.0
+    ):
+        diag["denominator_cap_to_total_ratio"] = denom_cap / denom_total
+    else:
+        diag["denominator_cap_to_total_ratio"] = None
+
+    # σ_S converted to Singh's counts/pm² units (signed).  Diagnostic
+    # callers may apply max(0, -value) for the anode-clamped Singh
+    # magnitude separately.
+    diag["sigma_S_C_per_m2"] = sigma_S_avg
+    if sigma_C_m2_to_counts_pm2 is not None:
+        try:
+            diag["sigma_S_counts_per_pm2"] = sigma_C_m2_to_counts_pm2(
+                sigma_S_avg
+            )
+        except Exception as exc:
+            diag["sigma_S_counts_per_pm2_error"] = (
+                f"{type(exc).__name__}: {exc}"
+            )
+
+    # Per-reaction current contributions.  Used by the Phase A.2 / D /
+    # E ablation matrix to confirm the parallel-2e + 4e topology
+    # behaves as expected as Γ saturates.
+    bv_rate_exprs = ctx.get("bv_rate_exprs") or []
+    try:
+        for idx, R_expr in enumerate(bv_rate_exprs):
+            key = (
+                "R_2e_current_nondim"
+                if idx == 0
+                else "R_4e_current_nondim"
+                if idx == 1
+                else f"R_{idx}_current_nondim"
+            )
+            diag[key] = float(
+                fd.assemble(R_expr * ds(electrode_marker))
+            )
+    except Exception as exc:
+        diag["per_reaction_current_error"] = (
+            f"{type(exc).__name__}: {exc}"
+        )
+
+    # ---- Phase 6β v10a' enhanced decompositions ---------------------------
+    # F0 boundary-averaged decomposition (Jensen-safe per critique session
+    # 33 R2 #5).  All averages are taken on factor PRODUCTS, never on
+    # factors then multiplied.  Amplification ratios surface whether the
+    # F0 growth in the cathodic region is dominated by K+ enrichment vs.
+    # Singh ΔpKa (R3 #1: K+ enrichment is already load-bearing in v10a).
+    try:
+        c_K_avg = float(
+            fd.assemble(c_M_expr * ds(electrode_marker))
+        ) / area
+        pka_factor_avg = float(
+            fd.assemble(pka_factor * ds(electrode_marker))
+        ) / area
+        c_K_pka_product_avg = forward_avg          # = ⟨c_M · 10^(−ΔpKa)⟩
+        F0_total = F0
+        # Bulk c_K reference for the "K+-stayed-bulk" counterfactual.
+        # Read from the form-build c0 (concentration BC at the bulk
+        # ground node) when available; default to 1.0 nondim otherwise
+        # (mPNP code typically nondimensionalises bulk concentrations
+        # to 1).
+        c_K_bulk = 1.0
+        try:
+            c0_vals = (ctx.get("nondim", {})
+                          .get("c0_model_vals")
+                       or ctx.get("nondim", {})
+                             .get("c0_model"))
+            if c0_vals is not None and bundle.counterion_idx < len(c0_vals):
+                c_K_bulk = float(c0_vals[bundle.counterion_idx])
+        except Exception:
+            pass
+        diag["F0_decomposition"] = {
+            "c_K_avg":                   c_K_avg,
+            "pka_factor_avg":            pka_factor_avg,
+            "c_K_pka_product_avg":       c_K_pka_product_avg,
+            "F0_total":                  F0_total,
+            "c_K_bulk":                  c_K_bulk,
+            # Counterfactual: K+ never depleted/enriched at the OHP.
+            "F0_counterfactual_c_K_bulk": (
+                k_hyd * c_K_bulk * pka_factor_avg
+            ),
+            # Counterfactual: Singh shift disabled (ΔpKa → 0, factor → 1).
+            "F0_counterfactual_no_singh": k_hyd * c_K_avg,
+            # Mechanism attribution.  >1 → c_K enrichment dominates;
+            # <1 → c_K depletion suppresses.  Singh amplification
+            # should be ≈1 in v10a baseline (pka_shift_avg ~ 1e-5).
+            "amplification_from_c_K": (
+                F0_total / (k_hyd * c_K_bulk * pka_factor_avg)
+                if (k_hyd > 0.0 and c_K_bulk > 0.0 and pka_factor_avg > 0.0)
+                else None
+            ),
+            "amplification_from_singh": (
+                F0_total / (k_hyd * c_K_avg)
+                if (k_hyd > 0.0 and c_K_avg > 0.0) else None
+            ),
+        }
+    except Exception as exc:
+        diag["F0_decomposition_error"] = (
+            f"{type(exc).__name__}: {exc}"
+        )
+
+    # R_4e log-space decomposition (solver-faithful: matches the
+    # bv_log_rate path).  η_raw with Stern enabled is
+    # (phi_applied − phi_boundary − E_eq), NOT (V_RHE − E_eq); the
+    # exponent clip is applied to η/V_T BEFORE the α·n_e
+    # multiplication (CLAUDE.md Hard Rule 2;
+    # forms_logc.py:_build_eta_clipped).  This decomposition is a
+    # SCALAR APPROXIMATION over boundary-averaged nonlinear terms;
+    # ``log_R4e_measured`` (= ln of the assembled R_4e current) is
+    # authoritative.
+    try:
+        nondim = ctx.get("nondim", {})
+        rxns = nondim.get("bv_reactions", [])
+        if len(rxns) >= 2:
+            r4e = rxns[1]
+            k0_R4e = float(r4e.get("k0_model", r4e.get("k0", 0.0)))
+            alpha_R4e = float(r4e.get("alpha", 0.5))
+            n_e_R4e = float(r4e.get("n_electrons", 4))
+            E_eq_R4e = float(r4e.get("E_eq_model", 0.0))
+            bv_exp_scale = float(ctx.get("_diag_bv_exp_scale", 1.0))
+            exponent_clip = float(ctx.get("_diag_exponent_clip", 100.0))
+
+            # Build η_raw expression — Stern-aware per Hard Rule 2.
+            use_stern = bool(ctx.get("use_stern", False))
+            phi_applied_func = ctx.get("phi_applied_func")
+            indices = ctx.get("mixed_space_indices")
+            U = ctx.get("U")
+            if (
+                phi_applied_func is not None
+                and indices is not None
+                and U is not None
+            ):
+                phi_var = fd.split(U)[indices.phi_index]
+                if use_stern:
+                    eta_raw = (
+                        phi_applied_func - phi_var
+                        - fd.Constant(E_eq_R4e)
+                    )
+                else:
+                    eta_raw = phi_applied_func - fd.Constant(E_eq_R4e)
+                eta_scaled = bv_exp_scale * eta_raw
+                clip_const = fd.Constant(exponent_clip)
+                eta_scaled_clipped = fd.min_value(
+                    fd.max_value(eta_scaled, -clip_const), clip_const
+                )
+
+                eta_scaled_avg = float(
+                    fd.assemble(eta_scaled * ds(electrode_marker))
+                ) / area
+                eta_scaled_clipped_avg = float(
+                    fd.assemble(eta_scaled_clipped * ds(electrode_marker))
+                ) / area
+                # min/max via squared-difference detection: not
+                # cheaply available without nodal extraction; report
+                # whether the clip is active by comparing avg of
+                # |η_scaled| > clip indicator.
+                clip_indicator_avg = float(
+                    fd.assemble(
+                        fd.conditional(
+                            abs(eta_scaled) > clip_const,
+                            fd.Constant(1.0), fd.Constant(0.0),
+                        ) * ds(electrode_marker)
+                    )
+                ) / area
+
+                # n_e · ⟨ln(c_H/c_H_ref)⟩.
+                # c_H_ref comes from the cathodic_conc_factors entry
+                # for H+ (species 2 in the K2SO4 4sp stack).  The
+                # ratio is in nondim units already (both are
+                # nondimensionalised by C_SCALE).
+                c_H_ref_nondim = 1.0
+                ccfs = r4e.get("cathodic_conc_factors") or []
+                for ccf in ccfs:
+                    if ccf.get("species") == bundle.h_idx:
+                        c_H_ref_nondim = float(
+                            ccf.get("c_ref_nondim", 1.0)
+                        )
+                        break
+                # ⟨ln(c_H)⟩ ≈ ⟨u_H⟩ for non-mu species; for mu_H the
+                # reconstructed log is u_exprs[h_idx].  Use ci[h_idx]
+                # via ln-of-average (Jensen approximation acknowledged).
+                u_exprs = ctx.get("u_exprs")
+                h_idx = bundle.h_idx
+                if u_exprs is not None and h_idx < len(u_exprs):
+                    ln_c_H_avg = float(
+                        fd.assemble(u_exprs[h_idx] * ds(electrode_marker))
+                    ) / area
+                else:
+                    # Fallback: ln of boundary-average c_H.  This is a
+                    # stricter Jensen approximation than ⟨ln c_H⟩ but
+                    # should be small for slowly-varying c_H.
+                    ln_c_H_avg = (
+                        math.log(c_H_avg) if c_H_avg > 0.0 else float("-inf")
+                    )
+                ln_c_H_ratio_avg = ln_c_H_avg - math.log(c_H_ref_nondim)
+
+                log_k0 = math.log(k0_R4e) if k0_R4e > 0.0 else float("-inf")
+                log_bv_clipped_avg = (
+                    -alpha_R4e * n_e_R4e * eta_scaled_clipped_avg
+                )
+                n_e_log_c_H_factor_avg = n_e_R4e * ln_c_H_ratio_avg
+                log_R4e_predicted = (
+                    log_k0 + log_bv_clipped_avg + n_e_log_c_H_factor_avg
+                )
+                R4e_measured = diag.get("R_4e_current_nondim")
+                if R4e_measured is not None and R4e_measured > 0.0:
+                    log_R4e_measured = math.log(R4e_measured)
+                elif R4e_measured is not None and R4e_measured < 0.0:
+                    log_R4e_measured = math.log(abs(R4e_measured))
+                else:
+                    log_R4e_measured = None
+
+                diag["R_4e_decomposition_log"] = {
+                    "log_k0":                  log_k0,
+                    "alpha_R4e":               alpha_R4e,
+                    "n_electrons_R4e":         n_e_R4e,
+                    "E_eq_R4e_nondim":         E_eq_R4e,
+                    "bv_exp_scale":            bv_exp_scale,
+                    "exponent_clip":           exponent_clip,
+                    "eta_scaled_raw_avg":      eta_scaled_avg,
+                    "eta_scaled_clipped_avg":  eta_scaled_clipped_avg,
+                    "exponent_clip_active_fraction": clip_indicator_avg,
+                    "log_bv_clipped_avg":      log_bv_clipped_avg,
+                    "ln_c_H_avg":              ln_c_H_avg,
+                    "ln_c_H_ratio_avg":        ln_c_H_ratio_avg,
+                    "n_e_log_c_H_factor_avg":  n_e_log_c_H_factor_avg,
+                    "c_H_ref_nondim":          c_H_ref_nondim,
+                    "log_R4e_predicted":       log_R4e_predicted,
+                    "log_R4e_measured":        log_R4e_measured,
+                    "_note": (
+                        "Scalar approximation: averages of nonlinear "
+                        "terms over boundary; small/moderate "
+                        "discrepancies vs measured can come from "
+                        "Jensen/covariance, not necessarily a missing "
+                        "Stern/diffuse term.  Order-of-magnitude "
+                        "discrepancies indicate a missing residual term."
+                    ),
+                }
+    except Exception as exc:
+        diag["R_4e_decomposition_log_error"] = (
+            f"{type(exc).__name__}: {exc}"
+        )
+
+    return diag
+
+
 __all__ = [
     "CationHydrolysisBundle",
+    "GAMMA_MAX_HAT_SMOKE",
     "build_cation_hydrolysis_terms",
     "build_forward_branch",
+    "build_forward_branch_uncapped",
     "build_pka_shift",
     "build_proton_boundary_source",
+    "clamp_gamma_to_max",
+    "collect_v10a_rung_diagnostics",
     "extract_gamma_value",
+    "gamma_ss_langmuir",
     "is_cation_hydrolysis_enabled",
     "resolve_counterion_index",
     "update_gamma_from_solution",

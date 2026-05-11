@@ -934,6 +934,78 @@ SINGH_2016_CATION_PARAMS: Dict[str, Dict[str, float]] = {
 }
 
 
+# Phase 6β v10a Langmuir cap smoke baseline.  Mirrors the in-module
+# constant from ``Forward.bv_solver.cation_hydrolysis`` so callers
+# that import this module directly do not need to reach across into
+# the solver package for a single scalar.  See
+# ``Forward.bv_solver.cation_hydrolysis.GAMMA_MAX_HAT_SMOKE`` for the
+# nondim conversion derivation (≈ 1 monolayer of MOH at the OHP at
+# C_SCALE = 1.2 mol/m³ and L_REF = 100 µm).
+GAMMA_MAX_HAT_SMOKE: float = 0.047
+
+
+def make_cation_hydrolysis_config(
+    *,
+    k_hyd: float,
+    k_prot: float,
+    k_des: float,
+    delta_ohp_hat: float,
+    cation: str = "K+",
+    r_H_El_pm: Optional[float] = None,
+    anode_clamp: bool = True,
+    pka_shift_form: str = "singh_2016_eq_4",
+    gamma_max_nondim: float = GAMMA_MAX_HAT_SMOKE,
+) -> Dict[str, Any]:
+    """Build a ``cation_hydrolysis_config`` sub-dict for ``make_bv_solver_params``.
+
+    Phase 6β v10a builder — bundles the kinetic rates, OHP thickness,
+    Singh pKa parameters, and the Langmuir saturation cap
+    ``gamma_max_nondim`` into the dict that the solver consumes.
+    The Phase 6β v9 Gate 4 driver constructed this dict inline; v10a
+    promotes it to a builder so callers cannot forget to thread the
+    cap value through (a missing ``gamma_max_nondim`` falls back to
+    the bundle's smoke baseline, but that is *opt-in* now).
+
+    Parameters
+    ----------
+    k_hyd, k_prot, k_des
+        Forward / reverse / desorption kinetics (nondim).
+    delta_ohp_hat
+        OHP thickness in nondim length units.
+    cation, r_H_El_pm, anode_clamp
+        Forwarded to :func:`make_singh_pka_shift_params`.
+    pka_shift_form
+        ``"placeholder"`` (Gate 3B) or ``"singh_2016_eq_4"`` (Gate 4A
+        default).  v10a does not change the Singh form.
+    gamma_max_nondim
+        Langmuir saturation cap (Phase 6β v10a, 2026-05-10).  Defaults
+        to :data:`GAMMA_MAX_HAT_SMOKE` (≈ 1 monolayer of MOH).  Replace
+        with the literature-anchored value once v10b's CMK-3
+        capacitance note lands.
+
+    Returns
+    -------
+    Dict suitable as ``cation_hydrolysis_config`` for
+    :func:`make_bv_solver_params`.
+    """
+    if gamma_max_nondim <= 0.0:
+        raise ValueError(
+            "gamma_max_nondim must be positive "
+            f"(got {gamma_max_nondim!r})"
+        )
+    return {
+        "k_hyd": float(k_hyd),
+        "k_prot": float(k_prot),
+        "k_des": float(k_des),
+        "delta_ohp_hat": float(delta_ohp_hat),
+        "pka_shift_form": str(pka_shift_form),
+        "pka_shift_params": make_singh_pka_shift_params(
+            cation, r_H_El_pm=r_H_El_pm, anode_clamp=anode_clamp,
+        ),
+        "gamma_max_nondim": float(gamma_max_nondim),
+    }
+
+
 def make_singh_pka_shift_params(
     cation: str = "K+",
     *,

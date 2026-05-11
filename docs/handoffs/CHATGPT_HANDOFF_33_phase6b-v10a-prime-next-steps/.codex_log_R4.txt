@@ -1,0 +1,858 @@
+OpenAI Codex v0.129.0 (research preview)
+--------
+workdir: /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/jakeweinstein/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e1426-32e3-7b11-8f86-d66037940e1b
+--------
+user
+# Round 4 counterreply — v10a' next-steps (cap raised to 5)
+
+The round cap was raised from 3 to 5 because the user wants the
+plan reviewed all the way to **VERDICT: APPROVED** rather than
+auto-revised post-cap.  All 5 of your R3 issues have been
+incorporated into the plan via auto-revise; this round shows you
+the revised plan sections so you can verify the fixes landed
+correctly and verdict APPROVED (or call out any that didn't).
+
+## 1. Acknowledgment per issue
+
+### Re point 1 — `amplification_from_c_K` expectation. **Accepted.**
+
+You're right: C_K_HAT_bulk ≈ 166.6 (= 199.9/1.2 from
+`scripts/_bv_common.py:757`), and v10a's
+`F0/k_hyd ∈ {52, 67, 101, 129, 226, 414, 732}` across V_RHE
+= +0.55 → −0.50.  With `<10^(−ΔpKa)> ≈ 1` (since pka_shift_avg
+is ~1e-6 to 1e-5), the implied `<c_K>` ranges from ~52 (V=+0.55,
+3.2× depletion from bulk) to ~732 (V=−0.50, 4.4× enrichment).
+
+So `amplification_from_c_K` runs **0.31 (V=+0.55) → 4.39 (V=−0.50)**
+— K+ enrichment is already load-bearing in v10a, **not** a new
+v10a' effect from C_S=0.20.
+
+**Plan now says** (Sanity checks section, point 4):
+
+> "K+ enrichment is **already load-bearing in v10a** — not a new
+> effect from C_S=0.20."
+> Expected pattern:
+> - `amplification_from_singh ≈ 1` (Singh ΔpKa is tiny; ~1e-6 to 1e-5).
+> - `amplification_from_c_K`: ~0.31 at V=+0.55 (K+ depletion at anode),
+>   rising through ~1 near V=0, to ~4.39 at V=−0.50 (4× bulk enrichment).
+
+This is now documented as the expected baseline for the v10a' run.
+
+### Re point 2 — R_4e log decomposition not solver-faithful. **Accepted.**
+
+You're right that:
+- With Stern enabled, `η_raw = phi_applied − phi_boundary − E_eq`,
+  not `V_RHE − E_eq`.
+- Clip is on `eta_scaled = η/V_T` BEFORE the α·n_e multiplication
+  (`forms_logc.py:_build_eta_clipped`).
+- Raw 4e exponent magnitude does NOT itself indicate clipping is
+  active.
+
+**Plan now emits** (Enhanced diagnostic emissions section):
+
+```python
+diag["R_4e_decomposition_log"] = {
+    "log_k0":                 ln(k0_R4e),
+    "eta_scaled_raw_avg":     <η/V_T> over electrode boundary,
+    "eta_scaled_min":         min(η/V_T) over boundary,
+    "eta_scaled_max":         max(η/V_T) over boundary,
+    "eta_scaled_clipped_avg": <clip(η/V_T, -100, 100)>,
+    "exponent_clip_active":   any boundary point has |η/V_T| > 100,
+    "log_bv_clipped_avg":     -α·n_e · <eta_scaled_clipped>,
+    "n_e_log_c_H_factor_avg": n_e · <ln(c_H/c_H_ref)>,
+    "log_R4e_predicted":      sum of the above (scalar approximation),
+    "log_R4e_measured":       ln(R_4e_current_nondim) if R_4e > 0 else None,
+}
+```
+
+With an inline label in the plan:
+
+> "This decomposition is a scalar approximation — label as such;
+> the `log_R4e_measured` field is authoritative."
+
+`η_raw` correctly defined as `phi_applied − phi_boundary − E_eq`
+in the plan's comment.
+
+### Re point 3 — Case F's φ-perturbation fallback. **Accepted.**
+
+You're right: switching to φ_applied perturbation measures
+`dRnet/dφ`, not `dRnet/dσ` along the Stern-cap manifold.  Different
+derivative; cannot validate the same V_kin score.
+
+**Plan now says** (Decision tree Case F):
+
+> "Per R3 #3, do **NOT** switch to a φ-perturbation knob — that
+> measures a different derivative. Instead: increase the C_S
+> perturbation ε from 0.05 to 0.10 (or 0.15) and rerun. If still
+> `no_valid_stern_capacitance_sensitivity`, escalate as
+> 'C_S manifold unidentifiable at this regime'."
+
+φ-perturbation is **not** used in V_kin selection; reserved as
+auxiliary diagnostic only.
+
+### Re point 4 — Case G's invalid inference. **Accepted.**
+
+You're right: `no_candidate_passed_locked_rule + no artifact flag`
+does NOT imply "σ<0 ∧ o2lev<0.9 holds somewhere".  The artifact
+flag only fires when `current_passed=True AND o2lev>0.9`.  Absence
+of the flag could mean current failed everywhere (artifact flag
+trivially false because current_passed is False).
+
+**Plan now says** (Decision tree Case G):
+
+> "Per R3 #4, do **NOT** infer 'σ<0 + o2lev<0.9 holds somewhere'.
+> Instead: read the per-filter failure matrix from
+> `per_v_decisions`:
+> - counts of `locked_sigma_neg_filter_passed = True`
+> - counts of `locked_current_filter_passed = True`
+> - counts of `locked_branch_filter_passed = True`
+> - counts of `o2_flux_levich_ratio > 0.9`
+> - counts of `primary_valid` / `fallback_valid`
+> Route based on the actual blocking filter:
+> - If `sigma_neg` count = 0 → would have been Case E (abort).
+> - If `current_passed` count = 0 → bracket sweep (Case B path).
+> - If `branch_passed` count = 0 → bracket sweep (Case B path);
+>   bias bracket point selection to where x_4e is closest to
+>   [0.05, 0.95] in the v10a record.
+> - If `*_valid` count = 0 → Case F.
+> - Multiple zero counts → bracket sweep + escalate if no factor
+>   opens any single failing filter."
+
+### Re point 5 — Routing precedence ambiguous. **Accepted.**
+
+You're right: a returned V_kin with `cap_dominated=True` could
+satisfy both "Case A: clean V_kin → Phase A.2" and "v10b routing
+threshold met → v10b".  Auto-revise step can't decide.
+
+**Plan now has** an explicit Step 0 precedence section:
+
+> "After `select_v_kin()` returns a `v_kin`, first compute on the
+> selected V's record:
+>   - `is_transport_artifact = locked_current_filter_passes_but_o2_transport_limited`
+>   - `is_cap_dominated_routing = (
+>         all σ<0 fallback-valid V satisfy
+>         denom_cap/denom_total > 0.8 AND θ > 0.9 AND |sensS| < 0.10
+>     )`
+>
+> If `is_transport_artifact`: route to **Case B** below regardless
+> of what the locked rule said about 'clean V_kin'.
+>
+> Else if `is_cap_dominated_routing`: route to **v10b** (literature
+> calibration) NOT to Phase A.2 — even if `select_v_kin` returned
+> a nominally 'clean' V_kin.
+>
+> Else if neither: proceed to Case A."
+
+Order: artifact check → cap-dominance check → Phase A.2.
+Deterministic.
+
+## 2. Updated artifact (changes since R3)
+
+All 5 R3 issues incorporated above are in the live plan file at
+`/Users/jakeweinstein/.claude/plans/sparkly-gilded-pasteur.md`.
+Specifically:
+
+* **Sanity checks section** now states "K+ enrichment is already
+  load-bearing in v10a — not a new effect from C_S=0.20" with
+  the 0.31 → 4.39 expected pattern (R3.1).
+* **R_4e log decomposition** is labeled as scalar approximation
+  with authoritative `log_R4e_measured`; emits boundary
+  `eta_scaled` avg/min/max + `exponent_clip_active` (R3.2).
+* **Case F** restricts the fallback to "increase ε" — no knob
+  switch (R3.3).
+* **Case G** uses per-filter failure matrix inspection — no
+  invalid inferences (R3.4).
+* **Step 0 precedence guards** added before Cases A–G; order
+  pinned (R3.5).
+
+In addition to the R3 fixes, the plan has the cumulative R1+R2
+revisions:
+
+* Single-run K0_R4e_factor = `1e-14` (was 1e-18; per R1.1 this is
+  the V=−0.10 branch-pass probe, not a plateau-shift target).
+* Bracket sweep `{1e-10, 1e-12, 1e-14, 1e-16, 1e-18, 1e-20, 1e-22, 1e-24}`
+  (was the sparse 5-point bracket missing V=−0.10 window; per R1.8).
+* Decision tree expanded to 7 cases (A–G; per R2.2).
+* "BV-controlled" softened to "passes O₂ sanity check" (R2.3).
+* F₀ decomposition uses boundary averages of products
+  (Jensen-safe; R2.5).
+* `denominator_cap dominates` threshold pinned at
+  `>0.8 ∧ θ>0.9 ∧ |sensS|<0.10` (R2.6).
+* Attribution disclaimer added (combined C_S + K0 change
+  intentional; routing works regardless; R2.7).
+
+## 3. Continued critique prompt
+
+Review the updated plan and my responses to your earlier issues.
+Push back on responses where I defended poorly — name which point.
+Raise any new issues the updated plan creates. Re-issue any earlier
+issue you don't think I addressed.
+
+Round 4 of 5.  We're aiming for **VERDICT: APPROVED** — if
+remaining concerns are minor nitpicks (not blocking), please verdict
+APPROVED and call them out for the record.  If genuine blockers
+remain, verdict ISSUES_REMAIN and we run round 5.
+
+Same numbered format + verdict line:
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN
+
+Scope reminder: still narrow on the three subtle physics/parameter-
+coupling points. Don't critique driver structure, test list, or
+file modifications.
+
+codex
+I’ll verify the live plan file now, focusing only on the revised physics/routing sections you called out.
+exec
+/bin/zsh -lc "sed -n '260,560p' /Users/jakeweinstein/.claude/plans/sparkly-gilded-pasteur.md" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+exec
+/bin/zsh -lc "sed -n '1,260p' /Users/jakeweinstein/.claude/plans/sparkly-gilded-pasteur.md" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+# Plan — Phase 6β v10a' V-sweep diagnostic with corrected parameters
+
+## Context
+
+The Phase 6β v10a V-sweep diagnostic landed on 2026-05-10 and ran
+cleanly through 7 V_RHE points (+0.55 → −0.50 V). End-to-end Firedrake
+wiring works; all 25 unit tests on the V_kin selection module pass.
+But the diagnostic returned `no_candidate_passed_locked_rule` —
+**no V cleared the locked three-filter set even in fallback** —
+because two parameter choices in the smoke baseline were misaligned
+with the production stack:
+
+1. **Stern capacitance**: the diagnostic used `C_S = 0.10 F/m²`. Per
+   the new CMK-3 research consensus (`.research/cmk3-stern-capacitance/SUMMARY.md`,
+   2026-05-10) and CLAUDE.md update, the **production target is
+   `C_S = 0.20 F/m²` (20 µF/cm²)**, anchored to the
+   Bohra-Koper-Choi PNP-modeling convergence (Choi 2024 / Bohra 2024 /
+   CatINT / Pillai 2024). The 0.10 value sits at the bottom of
+   Pillai's "safe band" but lacks a citation chain; 0.20 is the
+   defensible literature-anchored value.
+
+2. **K0_R4e/K0_R2e ratio**: the codebase defaults set
+   `K0_HAT_R4E = K0_HAT_R2E` (i.e. ratio = 1), which is documented
+   as "a PRIOR-SELECTED placeholder — not calibrated to any data"
+   in `scripts/_bv_common.py` and in CLAUDE.md memory
+   `project_k0_r4e_ratio_regimes`. At this ratio every voltage in
+   the diagnostic showed **pure-4e selectivity**
+   (`R_2e/(R_2e+R_4e) = 1.000` for all 7 V), which kills the locked
+   branch filter `[0.05, 0.95]` everywhere. The project memory
+   identifies **ratio ≈ 1e-18 as the regime that produces Butler-
+   shaped IV + Mangan-like 35–50 % peroxide selectivity** — the
+   regime Phase E will calibrate against.
+
+The diagnostic also surfaced a deeper finding: at the smoke setup,
+**the σ_S<0 region and the cd_ok region have empty intersection**.
+σ_S<0 only at V ≤ −0.10 V; `|cd|/I_lim_4e < 0.9` only at V ≥ +0.40 V.
+The cathode Levich-saturates before σ_S goes cathodic. A quick BV
+exponential-dependence argument (`∂ln R_4e/∂V = −α·n_e/V_T = −78/V`)
+shows the L_eff knob is **insufficient** to fix this — halving L_eff
+shifts plateau onset by only ~9 mV, but ~300+ mV is needed. **K0_R4e
+reduction is the load-bearing knob** (with α_R4E as a narrower-headroom
+alternative — see Implementation notes).
+
+> **Important caveat (critique session 33 R1 #1):** the factor needed
+> to *shift cd plateau onset* is decoupled from the factor that
+> *opens the branch filter*.  Project memory's "1e-18 → 35–50 %
+> peroxide" refers to selectivity (R_2e/R_4e equality on the
+> Levich plateau), NOT plateau-onset shift.  Per the BV slope
+> `∂V/∂ln K0 = −1/78`:
+> - K0 factor for 0.3 V plateau shift: `e^(−78·0.3) ≈ 7e-11`.
+> - K0 factor for branch-pass at V=−0.10 V (where v10a's |sensS|
+>   is highest): per GPT's extrapolation from the v10a record,
+>   `~[7e-16, 2.5e-13]`.
+> - K0 factor for branch-pass at V=−0.30 V: `~[1e-18, 3e-16]`.
+> - K0 factor for branch-pass at V=−0.50 V: `~[1e-21, 5e-19]`.
+> The single-run target `1e-14` is a **V=−0.10 probe only**; the
+> dense bracket below covers V=−0.30 and V=−0.50.
+
+This plan re-runs the v10a diagnostic with both corrections in place
+and defines a deterministic decision tree (Cases A–G) for every
+diagnostic outcome.
+
+## Scope (v10a' only)
+
+### What's in scope
+
+1. **`C_S = 0.20 F/m²` driver default**: bump `STERN_F_M2_BASELINE`
+   in the V-sweep driver from `0.10` to `0.20`. Document the change
+   inline citing the CMK-3 SUMMARY.
+2. **`--k0-r4e-factor CLI flag`**: dimensionless multiplier on
+   `K0_HAT_R4E` (default `1.0` to preserve back-compat). Internally
+   the driver builds a copy of `PARALLEL_2E_4E_REACTIONS_4SP` with
+   `k0` replaced by `K0_HAT_R4E · factor` for the 4e branch.
+3. **Re-run the 7-point midway grid** at the new parameters with
+   `--k0-r4e-factor 1e-14` (a V=−0.10 branch-pass probe; the V
+   that had the highest |sensS| in v10a). Wall budget: ~1.5 h.
+4. **Dense bracket-sweep follow-up** if the single-factor run
+   doesn't yield a clean V_kin: sweep
+   `K0_R4e_factor ∈ {1e-10, 1e-12, 1e-14, 1e-16, 1e-18, 1e-20, 1e-22, 1e-24}`
+   (8 points, log-uniform, covering the v10a-extrapolated
+   branch-pass windows at V=−0.10 through V=−0.50).  Wall budget:
+   ~12 h serial.
+5. **Update the v10a / acceptance bundle docs** with the diagnostic
+   findings:
+   - `docs/phase6/PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md` —
+     record the v10a' V_kin result (or routing decision).
+   - `CLAUDE.md` — Phase 6β scope updated with the v10a' outcome.
+
+### What's out of scope (deferred)
+
+- **Changing the locked V_kin rule itself.** Even if `no_candidate_
+  passed_locked_rule` recurs at 1e-18, the rule is locked per the
+  acceptance bundle. Amendments require a separate escalation
+  conversation with the experimental group, not a driver-side patch.
+- **L_eff bracket sweep.** Mathematically shown insufficient; not
+  worth a 7 h run.
+- **Phase A.2 / D / E.** Run *after* v10a' yields a clean V_kin.
+- **v10b literature calibration of Γ_max, k_des.** Still pending
+  the CMK-3 capacitance note; the C_S=0.20 update is one piece of
+  this.
+
+## Critical files to modify
+
+| File | Lines (approximate) | Change |
+|---|---|---|
+| `scripts/studies/phase6b_v10a_v_sweep_diagnostic.py` | ~94 (`STERN_F_M2_BASELINE`) | `0.10 → 0.20`; comment cites `.research/cmk3-stern-capacitance/SUMMARY.md` |
+| `scripts/studies/phase6b_v10a_v_sweep_diagnostic.py` | ~540 (`_build_sp` signature + body) | Accept `k0_r4e_factor: float = 1.0`; deep-copy `PARALLEL_2E_4E_REACTIONS_4SP` and scale `bv_reactions[1]["k0"]` |
+| `scripts/studies/phase6b_v10a_v_sweep_diagnostic.py` | ~720 (CLI `_parse_args`) | Add `--k0-r4e-factor` flag (default `1.0`) |
+| `scripts/studies/phase6b_v10a_v_sweep_diagnostic.py` | ~780 (`main`) | Thread factor through `_build_sp` calls in both passes |
+| `scripts/studies/phase6b_v10a_v_sweep_diagnostic.py` | ~830 (config block) | Record `k0_r4e_factor` in the JSON config payload |
+| `tests/test_phase6b_v10a_v_kin_selection.py` | NEW test class | `TestK0R4eFactorDriver` — fast tests that the factor wires through to the driver's SolverParams (mock-friendly via inspecting the built sp; no Firedrake required) |
+
+No solver-side changes. All v10a plumbing (Langmuir cap, diagnostics,
+setters, warm-restart clamp) is unchanged.
+
+## Implementation notes
+
+### Plateau-shift vs. branch-pass factor (decoupled — critique R1 #1)
+
+Two distinct targets, both governed by reducing K0_R4e but answering
+different conditions:
+
+| Target | Condition | K0 factor at α=0.5, n_e=4 |
+|---|---|---|
+| Kinetic plateau-onset shift ΔV | `ln F = −78·ΔV` | ΔV=0.3 V ⇒ F≈7e-11; ΔV=0.5 V ⇒ F≈6e-18 |
+| Branch-pass at V=−0.10 V (mixed) | x_4e ∈ [0.05, 0.95] at converged surface c | per GPT extrapolation: [7e-16, 2.5e-13] |
+| Branch-pass at V=−0.30 V | same | [1e-18, 3e-16] |
+| Branch-pass at V=−0.50 V | same | [1e-21, 5e-19] |
+
+The single-run target `1e-14` sits in the V=−0.10 branch-pass window
+only (it's 30× above the V=−0.30 upper edge). The dense bracket
+sweep is what covers V=−0.30 and V=−0.50.
+
+### α_R4E alternative (documented; deferred per R2 #3)
+
+α_R4E is the only other knob with the right OOM. Math:
+
+    α' = α · η_old / η_new       (plateau-condition equality)
+
+Recomputed targets:
+- V_overlap=−0.10 V ⇒ α' ≈ 0.35
+- V_overlap=−0.30 V ⇒ α' ≈ 0.30
+- V_overlap=−0.50 V ⇒ α' ≈ 0.27
+
+α<0.30 starts contradicting ORR Tafel-slope measurements (typical
+60–120 mV/dec → α ∈ [0.30, 0.50]). Narrower headroom than K0.
+**Defer to K0 to keep the Tafel-slope-fit conversation separate.**
+α adjustment is not pursued in v10a' but documented as the
+alternative knob.
+
+### `--k0-r4e-factor` wiring
+
+```python
+# scripts/studies/phase6b_v10a_v_sweep_diagnostic.py
+def _build_sp(*, k0_r4e_factor: float = 1.0, ...):
+    from scripts._bv_common import (
+        K0_HAT_R2E, K0_HAT_R4E, PARALLEL_2E_4E_REACTIONS_4SP,
+        ...
+    )
+    # Deep-copy the reactions list and rescale only the 4e branch's k0.
+    bv_reactions = [dict(r) for r in PARALLEL_2E_4E_REACTIONS_4SP]
+    # Defensive: cathodic_conc_factors is nested mutable.
+    for r in bv_reactions:
+        if "cathodic_conc_factors" in r:
+            r["cathodic_conc_factors"] = [
+                dict(f) for f in r["cathodic_conc_factors"]
+            ]
+        if "stoichiometry" in r:
+            r["stoichiometry"] = list(r["stoichiometry"])
+    bv_reactions[1]["k0"] = float(K0_HAT_R4E) * float(k0_r4e_factor)
+    ...
+    sp = make_bv_solver_params(
+        ...
+        bv_reactions=bv_reactions,
+        ...
+    )
+```
+
+Validation:
+- `k0_r4e_factor > 0` (`make_bv_solver_params` already validates `k0 > 0`).
+- CLI flag accepts scientific notation (`argparse` handles `1e-18`
+  naturally with `type=float`).
+
+### `STERN_F_M2_BASELINE` bump
+
+```python
+STERN_F_M2_BASELINE: float = 0.20
+"""Production Stern capacitance, F/m² (= 20 µF/cm²).
+
+Per `.research/cmk3-stern-capacitance/SUMMARY.md` (2026-05-10):
+literature-anchored Bohra-Koper-Choi consensus.  Derived from Stern
+thickness L_S = 5 Å and Booth-saturated permittivity ε_S = 11.3.
+The legacy 0.10 F/m² (pre-2026-05-10) was a convergence-pinned
+engineering choice with no CMK-3 anchor.
+"""
+```
+
+### Decision tree after re-run at `--k0-r4e-factor 1e-14` (deterministic, 7 branches)
+
+After the v10a' single run, apply this tree in strict order (per
+critique R3 #5 — precedence is explicit, artifact and cap-dominance
+checks take priority over routing to A.2):
+
+**Step 0 — Precedence guards** (apply BEFORE Case A/B routing):
+
+If `select_v_kin()` returned a `v_kin`, first compute on the
+selected V's record:
+  - `is_transport_artifact = locked_current_filter_passes_but_o2_transport_limited`
+  - `is_cap_dominated_routing = (
+        all σ<0 fallback-valid V satisfy
+        denom_cap/denom_total > 0.8 AND θ > 0.9 AND |sensS| < 0.10
+    )`
+
+If `is_transport_artifact`: route to **Case B** below regardless
+of what the locked rule said about "clean V_kin".
+
+Else if `is_cap_dominated_routing`: route to **v10b** (literature
+calibration) NOT to Phase A.2 — even if `select_v_kin` returned a
+nominally "clean" V_kin.
+
+Else if neither: proceed to Case A.
+
+**Cases:**
+
+**Case A — clean V_kin, not transport-artifact, not cap-dominated:**
+    → Phase A.2 at V_kin. Record in acceptance bundle.
+
+**Case B — V_kin returned but `locked_current_filter_passes_but_o2_transport_limited = True`:**
+    → "current-filter artifact, transport-limited at returned V".
+    → Launch the dense bracket sweep:
+      `{1e-10, 1e-12, 1e-14, 1e-16, 1e-18, 1e-20, 1e-22, 1e-24}`.
+
+**Case C — bracket returns at least one clean V_kin (no artifact):**
+    → Pick the bracket point whose V_kin has highest |sensS| AND
+      passes the O₂-sanity check (`o2lev ≤ 0.9` at the selected V)
+      AND is not cap-dominated.
+    → Phase A.2 at that V_kin.
+
+**Case D — every bracket point produces artifact-only OR
+no_candidate_passed_locked_rule:**
+    → Escalate to acceptance-bundle review.  Document as:
+      "locked current filter satisfied only by transport-limited
+      mixed-branch plateaus across {1e-10 … 1e-24} at C_S=0.20."
+
+**Case E — `abort_to_v10c=True` (no V has σ_S<0):**
+    → C_S = 0.20 didn't open the cathodic σ_S region.
+    → Launch v10c proper: C_S bracket sweep {0.10, 0.20, 0.30, 0.50}
+      F/m² (or wider).
+
+**Case F — `no_valid_stern_capacitance_sensitivity=True`:**
+    → Perturbation estimator collapsed. Per R3 #3, do **NOT**
+      switch to a φ-perturbation knob — that measures a different
+      derivative.  Instead: increase the C_S perturbation ε from
+      0.05 to 0.10 (or 0.15) and rerun.  If still
+      `no_valid_stern_capacitance_sensitivity`, escalate as
+      "C_S manifold unidentifiable at this regime".
+
+**Case G — `no_candidate_passed_locked_rule` BUT not Case B:**
+    → Per R3 #4, do **NOT** infer "σ<0 + o2lev<0.9 holds somewhere".
+      Instead: read the per-filter failure matrix from
+
+ succeeded in 0ms:
+      Instead: read the per-filter failure matrix from
+      `per_v_decisions`:
+        - counts of `locked_sigma_neg_filter_passed = True`
+        - counts of `locked_current_filter_passed = True`
+        - counts of `locked_branch_filter_passed = True`
+        - counts of `o2_flux_levich_ratio > 0.9`
+        - counts of `primary_valid` / `fallback_valid`
+      Route based on the actual blocking filter:
+        * If `sigma_neg` count = 0 → would have been Case E (abort).
+        * If `current_passed` count = 0 → bracket sweep (Case B path).
+        * If `branch_passed` count = 0 → bracket sweep (Case B path);
+          bias bracket point selection to where x_4e is closest to
+          [0.05, 0.95] in the v10a record.
+        * If `*_valid` count = 0 → Case F.
+        * Multiple zero counts → bracket sweep + escalate if no
+          factor opens any single failing filter.
+
+## Verification
+
+### Fast tests (no Firedrake)
+
+```bash
+source ../venv-firedrake/bin/activate
+python -m pytest tests/test_phase6b_v10a_v_kin_selection.py -v
+# Expected: 25 existing + N new TestK0R4eFactorDriver tests pass.
+```
+
+New test cases:
+1. `_build_sp(k0_r4e_factor=1.0)` produces a SolverParams whose
+   `bv_reactions[1]["k0"]` equals `K0_HAT_R4E`.
+2. `_build_sp(k0_r4e_factor=1e-18)` scales `bv_reactions[1]["k0"]`
+   to `K0_HAT_R4E * 1e-18`.
+3. `bv_reactions[0]["k0"]` is unchanged by the factor (2e branch
+   untouched).
+4. The cathodic_conc_factors and stoichiometry are deep-copied
+   (no aliasing into the module-level constant).
+5. CLI `--k0-r4e-factor 1e-18` parses to the float.
+
+### Re-run
+
+```bash
+# Single-factor run (~1.5 h, V=-0.10 probe per R1#1):
+python -u scripts/studies/phase6b_v10a_v_sweep_diagnostic.py \
+    --v-rhe-grid 0.55,0.40,0.20,0.10,-0.10,-0.30,-0.50 \
+    --k0-r4e-factor 1e-14 \
+    --out-subdir phase6b_v10a_prime_k0r4e_1e-14
+
+# Dense bracket sweep (Case B/C path; ~12 h serial; can parallelize):
+for f in 1e-10 1e-12 1e-14 1e-16 1e-18 1e-20 1e-22 1e-24; do
+    python -u scripts/studies/phase6b_v10a_v_sweep_diagnostic.py \
+        --v-rhe-grid 0.55,0.40,0.20,0.10,-0.10,-0.30,-0.50 \
+        --k0-r4e-factor $f \
+        --out-subdir phase6b_v10a_prime_bracket_factor_$f
+done
+```
+
+### Sanity checks on the re-run
+
+1. **σ_S crossing**: per R2 #7, the relationship between C_S and
+   σ_S is series-coupled and σ_S magnitude does **not** simply
+   double with C_S. Treat σ_S(V) as an observed diagnostic; do
+   NOT pre-commit to a direction. The σ_S=0 crossing voltage may
+   or may not shift meaningfully.
+2. **Branch filter satisfiable**: at K0_R4e_factor = 1e-14, expect
+   `R_2e/(R_2e+R_4e) ∈ [0.05, 0.95]` for V near −0.10 V (the V=−0.10
+   branch-pass window per R1 #8). At the bracket-sweep factors, expect
+   the window to walk through V=−0.30 (at f≈1e-17) and V=−0.50 (at
+   f≈1e-20).
+3. **cd_plateau onset**: with K0_R4e reduced, the 4e branch's BV
+   rate drops, so the V at which cd hits Levich shifts more
+   cathodic. But: |cd|/I_lim_4e is asymmetric for parallel 2e/4e
+   (= (1 + x_4e)/2 at transport limit per R1 #2), so cd_ok=True
+   does NOT imply non-transport-limited — check `o2_flux_levich_ratio`.
+4. **F₀ amplification map** (per R3 #1): compute
+   `amplification_from_c_K = F0_total / (k_hyd · c_K_bulk · pka_factor_avg)`
+   at each V. Expected pattern from v10a baseline:
+   `amplification < 1` at anodic V (K+ depletion at the OHP),
+   `amplification > 1` at cathodic V (K+ enrichment, reaches
+   several-fold by V=−0.50). K+ enrichment is **already
+   load-bearing in v10a** — not a new effect from C_S=0.20.
+5. **θ profile** (per R2 #5 / R3 critique): θ behavior under
+   v10a' is **observed**, not predicted. K0_R4e reduction is
+   uncoupled from F₀ and from Γ saturation. If `denominator_cap`
+   dominates everywhere, route to **v10b** per the threshold
+   below.
+6. **R_4e log-space sanity** (per R3 #4): verify
+   `log_R4e_predicted ≈ log_R4e_measured` within clip tolerance
+   on each per-V record; large discrepancies indicate the BV η
+   includes Stern/diffuse terms not captured in the scalar
+   decomposition.
+
+### v10b-vs-v10c routing decision threshold (pinned per R2 #6 + R3)
+
+After the v10a' run + (if needed) bracket sweep:
+
+Route to **v10b** (literature-anchored Γ_max + k_des calibration)
+iff EVERY σ_S<0, fallback-tier-valid V in the output satisfies
+**ALL THREE** of:
+- `denominator_cap / denominator_total > 0.8`
+- `θ > 0.9`
+- `|dRnet_dsigma_along_stern_capacitance| < 0.10`
+   (below the v10a |sensS| baseline of 0.21 at V=−0.10, so the
+   Langmuir cap has eaten the σ_S leverage; kinetics tuning can't
+   help)
+
+Route to **v10c** (C_S bracket sweep) iff `abort_to_v10c=True`
+(no V has σ_S<0).
+
+Route to **escalation** iff every bracket-sweep run produces an
+artifact candidate OR no_candidate_passed_locked_rule across the
+full bracket. Acceptance bundle review.
+
+Otherwise: route to **Phase A.2** at the returned V_kin.
+
+### Attribution disclaimer (per R2 #7)
+
+v10a' changes BOTH C_S (0.10 → 0.20) AND adds the K0_R4e factor
+knob. If the run's outcome is operational success (clean V_kin),
+attribution isn't needed. If the outcome is the v10b-prerequisite
+signal (cap dominates), we route to v10b regardless of which knob
+caused it. The only scenario where attribution would matter is if
+we were considering rolling back C_S = 0.20 — we are not, since
+0.20 is the new literature-anchored production target per
+`.research/cmk3-stern-capacitance/SUMMARY.md`.
+
+If a future C_S audit becomes necessary, the (C_S=0.20, factor=1)
+control run can be added as a follow-up (wall ~1.5 h).
+
+### Enhanced diagnostic emissions (per R3 #4 + #5 corrections)
+
+Extend `collect_v10a_rung_diagnostics(ctx)` per-V with:
+
+```python
+# R_4e log-space decomposition (solver-faithful: matches bv_log_rate path).
+# Note: η_raw with Stern enabled is (phi_applied - phi_boundary - E_eq),
+# NOT (V_RHE - E_eq).  The exponent clip is applied to η/V_T before α·n_e
+# multiplication (CLAUDE.md Hard Rule 2; forms_logc.py:_build_eta_clipped).
+# This decomposition is a scalar approximation — label as such; the
+# log_R4e_measured field is authoritative.
+diag["R_4e_decomposition_log"] = {
+    "log_k0":                 ln(k0_R4e),
+    "eta_scaled_raw_avg":     <η/V_T> over electrode boundary,
+    "eta_scaled_min":         min(η/V_T) over boundary,
+    "eta_scaled_max":         max(η/V_T) over boundary,
+    "eta_scaled_clipped_avg": <clip(η/V_T, -100, 100)>,
+    "exponent_clip_active":   any boundary point has |η/V_T| > 100,
+    "log_bv_clipped_avg":     -α·n_e · <eta_scaled_clipped>,
+    "n_e_log_c_H_factor_avg": n_e · <ln(c_H/c_H_ref)>,
+    "log_R4e_predicted":      sum of the above (scalar approximation),
+    "log_R4e_measured":       ln(R_4e_current_nondim) if R_4e > 0 else None,
+}
+
+# F0 boundary-averaged decomposition (Jensen-safe per R2 #5; corrected
+# expected values per R3 #1 — K+ enrichment IS load-bearing in v10a).
+diag["F0_decomposition"] = {
+    "c_K_avg":                 <c_K> over electrode boundary,
+    "pka_factor_avg":          <10^(-ΔpKa)>,
+    "c_K_pka_product_avg":     <c_K · 10^(-ΔpKa)>,
+    "F0_total":                k_hyd · c_K_pka_product_avg,
+    # Counterfactuals (clearly labeled approximations):
+    "F0_counterfactual_c_K_bulk":
+        k_hyd · c_K_bulk · pka_factor_avg,    # if K+ stayed at bulk
+    "F0_counterfactual_no_singh":
+        k_hyd · c_K_avg,                      # if Singh disabled
+    # The actual mechanism attribution:
+    "amplification_from_c_K":
+        F0_total / (k_hyd · c_K_bulk · pka_factor_avg),
+    "amplification_from_singh":
+        F0_total / (k_hyd · c_K_avg),
+}
+```
+
+Expected baseline pattern from v10a (per R3 #1):
+- `amplification_from_singh ≈ 1` (Singh ΔpKa is tiny; ~1e-6 to 1e-5).
+- `amplification_from_c_K`: ~0.31 at V=+0.55 (K+ depletion at anode),
+  rising through ~1 near V=0, to ~4.39 at V=−0.50 (4× bulk enrichment).
+- **K+ enrichment is the dominant F₀ amplifier in the cathodic region**.
+
+## Risks (revised per critique session 33)
+
+| # | Risk | Mitigation |
+|---|---|---|
+| 1 | `K0_R4e_factor = 1e-14` (or smaller bracket values) makes 4e branch numerically vanish; Newton conditioning degrades | Project memory `project_k0_r4e_ratio_regimes` established that ratios down to ~1e-24 converge.  If Newton fails at the smallest bracket value, the per-V failure flags pinpoint where; bisect upward in the bracket. |
+| 2 | C_S = 0.20 in series with the diffuse layer may NOT linearly scale σ_S — per R2 #7 the relationship is sublinear. abort_to_v10c may or may not retreat. | Treat σ_S(V) at C_S=0.20 as observed.  Decision tree Case E routes to v10c proper if abort fires; no pre-commit. |
+| 3 | Singh ΔpKa at C_S = 0.20 may amplify; expected from R3 #1 to remain tiny (`pka_shift_avg ~ 1e-5`) but watch for unphysically large shifts | The F0 decomposition surfaces `amplification_from_singh`; if it grows above ~10, treat as unphysical and re-examine Singh r_H_El. |
+| 4 | ~~F₀ drops with weaker R_4e → θ retreats~~ (DELETED per R2 #5; F₀ uncoupled from K0_R4e) | — |
+| 5 | If even the dense bracket sweep (1e-10 → 1e-24) produces no clean V_kin (Case D), the locked rule is over-constrained for this stack | Surface to acceptance bundle Status section; escalate to experimental-group review.  v10c (C_S bracket) is the next physical knob. |
+| 6 | Per R3 #1, K+ enrichment is **already load-bearing** in v10a (`amplification_from_c_K` rises from 0.31 → 4.39 across V_RHE).  C_S = 0.20 may push θ higher at all cathodic V, killing sensS. | Decision tree v10b routing threshold (denom_cap/total>0.8, θ>0.9, |sensS|<0.10) is the deterministic escape; route to v10b literature calibration. |
+| 7 | R_4e_decomposition_log is a **scalar approximation** (per R3 #4); η_raw with Stern enabled includes phi_boundary, not just V_RHE | Labeled as approximation in the JSON; `log_R4e_measured` is authoritative.  Discrepancies surface a missing Stern/diffuse term. |
+| 8 | Bracket point precedence ambiguous when multiple bracket runs return clean V_kin candidates | Case C decision rule: pick max |sensS| AND `o2lev ≤ 0.9` AND not cap-dominated. |
+
+## After v10a' lands
+
+Per the locked sequence (acceptance bundle step 5+):
+
+1. Phase A.2 at V_kin (~1 day): densified k_hyd + λ ramp.
+2. Plumbing ablation matrix at V_kin (~2 days; A1/A2/A3 flags).
+3. CMK-3 capacitance literature note (v10b prerequisite — partially
+   landed via `.research/cmk3-stern-capacitance/`).
+4. v10b literature calibration of Γ_max, k_des (~1-2 weeks).
+5. B.2 densified ramp (~2 days).
+6. Phase D K-only fit (~1 day).
+7. Phase E predictive holdout (~3-5 days).
+
+## References
+
+- `StudyResults/phase6b_v10a_v_sweep_diagnostic/iv_diagnostic.json` —
+  the v10a run that surfaced the empty-intersection finding.
+- `.research/cmk3-stern-capacitance/SUMMARY.md` — the CMK-3 Stern
+  research that anchors C_S = 0.20.
+- `docs/phase6/PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md` — the
+  locked V_kin rule.
+- CLAUDE.md memory `project_k0_r4e_ratio_regimes` — three-regime
+  characterization including the 1e-18 mixed-selectivity sweet spot.
+- `docs/handoffs/CHATGPT_HANDOFF_32_phase6b-v10a-v-sweep-diagnostic/` —
+  the prior critique session that hardened the V-sweep plan
+  structure (locked-rule literalism, Stage 1 / Stage 2 split, σ-gap
+  floors, Levich asymmetry indicator).
+- `docs/handoffs/CHATGPT_HANDOFF_33_phase6b-v10a-prime-next-steps/` —
+  the critique session that hardened *this* plan (20 issues across
+  3 rounds, cap hit on minor sharpening; ledger below).
+
+## Critique provenance (session 33)
+
+3-round adversarial critique loop with GPT (Codex CLI, xhigh
+reasoning).  Cap hit on round 3; all 20 issues accepted, 0
+defended, 0 unresolved.
+
+### Round 1 fixes (8 issues)
+
+1. **1e-18 ↔ plateau-shift confusion**: decoupled into "factor for
+   ΔV plateau shift" (≈1e-10 for 0.3 V) and "factor for branch-pass
+   at target V" (per GPT's v10a extrapolation).
+2. **cd_ok ≠ "non-transport-limited"**: parallel-2e/4e asymmetry
+   means cd_ok can pass while o2lev≈1.  Added artifact-flag
+   escalation trigger in decision tree.
+3. **α math wrong**: recomputed α for actual target V (V=−0.10 ⇒
+   α≈0.35, V=−0.30 ⇒ α≈0.30); α demoted to alternative knob.
+4. **c_H⁴ omitted**: added log-space decomposition of R_4e
+   including `n_e · ln(c_H/c_H_ref)` term.
+5. **"F₀ drops → θ retreats" wrong**: F₀ uncoupled from K0_R4e.
+   Risk #4 deleted; replaced with v10b-routing threshold.
+6. **pka_shift_avg tiny (≈1e-5)**: F₀ growth is K+ enrichment,
+   not Singh ΔpKa.  Added F₀ decomposition with explicit
+   amplification ratios.
+7. **C_S doubles σ_S oversimplified**: Stern-diffuse series
+   coupling is sublinear.  σ_S(V) treated as observed, not
+   predicted.
+8. **Bracket too sparse**: redesigned to log-uniform
+   {1e-10, 1e-12, 1e-14, 1e-16, 1e-18, 1e-20, 1e-22, 1e-24};
+   single-run target moved from 1e-18 to 1e-14 (V=−0.10 probe).
+
+### Round 2 fixes (7 issues)
+
+1. **1e-14 not in V=−0.30 window**: 30× above upper edge.
+   Reframed as V=−0.10 probe only.
+2. **`o2lev>0.9` artifact branch needs deterministic action**:
+   expanded decision tree to 7 cases (A–G), each with a concrete
+   next step.
+3. **"BV-controlled" too strong**: reworded to "passes
+   O₂-transport sanity check (necessary, not sufficient)".
+4. **R_4e decomposition not solver-faithful**: switched to
+   log-space with clip-awareness; emits boundary η_scaled
+   stats; labels as scalar approximation.
+5. **F₀ decomposition Jensen error**: `10^<−ΔpKa>` ≠ `<10^−ΔpKa>`.
+   Switched to boundary averages of factor products.
+6. **"denominator_cap dominates" undefined**: pinned threshold
+   `>0.8 AND θ>0.9 AND |sensS|<0.10`.
+7. **Combined C_S + K0 change loses attribution**: added
+   explicit disclaimer that v10a' is operational, not
+   attribution-clean.
+
+### Round 3 fixes (5 issues, cap-hit but all incorporated)
+
+1. **K+ enrichment is already load-bearing in v10a**: corrected
+   expected `amplification_from_c_K` to 0.31 → 4.39 (anodic →
+   cathodic), not "≈1".
+2. **R_4e log decomposition not solver-faithful even with logs**:
+   η_raw with Stern includes phi_boundary; clip is on η/V_T
+   before α·n_e multiplication.  Labeled as scalar approximation
+   with authoritative `log_R4e_measured` field.
+3. **Case F: φ-perturbation ≠ C_S-perturbation**: don't switch
+   knobs; only increase ε.  φ-perturbation reserved as auxiliary
+   diagnostic.
+4. **Case G: bad inference about which filter failed**: replaced
+   with per-filter failure matrix inspection.
+5. **Routing precedence ambiguous**: pinned order — artifact check
+   first, then cap-dominance check, then Phase A.2 only if both
+   pass.
+
+### Final verdict
+
+VERDICT: ISSUES_REMAIN (cap_hit_round_3) — but all R3 issues are
+sharpening, not core-mechanism challenges; all incorporated above
+via auto-revise.  Plan is ready to implement.
+
+exec
+/bin/zsh -lc "rg -n \"K\\+ enrichment|R_4e_decomposition_log|Case F|Case G|Step 0|transport_artifact|cap_dominated|v10b-vs-v10c|denominator_cap|1e-14|Attribution disclaimer|amplification_from\" /Users/jakeweinstein/.claude/plans/sparkly-gilded-pasteur.md" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+56:> The single-run target `1e-14` is a **V=−0.10 probe only**; the
+75:   `--k0-r4e-factor 1e-14` (a V=−0.10 branch-pass probe; the V
+79:   `K0_R4e_factor ∈ {1e-10, 1e-12, 1e-14, 1e-16, 1e-18, 1e-20, 1e-22, 1e-24}`
+130:The single-run target `1e-14` sits in the V=−0.10 branch-pass window
+198:### Decision tree after re-run at `--k0-r4e-factor 1e-14` (deterministic, 7 branches)
+204:**Step 0 — Precedence guards** (apply BEFORE Case A/B routing):
+208:  - `is_transport_artifact = locked_current_filter_passes_but_o2_transport_limited`
+209:  - `is_cap_dominated_routing = (
+214:If `is_transport_artifact`: route to **Case B** below regardless
+217:Else if `is_cap_dominated_routing`: route to **v10b** (literature
+231:      `{1e-10, 1e-12, 1e-14, 1e-16, 1e-18, 1e-20, 1e-22, 1e-24}`.
+250:**Case F — `no_valid_stern_capacitance_sensitivity=True`:**
+258:**Case G — `no_candidate_passed_locked_rule` BUT not Case B:**
+273:        * If `*_valid` count = 0 → Case F.
+304:    --k0-r4e-factor 1e-14 \
+305:    --out-subdir phase6b_v10a_prime_k0r4e_1e-14
+308:for f in 1e-10 1e-12 1e-14 1e-16 1e-18 1e-20 1e-22 1e-24; do
+323:2. **Branch filter satisfiable**: at K0_R4e_factor = 1e-14, expect
+334:   `amplification_from_c_K = F0_total / (k_hyd · c_K_bulk · pka_factor_avg)`
+337:   `amplification > 1` at cathodic V (K+ enrichment, reaches
+338:   several-fold by V=−0.50). K+ enrichment is **already
+342:   uncoupled from F₀ and from Γ saturation. If `denominator_cap`
+351:### v10b-vs-v10c routing decision threshold (pinned per R2 #6 + R3)
+358:- `denominator_cap / denominator_total > 0.8`
+374:### Attribution disclaimer (per R2 #7)
+399:diag["R_4e_decomposition_log"] = {
+413:# expected values per R3 #1 — K+ enrichment IS load-bearing in v10a).
+425:    "amplification_from_c_K":
+427:    "amplification_from_singh":
+433:- `amplification_from_singh ≈ 1` (Singh ΔpKa is tiny; ~1e-6 to 1e-5).
+434:- `amplification_from_c_K`: ~0.31 at V=+0.55 (K+ depletion at anode),
+436:- **K+ enrichment is the dominant F₀ amplifier in the cathodic region**.
+442:| 1 | `K0_R4e_factor = 1e-14` (or smaller bracket values) makes 4e branch numerically vanish; Newton conditioning degrades | Project memory `project_k0_r4e_ratio_regimes` established that ratios down to ~1e-24 converge.  If Newton fails at the smallest bracket value, the per-V failure flags pinpoint where; bisect upward in the bracket. |
+444:| 3 | Singh ΔpKa at C_S = 0.20 may amplify; expected from R3 #1 to remain tiny (`pka_shift_avg ~ 1e-5`) but watch for unphysically large shifts | The F0 decomposition surfaces `amplification_from_singh`; if it grows above ~10, treat as unphysical and re-examine Singh r_H_El. |
+447:| 6 | Per R3 #1, K+ enrichment is **already load-bearing** in v10a (`amplification_from_c_K` rises from 0.31 → 4.39 across V_RHE).  C_S = 0.20 may push θ higher at all cathodic V, killing sensS. | Decision tree v10b routing threshold (denom_cap/total>0.8, θ>0.9, |sensS|<0.10) is the deterministic escape; route to v10b literature calibration. |
+448:| 7 | R_4e_decomposition_log is a **scalar approximation** (per R3 #4); η_raw with Stern enabled includes phi_boundary, not just V_RHE | Labeled as approximation in the JSON; `log_R4e_measured` is authoritative.  Discrepancies surface a missing Stern/diffuse term. |
+502:6. **pka_shift_avg tiny (≈1e-5)**: F₀ growth is K+ enrichment,
+509:   {1e-10, 1e-12, 1e-14, 1e-16, 1e-18, 1e-20, 1e-22, 1e-24};
+510:   single-run target moved from 1e-18 to 1e-14 (V=−0.10 probe).
+514:1. **1e-14 not in V=−0.30 window**: 30× above upper edge.
+526:6. **"denominator_cap dominates" undefined**: pinned threshold
+534:1. **K+ enrichment is already load-bearing in v10a**: corrected
+535:   expected `amplification_from_c_K` to 0.31 → 4.39 (anodic →
+541:3. **Case F: φ-perturbation ≠ C_S-perturbation**: don't switch
+544:4. **Case G: bad inference about which filter failed**: replaced
+
+codex
+1. WHAT: Minor nit: the R4e scalar decomposition still says to verify `log_R4e_predicted ≈ log_R4e_measured`.
+
+WHY: Since it is explicitly a scalar approximation over boundary-averaged nonlinear terms, mismatch can come from averaging/covariance, not only a missing Stern/diffuse term.
+
+WHAT TO DO: Keep it, but interpret only order-of-magnitude discrepancies as diagnostic. `log_R4e_measured` remains authoritative. Not blocking.
+
+2. WHAT: Minor wording inconsistency: Risk #5 says v10c is “the next physical knob” after dense bracket failure, while the decision tree says Case D escalates to acceptance-bundle review.
+
+WHY: Could confuse the handoff reader about whether v10c is automatic.
+
+WHAT TO DO: Change Risk #5 to “v10c is a possible next physical knob after review.” Not blocking.
+
+All prior material blockers are addressed: K0/α/c_H math is separated, C_S/cap routing is deterministic, bracket coverage now hits the relevant branch windows, transport artifacts are routed, and the decomposition language is appropriately cautious.
+
+VERDICT: APPROVED
+tokens used
+166,102
+1. WHAT: Minor nit: the R4e scalar decomposition still says to verify `log_R4e_predicted ≈ log_R4e_measured`.
+
+WHY: Since it is explicitly a scalar approximation over boundary-averaged nonlinear terms, mismatch can come from averaging/covariance, not only a missing Stern/diffuse term.
+
+WHAT TO DO: Keep it, but interpret only order-of-magnitude discrepancies as diagnostic. `log_R4e_measured` remains authoritative. Not blocking.
+
+2. WHAT: Minor wording inconsistency: Risk #5 says v10c is “the next physical knob” after dense bracket failure, while the decision tree says Case D escalates to acceptance-bundle review.
+
+WHY: Could confuse the handoff reader about whether v10c is automatic.
+
+WHAT TO DO: Change Risk #5 to “v10c is a possible next physical knob after review.” Not blocking.
+
+All prior material blockers are addressed: K0/α/c_H math is separated, C_S/cap routing is deterministic, bracket coverage now hits the relevant branch windows, transport artifacts are routed, and the decomposition language is appropriately cautious.
+
+VERDICT: APPROVED

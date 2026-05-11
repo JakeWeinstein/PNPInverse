@@ -610,6 +610,27 @@ def set_reaction_delta_ohp_model(ctx: dict, delta_ohp_value: float) -> None:
     )
 
 
+def set_reaction_gamma_max_model(ctx: dict, gamma_max_value: float) -> None:
+    """Set the Langmuir saturation cap Γ_max in BOTH metadata + Function.
+
+    Phase 6β v10a accessor — mirrors the kinetic-rate setters.
+    Writes the live FE Function plus the metadata layer
+    (``cation_hydrolysis_config['gamma_max_nondim']``) so downstream
+    readers (Picard, diagnostics) see the current value.
+
+    Raises
+    ------
+    ValueError
+        ``gamma_max_value <= 0`` (Γ_max = 0 forces the vacancy factor
+        ``(1 − Γ/Γ_max)`` to diverge) or no cation_hydrolysis bundle
+        on ``ctx``.
+    """
+    _set_kinetic_rate(
+        ctx, "gamma_max_func", "gamma_max_nondim", gamma_max_value,
+        allow_zero=False,
+    )
+
+
 def set_reaction_r_H_El_pm_model(ctx: dict, r_H_El_pm_value: float) -> None:
     """Set Singh's hydration-shell H to electrode distance r_H_El (pm).
 
@@ -1327,6 +1348,19 @@ def solve_anchor_with_continuation(
                         rung_diag["cd_observable_error"] = (
                             f"{type(exc).__name__}: {exc}"
                         )
+                if ok:
+                    # Phase 6β v10a diagnostics — collected after Newton
+                    # converged so boundary integrals reflect the final
+                    # FE state (not a stale Picard mid-step).
+                    try:
+                        from .cation_hydrolysis import (
+                            collect_v10a_rung_diagnostics,
+                        )
+                        rung_diag.update(collect_v10a_rung_diagnostics(ctx))
+                    except Exception as exc:
+                        rung_diag["v10a_diagnostics_error"] = (
+                            f"{type(exc).__name__}: {exc}"
+                        )
                 rungs.append(rung_diag)
 
                 if rung_callback is not None:
@@ -1596,7 +1630,11 @@ def solve_lambda_ramp_from_warm_start(
     from .dispatch import build_context, build_forms
     from .observables import _build_bv_observable_form
     from .grid_per_voltage import snapshot_U, restore_U, make_run_ss
-    from .cation_hydrolysis import update_gamma_from_solution
+    from .cation_hydrolysis import (
+        clamp_gamma_to_max,
+        collect_v10a_rung_diagnostics,
+        update_gamma_from_solution,
+    )
 
     # ----- Validate ladder up-front
     lam_seq = list(lambda_hydrolysis_ladder)
@@ -1637,6 +1675,13 @@ def solve_lambda_ramp_from_warm_start(
         )
     restore_U(U_warmstart, U, U_prev)
 
+    # Phase 6β v10a — silent warm-restart clamp on Γ to absorb the case
+    # where the cached snapshot was taken under a different Γ_max
+    # (e.g. parameter-sweep combinations).  Picard runs after this with
+    # a Γ already inside [0, Γ_max], so the first vacancy factor is
+    # well-posed.  No-op when feature disabled.
+    clamp_gamma_to_max(ctx)
+
     # ----- Apply parameter overrides
     if parameter_overrides is None:
         parameter_overrides = {}
@@ -1649,6 +1694,7 @@ def solve_lambda_ramp_from_warm_start(
         "k_des": set_reaction_k_des_model,
         "delta_ohp_hat": set_reaction_delta_ohp_model,
         "r_H_El_pm": set_reaction_r_H_El_pm_model,
+        "gamma_max_nondim": set_reaction_gamma_max_model,
     }
     for key, value in parameter_overrides.items():
         if key not in _OVERRIDE_DISPATCH:
@@ -1657,6 +1703,11 @@ def solve_lambda_ramp_from_warm_start(
                 f"{list(_OVERRIDE_DISPATCH)}"
             )
         _OVERRIDE_DISPATCH[key](ctx, float(value))
+
+    # Re-clamp Γ after parameter overrides — if the override included
+    # ``gamma_max_nondim`` and the new cap is tighter than the cached
+    # Γ, Newton needs a feasible vacancy factor on entry.
+    clamp_gamma_to_max(ctx)
 
     # ----- Pin k0 at production (no ramp; we're warm-started)
     rxn_count = len(ctx.get("nondim", {}).get("bv_reactions", []))
@@ -1796,6 +1847,13 @@ def solve_lambda_ramp_from_warm_start(
                 "cd_observable": cd_obs,
                 "wall_seconds": float(time.time() - t_rung),
             }
+            if ok:
+                try:
+                    rung_diag.update(collect_v10a_rung_diagnostics(ctx))
+                except Exception as exc:
+                    rung_diag["v10a_diagnostics_error"] = (
+                        f"{type(exc).__name__}: {exc}"
+                    )
             rungs.append(rung_diag)
 
             if rung_callback is not None:
@@ -1849,6 +1907,8 @@ __all__ = [
     "set_reaction_k_des_model",
     "set_reaction_delta_ohp_model",
     "set_reaction_r_H_El_pm_model",
+    # Phase 6β v10a — Langmuir saturation cap accessor.
+    "set_reaction_gamma_max_model",
     "solve_lambda_ramp_from_warm_start",
     "solve_anchor_with_continuation",
 ]

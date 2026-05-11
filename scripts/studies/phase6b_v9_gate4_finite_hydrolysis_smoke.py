@@ -136,16 +136,18 @@ def _build_sp(
     k_prot_nondim: float = 1e-3,   # smoke baseline; tame for Picard
     lambda_hydrolysis: float = 0.0,
     delta_ohp_hat: float = 4e-6,    # 0.40 nm / L_REF=100 µm = 4e-6
+    gamma_max_nondim: Optional[float] = None,
 ):
     from scripts._bv_common import (
         A_OH_HAT, D_OH_HAT, KW_HAT,
         DEFAULT_SULFATE_ANALYTIC_BIKERMAN_FOR_K2SO4,
         FOUR_SPECIES_LOGC_DYNAMIC_K2SO4,
+        GAMMA_MAX_HAT_SMOKE,
         K0_HAT_R2E, K0_HAT_R4E,
         PARALLEL_2E_4E_REACTIONS_4SP,
         SNES_OPTS_CHARGED,
         make_bv_solver_params,
-        make_singh_pka_shift_params,
+        make_cation_hydrolysis_config,
         setup_firedrake_env,
     )
     setup_firedrake_env()
@@ -161,16 +163,23 @@ def _build_sp(
         "snes_divergence_tolerance": 1e10,
     })
 
-    cation_cfg = {
-        "k_hyd": float(k_hyd_nondim),
-        "k_prot": float(k_prot_nondim),
-        "k_des": float(k_des_nondim),
-        "delta_ohp_hat": float(delta_ohp_hat),
-        "pka_shift_form": "singh_2016_eq_4",
-        "pka_shift_params": make_singh_pka_shift_params(
-            "K+", r_H_El_pm=float(r_H_El_pm),
-        ),
-    }
+    # Phase 6β v10a — explicit ``gamma_max_nondim`` makes the Langmuir
+    # cap visible in the driver.  ``None`` falls back to the smoke
+    # baseline (1 monolayer of MOH).
+    gamma_max_effective = (
+        GAMMA_MAX_HAT_SMOKE if gamma_max_nondim is None
+        else float(gamma_max_nondim)
+    )
+    cation_cfg = make_cation_hydrolysis_config(
+        k_hyd=float(k_hyd_nondim),
+        k_prot=float(k_prot_nondim),
+        k_des=float(k_des_nondim),
+        delta_ohp_hat=float(delta_ohp_hat),
+        cation="K+",
+        r_H_El_pm=float(r_H_El_pm),
+        pka_shift_form="singh_2016_eq_4",
+        gamma_max_nondim=gamma_max_effective,
+    )
 
     sp = make_bv_solver_params(
         eta_hat=0.0, dt=0.25, t_end=80.0,

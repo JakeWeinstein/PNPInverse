@@ -209,5 +209,164 @@ If Phase D's Δ_β differs by > 30 % between the two conventions,
 ## Status
 
 * **Phase 0 locked:** 2026-05-10.
-* **Next action:** begin v10a (Langmuir cap residual + Picard
-  formula + Γ clamp + helper + tests).
+* **v10a delivered:** 2026-05-10 (same day).  See section below
+  for the implementation summary.
+* **v10a V-sweep diagnostic (initial):** 2026-05-10.  7 V points
+  (+0.55 → −0.50), `C_S = 0.10 F/m²`, `K0_R4e_factor = 1.0`.
+  Result: `no_candidate_passed_locked_rule` — branch filter blocked
+  every V (pure-4e selectivity throughout) and σ_S<0 ∩ cd_ok
+  intersection was empty.  See
+  `StudyResults/phase6b_v10a_v_sweep_diagnostic/iv_diagnostic.json`
+  and the v10a' result section below for the corrected re-run.
+* **v10a' V-sweep diagnostic (corrected):** 2026-05-10.  Same 7 V
+  points with `C_S = 0.20 F/m²` (Bohra-Koper-Choi consensus per
+  `.research/cmk3-stern-capacitance/SUMMARY.md`) and
+  `K0_R4e_factor = 1e-14` (V=−0.10 branch-pass probe per
+  `project_k0_r4e_ratio_regimes`).  **Result: V_kin = −0.10 V**
+  via the primary path (no fallback).  Decision tree precedence
+  guards: not transport-artifact (o2_flux_levich = 0.63 < 0.9),
+  not cap-dominated (V=−0.10 has θ=0.86 < 0.9 and |sensS|=0.187
+  > 0.10).  → **Case A: Phase A.2 at V_kin = −0.10 V.**
+
+  Per-V breakdown (truncated):
+
+  | V_RHE | σ_S<0 | cd_ok | branch_ok | 3pass | sensS | denom_cap/T | θ | x_2e |
+  |---|---|---|---|---|---|---|---|---|
+  | +0.55 | F | T | F | F | −0.104 | 0.318 | 0.318 | 0.002 |
+  | +0.20 | F | T | T | F | −0.220 | 0.596 | 0.596 | 0.059 |
+  | +0.10 | F | T | T | F | −0.249 | 0.687 | 0.687 | 0.130 |
+  | **−0.10** | **T** | **T** | **T** | **T** | **−0.187** | 0.861 | 0.861 | 0.199 |
+  | −0.30 | T | F | F | F | −0.064 | 0.948 | 0.948 | 0.001 |
+  | −0.50 | T | F | F | F | −0.021 | 0.976 | 0.976 | <1e-5 |
+
+  V=−0.30 and V=−0.50 are cap-dominated (denom_cap/total > 0.8 AND
+  θ > 0.9 AND |sensS| < 0.10) — the v10b literature-calibration
+  prerequisite signal is present at the most cathodic V's, but
+  V_kin (=−0.10) is *not* cap-dominated, so v10b routing is not
+  triggered for V_kin itself.  Phase A.2 at V_kin should still
+  retain headroom on the Stern-cap-manifold derivative.
+
+  K+ enrichment is the dominant F₀ amplifier in the cathodic
+  region (per critique session 33 R3 #1):
+  `amplification_from_c_K = 0.16 (V=+0.55) → 11.6 (V=−0.50)`,
+  while `amplification_from_singh ≈ 1.0` everywhere
+  (`pka_shift_avg ~ 1e-5`).
+
+  Output: `StudyResults/phase6b_v10a_prime_k0r4e_1e-14/iv_diagnostic.{json,png}`.
+  Wall: 1626 s (~27 min).
+* **Phase A.2 landed:** 2026-05-10.  Densified k_hyd × λ ramp at
+  V_kin = −0.10 V with 10-point k_hyd grid
+  `{1e-5, 3e-5, 1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3, 1e-2, 1e-1}`,
+  two-stage anchor at C_S = 0.10 → 0.20 F/m², K0_R4e_factor =
+  1e-14, full v10a Langmuir cap.  **All 10 rungs converged at
+  λ=1.0; Picard converged everywhere; mass-balance residual at
+  machine precision (1e-14 to 1e-16)**.  Baseline reproduction at
+  k_hyd=1e-3 matches v10a' record within rel 1e-3 (γ=0.04047 vs
+  0.0405; θ=0.861; σ_S=−0.01715; cd=−3.12 mA/cm²).  Cap saturation
+  smooth from θ=0.058 (k_hyd=1e-5) → θ=0.998 (k_hyd=1e-1); v10a's
+  `(1 − Γ/Γ_max)` cap delivers exactly the saturation behavior it
+  was designed for, with v9's k_hyd ≥ 1e-1 Picard breakdown
+  resolved.  **k_hyd_route = 1e-1**.  **v10b k_des/Γ_max priority:
+  LOW** (`single_v_selectivity_gap_pp = +5.09 pp`; H₂O₂% = 19.91%
+  sits within 10pp of deck band's lower edge [25, 50]).
+  `max_amp_from_singh = 1.0000112` ⇒ rH_El recalibration NOT
+  required for v10b.  No transport re-entry (o2_flux_levich ≈ 0.63
+  flat across k_hyd).
+
+  Decoupling observations (independent of k_hyd at this V_kin):
+  σ_S = −0.01715 C/m² (field-driven Bikerman packing, not Γ);
+  cd_mA_cm² = −3.12 (R_4e dominated); x_2e = 0.199, x_4e = 0.801
+  (k0_R4e_factor=1e-14 puts both branches active);
+  amplification_from_c_K = 1.75 (K⁺ enrichment dominates F₀ growth
+  at V_kin, consistent with v10a' cathodic-side finding).
+
+  Convergence audit `overall_pass = False` is a threshold-
+  narrowness artifact, NOT a physics or convergence problem: the
+  plan's `transition_coverage` test demanded
+  `max(θ at k_hyd ∈ {1e-5 … 2e-3}) ≥ 0.93`, but the closed-form
+  prediction at k_hyd=2e-3 was θ=0.926 — observed 0.9253 is
+  essentially exact match.  k_hyd=5e-3 hits θ=0.969 (within the
+  saturation grid by construction).  Future audits should set
+  the transition-grid threshold ≤ 0.92 OR move k_hyd=5e-3 into
+  the transition grid.
+
+  Output:
+  `StudyResults/phase6b_v10a_phase_A2_v_kin/phase_a2_v_kin.{json,png}`.
+  Tests: `tests/test_phase6b_v10a_phase_A2_driver.py` (43 fast).
+  Wall: 1300 s (~22 min).  Plan + critique provenance:
+  `~/.claude/plans/phase6b-v10a-phase-A2-v-kin.md` /
+  `docs/handoffs/CHATGPT_HANDOFF_34_phase6b-v10a-phase-A2-v-kin/`
+  (4 rounds of GPT critique, APPROVED; 41 issues addressed).
+
+  Per-k_hyd λ=1 result table:
+
+  | k_hyd | γ | θ | picard | mb_rel | x_2e | H₂O₂% | σ_S | o2_Levich | amp_cK |
+  |---|---|---|---|---|---|---|---|---|---|
+  | 1e-5 | 0.00274 | 0.058 | converged | 0.0 | 0.199 | 19.95 | −0.0171 | 0.630 | 1.75 |
+  | 3e-5 | 0.00737 | 0.157 | converged | 2e-17 | 0.199 | 19.94 | −0.0171 | 0.630 | 1.75 |
+  | 1e-4 | 0.01798 | 0.382 | converged | 7e-17 | 0.199 | 19.93 | −0.0171 | 0.630 | 1.75 |
+  | 2e-4 | 0.02601 | 0.553 | converged | 7e-17 | 0.199 | 19.93 | −0.0171 | 0.630 | 1.75 |
+  | 5e-4 | 0.03553 | 0.756 | converged | 3e-16 | 0.199 | 19.92 | −0.0171 | 0.630 | 1.75 |
+  | **1e-3** | **0.04047** | **0.861** | converged | 4e-16 | 0.199 | 19.91 | −0.0171 | 0.631 | 1.75 |
+  | 2e-3 | 0.04349 | 0.925 | converged | 1e-15 | 0.199 | 19.91 | −0.0171 | 0.631 | 1.75 |
+  | 5e-3 | 0.04553 | 0.969 | converged | 1e-16 | 0.199 | 19.91 | −0.0171 | 0.631 | 1.75 |
+  | 1e-2 | 0.04625 | 0.984 | converged | 2e-15 | 0.199 | 19.91 | −0.0171 | 0.631 | 1.75 |
+  | **1e-1** | **0.04692** | **0.998** | converged | 1e-14 | 0.199 | 19.91 | −0.0171 | 0.631 | 1.75 |
+
+  Bold row at k_hyd=1e-3 = v10a' baseline reproduction.  Bold row
+  at k_hyd=1e-1 = `k_hyd_route` (routing-pass).
+* **Next action:** step 6 plumbing ablation matrix at V_kin
+  (A1/A2/A3 manufactured ablations), OR step 7/8 CMK-3 capacitance
+  literature note + v10b literature calibration of Γ_max + k_des
+  + C_S.  v10b is MANDATORY in all routing branches per the
+  acceptance bundle's "v10a → E sequence" §; A.2 informs v10b
+  priority but does not cancel v10b.
+
+## v10a delivery summary (2026-05-10)
+
+What landed:
+
+* `Forward/bv_solver/cation_hydrolysis.py`:
+  - `CationHydrolysisBundle.gamma_max_func` (R-space Function) +
+    `GAMMA_MAX_HAT_SMOKE = 0.047` (1 monolayer at the OHP).
+  - `build_proton_boundary_source` / `build_forward_branch` now
+    apply the Langmuir vacancy factor `(1 − Γ/Γ_max)`.
+  - `build_forward_branch_uncapped` exposes the Γ-independent F₀
+    for diagnostic readers.
+  - `gamma_ss_langmuir(...)` — pure-Python closed-form helper used
+    by Picard and by unit tests.
+  - `update_gamma_from_solution` rewired to delegate to the helper
+    on the physical path; manufactured-R_inj path unchanged
+    (intentionally bypasses the cap and the post-clamp warning).
+  - `clamp_gamma_to_max(ctx)` silent helper for warm restarts.
+  - `collect_v10a_rung_diagnostics(ctx)` returns the documented
+    rung-callback payload.
+* `Forward/bv_solver/units.py` (new): `sigma_C_m2_to_counts_pm2(σ)`.
+* `Forward/bv_solver/anchor_continuation.py`:
+  - `set_reaction_gamma_max_model` accessor; new
+    `"gamma_max_nondim"` key in
+    `solve_lambda_ramp_from_warm_start`'s `parameter_overrides`.
+  - `clamp_gamma_to_max` invoked before Picard in
+    `solve_lambda_ramp_from_warm_start` so warm restarts always
+    enter Newton with a feasible vacancy factor.
+  - `collect_v10a_rung_diagnostics` plumbed into the λ-rung
+    rung_diag in both `solve_anchor_with_continuation` and
+    `solve_lambda_ramp_from_warm_start`.
+* `scripts/_bv_common.py`: `make_cation_hydrolysis_config(...)`
+  builder (threads `gamma_max_nondim`) + re-exported
+  `GAMMA_MAX_HAT_SMOKE`.
+* `scripts/studies/phase6b_v9_gate4_finite_hydrolysis_smoke.py`:
+  migrated to the builder; new `gamma_max_nondim` driver arg.
+* `tests/test_phase6b_v10a_langmuir_cap.py` (new): 22 fast +
+  14 slow regression tests covering the six plan-prescribed
+  invariants plus the Risk #2 bisection cross-check.
+
+Pre-merge verification (all green):
+
+* `python -m pytest -m "not slow" --deselect tests/test_autograd_gradient.py --deselect tests/test_multistart.py -q` → 659 passed.
+* `python -m pytest tests/test_phase6b_v10a_langmuir_cap.py -v` → 22 fast + 14 slow passed.
+* Existing gate3/gate4 slow tests still green:
+  `TestGammaResidualAreaInvariance`, `TestGammaDirichletPinAtLambdaZero`,
+  `TestProtonBoundarySourceSignConvention`, `TestSinghPkaShiftUFL`,
+  `TestLambdaHydrolysisAccessorRoundtrip`,
+  `TestCationHydrolysisBundleBuild`, `TestMixedSpaceLayout*` — all pass.

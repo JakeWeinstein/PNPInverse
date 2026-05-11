@@ -23,8 +23,24 @@ The production forward stack (May 2026):
   primary variable (`mu_H = u_H + em·z_H·phi`).
 - **Log-rate Butler–Volmer** with **parallel R2e + R4e** (E°_R2e =
   0.695 V, E°_R4e = 1.23 V vs RHE; Ruggiero 2022 §1).
-- **Finite Stern compact layer** (`stern_capacitance_f_m2 ≈ 0.10`;
-  citation chain to deck-measured C_S unverified).
+- **Finite Stern compact layer** — production target
+  `stern_capacitance_f_m2 = 0.20` F/m² (= 20 µF/cm²) per the
+  Bohra-Koper-Choi PNP-modeling consensus
+  (`.research/cmk3-stern-capacitance/SUMMARY.md`). Derived from
+  Stern thickness `L_S = 5 Å` and Booth-saturated
+  `ε_S = 11.3`. Citation chain: Bohra et al. 2024 *JPC C*
+  (PMC11215773), Choi et al. 2024 (`10.1021/acs.jpcc.4c03469`),
+  Pillai et al. 2024 (`10.1021/acs.jpcc.3c05364`,
+  the methodological-error critical review that flags the
+  100–200 µF/cm² CO2R-modeler convention as wrong), CatINT
+  default (Stanford Bell group), Kilic-Bazant 2007 *Phys Rev E*
+  75:021503 (foundational mPNP-Stern). The legacy
+  `0.10 F/m² (10 µF/cm²)` value (pre-2026-05-10) was a
+  convergence-pinned engineering choice with no CMK-3 anchor
+  (see `.research/cmk3-stern-capacitance/codebase-cs-provenance.md`);
+  it still sits in Pillai's "safe band" (10–50 µF/cm²) and is
+  defensible as carbon-conservative, but `0.20 F/m²` is the
+  production target going forward.
 - **`debye_boltzmann` IC** (composite-ψ + multispecies-γ).
 
 Reaches V_RHE = +1.0 V at 15/15 via C+D (cold ceiling +0.60 V;
@@ -41,6 +57,86 @@ but P3 surface-pH gate fails at 10.58. See
 (`M(H₂O)ₙ⁺ ⇌ M(OH)⁰ + H⁺` with field-dependent pKa per Singh 2016
 JACS). **Not sulfate buffering** — retired after grepping the data
 folder. See `docs/phase6/phase6b_next_steps_plan.md`.
+
+**Phase 6β v10a landed (2026-05-10):** Langmuir saturation cap
+`(1 − Γ/Γ_max)` on the cation-hydrolysis forward branch — the v9
+formulation let Γ grow unboundedly (≈ 6+ monolayers at `k_hyd ≥ 1e-3`,
+~64 monolayers at `k_hyd = 1e-2`). The v10a closed form
+`Γ_ss(λ) = λ·F₀ / ((1−λ) + λ·k_des + λ·B + λ·F₀/Γ_max)` reduces to v9
+as `Γ_max → ∞` and saturates at one monolayer otherwise. Default
+`gamma_max_nondim = 0.047` is a smoke baseline (1 monolayer of MOH at
+the OHP, `5.6e-6 mol/m² / (C_SCALE · L_REF)`); v10b replaces it with
+the literature-calibrated value once
+`docs/phase6/CMK3_capacitance_literature.md` lands. Wired through
+`Forward/bv_solver/cation_hydrolysis.py` + `Forward/bv_solver/units.py`
++ `set_reaction_gamma_max_model` accessor; diagnostic plumbing emits
+`F₀`, `Γ`, `θ`, `R_forward_capped`, denominator decomposition, R_2e/R_4e
+per-reaction currents, and σ_S in counts/pm² per rung. Regression
+suite at `tests/test_phase6b_v10a_langmuir_cap.py`.
+
+**Phase 6β v10a' landed (2026-05-10):** V-sweep diagnostic at the
+production target (`C_S = 0.20 F/m²` per Bohra-Koper-Choi consensus,
+`K0_R4e_factor = 1e-14` V=−0.10 branch-pass probe per
+`project_k0_r4e_ratio_regimes`).  The initial v10a sweep returned
+`no_candidate_passed_locked_rule`; v10a' adds two driver-side fixes:
+(a) two-stage anchor (`STERN_F_M2_ANCHOR = 0.10` for the k0/Kw_eff
+ladder, then runtime bump to `STERN_F_M2_BASELINE = 0.20` via
+`set_stern_capacitance_model` + Newton resolve — needed because the
+existing solver's `c_s_ladder` raises `NotImplementedError` when
+combined with `kw_eff_ladder`); and (b) `--k0-r4e-factor` CLI flag
+with deep-copy reaction rescaling.  **Result: V_kin = −0.10 V via
+the primary path (no fallback).**  Decision tree → Case A → Phase
+A.2 at V_kin = −0.10 V.  Per-V breakdown shows V=−0.30 / V=−0.50
+are cap-dominated (denom_cap/total > 0.8 AND θ > 0.9 AND |sensS| <
+0.10) — v10b prerequisite signal is present at the deepest cathodic
+V's but not at V_kin itself, so v10b routing is not triggered.  K+
+enrichment is the dominant F₀ amplifier in the cathodic region
+(amp_from_c_K = 0.16 → 11.6 across V_RHE; amp_from_singh ≈ 1.0
+everywhere).  New diagnostic emissions: `F0_decomposition`,
+`R_4e_decomposition_log`, `denominator_cap_to_total_ratio` (folded
+into per-V records).  Output:
+`StudyResults/phase6b_v10a_prime_k0r4e_1e-14/iv_diagnostic.{json,png}`.
+Wall: 27 min.  Plan + critique provenance:
+`~/.claude/plans/sparkly-gilded-pasteur.md`.
+
+**Phase 6β v10a Phase A.2 landed (2026-05-10):** densified k_hyd × λ
+ramp at V_kin = −0.10 V (10 points spanning `k_hyd ∈ {1e-5 … 1e-1}`)
+with the v10a Langmuir cap + v10a' two-stage anchor + full
+diagnostics.  All 10 rungs converge cleanly at λ=1.0; Picard
+converged everywhere (no `iter_cap_hit_unconverged` rungs);
+**mass-balance residual at machine precision (1e-14 to 1e-16)**
+across the grid, confirming the closed-form Γ_ss residual-side
+closure is consistent.  θ tracks from 0.058 (k_hyd=1e-5, pre-cap)
+through the onset transition (θ=0.86 at k_hyd=1e-3 baseline,
+reproducing v10a' record within rel 1e-3) to full saturation
+(θ=0.998 at k_hyd=1e-1; v9 Phase B failed Picard at this point
+without a cap).  **k_hyd_route = 1e-1** (highest k_hyd satisfying
+θ>0.95, slope<0.05, picard_ok, mass_balance_ok, transport_ok).
+**v10b routing: LOW priority for k_des/Γ_max calibration**
+(`single_v_selectivity_gap_pp = +5.09 pp` — H₂O₂% = 19.91% sits
+5pp below the deck band [25, 50]%, within the 10pp routing
+cutoff).  **rH_El recalibration NOT required**
+(`max_amp_from_singh = 1.0000112`; Singh ΔpKa contribution is
+negligible at V_kin).  No transport re-entry across the k_hyd
+grid (`o2_flux_levich_ratio ≈ 0.63` everywhere).  σ_S, cd_mA_cm²,
+x_2e are all k_hyd-independent at this V — confirming cation
+hydrolysis is decoupled from the parallel-2e/4e branch split and
+from the Stern-cap manifold at V_kin (Γ affects the proton
+boundary source but not the field-driven Bikerman packing).
+Convergence audit `overall_pass = False` is a threshold-narrowness
+artifact: `max(θ_λ=1) = 0.9253` in the plan-defined transition
+grid {1e-5 … 2e-3} just below the 0.93 cutoff, but the next
+k_hyd up (5e-3, in the saturation grid by construction) hits
+θ=0.969 — the audit's transition_grid threshold was set 0.005
+above the closed-form prediction without margin.  Output:
+`StudyResults/phase6b_v10a_phase_A2_v_kin/phase_a2_v_kin.{json,png}`.
+Tests: `tests/test_phase6b_v10a_phase_A2_driver.py` (43 fast).
+Wall: 22 min.  Plan + critique provenance:
+`~/.claude/plans/phase6b-v10a-phase-A2-v-kin.md` (4 rounds of GPT
+critique, APPROVED).  Next: step 6 plumbing ablation matrix at
+V_kin or step 8 v10b literature calibration of Γ_max + k_des + C_S
+(v10b is MANDATORY in all routing branches; A.2 informs priority,
+never cancels v10b).
 
 ## Inverse status: paused
 
@@ -140,6 +236,39 @@ non-operational. When work resumes, start from
    experimental support; product/ring electrochemistry, *not* IrOx)
    → Linsey 2025 ACS-CATL deck slides 5–9 + 27.
 
+6. **`stern_capacitance_f_m2 = 0.20` F/m² is the literature-anchored
+   production target.** Derived from Stern thickness `L_S = 5 Å` and
+   Booth-saturated permittivity `ε_S = 11.3`, giving
+   `C_S = ε_S·ε₀/L_S = 20 µF/cm²` per the Bohra-Koper-Choi
+   PNP-modeling consensus (Bohra 2024, Choi 2024, Pillai 2024,
+   CatINT default, Kilic-Bazant 2007 foundational).
+   **Three caveats that matter:**
+   (a) The legacy `0.10 F/m²` (pre-2026-05-10) is at the *low* edge
+       of Pillai 2024's "safe band" (10–50 µF/cm²) — defensible as
+       carbon-conservative but not citation-anchored; existing
+       StudyResults at `0.10 F/m²` remain interpretable as a
+       sensitivity-bracket low rung.
+   (b) **C_S is per-local-surface-element**, not per-geometric-
+       electrode-area. The 1D-slab PNP-Stern formulation
+       (Bazant/Kilic/Storey/Jithin lineage) has no roughness factor
+       in the BC. The deck's CMK-3 RF ≈ 6000 (0.5 mg/cm² × 1200
+       m²/g BET) is *implicit in fitted k₀*. Cross-stack comparison
+       to Yash (uses `L_Stern` thickness directly, not C_S) or
+       Bohra 2019 (variable ε via Booth) requires explicit RF
+       accounting on the kinetic side.
+   (c) The earlier "σ_S mismatch vs Singh 51 µF/cm²" concern
+       (`PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md` Risk #5)
+       was a misapplication: Singh's 51 µF/cm² Cu was an in-house
+       CV-slope total C_dl measurement (Stern + diffuse + roughness
+       + specific adsorption), not a Stern-only quantity. At
+       `C_S = 0.20 F/m²`, the σ_S mismatch may not even be the
+       right comparison anymore — re-derive with Stern-only values
+       (Bohra/Koper 20–25 µF/cm² for metal; ~10–20 µF/cm² for sp²
+       carbon) before treating Risk #5 as load-bearing.
+   Sensitivity bracket for Gate 4B / v10b:
+   `C_S ∈ {0.05, 0.10, 0.20, 0.30}` F/m². Full literature trail in
+   `.research/cmk3-stern-capacitance/SUMMARY.md`.
+
 ## Calling the production solver
 
 Use the canonical factory + dispatcher; don't reinvent flag wiring.
@@ -175,7 +304,7 @@ sp = make_bv_solver_params(
         DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC,
     ],
     multi_ion_enabled=True,                       # required for ≥2 bikerman entries
-    stern_capacitance_f_m2=0.10,
+    stern_capacitance_f_m2=0.20,                  # Bohra/Choi/Pillai 2024 anchor — see hard rule #6
     initializer="debye_boltzmann",
     l_eff_m=100e-6,                               # boundary-layer thickness
     enable_water_ionization=False,                # Phase 6α opt-in (default off)
@@ -219,7 +348,12 @@ sp = make_bv_solver_params(
     species=THREE_SPECIES_LOGC_BOLTZMANN,
     formulation="logc_muh", log_rate=True,
     boltzmann_counterions=[DEFAULT_CLO4_BOLTZMANN_COUNTERION_STERIC],
-    stern_capacitance_f_m2=0.10, initializer="debye_boltzmann",
+    stern_capacitance_f_m2=0.10,                  # legacy ClO₄⁻ runs keep 0.10
+                                                  # for byte-equivalence with
+                                                  # historical StudyResults;
+                                                  # use 0.20 for deck-aligned
+                                                  # multi-ion stack (hard rule #6)
+    initializer="debye_boltzmann",
     # parallel-2e/4e omitted → defaults to legacy sequential R1/R2
 )
 ```
