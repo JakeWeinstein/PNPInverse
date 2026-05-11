@@ -577,6 +577,7 @@ class TestParseArgs:
         assert args.v_kin == pytest.approx(V_KIN_DEFAULT)
         assert args.k0_r4e_factor == pytest.approx(K0_R4E_FACTOR_DEFAULT)
         assert args.k_hyd_grid is None
+        assert args.lambda_ladder is None
         assert args.with_perturbation is False
 
     def test_v_kin_override(self):
@@ -633,6 +634,100 @@ class TestParseKHydGrid:
         )
         out = _parse_k_hyd_grid(" 1e-5 , 1e-4 , 1e-3 ")
         assert out == (1e-5, 1e-4, 1e-3)
+
+
+# ===========================================================================
+# --lambda-ladder CLI (step 9.A)
+# ===========================================================================
+
+
+class TestParseLambdaLadder:
+    """Step 9.A: --lambda-ladder CLI flag mirrors --k-hyd-grid validation.
+
+    Defaults to LAMBDA_LADDER imported from v_sweep_diagnostic so absence
+    of the flag reproduces the locked v10a behavior byte-equivalently.
+    """
+
+    def test_phase_A2_lambda_ladder_cli_default(self):
+        """Flag absent -> falls back to imported LAMBDA_LADDER constant
+        (0.0, 0.25, 0.50, 0.75, 1.0)."""
+        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+            _parse_args, _parse_lambda_ladder,
+        )
+        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+            LAMBDA_LADDER,
+        )
+        args = _parse_args(["--no-plot"])
+        assert args.lambda_ladder is None
+        # Parse fallback path.
+        ladder = _parse_lambda_ladder(args.lambda_ladder)
+        assert ladder == tuple(float(x) for x in LAMBDA_LADDER)
+        # Locked v10a default for the module constant.
+        assert ladder == (0.0, 0.25, 0.50, 0.75, 1.0)
+
+    def test_phase_A2_lambda_ladder_cli_custom(self):
+        """--lambda-ladder 0.0,0.5,1.0 parses to the expected tuple."""
+        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+            _parse_args, _parse_lambda_ladder,
+        )
+        args = _parse_args(
+            ["--lambda-ladder", "0.0,0.5,1.0", "--no-plot"],
+        )
+        assert args.lambda_ladder == "0.0,0.5,1.0"
+        ladder = _parse_lambda_ladder(args.lambda_ladder)
+        assert ladder == (0.0, 0.5, 1.0)
+
+    def test_phase_A2_lambda_ladder_cli_b2_locked_grid(self):
+        """Step 9 B.2 locked 10-point ladder parses correctly."""
+        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+            _parse_lambda_ladder,
+        )
+        raw = "0.0,0.10,0.25,0.40,0.50,0.60,0.75,0.85,0.95,1.0"
+        ladder = _parse_lambda_ladder(raw)
+        assert len(ladder) == 10
+        assert ladder[0] == 0.0
+        assert ladder[-1] == 1.0
+        # Monotonic non-decreasing.
+        for i in range(len(ladder) - 1):
+            assert ladder[i] <= ladder[i + 1]
+
+    def test_phase_A2_lambda_ladder_cli_rejects_non_monotonic(self):
+        """Non-monotonic input raises SystemExit."""
+        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+            _parse_lambda_ladder,
+        )
+        with pytest.raises(SystemExit):
+            _parse_lambda_ladder("0.0,0.5,0.3,1.0")
+
+    def test_phase_A2_lambda_ladder_cli_rejects_off_endpoints(self):
+        """Endpoints != 0.0 / 1.0 raise SystemExit."""
+        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+            _parse_lambda_ladder,
+        )
+        with pytest.raises(SystemExit):
+            _parse_lambda_ladder("0.1,0.5,0.9")
+        with pytest.raises(SystemExit):
+            _parse_lambda_ladder("0.0,0.5,0.9")
+        with pytest.raises(SystemExit):
+            _parse_lambda_ladder("0.1,0.5,1.0")
+
+    def test_phase_A2_lambda_ladder_cli_rejects_out_of_range(self):
+        """Values outside [0, 1] raise SystemExit."""
+        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+            _parse_lambda_ladder,
+        )
+        with pytest.raises(SystemExit):
+            _parse_lambda_ladder("0.0,1.5,1.0")
+        with pytest.raises(SystemExit):
+            _parse_lambda_ladder("-0.1,0.5,1.0")
+
+    def test_phase_A2_lambda_ladder_cli_rejects_empty(self):
+        """Empty value (just commas/whitespace) raises SystemExit."""
+        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+            _parse_lambda_ladder,
+        )
+        with pytest.raises(SystemExit):
+            _parse_lambda_ladder(" , , ")
 
 
 # ===========================================================================

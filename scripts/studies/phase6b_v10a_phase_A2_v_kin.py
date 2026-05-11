@@ -644,6 +644,15 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--lambda-ladder", default=None,
+        help=(
+            "Comma-separated lambda values for the hydrolysis ramp.  "
+            "Default: LAMBDA_LADDER imported from v_sweep_diagnostic "
+            "(0.0, 0.25, 0.50, 0.75, 1.0).  Validation: monotonic "
+            "non-decreasing on [0, 1] with endpoints 0.0 and 1.0."
+        ),
+    )
+    parser.add_argument(
         "--with-perturbation", dest="with_perturbation", action="store_true",
         default=False,
         help=(
@@ -681,6 +690,52 @@ def _parse_k_hyd_grid(raw: Optional[str]) -> Tuple[float, ...]:
     return tuple(values)
 
 
+def _parse_lambda_ladder(raw: Optional[str]) -> Tuple[float, ...]:
+    """Parse ``--lambda-ladder`` value (comma-separated) into a tuple of floats.
+
+    Validation:
+      * Endpoints must be exactly 0.0 and 1.0.
+      * Values must be monotonic non-decreasing.
+      * All values must lie in [0, 1].
+
+    When ``raw`` is ``None``/empty, falls back to the module-level
+    ``LAMBDA_LADDER`` imported from
+    :mod:`scripts.studies.phase6b_v10a_v_sweep_diagnostic` -- preserving
+    the locked v10a default ``(0.0, 0.25, 0.50, 0.75, 1.0)`` when the
+    flag is absent.
+    """
+    if raw is None or raw == "":
+        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+            LAMBDA_LADDER,
+        )
+        return tuple(float(x) for x in LAMBDA_LADDER)
+    values: List[float] = []
+    for tok in raw.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        values.append(float(tok))
+    if not values:
+        raise SystemExit(
+            f"--lambda-ladder parsed to empty list (raw={raw!r})"
+        )
+    if any(v < 0.0 or v > 1.0 for v in values):
+        raise SystemExit(
+            f"--lambda-ladder values must be in [0, 1] (raw={raw!r})"
+        )
+    if values[0] != 0.0 or values[-1] != 1.0:
+        raise SystemExit(
+            f"--lambda-ladder must start at 0.0 and end at 1.0 (raw={raw!r})"
+        )
+    for i in range(len(values) - 1):
+        if values[i + 1] < values[i]:
+            raise SystemExit(
+                f"--lambda-ladder must be monotonic non-decreasing "
+                f"(raw={raw!r})"
+            )
+    return tuple(values)
+
+
 def _run_k_hyd_ramp(
     *,
     sp_template,
@@ -694,6 +749,7 @@ def _run_k_hyd_ramp(
     electrode_area_nondim: float,
     domain_height_hat: float,
     extra_overrides: Optional[Dict[str, Any]] = None,
+    lambda_ladder: Optional[Tuple[float, ...]] = None,
 ) -> Dict[str, Any]:
     """Run the λ ladder at V_kin for one k_hyd_target via the callback side-channel.
 
@@ -758,7 +814,13 @@ def _run_k_hyd_ramp(
 
     # LAMBDA_LADDER is module-level data in the v10a' driver — pure
     # Python (no Firedrake), safe to import at function entry.
-    from scripts.studies.phase6b_v10a_v_sweep_diagnostic import LAMBDA_LADDER
+    if lambda_ladder is None:
+        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+            LAMBDA_LADDER,
+        )
+        ladder_tuple = tuple(float(x) for x in LAMBDA_LADDER)
+    else:
+        ladder_tuple = tuple(float(x) for x in lambda_ladder)
 
     sp_at_v = sp_template.with_phi_applied(voltage / V_T)
     k0_r4e_target = float(K0_HAT_R4E) * float(k0_r4e_factor)
@@ -776,7 +838,7 @@ def _run_k_hyd_ramp(
             result = solve_lambda_ramp_from_warm_start(
                 sp_at_v, mesh=mesh, U_warmstart=U_warmstart,
                 k0_targets={0: float(K0_HAT_R2E), 1: k0_r4e_target},
-                lambda_hydrolysis_ladder=tuple(float(x) for x in LAMBDA_LADDER),
+                lambda_hydrolysis_ladder=ladder_tuple,
                 parameter_overrides=overrides,
                 rung_callback=_rung_callback,
                 max_ss_steps_per_rung=300,
@@ -1157,6 +1219,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = _parse_args(argv)
 
     k_hyd_grid = _parse_k_hyd_grid(args.k_hyd_grid)
+    lambda_ladder = _parse_lambda_ladder(args.lambda_ladder)
     v_kin = float(args.v_kin)
     v_anchor = float(args.v_anchor)
     k0_r4e_factor = float(args.k0_r4e_factor)
@@ -1165,6 +1228,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(f"Phase A.2 — k_hyd × λ at V_kin={v_kin:+.3f} V, "
           f"K0_R4e_factor={k0_r4e_factor:.3g}", flush=True)
     print(f"  k_hyd grid ({len(k_hyd_grid)} points): {k_hyd_grid}", flush=True)
+    print(f"  lambda ladder ({len(lambda_ladder)} points): {lambda_ladder}",
+          flush=True)
     print(f"  Output: {out_dir}", flush=True)
 
     # Lazy imports — keep test imports free of Firedrake.
@@ -1256,6 +1321,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             i_lim_4e_mA_cm2=i_lim_4e,
             electrode_area_nondim=electrode_area_nondim,
             domain_height_hat=domain_height_hat,
+            lambda_ladder=lambda_ladder,
         )
         lam1 = lambda1_record(rec)
         summary = (
@@ -1288,6 +1354,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 electrode_area_nondim=electrode_area_nondim,
                 domain_height_hat=domain_height_hat,
                 extra_overrides={"stern_capacitance_f_m2": cs_lo},
+                lambda_ladder=lambda_ladder,
             )
             rec_hi = _run_k_hyd_ramp(
                 sp_template=sp, mesh=mesh, voltage=v_kin,
@@ -1298,6 +1365,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 electrode_area_nondim=electrode_area_nondim,
                 domain_height_hat=domain_height_hat,
                 extra_overrides={"stern_capacitance_f_m2": cs_hi},
+                lambda_ladder=lambda_ladder,
             )
             print(f"  perturbation wall: {time.time() - t0:.1f}s", flush=True)
             for rec in per_k_hyd_records:
@@ -1326,7 +1394,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         "transition_grid": list(TRANSITION_GRID),
         "saturation_grid": list(SATURATION_GRID),
         "warm_walk_grid": list(warm_grid_t),
-        "lambda_ladder": list(LAMBDA_LADDER),
+        "lambda_ladder": list(lambda_ladder),
+        "lambda_ladder_module_default": list(LAMBDA_LADDER),
         "v10b_kinetics": V10B_KINETICS,
         "v10b_calibration_metadata": V10B_CALIBRATION_METADATA,
         "l_eff_m": L_EFF_M_BASELINE,
