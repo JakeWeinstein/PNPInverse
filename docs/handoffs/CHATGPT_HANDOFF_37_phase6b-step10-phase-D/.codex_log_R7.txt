@@ -1,0 +1,221 @@
+OpenAI Codex v0.129.0 (research preview)
+--------
+workdir: /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/jakeweinstein/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e17c0-91c7-7791-945c-25064a110dfd
+--------
+user
+# R7 → GPT: counterreply + plan v7 patches (final round in cap)
+
+All 4 round-6 issues accepted.  Confirmed cation keys in
+`scripts/_bv_common.py:913-933` are charged-form (`"Li+"`, `"Na+"`,
+`"K+"`, `"Rb+"`, `"Cs+"`).
+
+---
+
+## Section 1 — Per-issue acknowledgments
+
+**1. ACCEPT.**  Phase D's Δ_β=0 baseline is split into TWO
+distinct runs:
+* **(a) A.2-compatible reproduction (HARD gate)**: uses the
+  EXACT A.2 warm grid `(+0.55, +0.40, +0.20, +0.10, -0.10)` — 5
+  points — to reach V_kin.  At V_kin, runs the λ ramp via
+  `_run_k_hyd_ramp` with k_hyd=1e-3.  The λ=1 rung at V_kin must
+  match the A.2 v10b record (rel < 1e-3) on all 9 comparison
+  fields.  This is the ONLY HARD-stop check.
+* **(b) Phase D production-grid baseline (DIAGNOSTIC)**: uses the
+  24-point V grid + per-V λ ramp topology (the production path).
+  Outputs σ_local_clamped profile across V, used to compute
+  `sigma_local_clamped_max_over_grid` for grid construction and
+  pre-screen bounds.  Mismatch vs (a) at V_kin is logged as
+  `continuation_path_drift = {rel_diff_per_field}` but NOT a STOP.
+
+Phase 10.A.0 (data audit) → 10.A.1 (`beta_offset_pm2_func` impl) →
+10.A.2 (driver build) → 10.B.0 (a) → 10.B.1 (b) → 10.B.2-3 (Stern
++ ablation fits in parallel).
+
+**2. ACCEPT.**  Hard-stop ONLY on (a) deviation.  (b) deviation
+is diagnostic — recorded in the result JSON's
+`continuation_path_drift` field for the writeup, no STOP.
+
+**3. ACCEPT.**  `set_reaction_beta_offset_pm2_model()` updated to
+mirror metadata everywhere the runtime state is reflected:
+```python
+def set_reaction_beta_offset_pm2_model(ctx: Dict[str, Any], val: float) -> None:
+    bundle = ctx["cation_hydrolysis"]
+    bundle.beta_offset_pm2_func.assign(float(val))
+    # Mirror into convergence config metadata so result JSONs report
+    # the actual value used:
+    cfg = ctx.setdefault("bv_convergence", {})
+    cation_cfg = cfg.setdefault("cation_hydrolysis_config", {})
+    cation_cfg["beta_offset_pm2"] = float(val)
+    # Mirror into the diagnostic-emitting bundle params if present:
+    if hasattr(bundle, "params") and isinstance(bundle.params, dict):
+        bundle.params["beta_offset_pm2"] = float(val)
+```
+New fast test:
+```python
+def test_set_beta_offset_pm2_mirrors_ctx_and_diagnostics():
+    ctx, bundle = make_test_ctx()
+    set_reaction_beta_offset_pm2_model(ctx, 1.5e6)
+    assert float(bundle.beta_offset_pm2_func) == 1.5e6
+    assert ctx["bv_convergence"]["cation_hydrolysis_config"]["beta_offset_pm2"] == 1.5e6
+    # Diagnostic emission picks up live value:
+    diag = collect_v10a_rung_diagnostics(ctx, ...)
+    assert diag["beta_offset_pm2"] == 1.5e6
+```
+
+**4. ACCEPT.**  Cation key convention pinned to **charged form
+(`"K+"`, `"Cs+"`, etc.)** — verified against
+`scripts/_bv_common.py:913-933`:
+* `SINGH_2016_CATION_PARAMS` keys: `"Li+"`, `"Na+"`, `"K+"`,
+  `"Rb+"`, `"Cs+"`.
+* `compute_beta_per_cation()` signature: `def compute_beta_per_cation(
+  cation: str, r_H_El_pm: Optional[float] = None) -> float` with
+  cation key validated against `SINGH_2016_CATION_PARAMS.keys()`.
+  Invalid key → `ValueError` with the canonical-keys list.
+* All docstrings + tests + plan text use `"K+"` (not `"K"`).
+* No alias support — explicit canonical-only.  Reduces footgun.
+
+---
+
+## Section 2 — Plan v7 patches (against v6)
+
+* **P68**: D5 split into Δ_β=0(a) HARD A.2-compatible reproduction
+  + (b) DIAGNOSTIC full-grid production baseline.
+* **P69**: D5 STOP rule scoped to (a) only.
+* **P70**: D1 `set_reaction_beta_offset_pm2_model()` updates ctx
+  metadata + bundle params mirror; new test
+  `test_set_beta_offset_pm2_mirrors_ctx_and_diagnostics`.
+* **P71**: Plan-wide cation references use canonical charged-form
+  keys (`"K+"`, `"Cs+"`, etc.).  `compute_beta_per_cation`
+  validates against `SINGH_2016_CATION_PARAMS.keys()` with
+  ValueError on unknown.  No alias support.
+* **P72**: Wall budget — (a) reproduction adds ~22 min (single
+  A.2 driver run); total Phase D wall ~15.5 hours (negligible
+  delta from v6's ~15 hour estimate).
+
+---
+
+## Section 3 — Continued critique prompt
+
+This is round 7 (final round in the 7-cap).  Review v7.  If new
+blocking issues remain, raise them; otherwise verdict APPROVED.
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN
+
+codex
+I’ll do a final check on the concrete setter patch against the actual bundle shape. If that matches, I’m not going to keep reopening already-settled design choices.
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/cation_hydrolysis.py | sed -n '80,155p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+    80	# ---------------------------------------------------------------------------
+    81	# Data + gating
+    82	# ---------------------------------------------------------------------------
+    83	
+    84	
+    85	@dataclass(frozen=True)
+    86	class CationHydrolysisBundle:
+    87	    """Frozen handle to the cation-hydrolysis UFL pieces and continuation knobs.
+    88	
+    89	    Attributes
+    90	    ----------
+    91	    counterion_idx
+    92	        Role-resolved index of the cation species in the dynamic NP
+    93	        list (Gate 1).  At Gate 4 (K2SO4 stack) this is the K⁺ index.
+    94	    h_idx
+    95	        Role-resolved index of the proton species (the H⁺ NP residual).
+    96	    delta_ohp_func
+    97	        R-space ``Function`` holding the OHP thickness ``δ_OHP``
+    98	        (nondim length).  Production prior 0.40 nm (Bohra 2019).
+    99	    k_hyd_func, k_prot_func, k_des_func
+   100	        R-space ``Function`` objects holding the forward / reverse /
+   101	        desorption rates.  All mutable by the continuation
+   102	        orchestrator via the ``set_reaction_k_*_model`` accessors.
+   103	    lambda_hydrolysis_func
+   104	        R-space ``Function`` holding the smooth activation knob
+   105	        ``λ ∈ [0, 1]`` walked by ``lambda_hydrolysis_ladder``.  At
+   106	        ``λ=0`` the cation-hydrolysis source contribution to the
+   107	        proton/cation residuals is byte-zeroed (matches the
+   108	        disabled-feature path observables to within Newton tolerance).
+   109	    r_H_El_pm_func
+   110	        R-space ``Function`` holding the cation-specific Singh r_H_El
+   111	        distance (pm).  Made live so the Gate 4B sensitivity sweep
+   112	        can swap in different values without rebuilding the form.
+   113	        Mutable via ``set_reaction_r_H_El_pm_model``.
+   114	    gamma_func
+   115	        R-space ``Function`` holding the surface coverage Γ_MOH.
+   116	        Treated as an external coefficient — the Newton solver reads
+   117	        it but does not include it in the monolithic system.  The
+   118	        orchestrator updates it via :func:`update_gamma_from_solution`
+   119	        between continuation rungs (outer Picard).
+   120	    gamma_max_func
+   121	        R-space ``Function`` holding the Langmuir saturation cap
+   122	        ``Γ_max`` (Phase 6β v10a, 2026-05-10).  The residual reads
+   123	        ``(1 − Γ / Γ_max)`` as the vacancy factor on the forward
+   124	        branch so coverage saturates at one monolayer.  Mutable via
+   125	        the ``set_reaction_gamma_max_model`` accessor.  Default at
+   126	        bundle build time is ``cation_hydrolysis_config['gamma_max_nondim']``
+   127	        or the smoke baseline ``0.047`` (1 monolayer of MOH at the
+   128	        OHP; ``5.6e-6 mol/m² / (C_SCALE · L_REF)``).  The v10b
+   129	        literature-calibration step will replace the default.
+   130	    cation_params
+   131	        Per-cation Singh 2016 Table S1 row + r_H_El plus solver-side
+   132	        switches (anode_clamp).  Held verbatim as a Python dict.
+   133	        ``cation_params['r_H_El_pm']`` is the *initial* value mirrored
+   134	        into ``r_H_El_pm_func`` at build time; ``r_H_El_pm_func`` is
+   135	        the residual-side authoritative value during continuation.
+   136	    """
+   137	
+   138	    counterion_idx: int
+   139	    h_idx: int
+   140	    delta_ohp_func: Any
+   141	    k_hyd_func: Any
+   142	    k_prot_func: Any
+   143	    k_des_func: Any
+   144	    lambda_hydrolysis_func: Any
+   145	    r_H_El_pm_func: Any
+   146	    gamma_func: Any
+   147	    gamma_max_func: Any
+   148	    cation_params: dict
+   149	
+   150	
+   151	def is_cation_hydrolysis_enabled(conv_cfg: dict) -> bool:
+   152	    """Centralised gate check on ``enable_cation_hydrolysis``.
+   153	
+   154	    Returns False both when the key is missing (legacy params dict)
+   155	    and when set to a falsy value, so callers can rely on a uniform
+
+codex
+One non-blocking implementation correction: `CationHydrolysisBundle` has `cation_params`, not `params`. So this part:
+
+```python
+if hasattr(bundle, "params") and isinstance(bundle.params, dict):
+    bundle.params["beta_offset_pm2"] = float(val)
+```
+
+will no-op. If you want the same metadata mirror pattern as `set_reaction_r_H_El_pm_model`, update `bundle.cation_params` via `object.__setattr__` with a copied dict. The ctx metadata mirror and live `beta_offset_pm2_func` are the load-bearing pieces, so I would not block Phase D on this.
+
+Everything else from v6 is now addressed: topology matches A.2, Stern and ablation baselines are separate, σ-grid construction is ordered correctly, and the acceptance gate remains locked.
+
+VERDICT: APPROVED
+tokens used
+248,251
+One non-blocking implementation correction: `CationHydrolysisBundle` has `cation_params`, not `params`. So this part:
+
+```python
+if hasattr(bundle, "params") and isinstance(bundle.params, dict):
+    bundle.params["beta_offset_pm2"] = float(val)
+```
+
+will no-op. If you want the same metadata mirror pattern as `set_reaction_r_H_El_pm_model`, update `bundle.cation_params` via `object.__setattr__` with a copied dict. The ctx metadata mirror and live `beta_offset_pm2_func` are the load-bearing pieces, so I would not block Phase D on this.
+
+Everything else from v6 is now addressed: topology matches A.2, Stern and ablation baselines are separate, σ-grid construction is ordered correctly, and the acceptance gate remains locked.
+
+VERDICT: APPROVED

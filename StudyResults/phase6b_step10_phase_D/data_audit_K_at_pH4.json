@@ -1,0 +1,188 @@
+{
+  "plan": "Phase 6\u03b2 Step 10 \u2014 Phase D \u2014 10.A.0 data audit",
+  "date_generated": "2026-05-11",
+  "source_file": "data/EChem Reactor Modeling-Seitz-Mangan/Brianna/20201024 CP Experiment Data-Code/Summary Data-Error.xlsx",
+  "sheet": "Cation Summary Table",
+  "filter": {
+    "cation": "K2",
+    "pH_bin": [
+      3.5,
+      4.5
+    ]
+  },
+  "rows": [
+    {
+      "row": 8,
+      "date": "2020-03-19",
+      "pH": 3.99,
+      "ring_onset_pot_V_at_0.01_mA_cm2": 0.346,
+      "max_ring_current_mA_cm2": 0.3654,
+      "max_h2o2_selectivity_pct": 54.8,
+      "number_of_e": 2.9,
+      "overpotential_V": 0.324
+    },
+    {
+      "row": 14,
+      "date": "2019-08-15",
+      "pH": 4.21,
+      "ring_onset_pot_V_at_0.01_mA_cm2": 0.413,
+      "max_ring_current_mA_cm2": 0.3012,
+      "max_h2o2_selectivity_pct": 88,
+      "number_of_e": 2.2,
+      "overpotential_V": 0.257
+    },
+    {
+      "row": 23,
+      "date": "2020-06-15",
+      "pH": 4.03,
+      "ring_onset_pot_V_at_0.01_mA_cm2": 0.3695,
+      "max_ring_current_mA_cm2": 0.1473,
+      "max_h2o2_selectivity_pct": 35,
+      "number_of_e": 3.3,
+      "overpotential_V": 0.3255
+    },
+    {
+      "row": 29,
+      "date": "2020-09-29",
+      "pH": 4.02,
+      "ring_onset_pot_V_at_0.01_mA_cm2": 0.3143,
+      "max_ring_current_mA_cm2": 0.1145,
+      "max_h2o2_selectivity_pct": 26,
+      "number_of_e": 3.5,
+      "overpotential_V": 0.3807
+    }
+  ],
+  "statistics": {
+    "max_h2o2_selectivity_pct": {
+      "mean": 50.95,
+      "std": 27.47380570652708,
+      "n": 4,
+      "values": [
+        54.8,
+        88,
+        35,
+        26
+      ]
+    },
+    "ring_onset_pot_V_at_0.01_mA_cm2": {
+      "mean": 0.3607,
+      "std": 0.04156031761187586,
+      "n": 4,
+      "values": [
+        0.346,
+        0.413,
+        0.3695,
+        0.3143
+      ]
+    },
+    "max_ring_current_mA_cm2": {
+      "mean": 0.2321,
+      "std": 0.1205051866103696,
+      "n": 4,
+      "values": [
+        0.3654,
+        0.3012,
+        0.1473,
+        0.1145
+      ]
+    },
+    "number_of_e": {
+      "mean": 2.975,
+      "std": 0.5737304826019501,
+      "n": 4,
+      "values": [
+        2.9,
+        2.2,
+        3.3,
+        3.5
+      ]
+    }
+  },
+  "gpt_R1_5_check": {
+    "expected_pH_values": [
+      3.99,
+      4.21,
+      4.03,
+      4.02
+    ],
+    "expected_selectivity_values": [
+      54.8,
+      88,
+      35,
+      26
+    ],
+    "expected_mean_selectivity_approx": 51,
+    "expected_std_selectivity_approx_pp": 26,
+    "observed_pH_values": [
+      3.99,
+      4.21,
+      4.03,
+      4.02
+    ],
+    "observed_selectivity_values": [
+      54.8,
+      88,
+      35,
+      26
+    ],
+    "observed_mean_selectivity": 50.95,
+    "observed_std_selectivity": 27.47380570652708
+  },
+  "data_target_noisy_flag": true,
+  "primary_gate_locked_pp_absolute": 10,
+  "a2_json_schema_check": {
+    "comparison_fields": [
+      "cd_mA_cm2",
+      "x_2e",
+      "theta",
+      "gamma_final",
+      "sigma_S_C_per_m2",
+      "pka_shift_avg",
+      "mass_balance_residual_rel",
+      "R_2e_current_nondim",
+      "R_4e_current_nondim"
+    ],
+    "all_present_in_A2_rung": true,
+    "missing": [],
+    "verdict": "NO_SCHEMA_MISMATCH"
+  },
+  "a2_reproduction_target": {
+    "source": "StudyResults/phase6b_v10b_phase_A2_v_kin/phase_a2_v_kin.json",
+    "selector": {
+      "k_hyd_target": 0.001,
+      "lambda_hydrolysis": 1.0
+    },
+    "V_kin": -0.1,
+    "values": {
+      "cd_mA_cm2": -3.122717400943125,
+      "x_2e": 0.19911367899138108,
+      "theta": 0.8609978054837286,
+      "gamma_final": 0.040466896857735246,
+      "sigma_S_C_per_m2": -0.017148927103272066,
+      "pka_shift_avg": -4.8816816115655255e-06,
+      "mass_balance_residual_rel": 4.429081215259933e-16,
+      "R_2e_current_nondim": 0.7847319562714833,
+      "R_4e_current_nondim": 3.1563933358057703
+    },
+    "tolerance_rel": 0.001
+  },
+  "deck_target_locked": {
+    "cation": "K2",
+    "pH_bin": [
+      3.5,
+      4.5
+    ],
+    "n_rows": 4,
+    "max_h2o2_selectivity_pct_mean": 50.95,
+    "max_h2o2_selectivity_pct_std": 27.47380570652708,
+    "ring_onset_V_at_0.01_mA_cm2_mean": 0.3607,
+    "ring_onset_V_at_0.01_mA_cm2_std": 0.04156031761187586,
+    "max_ring_current_mA_cm2_mean": 0.2321,
+    "max_ring_current_mA_cm2_std": 0.1205051866103696,
+    "n_e_mean": 2.975,
+    "n_e_std": 0.5737304826019501,
+    "primary_gate_locked_pp_absolute": 10,
+    "data_target_noisy_flag": true,
+    "data_target_noisy_note": "std > 10pp gate; gate remains \u00b110 pp absolute per bundle line 61; emit DATA_TARGET_NOISY informational flag in result JSON + writeup."
+  }
+}

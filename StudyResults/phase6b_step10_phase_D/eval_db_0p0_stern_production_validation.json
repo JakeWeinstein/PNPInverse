@@ -1,0 +1,537 @@
+{
+  "config": {
+    "delta_beta_pm2": 0.0,
+    "sigma_mapping": "stern",
+    "v_grid": [
+      0.55,
+      0.4,
+      0.2,
+      0.1,
+      -0.1
+    ],
+    "v_anchor": 0.55,
+    "mode": "production",
+    "topology": "warm_walk_at_lambda_1",
+    "lambda_ladder_at_anchor": [
+      0.0,
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "k_hyd_baseline": 0.001,
+    "n_collection": 0.224,
+    "observable_mask": [
+      -0.06,
+      1.0
+    ],
+    "v_kin_excluded_from_observables": -0.1,
+    "k0_r4e_factor": 1e-14,
+    "anchor_cache": {
+      "status": "miss",
+      "config_hash": "fcae57e2",
+      "path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/anchor_cache_stern_fcae57e2.pkl"
+    }
+  },
+  "anchor_lambda_ramp_rungs": [
+    {
+      "rung_label": "lambda=2.500e-01",
+      "scale": 0.25,
+      "lambda_hydrolysis": 0.25,
+      "snes_converged": true,
+      "gamma_picard_iters": 2,
+      "gamma_picard_history": [
+        0.005641299299551015,
+        0.0056413389177578585
+      ],
+      "gamma_final": 0.0056413389177578585,
+      "cd_observable": 1.1886846909544655,
+      "wall_seconds": 2.8576672077178955,
+      "gamma": 0.0056413389177578585,
+      "gamma_max": 0.047,
+      "theta": 0.12002848761186934,
+      "k_hyd": 0.001,
+      "k_prot": 0.001,
+      "k_des": 1.0,
+      "delta_ohp_hat": 4e-06,
+      "c_H_boundary_avg": 0.0009741511137886279,
+      "c_K_boundary_avg": 27.204556455605676,
+      "sigma_S_C_per_m2": 0.10114626017238684,
+      "sigma_S_counts_per_pm2": 6.313053007137218e-07,
+      "R_2e_current_nondim": 0.0014604333203838567,
+      "R_4e_current_nondim": 0.5936121288170401,
+      "manufactured_run": false,
+      "F0_avg": 0.02720455660384009,
+      "forward_avg_no_k_hyd": 27.20455660384009,
+      "c_H_avg": 0.0009741511137886279,
+      "pka_shift_avg": 0.0,
+      "R_forward_capped": 0.02393923481852967,
+      "denominator_constant": 0.75,
+      "denominator_kdes": 0.25,
+      "denominator_kprot": 0.06088444461178924,
+      "denominator_cap": 0.14470508831829834,
+      "denominator_total": 1.2055895329300876,
+      "numerator": 0.006801139150960023,
+      "denominator_cap_to_total_ratio": 0.12002848761186932,
+      "F0_decomposition": {
+        "c_K_avg": 27.204556455605676,
+        "pka_factor_avg": 0.9999999999999999,
+        "c_K_pka_product_avg": 27.20455660384009,
+        "F0_total": 0.02720455660384009,
+        "c_K_bulk": 166.58333333333334,
+        "F0_counterfactual_c_K_bulk": 0.1665833333333333,
+        "F0_counterfactual_no_singh": 0.027204556455605676,
+        "amplification_from_c_K": 0.1633089941201006,
+        "amplification_from_singh": 1.0000000054488818
+      },
+      "R_4e_decomposition_log": {
+        "log_k0": -38.91033172971727,
+        "alpha_R4e": 0.5,
+        "n_electrons_R4e": 4.0,
+        "E_eq_R4e_nondim": 47.8737461166168,
+        "bv_exp_scale": 1.0,
+        "exponent_clip": 100.0,
+        "eta_scaled_raw_avg": -28.189801481909004,
+        "eta_scaled_clipped_avg": -28.189801481909004,
+        "exponent_clip_active_fraction": 0.0,
+        "log_bv_clipped_avg": 56.37960296381801,
+        "ln_c_H_avg": -6.933988844862995,
+        "ln_c_H_ratio_avg": -4.449082195074995,
+        "n_e_log_c_H_factor_avg": -17.79632878029998,
+        "c_H_ref_nondim": 0.08333333333333334,
+        "log_R4e_predicted": -0.3270575461992422,
+        "log_R4e_measured": -0.5215291546944484,
+        "_note": "Scalar approximation: averages of nonlinear terms over boundary; small/moderate discrepancies vs measured can come from Jensen/covariance, not necessarily a missing Stern/diffuse term.  Order-of-magnitude discrepancies indicate a missing residual term."
+      }
+    },
+    {
+      "rung_label": "lambda=5.000e-01",
+      "scale": 0.5,
+      "lambda_hydrolysis": 0.5,
+      "snes_converged": true,
+      "gamma_picard_iters": 2,
+      "gamma_picard_history": [
+        0.009638396616319874,
+        0.009638556495650902
+      ],
+      "gamma_final": 0.009638556495650902,
+      "cd_observable": 1.1906435570632237,
+      "wall_seconds": 2.7335479259490967,
+      "gamma": 0.009638556495650902,
+      "gamma_max": 0.047,
+      "theta": 0.20507567012023195,
+      "k_hyd": 0.001,
+      "k_prot": 0.001,
+      "k_des": 1.0,
+      "delta_ohp_hat": 4e-06,
+      "c_H_boundary_avg": 0.0009745946505202819,
+      "c_K_boundary_avg": 27.204519298821207,
+      "sigma_S_C_per_m2": 0.10114626418947391,
+      "sigma_S_counts_per_pm2": 6.313053257864071e-07,
+      "R_2e_current_nondim": 0.0014615112608322677,
+      "R_4e_current_nondim": 0.5945910229011948,
+      "manufactured_run": false,
+      "F0_avg": 0.027204519447055268,
+      "forward_avg_no_k_hyd": 27.20451944705527,
+      "c_H_avg": 0.0009745946505202819,
+      "pka_shift_avg": 0.0,
+      "R_forward_capped": 0.021625534391151526,
+      "denominator_constant": 0.5,
+      "denominator_kdes": 0.5,
+      "denominator_kprot": 0.12182433131503526,
+      "denominator_cap": 0.2894097813516518,
+      "denominator_total": 1.4112341126666872,
+      "numerator": 0.013602259723527634,
+      "denominator_cap_to_total_ratio": 0.20507567012023195,
+      "F0_decomposition": {
+        "c_K_avg": 27.204519298821207,
+        "pka_factor_avg": 0.9999999999999999,
+        "c_K_pka_product_avg": 27.20451944705527,
+        "F0_total": 0.027204519447055268,
+        "c_K_bulk": 166.58333333333334,
+        "F0_counterfactual_c_K_bulk": 0.1665833333333333,
+        "F0_counterfactual_no_singh": 0.027204519298821207,
+        "amplification_from_c_K": 0.16330877106786557,
+        "amplification_from_singh": 1.0000000054488762
+      },
+      "R_4e_decomposition_log": {
+        "log_k0": -38.91033172971727,
+        "alpha_R4e": 0.5,
+        "n_electrons_R4e": 4.0,
+        "E_eq_R4e_nondim": 47.8737461166168,
+        "bv_exp_scale": 1.0,
+        "exponent_clip": 100.0,
+        "eta_scaled_raw_avg": -28.189800700148822,
+        "eta_scaled_clipped_avg": -28.189800700148822,
+        "exponent_clip_active_fraction": 0.0,
+        "log_bv_clipped_avg": 56.379601400297645,
+        "ln_c_H_avg": -6.933533716013567,
+        "ln_c_H_ratio_avg": -4.448627066225567,
+        "n_e_log_c_H_factor_avg": -17.79450826490227,
+        "c_H_ref_nondim": 0.08333333333333334,
+        "log_R4e_predicted": -0.3252385943218954,
+        "log_R4e_measured": -0.5198814662428499,
+        "_note": "Scalar approximation: averages of nonlinear terms over boundary; small/moderate discrepancies vs measured can come from Jensen/covariance, not necessarily a missing Stern/diffuse term.  Order-of-magnitude discrepancies indicate a missing residual term."
+      }
+    },
+    {
+      "rung_label": "lambda=7.500e-01",
+      "scale": 0.75,
+      "lambda_hydrolysis": 0.75,
+      "snes_converged": true,
+      "gamma_picard_iters": 2,
+      "gamma_picard_history": [
+        0.012618416543620527,
+        0.012618720287119191
+      ],
+      "gamma_final": 0.012618720287119191,
+      "cd_observable": 1.1921040756482342,
+      "wall_seconds": 2.72902774810791,
+      "gamma": 0.012618720287119191,
+      "gamma_max": 0.047,
+      "theta": 0.2684834103642381,
+      "k_hyd": 0.001,
+      "k_prot": 0.001,
+      "k_des": 1.0,
+      "delta_ohp_hat": 4e-06,
+      "c_H_boundary_avg": 0.000974925053362164,
+      "c_K_boundary_avg": 27.20449159139304,
+      "sigma_S_C_per_m2": 0.10114626718443512,
+      "sigma_S_counts_per_pm2": 6.313053444794847e-07,
+      "R_2e_current_nondim": 0.0014623141768755241,
+      "R_4e_current_nondim": 0.5953208807356809,
+      "manufactured_run": false,
+      "F0_avg": 0.02720449173962682,
+      "forward_avg_no_k_hyd": 27.204491739626818,
+      "c_H_avg": 0.000974925053362164,
+      "pka_shift_avg": 0.0,
+      "R_forward_capped": 0.019900537020146065,
+      "denominator_constant": 0.25,
+      "denominator_kdes": 0.75,
+      "denominator_kprot": 0.18279844750540578,
+      "denominator_cap": 0.434114229887662,
+      "denominator_total": 1.616912677393068,
+      "numerator": 0.020403368804720115,
+      "denominator_cap_to_total_ratio": 0.2684834103642381,
+      "F0_decomposition": {
+        "c_K_avg": 27.20449159139304,
+        "pka_factor_avg": 0.9999999999999999,
+        "c_K_pka_product_avg": 27.204491739626818,
+        "F0_total": 0.02720449173962682,
+        "c_K_bulk": 166.58333333333334,
+        "F0_counterfactual_c_K_bulk": 0.1665833333333333,
+        "F0_counterfactual_no_singh": 0.02720449159139304,
+        "amplification_from_c_K": 0.163308604740131,
+        "amplification_from_singh": 1.0000000054488716
+      },
+      "R_4e_decomposition_log": {
+        "log_k0": -38.91033172971727,
+        "alpha_R4e": 0.5,
+        "n_electrons_R4e": 4.0,
+        "E_eq_R4e_nondim": 47.8737461166168,
+        "bv_exp_scale": 1.0,
+        "exponent_clip": 100.0,
+        "eta_scaled_raw_avg": -28.189800117303236,
+        "eta_scaled_clipped_avg": -28.189800117303236,
+        "exponent_clip_active_fraction": 0.0,
+        "log_bv_clipped_avg": 56.37960023460647,
+        "ln_c_H_avg": -6.933194819769654,
+        "ln_c_H_ratio_avg": -4.448288169981653,
+        "n_e_log_c_H_factor_avg": -17.793152679926614,
+        "c_H_ref_nondim": 0.08333333333333334,
+        "log_R4e_predicted": -0.3238841750374135,
+        "log_R4e_measured": -0.5186547234498996,
+        "_note": "Scalar approximation: averages of nonlinear terms over boundary; small/moderate discrepancies vs measured can come from Jensen/covariance, not necessarily a missing Stern/diffuse term.  Order-of-magnitude discrepancies indicate a missing residual term."
+      }
+    },
+    {
+      "rung_label": "lambda=1.000e+00",
+      "scale": 1.0,
+      "lambda_hydrolysis": 1.0,
+      "snes_converged": true,
+      "gamma_picard_iters": 2,
+      "gamma_picard_history": [
+        0.01492563926907718,
+        0.014926075884933596
+      ],
+      "gamma_final": 0.014926075884933596,
+      "cd_observable": 1.19323491966704,
+      "wall_seconds": 2.730255126953125,
+      "gamma": 0.014926075884933596,
+      "gamma_max": 0.047,
+      "theta": 0.3175760826581616,
+      "k_hyd": 0.001,
+      "k_prot": 0.001,
+      "k_des": 1.0,
+      "delta_ohp_hat": 4e-06,
+      "c_H_boundary_avg": 0.0009751807035555622,
+      "c_K_boundary_avg": 27.2044701360815,
+      "sigma_S_C_per_m2": 0.1011462695032828,
+      "sigma_S_counts_per_pm2": 6.313053589525935e-07,
+      "R_2e_current_nondim": 0.0014629353891741212,
+      "R_4e_current_nondim": 0.5958859921389341,
+      "manufactured_run": false,
+      "F0_avg": 0.027204470284315045,
+      "forward_avg_no_k_hyd": 27.204470284315043,
+      "c_H_avg": 0.0009751807035555622,
+      "pka_shift_avg": 0.0,
+      "R_forward_capped": 0.01856498118063191,
+      "denominator_constant": 0.0,
+      "denominator_kdes": 1.0,
+      "denominator_kprot": 0.24379517588889055,
+      "denominator_cap": 0.5788185166875541,
+      "denominator_total": 1.8226136925764447,
+      "numerator": 0.027204470284315045,
+      "denominator_cap_to_total_ratio": 0.3175760826581616,
+      "F0_decomposition": {
+        "c_K_avg": 27.2044701360815,
+        "pka_factor_avg": 0.9999999999999999,
+        "c_K_pka_product_avg": 27.204470284315043,
+        "F0_total": 0.027204470284315045,
+        "c_K_bulk": 166.58333333333334,
+        "F0_counterfactual_c_K_bulk": 0.1665833333333333,
+        "F0_counterfactual_no_singh": 0.0272044701360815,
+        "amplification_from_c_K": 0.16330847594386222,
+        "amplification_from_singh": 1.0000000054488671
+      },
+      "R_4e_decomposition_log": {
+        "log_k0": -38.91033172971727,
+        "alpha_R4e": 0.5,
+        "n_electrons_R4e": 4.0,
+        "E_eq_R4e_nondim": 47.8737461166168,
+        "bv_exp_scale": 1.0,
+        "exponent_clip": 100.0,
+        "eta_scaled_raw_avg": -28.18979966603525,
+        "eta_scaled_clipped_avg": -28.18979966603525,
+        "exponent_clip_active_fraction": 0.0,
+        "log_bv_clipped_avg": 56.3795993320705,
+        "ln_c_H_avg": -6.932932683058713,
+        "ln_c_H_ratio_avg": -4.448026033270713,
+        "n_e_log_c_H_factor_avg": -17.79210413308285,
+        "c_H_ref_nondim": 0.08333333333333334,
+        "log_R4e_predicted": -0.32283653072962437,
+        "log_R4e_measured": -0.5177059185722317,
+        "_note": "Scalar approximation: averages of nonlinear terms over boundary; small/moderate discrepancies vs measured can come from Jensen/covariance, not necessarily a missing Stern/diffuse term.  Order-of-magnitude discrepancies indicate a missing residual term."
+      }
+    }
+  ],
+  "per_v_records": [
+    {
+      "v_rhe": 0.55,
+      "snes_converged": true,
+      "picard_status": "converged",
+      "cd_mA_cm2": -0.5249912113070673,
+      "pc_mA_cm2": 0.26153012730194675,
+      "R_2e_current_nondim": 0.001462935365874313,
+      "R_4e_current_nondim": 0.5958859048339337,
+      "gross_h2o2_current_mA_cm2": 0.26153012730194675,
+      "ring_current_ring_basis_mA_cm2": 0.05858274851563607,
+      "theta": 0.3175760850769044,
+      "gamma_final": 0.014926075998614506,
+      "sigma_S_C_per_m2": 0.10114626950093589,
+      "sigma_local_clamped_counts_pm2": 0.0,
+      "pka_shift_avg": 0.0,
+      "mass_balance_residual_rel": 0.0,
+      "analytic_gamma_rel": 0.0
+    },
+    {
+      "v_rhe": 0.4,
+      "snes_converged": false,
+      "picard_status": "missing"
+    },
+    {
+      "v_rhe": 0.2,
+      "snes_converged": false,
+      "picard_status": "missing"
+    },
+    {
+      "v_rhe": 0.1,
+      "snes_converged": false,
+      "picard_status": "missing"
+    },
+    {
+      "v_rhe": -0.1,
+      "snes_converged": false,
+      "picard_status": "missing"
+    }
+  ],
+  "per_v_lam1_diagnostics": [
+    {
+      "v_rhe": 0.55,
+      "neighbour_v": 0.55,
+      "ladder_converged": true,
+      "lambda1_rung": {
+        "rung_label": "lambda=1.000e+00",
+        "scale": 1.0,
+        "lambda_hydrolysis": 1.0,
+        "snes_converged": true,
+        "gamma_picard_iters": 3,
+        "gamma_picard_history": [
+          0.014923253870842352,
+          0.014926075459596587,
+          0.014926075998614506
+        ],
+        "gamma_final": 0.014926075998614506,
+        "cd_observable": 1.1932347450337404,
+        "wall_seconds": 3.795502185821533,
+        "gamma": 0.014926075998614506,
+        "gamma_max": 0.047,
+        "theta": 0.3175760850769044,
+        "k_hyd": 0.001,
+        "k_prot": 0.001,
+        "k_des": 1.0,
+        "delta_ohp_hat": 4e-06,
+        "c_H_boundary_avg": 0.00097518063971746,
+        "c_K_boundary_avg": 27.204470090630718,
+        "sigma_S_C_per_m2": 0.10114626950093589,
+        "sigma_S_counts_per_pm2": 6.313053589379453e-07,
+        "R_2e_current_nondim": 0.001462935365874313,
+        "R_4e_current_nondim": 0.5958859048339337,
+        "manufactured_run": false,
+        "F0_avg": 0.027204470238864253,
+        "forward_avg_no_k_hyd": 27.204470238864253,
+        "c_H_avg": 0.00097518063971746,
+        "pka_shift_avg": 0.0,
+        "R_forward_capped": 0.018564981083814585,
+        "denominator_constant": 0.0,
+        "denominator_kdes": 1.0,
+        "denominator_kprot": 0.24379515992936499,
+        "denominator_cap": 0.578818515720516,
+        "denominator_total": 1.822613675649881,
+        "numerator": 0.027204470238864253,
+        "denominator_cap_to_total_ratio": 0.3175760850769044,
+        "F0_decomposition": {
+          "c_K_avg": 27.204470090630718,
+          "pka_factor_avg": 0.9999999999999999,
+          "c_K_pka_product_avg": 27.204470238864253,
+          "F0_total": 0.027204470238864253,
+          "c_K_bulk": 166.58333333333334,
+          "F0_counterfactual_c_K_bulk": 0.1665833333333333,
+          "F0_counterfactual_no_singh": 0.02720447009063072,
+          "amplification_from_c_K": 0.16330847567102105,
+          "amplification_from_singh": 1.0000000054488667
+        },
+        "R_4e_decomposition_log": {
+          "log_k0": -38.91033172971727,
+          "alpha_R4e": 0.5,
+          "n_electrons_R4e": 4.0,
+          "E_eq_R4e_nondim": 47.8737461166168,
+          "bv_exp_scale": 1.0,
+          "exponent_clip": 100.0,
+          "eta_scaled_raw_avg": -28.189799666491986,
+          "eta_scaled_clipped_avg": -28.189799666491986,
+          "exponent_clip_active_fraction": 0.0,
+          "log_bv_clipped_avg": 56.37959933298397,
+          "ln_c_H_avg": -6.932932748516314,
+          "ln_c_H_ratio_avg": -4.448026098728313,
+          "n_e_log_c_H_factor_avg": -17.792104394913252,
+          "c_H_ref_nondim": 0.08333333333333334,
+          "log_R4e_predicted": -0.32283679164655155,
+          "log_R4e_measured": -0.5177060650851688,
+          "_note": "Scalar approximation: averages of nonlinear terms over boundary; small/moderate discrepancies vs measured can come from Jensen/covariance, not necessarily a missing Stern/diffuse term.  Order-of-magnitude discrepancies indicate a missing residual term."
+        },
+        "picard_status": "converged",
+        "cd_mA_cm2": -0.5249912113070673,
+        "pc_mA_cm2": 0.26153012730194675,
+        "x_2e": 0.002449046967907352,
+        "x_4e": 0.9975509530320927,
+        "H2O2_selectivity_pct": 0.24490469679073518,
+        "o2_flux_levich_ratio": 0.09557581443196926,
+        "current_filter_ratio": 0.0954587796026992,
+        "mass_balance_residual_rel": 0.0,
+        "R_net": 0.014926075998614506
+      }
+    },
+    {
+      "v_rhe": 0.4,
+      "neighbour_v": 0.55,
+      "ladder_converged": false,
+      "lambda1_rung": null
+    },
+    {
+      "v_rhe": 0.2,
+      "neighbour_v": 0.55,
+      "ladder_converged": false,
+      "lambda1_rung": null
+    },
+    {
+      "v_rhe": 0.1,
+      "neighbour_v": 0.55,
+      "ladder_converged": false,
+      "lambda1_rung": null
+    },
+    {
+      "v_rhe": -0.1,
+      "neighbour_v": 0.55,
+      "ladder_converged": false,
+      "lambda1_rung": null
+    }
+  ],
+  "per_v_gate_results": [
+    {
+      "v_rhe": 0.55,
+      "passes": true,
+      "status": "ok"
+    },
+    {
+      "v_rhe": 0.4,
+      "passes": false,
+      "status": "newton_unconverged"
+    },
+    {
+      "v_rhe": 0.2,
+      "passes": false,
+      "status": "newton_unconverged"
+    },
+    {
+      "v_rhe": 0.1,
+      "passes": false,
+      "status": "newton_unconverged"
+    },
+    {
+      "v_rhe": -0.1,
+      "passes": false,
+      "status": "newton_unconverged"
+    }
+  ],
+  "n_gate_pass": 1,
+  "n_gate_fail": 4,
+  "sign_guard": {
+    "status": "not_evaluated",
+    "pka_shift_avg_at_V_kin": null
+  },
+  "sigma_clamped_profile": [
+    {
+      "v_rhe": 0.55,
+      "sigma_local_clamped_counts_pm2": 0.0
+    },
+    {
+      "v_rhe": 0.4,
+      "sigma_local_clamped_counts_pm2": null
+    },
+    {
+      "v_rhe": 0.2,
+      "sigma_local_clamped_counts_pm2": null
+    },
+    {
+      "v_rhe": 0.1,
+      "sigma_local_clamped_counts_pm2": null
+    },
+    {
+      "v_rhe": -0.1,
+      "sigma_local_clamped_counts_pm2": null
+    }
+  ],
+  "sigma_clamped_max_in_window": 0.0,
+  "aggregated_observables": {
+    "max_H2O2_selectivity_in_window_pct": 66.50299603173397,
+    "argmax_V_for_selectivity": 0.55,
+    "ring_onset_V_at_0.01_mA_cm2": 0.55,
+    "max_ring_current_in_window_mA_cm2": 0.05858274851563607,
+    "n_e_rrde_at_argmax_V": 2.669940079365321,
+    "n_records_in_mask": 4,
+    "n_records_with_finite_currents": 1
+  },
+  "wall_seconds": 95.5404999256134,
+  "mesh_dof_count": 3645
+}

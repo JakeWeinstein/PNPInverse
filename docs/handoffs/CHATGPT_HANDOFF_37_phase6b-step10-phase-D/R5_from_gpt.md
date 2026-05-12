@@ -1,0 +1,17 @@
+1. WHAT: The λ-topology verification is wrong. In `phase6b_v10a_phase_A2_v_kin.py`, the anchor/warm-walk is built with `lambda_hydrolysis=0.0`, then `_run_k_hyd_ramp()` runs `solve_lambda_ramp_from_warm_start()` at `V_kin` ([phase6b_v10a_phase_A2_v_kin.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/scripts/studies/phase6b_v10a_phase_A2_v_kin.py:1263), [line 1316](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/scripts/studies/phase6b_v10a_phase_A2_v_kin.py:1316)). The V-sweep diagnostic also explicitly does a per-V λ ramp ([phase6b_v10a_v_sweep_diagnostic.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/scripts/studies/phase6b_v10a_v_sweep_diagnostic.py:1177)). WHY: v5’s “λ ladder at anchor, fixed λ=1 grid walk” is not the existing validated topology. DO: either use the validated λ=0 grid + per-V λ ramp, or mark λ=1-anchor/grid-walk as a new topology requiring its own convergence/byte-equivalence validation.
+
+2. WHAT: The wall budget depends on the incorrect λ topology. WHY: if Phase D follows the validated v10a V-sweep topology, each V needs a λ ramp, so `~34 PDE solves/eval` is too low. DO: recompute budget for the actual chosen topology.
+
+3. WHAT: The byte-equivalence comparison to A.2 is invalid under the proposed λ=1-anchor topology. WHY: A.2’s λ=1 record is produced by a λ ramp at `V_kin` from a λ=0 warm snapshot, not by warm-walking a λ=1 anchor across V. DO: match the A.2 topology for the baseline, or compare against a newly generated λ=1-anchor reference and stop calling it A.2 byte-equivalence.
+
+4. WHAT: Ablation `Δ_β=0` cannot be injected from the production/Stern byte-equivalence baseline. WHY: ablation uses a different residual via `override_sigma_singh_counts_pm2`; its `Δ_β=0` solution is not the Stern solution. DO: run an explicit ablation `Δ_β=0` evaluation and inject that into the ablation pre-fit grid.
+
+5. WHAT: v5 contradicts itself on ablation pre-fit count: Section 1 says “6 additional + injected baseline,” while the budget says “Ablation pre-fit grid (7 new).” WHY: this affects both runtime and whether ablation baseline is actually evaluated. DO: make it `7 ablation evals total = 1 ablation Δβ=0 + 6 additional`, all under ablation mapping.
+
+6. WHAT: The Stern Δβ grid is hard-coded from the old `V_kin` σ scale, while v5 now uses `sigma_local_clamped_max_over_grid` for bounds/tolerance. WHY: the grid labels `T≈-5`, `T≈-3`, etc. may be wrong if max σ over the grid differs from `V_kin`. DO: after the full `Δβ=0` scan, compute the Stern grid from `sigma_local_clamped_max_over_grid`, not fixed literals.
+
+7. WHAT: The wall budget is internally inconsistent even before topology correction. Section 1 sums to ~6 hours, while P53 says `1190 PDE solves × 0.5 min ≈ 10 hours`. WHY: the plan still has two incompatible wall estimates. DO: keep one estimate, with an optimistic and conservative range if needed.
+
+8. WHAT: `beta_offset_pm2_func` is still allowed to be “Function or Constant.” WHY: the runtime setter assumes `.assign()`, diagnostics need a consistent way to read it, and tests should not cover two representations unnecessarily. DO: choose one representation, preferably `fd.Function(R_space)`, and make that the only supported path.
+
+VERDICT: ISSUES_REMAIN

@@ -509,3 +509,34 @@ Pre-merge verification (all green):
   `~/.claude/plans/phase6b-step9-B2-densified-ramp.md` (step 9)
   + `~/.claude/plans/phase6b-step9-5-adaptive-lambda-floor-bisection.md`
   (step 9.5; no critique loop — change is small and bounded).
+
+* **Step 10 Phase D K-only Δ_β fit landed:** 2026-05-12.  Verdict:
+  `OUTCOME_C_NON_IDENTIFIABLE_flagged`.  Published
+  `docs/phase6/phase6b_step10_phase_D_summary.md`.  The Δ_β
+  cation-hydrolysis offset does NOT control selectivity at the
+  V10B production point: Stern σ-mapping is exactly degenerate
+  over 11 orders of magnitude of Δ_β (loss = 15.628839 pp at every
+  finite_valid eval; D7 range criterion = 0); Ablation σ-mapping
+  needs Δ_β near upper bound +45.4 pm² to converge at all, and even
+  there the converging plateau is flat (loss range ~9e-4 pp²).
+  The model max_H₂O₂ selectivity is **66.58 pp uniformly across all
+  finite_valid Δ_β**, vs deck K@pH4 mean **50.95 pp** — a uniform
+  +15.6 pp overshoot that the Δ_β degree of freedom cannot close.
+  Plan Risk #4 (`non_identifiable under local Stern σ`) confirmed.
+  Also confirmed (informational, not part of locked verdict): the
+  primary acceptance gate (≤ 10 pp) would have failed by ~5.6 pp at
+  every Δ_β tested — `B_FALSIFIED_documented` evidence in addition
+  to the locked C verdict.  Phase E **must NOT launch** on this
+  Δ_β.  Open scope items for Phase D' / Phase 6γ: data-driven
+  re-fit of `k_des` / `Γ_max`, r_H_El sensitivity sweep, local-pH
+  / mass-transport coupling re-examination, possible revisit of
+  the Singh formula structure.  Total Phase 10.B wall: ~8.2 hr
+  (parallel main + extended worker).  Hybrid optimization: (F)
+  σ-keyed anchor cache (saves ~73s/eval after first); (relaxed
+  warm-walk) `n_substeps_warm=4, max_ss_steps_warm=60,
+  ss_rel_tol=1e-3` for production-mode walk-at-λ=0 cuts ~17 min
+  off per-eval wall vs unrelaxed defaults; (Opt A single-ctx walk
+  at λ=1) attempted but reverted as a regression
+  (`docs/phase6/phase6b_step10_phase_D_summary.md` §5).  Plan:
+  `~/.claude/plans/phase6b-step10-phase-D-deltaBeta-fit.md` (v7-FINAL,
+  GPT critique session 37, 7 rounds).

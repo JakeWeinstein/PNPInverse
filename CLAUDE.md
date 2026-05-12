@@ -28,21 +28,27 @@ Production forward stack (May 2026):
 
 ## Recent progress (Phase 6α/6β)
 
-Latest landed: **v10b literature calibration (2026-05-10)** —
-`GAMMA_MAX_HAT_V10B = 0.047` (tightened V10A chain; 4-test
-compatibility check found no peer-reviewed MOH-coverage anchor),
-`K_DES_NONDIM_V10B = 1.0` (engineering choice; Eyring prior
-`[1e-2, 1e2]` ↔ `ΔG_des ∈ [0.69, 0.94] eV`), `C_S_F_M2_V10B = 0.20`
-(locked at step 7). New top-level Firedrake-free
-`calibration/v10b.py`. Deprecation alias `SMOKE = V10A_SMOKE`
-(NEVER `SMOKE = V10B`). Writeup:
-`docs/phase6/v10b_calibration_summary.md`. Full Phase 6α/6β
-chronology (v9 A/B → v10a → v10a' → Phase A.2 → step 6 → v10b) in
+Latest: **Step 10 Phase D K-only Δ_β fit (2026-05-12)** — verdict
+**`OUTCOME_C_NON_IDENTIFIABLE_flagged`**.  Δ_β alone cannot match
+deck: Stern σ-mapping flat across 11 orders of magnitude of Δ_β
+(loss=15.629 pp uniformly); Ablation requires Δ_β≈+45.4 pm² and
+gives same flat loss.  Model max_H₂O₂ = 66.58 pp vs deck K@pH4 mean
+50.95 pp = uniform +15.6 pp overshoot.  Phase E **must NOT launch**.
+Open scope: `k_des`/`Γ_max` re-fit, r_H_El sweep, local-pH coupling.
+**Known discrepancy** surfaced during diagnostic: dynamic species
+(O₂, H₂O₂, H⁺) use `A_DEFAULT = 0.01` (≈ r 14.9 Å, NOT physical) for
+Bikerman steric `a_nondim` — only counterions (K⁺/Cs⁺/SO₄²⁻/OH⁻) use
+real radii.  H⁺ in particular is clamped ~150× tighter than its
+physical r=2.8 Å (H₃O⁺ Stokes) cap.  See `phase6b_step10_phase_D_summary.md` §7
+and Hard Rule #7 below.  Four bridge runs in flight to disentangle.
+Writeup: `docs/phase6/phase6b_step10_phase_D_summary.md`.  Plan:
+`~/.claude/plans/phase6b-step10-phase-D-deltaBeta-fit.md` (v7-FINAL,
+GPT critique session 37).  V10B locked from earlier:
+`GAMMA_MAX_HAT_V10B=0.047`, `K_DES_NONDIM_V10B=1.0`,
+`C_S_F_M2_V10B=0.20`.  Full Phase 6α/6β chronology (v9 → v10a →
+v10a' → A.2 → step 6 → v10b → step 9/9.5 → step 10 Phase D) in
 `docs/phase6/PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md § Status`.
-Current scope: **cation hydrolysis at polarized OHP** (Singh 2016
-field-dependent pKa). Live plan:
-`docs/phase6/phase6b_next_steps_plan.md`. Per-investigation
-findings: `~/.claude/projects/.../memory/MEMORY.md`.
+Per-investigation findings: `~/.claude/projects/.../memory/MEMORY.md`.
 
 ## Inverse status: paused
 
@@ -121,6 +127,21 @@ non-operational. When resumed, start from
    RF ≈ 6000 is implicit in fitted k₀). Sensitivity bracket for
    v10b: `C_S ∈ {0.05, 0.10, 0.20, 0.30}` F/m². Citation chain +
    caveats: `docs/phase6/CMK3_capacitance_literature.md`.
+
+7. **Bikerman `a_nondim` is physical only for counterions, NOT for
+   dynamic species.** `THREE_SPECIES_LOGC_BOLTZMANN` and
+   `FOUR_SPECIES_LOGC_DYNAMIC_K2SO4` both seed O₂/H₂O₂/H⁺ with
+   `A_DEFAULT = 0.01` — corresponds to r ≈ 14.9 Å hard sphere, NOT
+   physical for any of them. Counterion entries (`A_KPLUS_HAT`,
+   `A_CSPLUS_HAT`, `A_SO4_HAT`, `A_OH_HAT`) use real Marcus/Stokes
+   radii. The H⁺ entry matters most because H⁺ Boltzmann-piles up at
+   the OHP under cathodic polarization: `c_max ≈ 1/a` is clamped at
+   ~120 mol/m³ with `A_DEFAULT`, but would be ~1.8×10⁴ mol/m³ with
+   physical r=2.8 Å (H₃O⁺ Stokes). Discrepancy surfaced 2026-05-12
+   during Phase D bridge diagnostics; physical-a variants in
+   `scripts/studies/_phase_D_bridge_corrected_a*.py`. Treat any
+   plateau-set-by-Levich finding as suspect until physical-a bridge
+   runs disambiguate.
 
 ## Calling the production solver
 

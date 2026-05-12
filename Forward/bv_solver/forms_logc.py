@@ -699,6 +699,7 @@ def build_forms_logc(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
                 cation_params=cation_hydrolysis_bundle.cation_params,
                 sigma_S=fake_signed_sigma_S,
                 r_H_El_func=cation_hydrolysis_bundle.r_H_El_pm_func,
+                beta_offset_pm2_func=cation_hydrolysis_bundle.beta_offset_pm2_func,
             )
             pka_sigma_S_for_storage = fake_signed_sigma_S
         else:
@@ -706,6 +707,7 @@ def build_forms_logc(ctx: dict[str, Any], solver_params: Any) -> dict[str, Any]:
                 cation_params=cation_hydrolysis_bundle.cation_params,
                 sigma_S=sigma_S_expr,
                 r_H_El_func=cation_hydrolysis_bundle.r_H_El_pm_func,
+                beta_offset_pm2_func=cation_hydrolysis_bundle.beta_offset_pm2_func,
             )
             pka_sigma_S_for_storage = sigma_S_expr
 

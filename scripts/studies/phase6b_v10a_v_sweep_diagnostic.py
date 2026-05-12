@@ -960,6 +960,9 @@ def _build_kw_ladder():
 def _walk_lambda_zero_capture_snapshots(
     *, sp, mesh, v_rhe_grid: Tuple[float, ...], v_anchor: float,
     k0_r4e_factor: float = 1.0,
+    walk_n_substeps: Optional[int] = None,
+    walk_max_ss_steps: Optional[int] = None,
+    walk_ss_rel_tol: Optional[float] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[int, tuple], int, float, int]:
     """Anchor + warm-walk through ``v_rhe_grid`` at λ=0.
 
@@ -973,6 +976,21 @@ def _walk_lambda_zero_capture_snapshots(
     - mesh_dof_count: ``ctx['U'].function_space().dim()``.
     - electrode_area_nondim: assembled `Constant(1.0) * ds(electrode_marker)`.
     - electrode_marker: int.
+
+    Optional warm-walk tolerance overrides (Phase 6β step 10 — Phase D
+    hybrid optimization) — when non-None they relax the
+    :func:`solve_grid_with_anchor` defaults to trade some warm-walk
+    robustness for ~5x wall savings:
+
+    * ``walk_n_substeps`` — number of sub-steps per V change (default
+      8 → relaxable to 2-4 for small V spacing).
+    * ``walk_max_ss_steps`` — max SS time-stepping iterations per
+      sub-step (default 150 → relaxable to 30-60).
+    * ``walk_ss_rel_tol`` — SS plateau-detection rel tol (default
+      1e-4 → relaxable to 1e-3).
+
+    The defaults preserve byte-equivalence with the v10a/A.2 reference
+    (verified by the Phase 10.B.0 HARD reproduction test).
     """
     import firedrake as fd
     import firedrake.adjoint as adj
@@ -1161,11 +1179,23 @@ def _walk_lambda_zero_capture_snapshots(
 
     phi_grid = np.array([float(v) / V_T for v in v_rhe_grid])
     t1 = time.time()
+    walk_kwargs: Dict[str, Any] = {}
+    if walk_n_substeps is not None:
+        walk_kwargs["n_substeps_warm"] = int(walk_n_substeps)
+    if walk_max_ss_steps is not None:
+        walk_kwargs["max_ss_steps_warm"] = int(walk_max_ss_steps)
+        walk_kwargs["max_ss_steps_warm_final"] = max(
+            int(walk_max_ss_steps),
+            int(walk_max_ss_steps * 1.5),
+        )
+    if walk_ss_rel_tol is not None:
+        walk_kwargs["ss_rel_tol"] = float(walk_ss_rel_tol)
     with adj.stop_annotating():
         grid_result = solve_grid_with_anchor(
             sp, mesh=mesh, anchor=anchor,
             phi_applied_values=phi_grid,
             per_point_callback=_grab,
+            **walk_kwargs,
         )
     walk_wall = time.time() - t1
     n_converged = sum(p.converged for p in grid_result.points.values())

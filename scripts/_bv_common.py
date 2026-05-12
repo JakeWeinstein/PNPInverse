@@ -901,37 +901,20 @@ PARALLEL_2E_4E_REACTIONS_4SP: List[Dict[str, Any]] = [
 # ``z`` the effective cation charge from Singh Table S1, and Singh's
 # σ in counts/pm² (cathode-side magnitude).  Tables S1 + S3 verify
 # the constants below within rounding.
-
-SINGH_A_PM = 620.32          # slope, units of pm
-SINGH_B = 17.154             # intercept, dimensionless
-SINGH_R_O_PM = 63.0          # O-atom radius (Eq. 3 + 4 use r_M + r_O)
-
-# Per-cation Singh Table S1 + Cu r_H_El back-fit (`docs/singh_2016_pka_formula.md`
-# §4 + §7).  These are the prior values for ORR-on-CMK-3-carbon
-# (Linsey 2025 deck slide 27 cites Singh's Cu values directly).  Gate 4B
-# treats r_H_El_pm as a calibration sweep parameter.
-SINGH_2016_CATION_PARAMS: Dict[str, Dict[str, float]] = {
-    "Li+": {
-        "r_M_pm": 69.0,  "z_eff": 0.864, "n_hyd": 5.2,
-        "pKa_bulk": 13.6, "r_H_El_pm_Cu": 132.00,
-    },
-    "Na+": {
-        "r_M_pm": 102.0, "z_eff": 0.900, "n_hyd": 3.5,
-        "pKa_bulk": 14.2, "r_H_El_pm_Cu": 164.99,
-    },
-    "K+": {
-        "r_M_pm": 138.0, "z_eff": 0.919, "n_hyd": 2.6,
-        "pKa_bulk": 14.5, "r_H_El_pm_Cu": 200.98,
-    },
-    "Rb+": {
-        "r_M_pm": 149.0, "z_eff": 0.923, "n_hyd": 2.4,
-        "pKa_bulk": 14.6, "r_H_El_pm_Cu": 211.98,
-    },
-    "Cs+": {
-        "r_M_pm": 170.0, "z_eff": 0.930, "n_hyd": 2.1,
-        "pKa_bulk": 14.8, "r_H_El_pm_Cu": 232.97,
-    },
-}
+#
+# Phase 6β step 10 (Phase D, 2026-05-11) promoted these constants to
+# the top-level Firedrake-free ``calibration.singh2016`` module so the
+# Δ_β fit machinery can build the target-ΔpKa-effect bracket without
+# importing the BV solver package.  This module re-exports them by
+# is-identity reference for backward compatibility — callers can keep
+# importing from ``scripts._bv_common`` until the v9/v10a deprecation
+# window closes.
+from calibration.singh2016 import (
+    SINGH_A_PM,
+    SINGH_B,
+    SINGH_R_O_PM,
+    SINGH_2016_CATION_PARAMS,
+)
 
 
 # Phase 6β v10a Langmuir cap smoke baseline (frozen historical).

@@ -1,0 +1,366 @@
+{
+  "deck_target_pct": 50.95,
+  "beta_K_Cu": -45.6081955773514,
+  "loss_all": [
+    {
+      "delta_beta_pm2": 0.0,
+      "sigma_mapping": "stern",
+      "loss": 15.628839033541297,
+      "status": "finite_valid",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_0p0_stern_baseline.json",
+      "from_cache": true,
+      "wall_seconds": 1044.0092420578003
+    },
+    {
+      "delta_beta_pm2": 0.0,
+      "sigma_mapping": "stern",
+      "loss": 15.628839033541297,
+      "status": "finite_valid",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_0p0_stern_baseline_dup1.json",
+      "from_cache": true,
+      "wall_seconds": 1033.9727659225464
+    },
+    {
+      "delta_beta_pm2": 0.0,
+      "sigma_mapping": "stern",
+      "loss": 15.628839033541297,
+      "status": "finite_valid",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_0p0_stern_baseline_dup2.json",
+      "from_cache": false,
+      "wall_seconds": 1044.0737080574036
+    },
+    {
+      "delta_beta_pm2": 0.0,
+      "sigma_mapping": "ablation_singh_0.141",
+      "loss": Infinity,
+      "status": "solve_failed",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_0p0_ablation_baseline.json",
+      "from_cache": false,
+      "wall_seconds": 750.7635707855225
+    },
+    {
+      "delta_beta_pm2": -77647291.05528744,
+      "sigma_mapping": "stern",
+      "loss": Infinity,
+      "status": "solve_failed",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg7p764729e07_stern.json",
+      "from_cache": false,
+      "wall_seconds": 980.1868360042572
+    },
+    {
+      "delta_beta_pm2": -46588356.389894225,
+      "sigma_mapping": "stern",
+      "loss": Infinity,
+      "status": "solve_failed",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg4p658836e07_stern.json",
+      "from_cache": false,
+      "wall_seconds": 1050.158122062683
+    },
+    {
+      "delta_beta_pm2": -15529421.724501025,
+      "sigma_mapping": "stern",
+      "loss": 15.628839033541297,
+      "status": "finite_valid",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg1p552942e07_stern.json",
+      "from_cache": false,
+      "wall_seconds": 1052.0808770656586
+    },
+    {
+      "delta_beta_pm2": -1552901.125074083,
+      "sigma_mapping": "stern",
+      "loss": 15.628839033541297,
+      "status": "finite_valid",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg1p552901e06_stern.json",
+      "from_cache": false,
+      "wall_seconds": 1052.19539809227
+    },
+    {
+      "delta_beta_pm2": -155249.06513138866,
+      "sigma_mapping": "stern",
+      "loss": 15.628839033541297,
+      "status": "finite_valid",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg1p552491e05_stern.json",
+      "from_cache": false,
+      "wall_seconds": 1034.1097321510315
+    },
+    {
+      "delta_beta_pm2": -15483.85913711925,
+      "sigma_mapping": "stern",
+      "loss": 15.628839033541297,
+      "status": "finite_valid",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg1p548386e04_stern.json",
+      "from_cache": false,
+      "wall_seconds": 1041.1398270130157
+    },
+    {
+      "delta_beta_pm2": -1507.3385376923088,
+      "sigma_mapping": "stern",
+      "loss": 15.628839033541297,
+      "status": "finite_valid",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg1p507339e03_stern.json",
+      "from_cache": false,
+      "wall_seconds": 1285.416352033615
+    },
+    {
+      "delta_beta_pm2": -60.065563287896836,
+      "sigma_mapping": "ablation_singh_0.141",
+      "loss": Infinity,
+      "status": "solve_failed",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg6p006556e01_ablation_singh_0.141.json",
+      "from_cache": false,
+      "wall_seconds": 1030.3523428440094
+    },
+    {
+      "delta_beta_pm2": -25.313790238251443,
+      "sigma_mapping": "ablation_singh_0.141",
+      "loss": Infinity,
+      "status": "solve_failed",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg2p531379e01_ablation_singh_0.141.json",
+      "from_cache": true,
+      "wall_seconds": 982.8726761341095
+    },
+    {
+      "delta_beta_pm2": -11.129393075130874,
+      "sigma_mapping": "ablation_singh_0.141",
+      "loss": Infinity,
+      "status": "solve_failed",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg1p112939e01_ablation_singh_0.141.json",
+      "from_cache": false,
+      "wall_seconds": 987.9066128730774
+    },
+    {
+      "delta_beta_pm2": 17.239401251110262,
+      "sigma_mapping": "ablation_singh_0.141",
+      "loss": Infinity,
+      "status": "solve_failed",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_1p723940e01_ablation_singh_0.141.json",
+      "from_cache": false,
+      "wall_seconds": 1997.1944570541382
+    },
+    {
+      "delta_beta_pm2": 38.51599699579112,
+      "sigma_mapping": "ablation_singh_0.141",
+      "loss": 15.629456088444968,
+      "status": "finite_valid",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_3p851600e01_ablation_singh_0.141.json",
+      "from_cache": false,
+      "wall_seconds": 1565.0189740657806
+    },
+    {
+      "delta_beta_pm2": 44.89897571919538,
+      "sigma_mapping": "ablation_singh_0.141",
+      "loss": 15.628884166733314,
+      "status": "finite_valid",
+      "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_4p489898e01_ablation_singh_0.141.json",
+      "from_cache": false,
+      "wall_seconds": 1398.4259729385376
+    }
+  ],
+  "phases": {
+    "10.B.1": {
+      "baselines": [
+        {
+          "delta_beta_pm2": 0.0,
+          "sigma_mapping": "stern",
+          "loss": 15.628839033541297,
+          "status": "finite_valid",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_0p0_stern_baseline.json",
+          "from_cache": true,
+          "wall_seconds": 1044.0092420578003
+        },
+        {
+          "delta_beta_pm2": 0.0,
+          "sigma_mapping": "stern",
+          "loss": 15.628839033541297,
+          "status": "finite_valid",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_0p0_stern_baseline_dup1.json",
+          "from_cache": true,
+          "wall_seconds": 1033.9727659225464
+        },
+        {
+          "delta_beta_pm2": 0.0,
+          "sigma_mapping": "stern",
+          "loss": 15.628839033541297,
+          "status": "finite_valid",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_0p0_stern_baseline_dup2.json",
+          "from_cache": false,
+          "wall_seconds": 1044.0737080574036
+        }
+      ]
+    },
+    "10.B.2": {
+      "baseline": {
+        "delta_beta_pm2": 0.0,
+        "sigma_mapping": "ablation_singh_0.141",
+        "loss": Infinity,
+        "status": "solve_failed",
+        "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_0p0_ablation_baseline.json",
+        "from_cache": false,
+        "wall_seconds": 750.7635707855225
+      }
+    },
+    "10.B.3": {
+      "pre_fit_grid": [
+        {
+          "delta_beta_pm2": -77647291.05528744,
+          "sigma_mapping": "stern",
+          "loss": Infinity,
+          "status": "solve_failed",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg7p764729e07_stern.json",
+          "from_cache": false,
+          "wall_seconds": 980.1868360042572
+        },
+        {
+          "delta_beta_pm2": -46588356.389894225,
+          "sigma_mapping": "stern",
+          "loss": Infinity,
+          "status": "solve_failed",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg4p658836e07_stern.json",
+          "from_cache": false,
+          "wall_seconds": 1050.158122062683
+        },
+        {
+          "delta_beta_pm2": -15529421.724501025,
+          "sigma_mapping": "stern",
+          "loss": 15.628839033541297,
+          "status": "finite_valid",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg1p552942e07_stern.json",
+          "from_cache": false,
+          "wall_seconds": 1052.0808770656586
+        },
+        {
+          "delta_beta_pm2": -1552901.125074083,
+          "sigma_mapping": "stern",
+          "loss": 15.628839033541297,
+          "status": "finite_valid",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg1p552901e06_stern.json",
+          "from_cache": false,
+          "wall_seconds": 1052.19539809227
+        },
+        {
+          "delta_beta_pm2": -155249.06513138866,
+          "sigma_mapping": "stern",
+          "loss": 15.628839033541297,
+          "status": "finite_valid",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg1p552491e05_stern.json",
+          "from_cache": false,
+          "wall_seconds": 1034.1097321510315
+        },
+        {
+          "delta_beta_pm2": -15483.85913711925,
+          "sigma_mapping": "stern",
+          "loss": 15.628839033541297,
+          "status": "finite_valid",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg1p548386e04_stern.json",
+          "from_cache": false,
+          "wall_seconds": 1041.1398270130157
+        },
+        {
+          "delta_beta_pm2": -1507.3385376923088,
+          "sigma_mapping": "stern",
+          "loss": 15.628839033541297,
+          "status": "finite_valid",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg1p507339e03_stern.json",
+          "from_cache": false,
+          "wall_seconds": 1285.416352033615
+        }
+      ]
+    },
+    "10.B.4": {
+      "pre_fit_grid": [
+        {
+          "delta_beta_pm2": -60.065563287896836,
+          "sigma_mapping": "ablation_singh_0.141",
+          "loss": Infinity,
+          "status": "solve_failed",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg6p006556e01_ablation_singh_0.141.json",
+          "from_cache": false,
+          "wall_seconds": 1030.3523428440094
+        },
+        {
+          "delta_beta_pm2": -25.313790238251443,
+          "sigma_mapping": "ablation_singh_0.141",
+          "loss": Infinity,
+          "status": "solve_failed",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg2p531379e01_ablation_singh_0.141.json",
+          "from_cache": true,
+          "wall_seconds": 982.8726761341095
+        },
+        {
+          "delta_beta_pm2": -11.129393075130874,
+          "sigma_mapping": "ablation_singh_0.141",
+          "loss": Infinity,
+          "status": "solve_failed",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_neg1p112939e01_ablation_singh_0.141.json",
+          "from_cache": false,
+          "wall_seconds": 987.9066128730774
+        },
+        {
+          "delta_beta_pm2": 17.239401251110262,
+          "sigma_mapping": "ablation_singh_0.141",
+          "loss": Infinity,
+          "status": "solve_failed",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_1p723940e01_ablation_singh_0.141.json",
+          "from_cache": false,
+          "wall_seconds": 1997.1944570541382
+        },
+        {
+          "delta_beta_pm2": 38.51599699579112,
+          "sigma_mapping": "ablation_singh_0.141",
+          "loss": 15.629456088444968,
+          "status": "finite_valid",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_3p851600e01_ablation_singh_0.141.json",
+          "from_cache": false,
+          "wall_seconds": 1565.0189740657806
+        },
+        {
+          "delta_beta_pm2": 44.89897571919538,
+          "sigma_mapping": "ablation_singh_0.141",
+          "loss": 15.628884166733314,
+          "status": "finite_valid",
+          "eval_path": "/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/StudyResults/phase6b_step10_phase_D/eval_db_4p489898e01_ablation_singh_0.141.json",
+          "from_cache": false,
+          "wall_seconds": 1398.4259729385376
+        }
+      ]
+    },
+    "10.B.5": {
+      "n_finite_valid": 8,
+      "loss_min": 15.628839033541297,
+      "loss_max": 15.628839033541297,
+      "delta_loss_pp2": 0.0,
+      "noise_std_pp2": 0.0,
+      "noise_floor_threshold": 0.0,
+      "criteria": {
+        "range": {
+          "passes": false,
+          "delta_loss_pp2": 0.0,
+          "threshold_pp2": 1.0
+        },
+        "noise_floor": {
+          "passes": true,
+          "delta_loss_pp2": 0.0,
+          "noise_threshold": 0.0
+        },
+        "slope": {
+          "passes": false,
+          "max_abs_slope_pp2_per_dpka": 0.0,
+          "threshold": 0.01
+        },
+        "unimodality": {
+          "passes": true,
+          "interior_minima_count": 0
+        }
+      },
+      "overall_pass": false
+    }
+  },
+  "verdict": {
+    "verdict": "OUTCOME_C_NON_IDENTIFIABLE_flagged",
+    "primary_gap_pp": null,
+    "primary_pass": null,
+    "sign_guard_status": "not_evaluated"
+  },
+  "sigma_local_clamped_max_over_grid": 6.439370897767656e-08,
+  "noise_std_from_baseline_dups": 0.0
+}

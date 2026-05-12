@@ -133,6 +133,16 @@ class CationHydrolysisBundle:
         ``cation_params['r_H_El_pm']`` is the *initial* value mirrored
         into ``r_H_El_pm_func`` at build time; ``r_H_El_pm_func`` is
         the residual-side authoritative value during continuation.
+        ``cation_params['beta_offset_pm2']`` mirrors the live β offset
+        for diagnostics consumers; the residual reads
+        ``beta_offset_pm2_func`` directly.
+    beta_offset_pm2_func
+        Phase 6β step 10 Phase D — carbon-vs-Cu β offset in pm².  Sums
+        with the live β_per_cation (computed from r_H_El_pm_func) inside
+        ``_build_singh_2016_eq_4_pka_shift`` to give ``β_carbon =
+        β_per_cation_Cu(r_H_El_live) + Δ_β``.  Default 0.0 at build
+        time → byte-equivalent to the pre-D1 v10a/v10b residual.
+        Mutable via :func:`set_reaction_beta_offset_pm2_model`.
     """
 
     counterion_idx: int
@@ -146,6 +156,7 @@ class CationHydrolysisBundle:
     gamma_func: Any
     gamma_max_func: Any
     cation_params: dict
+    beta_offset_pm2_func: Any
 
 
 def is_cation_hydrolysis_enabled(conv_cfg: dict) -> bool:
@@ -396,6 +407,21 @@ def build_cation_hydrolysis_terms(
     )
     r_H_El_pm_func.assign(r_H_El_pm_init)
 
+    # Phase 6β step 10 Phase D — Δ_β offset (carbon-vs-Cu pKa shift
+    # coefficient).  Default 0.0 keeps the residual byte-equivalent to
+    # the pre-D1 v10b stack.  Live coefficient: re-read at every Newton
+    # resolve so the Phase D fit's outer loop can sweep Δ_β without
+    # rebuilding the form.  Sign convention: positive Δ_β raises
+    # ``β_carbon`` (less negative under Singh's cathodic geometry,
+    # smaller |ΔpKa|).
+    beta_offset_init = float(raw_cfg.get("beta_offset_pm2", 0.0))
+    beta_offset_pm2_func = fd.Function(
+        R_space, name="cation_hydrolysis_beta_offset_pm2",
+    )
+    beta_offset_pm2_func.assign(beta_offset_init)
+    # Mirror initial offset into cation_params so diagnostics see it.
+    cation_params["beta_offset_pm2"] = beta_offset_init
+
     bundle = CationHydrolysisBundle(
         counterion_idx=int(counterion_idx),
         h_idx=int(h_idx),
@@ -408,6 +434,7 @@ def build_cation_hydrolysis_terms(
         gamma_func=gamma_func,
         gamma_max_func=gamma_max_func,
         cation_params=cation_params,
+        beta_offset_pm2_func=beta_offset_pm2_func,
     )
     ctx["cation_hydrolysis"] = bundle
     return bundle
@@ -423,6 +450,7 @@ def build_pka_shift(
     cation_params: dict,
     sigma_S: Any,
     r_H_El_func: Any = None,
+    beta_offset_pm2_func: Any = None,
 ):
     """Return ``ΔpKa(σ_S)`` UFL expression.
 
@@ -437,16 +465,20 @@ def build_pka_shift(
 
       .. code-block:: text
 
-          ΔpKa(σ)  =  +2 · A · z · σ_singh · r_H_El · (1 − r_M-O² / r_H_El²)
+          ΔpKa(σ)  =  +(β_per_cation_Cu + Δ_β) · σ_singh
 
-      with ``σ_singh = max(0, −σ_S) · (N_A / F) · 1e-24`` (the
+      where
+      ``β_per_cation_Cu = 2 · A · z · r_H_El · (1 − r_M-O² / r_H_El²)``
+      and ``σ_singh = max(0, −σ_S) · (N_A / F) · 1e-24`` (the
       anode-clamped cathode-side counts/pm² value; Singh defines σ as
       a positive scalar magnitude so the anode-clamp keeps ΔpKa = 0
       at anodic bias) and ``r_M-O = r_M + r_O``.  Cathodic case
-      (``σ_S < 0`` and ``r_H_El < r_M-O``) gives ``ΔpKa < 0``,
-      lowering the hydrolysis pKa (more proton produced) — Singh
-      Tables S2/S3 verified per
-      ``docs/singh_2016_pka_formula.md`` §3.4 + §7.
+      (``σ_S < 0`` and ``r_H_El < r_M-O``) gives ``β_per_cation_Cu <
+      0`` ⇒ ``ΔpKa < 0`` (Singh Tables S2/S3 verified per
+      ``docs/singh_2016_pka_formula.md`` §3.4 + §7).  The Phase D
+      ``Δ_β`` offset (read live from ``beta_offset_pm2_func``)
+      defaults to 0 and the residual is byte-equivalent to the v10b
+      stack; the Phase D fit's outer loop sweeps Δ_β.
 
     Parameters
     ----------
@@ -460,6 +492,12 @@ def build_pka_shift(
         nondim potential drop has units of nondim charge density.
         We convert to physical C/m² via the scaling chain on ctx
         before applying Singh's pm-based formula.
+    beta_offset_pm2_func
+        Optional R-space ``Function`` holding the Phase 6β step 10
+        Phase D Δ_β offset in pm² (carbon-vs-Cu pKa-shift coefficient
+        offset).  When ``None`` (default), the residual collapses to
+        ``β_per_cation_Cu · σ_singh`` byte-equivalent to the pre-D1
+        v10b path.  Re-read at each Newton resolve.
 
     Returns
     -------
@@ -473,6 +511,7 @@ def build_pka_shift(
             cation_params=cation_params,
             sigma_S=sigma_S,
             r_H_El_func=r_H_El_func,
+            beta_offset_pm2_func=beta_offset_pm2_func,
         )
     raise NotImplementedError(
         f"pka_shift_form={form!r} not implemented; supported forms are "
@@ -498,6 +537,7 @@ def _build_singh_2016_eq_4_pka_shift(
     cation_params: dict,
     sigma_S: Any,
     r_H_El_func: Any = None,
+    beta_offset_pm2_func: Any = None,
 ):
     """Build the Singh 2016 SI Eq. (4) ΔpKa UFL expression.
 
@@ -516,6 +556,14 @@ def _build_singh_2016_eq_4_pka_shift(
     run time without rebuilding the form.  When ``None`` we fall
     back to ``cation_params['r_H_El_pm']`` baked as a Constant
     (used by unit tests that don't have a bundle).
+
+    ``beta_offset_pm2_func`` (Phase 6β step 10 Phase D): optional
+    R-space ``Function`` holding the Δ_β carbon-vs-Cu offset (pm²).
+    When provided, the residual builds
+    ``β_carbon = β_per_cation_Cu(r_H_El_live) + Δ_β`` and emits
+    ``ΔpKa = β_carbon · σ_singh``.  When ``None``, the residual
+    collapses to the pre-D1 expression ``β_per_cation_Cu · σ_singh``
+    — byte-equivalent to the v10b path.
     """
     z = float(cation_params["z_eff"])
     r_M = float(cation_params["r_M_pm"])
@@ -550,9 +598,22 @@ def _build_singh_2016_eq_4_pka_shift(
     G_expr = fd.Constant(1.0) - (r_M_O_const * r_M_O_const) / (
         r_H_El_expr * r_H_El_expr
     )
-    delta_pKa = (
-        fd.Constant(2.0 * A_pm * z) * r_H_El_expr * G_expr * sigma_singh
+    # β_per_cation_Cu in pm² — live UFL expression that tracks the
+    # current r_H_El_pm value.  At r_H_El_pm = 200.98 (K+ Cu default)
+    # this evaluates numerically to -45.608196 pm², matching
+    # ``calibration.singh2016.compute_beta_per_cation("K+")``.
+    beta_per_cation_live = (
+        fd.Constant(2.0 * A_pm * z) * r_H_El_expr * G_expr
     )
+    # Phase 6β step 10 Phase D — add the carbon-vs-Cu offset when
+    # provided.  At Δ_β=0 the UFL `x + 0` is numerically equivalent
+    # to `x`, so the residual at offset=0 matches the pre-D1 path
+    # to machine precision.
+    if beta_offset_pm2_func is not None:
+        beta_carbon_expr = beta_per_cation_live + beta_offset_pm2_func
+    else:
+        beta_carbon_expr = beta_per_cation_live
+    delta_pKa = beta_carbon_expr * sigma_singh
     return delta_pKa
 
 
@@ -909,6 +970,7 @@ def update_gamma_from_solution(
                 cation_params=bundle.cation_params,
                 sigma_S=sigma_S_expr,
                 r_H_El_func=bundle.r_H_El_pm_func,
+                beta_offset_pm2_func=bundle.beta_offset_pm2_func,
             )
         pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
         forward_avg = float(
@@ -1174,6 +1236,7 @@ def collect_v10a_rung_diagnostics(
             cation_params=bundle.cation_params,
             sigma_S=sigma_S_expr,
             r_H_El_func=bundle.r_H_El_pm_func,
+            beta_offset_pm2_func=bundle.beta_offset_pm2_func,
         )
     pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
 

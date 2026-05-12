@@ -1,0 +1,541 @@
+OpenAI Codex v0.129.0 (research preview)
+--------
+workdir: /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/jakeweinstein/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e17c0-91c7-7791-945c-25064a110dfd
+--------
+user
+# R3 → GPT: counterreply + plan v3 patches
+
+All 22 round-2 issues accepted.  Confirmed computations:
+* `β_K_Cu = 2·620.32·0.919·200.98·(1 − 201²/200.98²) = −45.608196 pm²`
+  (your −45.61 was right; my −45.18 was hand-arithmetic error).
+* Sign-flip boundary: `Δ_β ≥ +45.608 pm² ⇒ β_K_carbon ≥ 0 ⇒
+  sign-guard violation`.
+* At σ_local_clamped ≈ 1.07e-7 counts/pm²: `Δ_β = -9.35e6 pm²`
+  for ΔpKa = −1; `Δ_β = -4.67e7 pm²` for ΔpKa = −5.
+
+---
+
+## Section 1 — Per-issue acknowledgments
+
+**1. ACCEPT.**  Locked ±10 pp gate restored.  `DATA_TARGET_NOISY`
+informational flag added when `±std > ±10 pp`.  The flag is
+emitted but does NOT relax the gate.
+
+**2. ACCEPT.**  β computation in a single shared helper
+`calibration/v10b.py:compute_beta_per_cation(cation, r_H_El_pm=None)`
+(pure Python, Firedrake-free).  Used by docs, tests, and driver.
+Returns `−45.608196 pm²` for K @ Cu default.
+
+**3. ACCEPT.**  Target-ΔpKa grid restricted to **negative ΔpKa
+only**: `T ∈ {0, −1e-6, −1e-5, −1e-4, −1e-3, −1e-2, −1e-1, −0.3,
+−1, −3}` (10 points; log-spaced over |T|, baseline T = 0 at the
+top).  Positive T is excluded by construction (sign-guard
+falsification not search).
+
+**4. ACCEPT.**  Stern bracket one-sided: `Δ_β ∈ [−4.673e7, +45.6) pm²`
+(open at the sign-flip boundary).  Optimizer
+`minimize_scalar(method="bounded")` enforces these bounds.
+
+**5. ACCEPT.**  `Δ_β = 0` is the **first** explicit grid point (the
+V10B baseline anchor).  T = 0 maps to Δ_β = +45.6 only at exact
+sign-flip — that's the closing boundary, not the baseline.  The
+Δ_β grid is built by inverting T → Δ_β with `Δ_β = (T −
+β_K_Cu·σ_local_clamped) / σ_local_clamped` for the 10 listed T
+values, anchored at Δ_β = 0 (T = baseline ≈ −4.88e-6).
+
+**6. ACCEPT.**  Log-spaced |ΔpKa| target grid.  Specific values
+listed in #3.  Covers baseline (5e-6) through −3 pKa units with
+~7 decades of resolution and a strong T = 0 anchor.
+
+**7. ACCEPT.**  `Δ_loss = max(L) − min(L)` over **finite, sign-
+valid, non-clamped** evaluations only.  Separate report:
+`invalid_domain_count = N_inf + N_clamp_engaged` (informational).
+
+**8. ACCEPT.**  Sensitivity measured in **target-ΔpKa-effect
+space**, not raw Δ_β units.  Slope estimate:
+`d(loss)/d(target_ΔpKa)` at each grid point.  Threshold:
+`|slope| < 0.01 pp² per unit ΔpKa effect`.  Pre-fit
+identifiability gate uses target-ΔpKa coordinates throughout.
+
+**9. ACCEPT.**  Singh formula in residual is NOT clamped.  Instead:
+* **Pre-screening (Phase D harness, BEFORE solving):** compute
+  predicted worst-case `|ΔpKa|` at each Δ_β candidate using
+  `β_K_carbon · σ_local_max_across_V_grid` (σ_local_max from the
+  Δ_β=0 byte-equivalence baseline run).  If `|ΔpKa_max_predicted|
+  > 15`, declare `SOLVE_INVALID_DOMAIN` and do NOT solve.
+* **Solver behavior unchanged:** `_build_singh_2016_eq_4_pka_shift`
+  remains locked.
+* Out-of-domain candidates contribute `+inf` to the identifiability
+  metric but are EXCLUDED from optimizer search per #7.
+
+**10. ACCEPT.**  Δ_β candidates outside the safe ΔpKa domain are
+**rejected before solving**, not assigned `+inf` after.
+`SOLVE_INVALID_DOMAIN` is a pre-solve verdict; optimizer skips
+the eval entirely.  If the bracket gets squeezed by invalid-
+domain pre-screening, narrow the bracket and document.
+
+**11. ACCEPT.**  V grid corrected.  Locked explicit values, 22
+points total:
+```
+V_RHE = [-0.10, -0.06, -0.01, 0.04, 0.09, 0.14, 0.19, 0.24, 0.29,
+         0.34, 0.39, 0.44, 0.49, 0.54, 0.59, 0.64, 0.69, 0.74,
+         0.79, 0.84, 0.89, 0.94, 0.99, 1.00]
+```
+24 points (including V_kin = −0.10 and explicit V = +1.00 endpoint).
+Adaptive ring-onset refinement adds 4 interior points at 0.01 V
+spacing inside the bracket once first-pass identifies it → 28
+points typical.  Test counts grid explicitly and verifies V_kin
++ endpoints presence.
+
+**12. ACCEPT.**  V_kin = −0.10 V explicitly included in the V grid
+(see #11).  Δ_β = 0 baseline at V_kin reproduces v10b A.2 record
+(rel < 1e-3 check).
+
+**13. ACCEPT.**  Adaptive refinement: **4 interior points** at
+0.01 V spacing inside the 0.05 V bracket where ring-onset
+crosses 0.01 mA/cm².  Endpoints of the bracket are NOT duplicated.
+
+**14. ACCEPT.**  NaN handling clarified:
+* **Real V solve failure (HARD-gate)** → entire Δ_β evaluation
+  invalidated, marked `SOLVE_FAILED`, NOT skipped.
+* **NaN-skip aggregation** is ONLY for synthetic unit tests
+  (which assert robustness of the aggregation helper).
+* `test_nan_handling_in_observables` renamed to
+  `test_observable_aggregation_nan_skip_synthetic`; the
+  production path uses `validate_v_resolved_scan_complete()` to
+  invalidate.
+
+**15. ACCEPT.**  `OUTCOME_A` separated into:
+* **`OUTCOME_A_LOCKED_PASS`**: K primary criterion passes (max
+  H₂O₂% within ±10 pp of deck) AND `pka_shift_avg < 0` sign
+  guard holds.  Bundle-locked Phase D pass.
+* **`OUTCOME_A_RECOMMENDED_E_READY`**: A_LOCKED_PASS + ≥ 2/3
+  secondary + σ-divergence within bundle 30% + argmax-V/ring-
+  onset within tolerances.  Recommended (not locked) for Phase
+  E launch.
+
+The strict bundle-locked gate is what gates `OUTCOME_A` PASS;
+the strict gate is what's documented in the writeup as Phase D
+verdict.  The recommended-for-E flag is a separate metadata
+field, not a gating decision.
+
+**16. ACCEPT.**  Argmax-V and ring-onset mismatches reclassified
+as **diagnostic failures**, not falsification.  Verdict naming:
+* `argmax_V_diagnostic_mismatch` (informational).
+* `ring_onset_diagnostic_mismatch` (informational).
+* Only `primary_criterion_failed` triggers
+  `OUTCOME_B_FALSIFIED_documented`.
+
+**17. ACCEPT.**  `abs_div > 10 pm²` threshold removed.  Only the
+bundle-locked `rel_div > 0.30` triggers `NON_IDENTIFIABLE`.
+Absolute divergence is reported informationally with no gate.
+
+**18. ACCEPT.**  σ-mapping non-identifiability under local-Stern σ
+is **EXPECTED**, not surprising.  Plan §3.3 (σ-mapping) now states
+upfront:
+
+> "The bundle-locked σ-mapping divergence check
+> (`|Δ_β_stern − Δ_β_ablation| / max(|Δ_β_stern|, |Δ_β_ablation|)
+> > 0.30`) will fire under the local-Stern + imposed-Singh-σ
+> pair, because the two σ conventions differ in magnitude by ~10⁶×
+> at typical cathodic conditions.  The DIFFERENCES that would be
+> SURPRISING:
+>   (a) Δ_β_stern fits to a value that, when applied to the
+>       imposed-Singh-σ in the ablation residual, produces a
+>       similar max H₂O₂%.  This would indicate the ΔpKa effect
+>       is mediating selectivity through a single physical
+>       quantity that's coordinate-invariant.
+>   (b) Or, Δ_β_stern fits to something physically implausible
+>       (>3 σ from the ablation prediction in the same
+>       observable-equivalent space), indicating the local-
+>       Stern path is dominated by a different mechanism.
+> Phase D's writeup will report both possibilities; the bundle's
+> 'flag and report both' rule covers either case."
+
+**19. ACCEPT.**  Optimizer tolerance in **target-ΔpKa-effect
+space**, not Δ_β units:
+* `xatol = 0.05` in target-ΔpKa space.
+* `minimize_scalar` works in Δ_β; conversion `Δ(target_ΔpKa) =
+  σ_local · Δ(Δ_β)` lets us set `xatol_beta = 0.05 / σ_local ≈
+  0.05 / 1.07e-7 ≈ 4.67e5 pm²` at V_kin's σ scale.
+* This produces a tolerance ~0.05 pKa units, matching the loss
+  resolution.
+
+**20. ACCEPT.**  Wall budget in **PDE Newton-solve count**:
+* Each Δ_β evaluation = V-resolved scan with ~24-28 V points,
+  each requiring 1 Newton resolve (warm-walk from adjacent V).
+  Plus 1 anchor build at V = +0.55 with two-stage C_S (the
+  fixed cost ~70-300s).
+* Per-eval PDE cost: ~1 anchor + 28 Newtons ≈ 28-30 PDE solves.
+* Total: 37 Δ_β evaluations × 28 ≈ **~1000 PDE solves**.
+* Wall: 47 × ~7 min ≈ ~5.5 hours under tight continuation.
+
+Budget update:
+* Pre-fit: 10 (Stern) + 10 (ablation) = **20 Δ_β evals**.
+* Brent on Stern: ~10 evals.
+* σ-mapping check ONLY at Δ_β_fit_stern (1 ablation re-eval +
+  reuse pre-fit ablation grid).  Avoids full ablation Brent.  →
+  ~5 ablation evals total (10 pre-fit reused + 1 final point).
+  Wait: we still need the ablation fit value too, for the
+  bundle's 30% rel check.  So we still need Brent on ablation,
+  ~10 evals.
+* Δ_β = 0 baseline: 1 eval.
+* **Total: 31-41 Δ_β evals = ~870-1230 PDE solves = ~5-7 hours
+  wall.**
+
+**21. ACCEPT.**  Continuation topology pinned:
+* **Per Δ_β eval**: anchor built FRESH at `V_anchor = +0.55 V`
+  with two-stage C_S (anchor at C_S=0.10, bump to 0.20).  Then
+  warm-walk DESCENDING across the V grid (+0.55 → +1.0 at
+  small steps, then ramp back to V_min = −0.10).
+* **Across Δ_β**: NO warm-walk across Δ_β candidates.  Each
+  Δ_β starts from a fresh anchor build.  Reason: Δ_β changes
+  the residual nontrivially via `_build_singh_2016_eq_4_pka_shift`
+  and the residual-side σ-clamp behavior; cross-Δ_β warm-walk
+  introduces continuation fragility we don't need.
+* Wall consequence: anchor build amortized within a single Δ_β
+  eval (across V points); no cross-Δ_β caching.
+
+**22. ACCEPT.**  Δ_β = 0 byte-equivalence target pinned:
+* Comparison file:
+  `StudyResults/phase6b_v10b_phase_A2_v_kin/phase_a2_v_kin.json`.
+* Comparison V: `V_kin = −0.10 V`.
+* Comparison fields at `(k_hyd=1e-3, λ=1)`:
+  * `cd_mA_cm²`, `R_2e_current_nondim`,
+    `R_4e_current_nondim`, `θ`, `σ_S_C_per_m2`,
+    `pka_shift_avg`, `gamma_solver`, `mass_balance_residual_rel`.
+* Tolerance: rel ≤ `1e-3` per field.
+* Deviation → STOP, write `delta_beta_zero_baseline_FAIL.md`,
+  do NOT continue optimization.  (Indicates the new driver
+  diverged from v10a A.2 driver semantics.)
+* Implementation: a single-V byte-equiv check, NOT a mini-scan
+  (the mini-scan adds cost without changing the test signal).
+
+---
+
+## Section 2 — Plan v3 patches (against v2)
+
+* **P21**: §1.7 + D6 — primary gate restored to ±10 pp absolute
+  (NOT widened).  `DATA_TARGET_NOISY` flag emitted when std > 10
+  pp.
+* **P22**: New `calibration/v10b.py:compute_beta_per_cation()`
+  helper.  Tests verify exact value −45.608196.
+* **P23**: §3.3 target-ΔpKa grid restricted to negative + zero
+  baseline; 10 log-spaced T values.
+* **P24**: D7 Stern bracket one-sided `[−4.673e7, +45.6) pm²`.
+* **P25**: §3.3 ΔpKa overflow protection via PRE-SCREENING (not
+  residual clamp).  `SOLVE_INVALID_DOMAIN` pre-solve verdict.
+* **P26**: D1 V grid locked to 24 explicit values (incl. V_kin
+  and V=+1.00).  Adaptive refinement adds 4 interior points.
+* **P27**: D1 NaN-skip semantics reclassified: production V
+  failure invalidates eval; NaN-skip aggregation is unit-test only.
+* **P28**: D6 split: `OUTCOME_A_LOCKED_PASS` (bundle gate) vs
+  `OUTCOME_A_RECOMMENDED_E_READY` (recommendation metadata).
+* **P29**: D7 argmax/onset reclassified as diagnostic mismatches
+  (not falsification).  Only primary failure → `OUTCOME_B`.
+* **P30**: D5 σ-divergence: rel only (no `abs_div` threshold);
+  expected-divergence-under-Stern documented in §3.3.
+* **P31**: D4 optimizer tolerance in target-ΔpKa space; xatol_beta
+  = 0.05/σ_local at V_kin.
+* **P32**: §4 + D7 wall budget in PDE-solve count; total ~870-
+  1230 PDE solves, ~5-7 hours wall.
+* **P33**: §4 + D7 continuation topology pinned: per-Δ_β fresh
+  anchor; warm-walk across V; no cross-Δ_β warm-walk.
+* **P34**: D5 Δ_β=0 byte-equivalence: comparison file, V_kin,
+  8 fields, rel ≤ 1e-3 tolerance, STOP on deviation.
+* **P35**: Risk register updates: R17 (σ-divergence expected
+  under Stern, redefine surprise criteria), R18 (PDE-solve count
+  honesty in wall budget), R19 (continuation topology fragility
+  at deep cathodic V), R20 (compute_beta helper consistency tests).
+
+---
+
+## Section 3 — Continued critique prompt
+
+Review v3 patches.  Push back on poor defenses.  Raise new
+issues.  Re-issue earlier issues I missed.  Verdict line at end:
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN
+
+codex
+I’ll sanity-check the v3-specific code integration claims, especially the proposed helper location and the pinned A.2 JSON keys, because those are the remaining places where a good-looking plan can still fail at implementation time.
+exec
+/bin/zsh -lc "python - <<'PY'
+import json
+p='StudyResults/phase6b_v10b_phase_A2_v_kin/phase_a2_v_kin.json'
+with open(p) as f: d=json.load(f)
+print(d.keys())
+# print likely nested structure compactly
+for k,v in d.items():
+    if isinstance(v, dict): print('dict', k, list(v.keys())[:30])
+    elif isinstance(v, list): print('list', k, len(v), type(v[0]).__name__ if v else None, (list(v[0].keys())[:20] if v and isinstance(v[0],dict) else ''))
+    else: print('scalar', k, v)
+PY" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+dict_keys(['config', 'lambda_zero_baseline_at_v_kin', 'warm_walk_records', 'per_k_hyd_records', 'v10b_priorities', 'convergence_audit'])
+dict config ['v_kin', 'v_anchor', 'k0_r4e_factor', 'stern_capacitance_f_m2', 'stern_capacitance_f_m2_anchor_build', 'K0_HAT_R2E_baseline', 'K0_HAT_R4E_baseline', 'K0_HAT_R4E_effective', 'k_hyd_grid', 'transition_grid', 'saturation_grid', 'warm_walk_grid', 'lambda_ladder', 'v10b_kinetics', 'v10b_calibration_metadata', 'l_eff_m', 'domain_height_hat', 'electrode_area_nondim', 'electrode_marker', 'mesh', 'mesh_dof_count', 'i_lim_4e_mA_cm2', 'with_perturbation', 'wall_seconds']
+dict lambda_zero_baseline_at_v_kin ['v_rhe', 'phi_applied_eta', 'lambda_zero_converged', 'cd_mA_cm2', 'pc_mA_cm2', 'c_H_surface_nondim', 'c_K_surface_nondim', 'gamma_at_lambda_zero', 'lambda_zero_sigma_S_C_per_m2', 'lambda_zero_sigma_S_counts_per_pm2', 'lambda_zero_R_2e_current_nondim', 'lambda_zero_R_4e_current_nondim']
+list warm_walk_records 5 dict ['v_rhe', 'phi_applied_eta', 'lambda_zero_converged', 'cd_mA_cm2', 'pc_mA_cm2', 'c_H_surface_nondim', 'c_K_surface_nondim', 'gamma_at_lambda_zero', 'lambda_zero_sigma_S_C_per_m2', 'lambda_zero_sigma_S_counts_per_pm2', 'lambda_zero_R_2e_current_nondim', 'lambda_zero_R_4e_current_nondim']
+list per_k_hyd_records 10 dict ['k_hyd_target', 'ladder_converged', 'exception_phase', 'exception', 'wall_seconds', 'rungs', 'partial_rungs']
+dict v10b_priorities ['k_hyd_route', 'single_v_selectivity_gap_pp', 'selectivity_band', 'kdes_gammamax_priority', 'rHEl_recalibration_required', 'max_amp_from_singh', 'transport_re_entry_first_k_hyd', 'no_route_cause']
+dict convergence_audit ['baseline_reproduction', 'transition_coverage', 'saturation_coverage', 'hard_gates', 'soft_deltas', 'overall_pass', 'legacy_strict_pass']
+
+exec
+/bin/zsh -lc "sed -n '1,80p' calibration/v10b.py && rg -n \"from calibration.v10b|import calibration.v10b|GAMMA_MAX_HAT_V10B|SINGH_2016_CATION_PARAMS\" scripts/_bv_common.py calibration/v10b.py tests -g '*.py' | head -80" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+"""Phase 6 beta v10b literature calibration of Gamma_max + k_des + C_S.
+
+Locked numeric constants plus the V10B_CALIBRATION_METADATA record
+that every v10b result JSON emits verbatim.  This module is
+deliberately Firedrake-free; importing it must not pull
+``firedrake`` (or any ``Forward.bv_solver`` submodule) into
+``sys.modules``.  Pure Python only.
+
+Source of truth: ``.claude/plans/phase6b-step8-v10b-calibration.md``
+(v7-FINAL, APPROVED by GPT critique session 36).  Companion writeup:
+``docs/phase6/v10b_calibration_summary.md``.
+
+Outcome summary (2026-05-10):
+
+* ``C_S`` -- locked at step 7 to ``0.20 F/m^2`` per
+  ``docs/phase6/CMK3_capacitance_literature.md`` (Bohra-Koper-Choi
+  consensus).  v10b carries the 4-rung sensitivity bracket {0.05, 0.10,
+  0.20, 0.30} F/m^2 and three open asks (Bohra 2019 EES pull, Risk #5
+  sigma_S re-derivation with Stern-only C_S = 20 uF/cm^2, Yash
+  convention disposition).
+* ``Gamma_max_nondim`` -- 4-test compatibility check (mechanism /
+  electrode / electrolyte / dimensional) finds no peer-reviewed source
+  that reports MOH adsorbate coverage at the OHP in K2SO4 / sp2-carbon
+  / aqueous.  Singh 2016 reports the equilibrium constant K_eq for
+  hydrolysis (constraining k_hyd / k_prot, not coverage);
+  Iamprasertkun 2019 reports HOPG specific capacitance (4.7 - 9.4
+  uF/cm^2 across Li+ -> Cs+) which is a different quantity from MOH
+  coverage; Bohra 2019 uses variable Booth permittivity which does not
+  yield MOH coverage.  Decision rule outcome: tighten V10A derivation
+  chain (V10B = V10A = 0.047 nondim).  The V10A chain is the one-
+  monolayer hard-sphere packing at the OHP with K+ effective hard-
+  sphere radius r ~ 2.3 Angstrom, giving Gamma_max_phys ~ 5.6e-6
+  mol/m^2 and Gamma_max_nondim = 5.6e-6 / (C_SCALE * L_REF)
+  = 5.6e-6 / (1.2 * 1e-4) ~= 0.047.  Sensitivity bracket: 3-rung
+  Gamma_max in {V10A/2, V10A, V10A*2} as the three Gamma_max rungs
+  of the D7-D4 coupled matrix.  Engineering choice flag NOT set --
+  this is a documented derivation, not an undocumented engineering
+  pick.  See writeup section 2 for the full 4-test outcome and the
+  K+ hydrated-radius caveats (Marcus / Volkov bond-distance literature
+  reports K-O 2.65 - 2.97 Angstrom; r = 2.3 Angstrom is a closer-
+  packing effective hard-sphere radius for monolayer estimation,
+  intentionally smaller than the bare K-O bond distance so the
+  monolayer area is not over-counted).
+* ``k_des_nondim`` -- engineering choice with documented Eyring prior.
+  Strategy 1 (analogous OH* desorption from sp2 carbon, Nørskov-
+  Viswanathan 2012 + Co-Billy 2017) does not yield a transportable
+  order of magnitude with electrode / electrolyte transferability:
+  the published OH* binding energies are for metal cathodes in
+  CO2R / HER conditions, not MOH adsorbate at the OHP in K2SO4 / ORR.
+  Strategy 2 (Eyring estimate from cation-OH bond energy) yields the
+  bracket prior k_des_nondim in [1e-2, 1e2] corresponding to
+  Delta G_des in [0.69, 0.94] eV at 298 K (k_des_phys = (k_B T / h)
+  exp(-Delta G_des / RT) and k_des_nondim = k_des_phys * tau_REF
+  with tau_REF = L_REF^2 / D_REF ~= 5 s).  Strategy 3 -- engineering
+  choice -- is the honest fallback: lock central value at k_des_nondim
+  = 1.0 (smoke value; smoke 1.0 nondim corresponds to Delta G_des
+  ~= 0.80 eV via Eyring at 298 K) and run D7-D3 + D7-D4 sensitivity
+  brackets at {0.01, 0.1, 1.0, 10.0, 100.0}.  Engineering choice
+  flag IS set on this parameter; future scope expansion (post-v10b)
+  could use this as initial prior for a Phase D-style fit.
+
+Hard invariants (do NOT touch in v10b -- see plan section 2 table):
+
+* V_kin = -0.10 V, K0_R4e_factor = 1e-14, k_hyd_baseline = 1e-3
+  nondim, k_hyd_route = 1e-1 nondim, WARM_WALK_GRID
+  (+0.55, +0.40, +0.20, +0.10, -0.10), LAMBDA_LADDER (0.0, 0.25,
+  0.50, 0.75, 1.0), R2e E_0 = 0.695 V, R4e E_0 = 1.23 V,
+  exponent_clip = 100.0, STERN_F_M2_ANCHOR = 0.10 F/m^2,
+  STERN_F_M2_BASELINE = 0.20 F/m^2, c_s_ladder + kw_eff_ladder combo
+  unsupported, tau_REF = L_REF^2 / D_REF ~= 5 s.
+
+References
+----------
+.. plan v7-FINAL: /Users/jakeweinstein/.claude/plans/phase6b-step8-v10b-calibration.md
+.. CMK-3 writeup: docs/phase6/CMK3_capacitance_literature.md
+.. v10b writeup: docs/phase6/v10b_calibration_summary.md
+.. CLAUDE.md hard rules #2, #6
+"""
+from __future__ import annotations
+
+calibration/v10b.py:103:GAMMA_MAX_HAT_V10B: float = 0.047
+calibration/v10b.py:123:        "value": GAMMA_MAX_HAT_V10B,
+calibration/v10b.py:148:            GAMMA_MAX_HAT_V10B / 2.0,
+calibration/v10b.py:149:            GAMMA_MAX_HAT_V10B,
+calibration/v10b.py:150:            GAMMA_MAX_HAT_V10B * 2.0,
+calibration/v10b.py:275:    "gamma_max_nondim": GAMMA_MAX_HAT_V10B,
+calibration/v10b.py:282:    "GAMMA_MAX_HAT_V10B",
+scripts/_bv_common.py:913:SINGH_2016_CATION_PARAMS: Dict[str, Dict[str, float]] = {
+scripts/_bv_common.py:951:from calibration.v10b import GAMMA_MAX_HAT_V10B
+scripts/_bv_common.py:956:# GAMMA_MAX_HAT_V10B (production) or GAMMA_MAX_HAT_V10A_SMOKE
+scripts/_bv_common.py:973:    gamma_max_nondim: float = GAMMA_MAX_HAT_V10B,
+scripts/_bv_common.py:999:        :data:`calibration.v10b.GAMMA_MAX_HAT_V10B` (= the same numeric
+scripts/_bv_common.py:1045:        Cation key into :data:`SINGH_2016_CATION_PARAMS` (e.g.
+scripts/_bv_common.py:1058:    if cation not in SINGH_2016_CATION_PARAMS:
+scripts/_bv_common.py:1061:            f"{list(SINGH_2016_CATION_PARAMS.keys())}"
+scripts/_bv_common.py:1063:    row = SINGH_2016_CATION_PARAMS[cation]
+tests/test_phase6b_v10b_calibration.py:43:        "import calibration.v10b as v; "
+tests/test_phase6b_v10b_calibration.py:48:        "print('OK', v.GAMMA_MAX_HAT_V10B, v.K_DES_NONDIM_V10B, v.C_S_F_M2_V10B)"
+tests/test_phase6b_v10b_calibration.py:88:    from calibration.v10b import V10B_CALIBRATION_METADATA
+tests/test_phase6b_v10b_calibration.py:126:    from calibration.v10b import V10B_CALIBRATION_METADATA
+tests/test_phase6b_v10b_calibration.py:142:    from calibration.v10b import (
+tests/test_phase6b_v10b_calibration.py:144:        GAMMA_MAX_HAT_V10B,
+tests/test_phase6b_v10b_calibration.py:167:            GAMMA_MAX_HAT_V10B as SOLVER_V10B,
+tests/test_phase6b_v10b_calibration.py:170:            GAMMA_MAX_HAT_V10B as BV_COMMON_V10B,
+tests/test_phase6b_v10b_calibration.py:172:        assert SOLVER_V10B == pytest.approx(GAMMA_MAX_HAT_V10B, rel=1e-15)
+tests/test_phase6b_v10b_calibration.py:173:        assert BV_COMMON_V10B == pytest.approx(GAMMA_MAX_HAT_V10B, rel=1e-15)
+tests/test_phase6b_v10b_calibration.py:179:    assert GAMMA_MAX_HAT_V10B == pytest.approx(
+tests/test_phase6b_v10b_calibration.py:182:    assert GAMMA_MAX_HAT_V10B == pytest.approx(0.047, rel=1e-15)
+tests/test_phase6b_v10b_calibration.py:201:    # gamma_max_nondim in V10B_KINETICS agrees with GAMMA_MAX_HAT_V10B
+tests/test_phase6b_v10b_calibration.py:203:        GAMMA_MAX_HAT_V10B, rel=1e-15
+tests/test_phase6b_v10b_calibration.py:214:    equals ``GAMMA_MAX_HAT_V10B`` and ``k_des`` callers see V10B.
+tests/test_phase6b_v10b_calibration.py:221:            GAMMA_MAX_HAT_V10B, make_cation_hydrolysis_config,
+tests/test_phase6b_v10b_calibration.py:230:        GAMMA_MAX_HAT_V10B, rel=1e-15
+tests/test_phase6b_v9_gate3_gamma_machinery.py:906:            SINGH_2016_CATION_PARAMS,
+tests/test_phase6b_v9_gate3_gamma_machinery.py:910:        for cation, row in SINGH_2016_CATION_PARAMS.items():
+tests/test_phase6b_v10a_langmuir_cap.py:73:            GAMMA_MAX_HAT_V10B,
+tests/test_phase6b_v10a_langmuir_cap.py:82:        assert GAMMA_MAX_HAT_V10B == pytest.approx(0.047, rel=1e-15)
+
+exec
+/bin/zsh -lc "python - <<'PY'
+# show mapping for ablation sigma=0.141 and Stern sigma=1.07035598e-7
+beta=-45.6081955773514
+for sig,label in [(1.07035598e-7,'stern'),(0.141,'ablation')]:
+    print(label, 'baseline T', beta*sig)
+    for T in [0,-1e-6,-1e-5,-1e-4,-1e-3,-1e-2,-1e-1,-0.3,-1,-3]:
+        db=(T-beta*sig)/sig
+        print(T, db)
+    print()
+PY" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+stern baseline T -4.881700487322763e-06
+0 45.6081955773514
+-1e-06 36.26550941792994
+-1e-05 -47.81866601686327
+-0.0001 -888.6604203647952
+-0.001 -9297.077963844114
+-0.01 -93381.25339863732
+-0.1 -934223.0077465693
+-0.3 -2802760.239630862
+-1 -9342640.55122589
+-3 -28028012.870068822
+
+ablation baseline T -6.430755576406547
+0 45.6081955773514
+-1e-06 45.608188485152816
+-1e-05 45.608124655365586
+-0.0001 45.607486357493244
+-0.001 45.601103378769835
+-0.01 45.5372735915358
+-0.1 44.89897571919538
+-0.3 43.48053600288332
+-1 38.51599699579112
+-3 24.33159983267055
+
+
+exec
+/bin/zsh -lc "python - <<'PY'
+import json
+p='StudyResults/phase6b_v10b_phase_A2_v_kin/phase_a2_v_kin.json'
+d=json.load(open(p))
+rec=d['per_k_hyd_records'][0]
+print('first rec keys', rec.keys())
+if rec.get('rungs'):
+    print('rung keys', rec['rungs'][-1].keys())
+    print({k:rec['rungs'][-1].get(k) for k in list(rec['rungs'][-1].keys())[:80]})
+PY" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+first rec keys dict_keys(['k_hyd_target', 'ladder_converged', 'exception_phase', 'exception', 'wall_seconds', 'rungs', 'partial_rungs'])
+rung keys dict_keys(['rung_label', 'scale', 'lambda_hydrolysis', 'snes_converged', 'gamma_picard_iters', 'gamma_picard_history', 'gamma_final', 'cd_observable', 'wall_seconds', 'gamma', 'gamma_max', 'theta', 'k_hyd', 'k_prot', 'k_des', 'delta_ohp_hat', 'c_H_boundary_avg', 'c_K_boundary_avg', 'sigma_S_C_per_m2', 'sigma_S_counts_per_pm2', 'R_2e_current_nondim', 'R_4e_current_nondim', 'manufactured_run', 'F0_avg', 'forward_avg_no_k_hyd', 'c_H_avg', 'pka_shift_avg', 'R_forward_capped', 'denominator_constant', 'denominator_kdes', 'denominator_kprot', 'denominator_cap', 'denominator_total', 'numerator', 'denominator_cap_to_total_ratio', 'F0_decomposition', 'R_4e_decomposition_log', 'picard_status', 'cd_mA_cm2', 'pc_mA_cm2', 'x_2e', 'x_4e', 'H2O2_selectivity_pct', 'o2_flux_levich_ratio', 'current_filter_ratio', 'mass_balance_residual_rel', 'R_net'])
+{'rung_label': 'lambda=1.000e+00', 'scale': 1.0, 'lambda_hydrolysis': 1.0, 'snes_converged': True, 'gamma_picard_iters': 2, 'gamma_picard_history': [0.002741466218151301, 0.002741466253281513], 'gamma_final': 0.002741466253281513, 'cd_observable': 7.085270000776571, 'wall_seconds': 7.604690074920654, 'gamma': 0.002741466253281513, 'gamma_max': 0.047, 'theta': 0.058329069218755594, 'k_hyd': 1e-05, 'k_prot': 0.001, 'k_des': 1.0, 'delta_ohp_hat': 4e-06, 'c_H_boundary_avg': 1.8054157548322855e-08, 'c_K_boundary_avg': 291.1258829778527, 'sigma_S_C_per_m2': -0.017148988932603797, 'sigma_S_counts_per_pm2': -1.0703557004067379e-07, 'R_2e_current_nondim': 0.7849605165172634, 'R_4e_current_nondim': 3.1501547421296463, 'manufactured_run': False, 'F0_avg': 0.002911291553539829, 'forward_avg_no_k_hyd': 291.12915535398287, 'c_H_avg': 1.8054157548322855e-08, 'pka_shift_avg': -4.881699212148345e-06, 'R_forward_capped': 0.0027414786269974257, 'denominator_constant': 0.0, 'denominator_kdes': 1.0, 'denominator_kprot': 4.513539387080714e-06, 'denominator_cap': 0.06194237347957083, 'denominator_total': 1.061946887018958, 'numerator': 0.002911291553539829, 'denominator_cap_to_total_ratio': 0.0583290692187556, 'F0_decomposition': {'c_K_avg': 291.1258829778527, 'pka_factor_avg': 1.0000112405910098, 'c_K_pka_product_avg': 291.12915535398287, 'F0_total': 0.002911291553539829, 'c_K_bulk': 166.58333333333334, 'F0_counterfactual_c_K_bulk': 0.0016658520582845241, 'F0_counterfactual_no_singh': 0.0029112588297785275, 'amplification_from_c_K': 1.747629112118062, 'amplification_from_singh': 1.0000112404163335}, 'R_4e_decomposition_log': {'log_k0': -38.91033172971727, 'alpha_R4e': 0.5, 'n_electrons_R4e': 4.0, 'E_eq_R4e_nondim': 47.8737461166168, 'bv_exp_scale': 1.0, 'exponent_clip': 100.0, 'eta_scaled_raw_avg': -51.21108897156048, 'eta_scaled_clipped_avg': -51.21108897156048, 'exponent_clip_active_fraction': 0.0, 'log_bv_clipped_avg': 102.42217794312096, 'ln_c_H_avg': -17.829919848731095, 'ln_c_H_ratio_avg': -15.345013198943095, 'n_e_log_c_H_factor_avg': -61.38005279577238, 'c_H_ref_nondim': 0.08333333333333334, 'log_R4e_predicted': 2.1317934176313074, 'log_R4e_measured': 1.1474515761165756, '_note': 'Scalar approximation: averages of nonlinear terms over boundary; small/moderate discrepancies vs measured can come from Jensen/covariance, not necessarily a missing Stern/diffuse term.  Order-of-magnitude discrepancies indicate a missing residual term.'}, 'picard_status': 'converged', 'cd_mA_cm2': -3.1173283342835765, 'pc_mA_cm2': 1.0406218781750427, 'x_2e': 0.19947586409125212, 'x_4e': 0.8005241359087478, 'H2O2_selectivity_pct': 19.94758640912521, 'o2_flux_levich_ratio': 0.6296184413835055, 'current_filter_ratio': 0.5668216000621257, 'mass_balance_residual_rel': 0.0, 'R_net': 0.002741466253281513}
+
+codex
+1. WHAT: v3 still has a T-grid contradiction. It says `T=0` is “baseline” in #3, then correctly says in #5 that `T=0` maps to the sign-flip boundary `Δ_β≈+45.6`, not baseline. WHY: this will produce off-by-one/invalid-domain bugs in the grid builder. DO: remove `T=0` from evaluated candidates; keep it only as the open upper bound. Explicitly include `Δ_β=0` with its actual `T≈-4.88e-6`.
+
+2. WHAT: The optimizer bound is open at `+45.6`, but `minimize_scalar(method="bounded")` only supports closed finite bounds. WHY: it can evaluate arbitrarily close to or at a sign-invalid boundary depending on tolerance/numerics. DO: use `upper = -β_K_Cu - eps`, with `eps` defined in ΔpKa space, e.g. `eps_beta = 1e-6 / σ_ref`.
+
+3. WHAT: The Stern lower bound still comes from `T=-5`, but the v3 grid only goes to `T=-3`. WHY: bracket, grid, and optimizer domain no longer match. DO: either include `T=-5` in the grid or make the lower bound correspond to `T=-3`.
+
+4. WHAT: The ablation target grid is wrong. At `override_sigma=0.141`, `Δ_β=0` already gives `T≈-6.43`, but the v3 grid only spans `0` to `-3`. WHY: the ablation optimizer would exclude the existing Cu-prior baseline and all stronger-hydrolysis candidates. DO: build the ablation bracket separately and force inclusion of `Δ_β=0`; extend ablation T coverage at least through the baseline and safe lower domain.
+
+5. WHAT: The same T grid cannot be blindly reused for Stern and ablation. WHY: in Stern coordinates, `Δ_β=0` is near zero effect; in ablation coordinates, it is a large effect. DO: define mapping-specific grids in ΔpKa space, each with explicit `Δ_β=0`, sign boundary, and finite safe lower bound.
+
+6. WHAT: Pre-screening uses `σ_local_max_across_V_grid` from a `Δ_β=0` baseline, but D34 pins only a single-V byte-equivalence check. WHY: a single `V_kin` check cannot provide max σ over the grid. DO: run a full `Δ_β=0` scan for pre-screen σ bounds, while separately comparing the `V_kin` record to A.2.
+
+7. WHAT: Even a full `Δ_β=0` σ bound may underpredict σ at large negative `Δ_β`. WHY: the residual changes H/K profiles and can change Stern charge. DO: after each successful solve, verify assembled per-V `|pka_shift_avg| <= 15`; if violated, mark the candidate invalid and exclude it from finite loss.
+
+8. WHAT: v3 says invalid-domain candidates “contribute +inf” and also says identifiability uses finite non-invalid candidates only. WHY: those are different metrics. DO: define two arrays: `loss_all` with invalid markers for traceability, and `loss_finite_valid` for identifiability/optimization.
+
+9. WHAT: The V grid section still says “22 points total” before listing 24 values. WHY: this kind of mismatch already caused two rounds of grid bugs. DO: remove the stale count and make the constant plus unit test the source of truth.
+
+10. WHAT: `V=-0.10` is outside the locked overlap window `[−0.06,+1.0]`. WHY: if extraction includes `-0.10`, max selectivity/ring current can be computed outside the deck overlap. DO: keep `-0.10` only for `V_kin` sign/baseline diagnostics; mask acceptance observable extraction to `[−0.06,+1.0]`.
+
+11. WHAT: The continuation order is internally inconsistent: “DESCENDING” but `+0.55 → +1.0` is ascending. WHY: solve order matters for convergence and reproducibility. DO: list the exact solve order, including the off-grid anchor `+0.55`, the anodic branch, and the cathodic branch.
+
+12. WHAT: The anchor voltage `+0.55` is not in the explicit grid, which has `0.54` and `0.59`. WHY: it is unclear whether `+0.55` is only an anchor or also an emitted data point. DO: state that anchor-only points are excluded from observable aggregation, or add `+0.55` to the grid.
+
+13. WHAT: `compute_beta_per_cation()` in `calibration/v10b.py` risks a circular import. `scripts/_bv_common.py` already imports `GAMMA_MAX_HAT_V10B` from `calibration.v10b`; if `v10b.py` imports `SINGH_2016_CATION_PARAMS` from `_bv_common`, it will cycle. WHY: this can break Firedrake-free imports and existing v10b tests. DO: put the helper and Singh table in a separate Firedrake-free module, e.g. `calibration/singh2016.py`, and import it from both places.
+
+14. WHAT: The pinned A.2 comparison field names do not match the actual JSON. Existing keys are `cd_mA_cm2`, `theta`, `gamma_final`/`gamma`, not `cd_mA_cm²`, `θ`, or `gamma_solver`. WHY: the byte-equivalence test will fail for schema reasons before testing physics. DO: pin the exact JSON path: `per_k_hyd_records` row with `k_hyd_target==1e-3`, final `lambda=1` rung, exact key names.
+
+15. WHAT: The baseline comparison does not specify how to choose the `k_hyd=1e-3` record from `phase_a2_v_kin.json`. WHY: that file contains multiple `per_k_hyd_records`; blindly using first/last is wrong. DO: select by `k_hyd_target == 1e-3` and `lambda_hydrolysis == 1.0`, then assert uniqueness.
+
+16. WHAT: The wall-budget arithmetic is still inconsistent: it says 37 evals, then 47, then 31-41. WHY: the plan cannot be scheduled or reviewed if the count is unstable inside one paragraph. DO: give one table: baseline, Stern grid, Stern optimize, ablation grid, ablation optimize, final checks, total.
+
+17. WHAT: The ablation-Brent decision is still unresolved in text: “reuse pre-fit only” then “still need Brent.” WHY: σ-divergence requires an actual ablation fit if following the bundle. DO: either commit to ablation Brent or explicitly downgrade to grid-best ablation with rationale.
+
+18. WHAT: `xatol_beta = 0.05 / σ_local(V_kin)` assumes the loss-relevant σ is V_kin σ. WHY: max selectivity may occur at another voltage with different σ. DO: set tolerance using `max σ_clamped` over the acceptance window or optimize directly in target-ΔpKa coordinates with a mapping wrapper.
+
+VERDICT: ISSUES_REMAIN
+tokens used
+182,301
+1. WHAT: v3 still has a T-grid contradiction. It says `T=0` is “baseline” in #3, then correctly says in #5 that `T=0` maps to the sign-flip boundary `Δ_β≈+45.6`, not baseline. WHY: this will produce off-by-one/invalid-domain bugs in the grid builder. DO: remove `T=0` from evaluated candidates; keep it only as the open upper bound. Explicitly include `Δ_β=0` with its actual `T≈-4.88e-6`.
+
+2. WHAT: The optimizer bound is open at `+45.6`, but `minimize_scalar(method="bounded")` only supports closed finite bounds. WHY: it can evaluate arbitrarily close to or at a sign-invalid boundary depending on tolerance/numerics. DO: use `upper = -β_K_Cu - eps`, with `eps` defined in ΔpKa space, e.g. `eps_beta = 1e-6 / σ_ref`.
+
+3. WHAT: The Stern lower bound still comes from `T=-5`, but the v3 grid only goes to `T=-3`. WHY: bracket, grid, and optimizer domain no longer match. DO: either include `T=-5` in the grid or make the lower bound correspond to `T=-3`.
+
+4. WHAT: The ablation target grid is wrong. At `override_sigma=0.141`, `Δ_β=0` already gives `T≈-6.43`, but the v3 grid only spans `0` to `-3`. WHY: the ablation optimizer would exclude the existing Cu-prior baseline and all stronger-hydrolysis candidates. DO: build the ablation bracket separately and force inclusion of `Δ_β=0`; extend ablation T coverage at least through the baseline and safe lower domain.
+
+5. WHAT: The same T grid cannot be blindly reused for Stern and ablation. WHY: in Stern coordinates, `Δ_β=0` is near zero effect; in ablation coordinates, it is a large effect. DO: define mapping-specific grids in ΔpKa space, each with explicit `Δ_β=0`, sign boundary, and finite safe lower bound.
+
+6. WHAT: Pre-screening uses `σ_local_max_across_V_grid` from a `Δ_β=0` baseline, but D34 pins only a single-V byte-equivalence check. WHY: a single `V_kin` check cannot provide max σ over the grid. DO: run a full `Δ_β=0` scan for pre-screen σ bounds, while separately comparing the `V_kin` record to A.2.
+
+7. WHAT: Even a full `Δ_β=0` σ bound may underpredict σ at large negative `Δ_β`. WHY: the residual changes H/K profiles and can change Stern charge. DO: after each successful solve, verify assembled per-V `|pka_shift_avg| <= 15`; if violated, mark the candidate invalid and exclude it from finite loss.
+
+8. WHAT: v3 says invalid-domain candidates “contribute +inf” and also says identifiability uses finite non-invalid candidates only. WHY: those are different metrics. DO: define two arrays: `loss_all` with invalid markers for traceability, and `loss_finite_valid` for identifiability/optimization.
+
+9. WHAT: The V grid section still says “22 points total” before listing 24 values. WHY: this kind of mismatch already caused two rounds of grid bugs. DO: remove the stale count and make the constant plus unit test the source of truth.
+
+10. WHAT: `V=-0.10` is outside the locked overlap window `[−0.06,+1.0]`. WHY: if extraction includes `-0.10`, max selectivity/ring current can be computed outside the deck overlap. DO: keep `-0.10` only for `V_kin` sign/baseline diagnostics; mask acceptance observable extraction to `[−0.06,+1.0]`.
+
+11. WHAT: The continuation order is internally inconsistent: “DESCENDING” but `+0.55 → +1.0` is ascending. WHY: solve order matters for convergence and reproducibility. DO: list the exact solve order, including the off-grid anchor `+0.55`, the anodic branch, and the cathodic branch.
+
+12. WHAT: The anchor voltage `+0.55` is not in the explicit grid, which has `0.54` and `0.59`. WHY: it is unclear whether `+0.55` is only an anchor or also an emitted data point. DO: state that anchor-only points are excluded from observable aggregation, or add `+0.55` to the grid.
+
+13. WHAT: `compute_beta_per_cation()` in `calibration/v10b.py` risks a circular import. `scripts/_bv_common.py` already imports `GAMMA_MAX_HAT_V10B` from `calibration.v10b`; if `v10b.py` imports `SINGH_2016_CATION_PARAMS` from `_bv_common`, it will cycle. WHY: this can break Firedrake-free imports and existing v10b tests. DO: put the helper and Singh table in a separate Firedrake-free module, e.g. `calibration/singh2016.py`, and import it from both places.
+
+14. WHAT: The pinned A.2 comparison field names do not match the actual JSON. Existing keys are `cd_mA_cm2`, `theta`, `gamma_final`/`gamma`, not `cd_mA_cm²`, `θ`, or `gamma_solver`. WHY: the byte-equivalence test will fail for schema reasons before testing physics. DO: pin the exact JSON path: `per_k_hyd_records` row with `k_hyd_target==1e-3`, final `lambda=1` rung, exact key names.
+
+15. WHAT: The baseline comparison does not specify how to choose the `k_hyd=1e-3` record from `phase_a2_v_kin.json`. WHY: that file contains multiple `per_k_hyd_records`; blindly using first/last is wrong. DO: select by `k_hyd_target == 1e-3` and `lambda_hydrolysis == 1.0`, then assert uniqueness.
+
+16. WHAT: The wall-budget arithmetic is still inconsistent: it says 37 evals, then 47, then 31-41. WHY: the plan cannot be scheduled or reviewed if the count is unstable inside one paragraph. DO: give one table: baseline, Stern grid, Stern optimize, ablation grid, ablation optimize, final checks, total.
+
+17. WHAT: The ablation-Brent decision is still unresolved in text: “reuse pre-fit only” then “still need Brent.” WHY: σ-divergence requires an actual ablation fit if following the bundle. DO: either commit to ablation Brent or explicitly downgrade to grid-best ablation with rationale.
+
+18. WHAT: `xatol_beta = 0.05 / σ_local(V_kin)` assumes the loss-relevant σ is V_kin σ. WHY: max selectivity may occur at another voltage with different σ. DO: set tolerance using `max σ_clamped` over the acceptance window or optimize directly in target-ΔpKa coordinates with a mapping wrapper.
+
+VERDICT: ISSUES_REMAIN

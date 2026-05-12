@@ -671,6 +671,47 @@ def set_reaction_r_H_El_pm_model(ctx: dict, r_H_El_pm_value: float) -> None:
     object.__setattr__(bundle, "cation_params", new_params)
 
 
+def set_reaction_beta_offset_pm2_model(
+    ctx: dict, beta_offset_value: float,
+) -> None:
+    """Set the Phase D Δ_β carbon-vs-Cu offset (pm²) on residual + metadata.
+
+    Phase 6β step 10 Phase D sweep accessor.  Mirrors
+    :func:`set_reaction_r_H_El_pm_model`: writes the live FE Function
+    plus the metadata layer
+    (``cation_hydrolysis_config['beta_offset_pm2']``) and the
+    ``bundle.cation_params`` dict so Picard / diagnostics consumers see
+    the current value.
+
+    Sign convention: positive Δ_β raises ``β_carbon`` (less negative
+    under Singh's cathodic geometry) and reduces ``|ΔpKa|``; the Phase
+    D fit's bracket construction (plan §3.1) caps Δ_β strictly below
+    ``-β_K_Cu = +45.608 pm²`` to preserve ``β_carbon < 0``.
+
+    Raises
+    ------
+    ValueError
+        No cation_hydrolysis bundle on ``ctx``.  Any sign of
+        ``beta_offset_value`` is accepted (the residual + bracket
+        construction is responsible for sign-flip safety).
+    """
+    val = float(beta_offset_value)
+    bundle = _require_cation_hydrolysis_bundle(ctx)
+    if "bv_convergence" in ctx and isinstance(ctx["bv_convergence"], dict):
+        new_cfg = dict(ctx["bv_convergence"])
+        sub_cfg = dict(new_cfg.get("cation_hydrolysis_config") or {})
+        sub_cfg["beta_offset_pm2"] = val
+        new_cfg["cation_hydrolysis_config"] = sub_cfg
+        ctx["bv_convergence"] = new_cfg
+    bundle.beta_offset_pm2_func.assign(val)
+    # Mirror into bundle.cation_params (NOT bundle.params — the
+    # frozen dataclass has no `params` attribute; cation_params is
+    # the public diagnostics-readable dict).
+    new_params = dict(bundle.cation_params)
+    new_params["beta_offset_pm2"] = val
+    object.__setattr__(bundle, "cation_params", new_params)
+
+
 # ---------------------------------------------------------------------------
 # AdaptiveLadder — geometric scale ramp with sqrt-mean rollback
 # ---------------------------------------------------------------------------
@@ -1746,6 +1787,7 @@ def solve_lambda_ramp_from_warm_start(
         "delta_ohp_hat": set_reaction_delta_ohp_model,
         "r_H_El_pm": set_reaction_r_H_El_pm_model,
         "gamma_max_nondim": set_reaction_gamma_max_model,
+        "beta_offset_pm2": set_reaction_beta_offset_pm2_model,
     }
     for key, value in parameter_overrides.items():
         if key not in _OVERRIDE_DISPATCH:
@@ -1961,6 +2003,8 @@ __all__ = [
     "set_reaction_r_H_El_pm_model",
     # Phase 6β v10a — Langmuir saturation cap accessor.
     "set_reaction_gamma_max_model",
+    # Phase 6β step 10 Phase D — Δ_β offset accessor.
+    "set_reaction_beta_offset_pm2_model",
     "solve_lambda_ramp_from_warm_start",
     "solve_anchor_with_continuation",
 ]

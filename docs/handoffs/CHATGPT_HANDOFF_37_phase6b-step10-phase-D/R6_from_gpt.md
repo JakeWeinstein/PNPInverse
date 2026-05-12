@@ -1,0 +1,9 @@
+1. WHAT: The Δβ=0 “byte-equivalence” run is still not actually A.2-equivalent. A.2 reaches `V_kin=-0.10` through its small warm grid; Phase D reaches `V_kin` through the 24-point production grid, so the nearest warm-start source at `V_kin` can differ. WHY: same residual and same helper are not enough for byte-equivalence when the continuation path differs. DO: run a separate A.2-compatible one-point reproduction path using the exact A.2 warm grid, then run the full 24-point Phase D baseline for σ profiling.
+
+2. WHAT: Because of #1, “deviation → STOP, driver diverged from A.2” is too strong for the full-grid baseline. WHY: a mismatch could be continuation-path drift, not a driver semantics bug. DO: only hard-stop on the exact A.2-compatible reproduction; treat the full-grid `V_kin` comparison as a diagnostic unless it uses the exact same warm path.
+
+3. WHAT: `set_reaction_beta_offset_pm2_model()` only assigns the live Function. WHY: existing runtime setters also mirror metadata into `ctx["bv_convergence"]["cation_hydrolysis_config"]` and bundle params where relevant; otherwise result provenance can say offset 0 while the form used nonzero offset. DO: update ctx metadata and add a test that the emitted config/diagnostics report the current `beta_offset_pm2`.
+
+4. WHAT: `compute_beta_per_cation("K")` is underspecified against the existing table keys, which are `"K+"`, `"Na+"`, etc. WHY: docs and plan use `"K"` while code historically uses `"K+"`; this is an avoidable implementation footgun. DO: either require canonical charged keys everywhere or support aliases with tests for `"K"` and `"K+"`.
+
+VERDICT: ISSUES_REMAIN

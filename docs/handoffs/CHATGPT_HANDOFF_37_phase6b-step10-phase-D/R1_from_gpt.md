@@ -1,0 +1,41 @@
+1. WHAT: `Δ_β ∈ [-2,+2]` is dimensionally/magnitude wrong. The locked β has units `pm²`, and K β from the current formula is about `-45.6 pm²`, while local Stern σ at `V_kin` is about `1.07e-7 counts/pm²` per [singh_2016_pka_formula.md](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/docs/phase6/singh_2016_pka_formula.md:245). WHY: ±2 changes ΔpKa by only ~`2e-7`, likely below numerical/physical sensitivity, so the fit can be flat and fake-identifiable. DO: define the bracket in ΔpKa effect space first, then convert to `Δ_β`, with overflow and sign bounds.
+
+2. WHAT: The plan says β is `O(10^-2) 1/pm²` and σ is `~50 counts/pm²`. Both are incompatible with the locked doc/code path. WHY: this justifies the wrong bracket and invalidates the wall-fit premise. DO: rewrite the unit derivation using β `pm²` and local Stern σ from `sigma_C_m2_to_counts_pm2`.
+
+3. WHAT: `r_H_El_pm` is not an acceptable fallback for fitting additive `Δ_β`. Current code only supports `r_H_El_pm` in [scripts/_bv_common.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/scripts/_bv_common.py:963) and [anchor_continuation.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/anchor_continuation.py:1688). WHY: the transfer rule is additive in β across cations; routing through nonlinear per-cation geometry changes the parameter. DO: make explicit `beta_offset_pm2` mandatory, not optional, and thread it through residual, diagnostics, runtime overrides, metadata, and tests.
+
+4. WHAT: Adding `beta_offset` is not “trivial.” WHY: `ΔpKa` is assembled in [cation_hydrolysis.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/cation_hydrolysis.py:553), and Γ diagnostics rebuild the same expression elsewhere. A partial setter would silently desync Newton and diagnostics. DO: require byte-equivalence at offset 0 and residual-vs-diagnostic equality tests at nonzero offset.
+
+5. WHAT: The data target is wrong as written. The bundle says Cation Summary Table rows are averaged within pH `[3.5,4.5]`, not “one row” ([bundle](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/docs/phase6/PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md:96)). The workbook has K2 rows at pH `3.99, 4.21, 4.03, 4.02` with selectivity `54.8, 88, 35, 26`. WHY: picking one row changes the target by more than the ±10 pp pass gate. DO: pin an audited JSON from the four-row bin with means/stds and workbook row provenance.
+
+6. WHAT: The V grid spec is arithmetically inconsistent. `[-0.06,+1.0]` at exactly `0.05 V` cannot include both endpoints, and “22 points” does not solve that. WHY: endpoint inclusion affects max extraction and ring onset. DO: choose explicit grid values and test exact endpoints, or use nonuniform endpoint padding.
+
+7. WHAT: Ring onset extraction depends on sweep direction, but the plan does not require anodic-to-cathodic sorting. WHY: the locked definition is “first V” while sweeping anodic to cathodic ([bundle](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/docs/phase6/PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md:120)); ascending grid order gives the wrong onset. DO: extraction must sort descending in `V_RHE` and unit-test threshold crossing.
+
+8. WHAT: `0.05 V` spacing is too coarse for a ±50 mV onset criterion. WHY: interpolation on a noisy/coarse curve leaves no numerical margin. DO: use ≤25 mV near the 0.01 mA/cm² crossing or adaptive refinement around the bracket.
+
+9. WHAT: The loss identifiability gate is inadequate. “Unimodal” does not catch flat loss, plateaus, or loss changes below solver noise. WHY: max selectivity can be insensitive to `Δ_β`, especially with local Stern σ this tiny. DO: add a sensitivity/profile gate: report loss range, `d(max S)/dΔβ`, duplicate-eval noise, and a non-identifiability flag for flat regions.
+
+10. WHAT: `max_H2O2%` alone can fit the wrong voltage. WHY: many `Δ_β` values can share the same max while moving `argmax_V` or onset badly. DO: keep primary-only if locked, but require post-fit argmax/onset diagnostics to be explicitly called out as a possible falsifying subcomponent, not buried as informational.
+
+11. WHAT: Brent is mis-specified. `scipy.optimize.brent` is not bounded to the supplied bracket, `tol=0.05` is not a guaranteed final bracket width, and endpoint minima cannot produce the required `(lo, mid, hi)` triple. WHY: the optimizer may leave the physical bracket or report false convergence. DO: use `minimize_scalar(method="bounded")` or a fixed global grid plus local quadratic fit; define endpoint expansion rules and hard bounds.
+
+12. WHAT: The 25-evaluation cap is internally inconsistent. D5 says optimize twice, and D1 also says emit both σ mappings in parallel. WHY: that is at least 50 forward evaluations, possibly 100 if each mapping needs its own solve. DO: count evaluations per physical solve and update wall budget.
+
+13. WHAT: The ablation σ mapping is underspecified. `override_sigma_singh_counts_pm2` is a scalar config path ([forms_logc_muh.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/forms_logc_muh.py:727)), not a postprocessing toggle. WHY: the ablation changes the residual, so it needs a separate form/solve and a specified imposed σ value or V-dependent rule. DO: define exactly what σ is imposed for every V before optimizing.
+
+14. WHAT: The 30% divergence formula divides by `|Δ_β_fit_stern|`. WHY: if the Stern fit is near zero, the ratio is undefined or meaningless. DO: use a symmetric relative difference with an absolute floor, and report absolute difference too.
+
+15. WHAT: The sign guard is ambiguous and likely wrong if it multiplies β by signed Stern σ. Code converts signed σ to positive cathodic `sigma_singh=max(0,-sigma)` before multiplying β ([cation_hydrolysis.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/cation_hydrolysis.py:541)). WHY: β_K is negative; β times signed negative σ would be positive even though `ΔpKa` is correctly negative. DO: guard on actual `pka_shift_avg < 0` or `β * max(0,-σ_counts_signed) < 0`.
+
+16. WHAT: Large bracket expansion can overflow `10^(-ΔpKa)`. The BV `exponent_clip` does not protect this hydrolysis factor ([cation_hydrolysis.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/cation_hydrolysis.py:598)). WHY: a physically necessary `Δ_β` under local Stern σ could be enormous and make the residual numerically impossible. DO: add explicit ΔpKa/pka_factor bounds and classify bound hits as falsification or non-identifiability.
+
+17. WHAT: D2 tests are too weak. Schema and CLI tests do not validate observable extraction. WHY: RRDE selectivity uses the `200 * I_ring/N / (...)` convention in [rrde_observables.py](/Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse/Forward/bv_solver/rrde_observables.py:121); hand-rolled extraction can easily be off by 2x or sign. DO: add synthetic tests for selectivity, `n_e`, ring onset interpolation, max ring, NaN handling, and units.
+
+18. WHAT: There is no required `Δ_β=0` byte-equivalence baseline. WHY: the new driver could alter V10B behavior and the fit would calibrate against its own bug. DO: before any optimization, reproduce an existing V10B/v10a diagnostic point or scan at `Δ_β=0` within a tight tolerance.
+
+19. WHAT: Falsification completion is contradictory. D6 says STOP on primary failure, but the DoD says Phase D is done only if D9-D13 also tick. WHY: a valid falsification outcome cannot close the checklist. DO: split completion into `PASS_to_Phase_E` and `FALSIFIED_documented` paths.
+
+20. WHAT: Solver failure and scientific falsification are conflated. WHY: “any V hard-gate failure → STOP” is a numerical failure, not evidence that the mechanism failed the deck. DO: report separate verdicts: numerical invalid, primary falsified, or pass.
+
+VERDICT: ISSUES_REMAIN
