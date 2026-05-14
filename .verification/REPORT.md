@@ -1,106 +1,128 @@
-# Verification Report — BV Forward-Solver Codepath
+# Verification Report — Forward Solver Codepath Doc
 
-**Target:** Production logc_muh BV forward-solver codepath
-**Date:** 2026-05-05
-**Level:** 1 (Sonnet only)
-**Scope:** 15 files, 5,267 lines, 2 subsystems (`Forward/bv_solver/`, `scripts/`)
-**Agents:** Sonnet × 6 (run in parallel)
-**Chunking:**
-- Chunk 1: `forms_logc_muh.py` (1044 lines)
-- Chunk 2: `forms_logc.py` + `boltzmann.py` (1336 lines)
-- Chunk 3: `grid_per_voltage.py` + `sweep_order.py` + `dispatch.py` (911 lines)
-- Chunk 4: `config.py` + `nondim.py` + `mesh.py` + `solvers.py` (588 lines)
-- Chunk 5: `validation.py` + `diagnostics.py` + `observables.py` + `__init__.py` (826 lines)
-- Chunk 6: `scripts/_bv_common.py` (562 lines)
-
-**Verdict:** **PASS with caveats.** The production logc_muh forward-solver math is correct end-to-end. No bug was found that produces wrong physics on the canonical production call path (`make_bv_solver_params(...formulation='logc_muh', initializer='debye_boltzmann', boltzmann_counterions=[DEFAULT_CLO4_BOLTZMANN_COUNTERION_STERIC]...)` → `solve_grid_per_voltage_cold_with_warm_fallback`). All 12 warnings are either latent (require non-standard caller patterns), live in adjacent diagnostic/validator code that does not feed back into the solver, or affect callers that already pass the right values.
+**Target:** `docs/solver/forward_codepath_demo_slide15.md` audited against current implementation
+**Date:** 2026-05-13
+**Level:** 2 (Sonnet + Opus in parallel)
+**Scope:** 11 files, ~9580 lines, 2 subsystems (`scripts/`, `Forward/bv_solver/`)
+**Agents:** Sonnet ×3 + Opus ×3 (6 total)
+**Chunking:** 3 chunks per tier — A=entry+scaffolding, B=forms+boltzmann+picard, C=continuation+grid+observables
+**Verdict:** **ISSUES FOUND** — substantive but bounded. Doc is structurally faithful but has multiple identifier-level bugs that would mislead anyone writing follow-on code.
 
 ---
 
 ## Summary
 
-The mu_H bookkeeping (`mu_H = u_H + em·z_H·phi` reconstructed at every c_H touch site, `c_H_old` using `phi_prev` for transient correctness), the log-rate Butler–Volmer form, the `exponent_clip=100` clip-on-η-before-α·n_e convention, the analytic Bikerman ClO4⁻ counterion + Stern Robin BC, the C+D continuation orchestrator, and the flag wiring through `_bv_common.py` → `config.py` → dispatcher → `forms_logc_muh.py` are all internally consistent. The two backends share their BV-rate form byte-for-byte except for the documented `_u_expr` substitution. The Bikerman closure formula matches `docs/steric_analytic_clo4_reduction_handoff.md` and the IC/residual sides share the same `c_steric` UFL expression (no double-counting).
+The doc's overall call-graph topology, line-number anchors for function definitions, and convergence-mechanism descriptions are largely correct. However, the doc contains **5 critical identifier/attribution errors** and **~13 secondary inaccuracies** in parameter names, ctx keys, dataclass field names, fallback semantics, and module paths. None of these would cause the *code* to behave differently — but each one would cause a reader writing follow-on code from the doc to use a wrong name and hit a `NameError` / `KeyError` / `AttributeError`.
 
-The findings below are real, but every one of them either (a) sits behind a fallback path that the production caller chain never hits, (b) lives in diagnostic/validator code rather than in the residual, or (c) is a defensive-validation gap rather than a bug in the math.
+One doc claim worth highlighting: the demo really does call `ctx['_last_solver'].solve()` in a manual Python loop for Stage 2 Stern bump (verified against `solver_demo_slide15_no_speculative_cs.py:454-458`). Sonnet-C initially flagged this as critical but had confused it with a separate `c_s_ladder` code path inside `solve_anchor_with_continuation` that the demo does not use. After spot-check against source, Opus-C's reading is correct — see "Agreement Analysis" below.
 
 ---
 
-## Findings
+## Findings — Critical
 
-| # | Severity | Location | Issue | Found By |
-|---|----------|----------|-------|----------|
-| 1 | warning | `forms_logc.py:702`, `forms_logc_muh.py:800` | Stale `conv_cfg.get("exponent_clip", 50.0)` fallback in `_try_debye_boltzmann_ic[_muh]`. Authoritative default is 100.0. Unreachable on the normal `_get_bv_convergence_cfg` path (which always populates the key); fires only if a test or helper passes a partial `conv_cfg`. clip=50 produces fictitious peroxide currents per `docs/clipping_conventions.md`. | Chunks 1, 2, 4 |
-| 2 | warning | `forms_logc.py:211`, `forms_logc_muh.py:262` | Stale `conv_cfg.get("u_clamp", 30.0)` fallback in main build-forms. Authoritative default is 100.0. Same unreachable-in-production story as #1, but the inline doc at `forms_logc.py:198–202` warns "widen to u_clamp=100 for V_RHE > +0.30 V" — so the fallback would actively bind right where production runs. | Chunks 1, 2, 4 |
-| 3 | warning | `FluxCurve/bv_point_solve/__init__.py:723`, `bv_point_solve/forward.py:318` | These callers of `validate_solution_state` pass `is_logc=True` but **omit** `mu_species=ctx.get('mu_species')` and `em=ctx['nondim'].get('electromigration_prefactor', 1.0)`. For a `logc_muh` context the validator reads raw `mu_H` DoFs and exponentiates without the phi correction → reported H⁺ concentration off by `exp(em·z_H·phi)` (many decades inside the Debye layer). Affects diagnostic checks only; the residual itself is correct. CLAUDE.md explicitly flags this gotcha. | Chunk 5 |
-| 4 | warning | `validation.py:53` | `exponent_clip` is a declared keyword arg but **never read** in the 202-line function body. The W1 ("clip saturation") check listed in the docstring is unimplemented. All callers faithfully pass the value from `ctx["_diag_exponent_clip"]`; nothing consumes it. | Chunk 5 |
-| 5 | warning | `validation.py:181–195` | W5 cation-depletion mask: applies a coordinate-derived boolean mask (sized to vertex count) to a concentration DOF array. Sizes agree only for CG1. Latent for the production stack (CG1) but breaks if `order > 1` is ever used. | Chunk 5 |
-| 6 | warning | `config.py:65, 72, 119, 135` | `_VALID_FORMULATIONS` still lists `"concentration"` and `_default_bv_convergence_cfg`/`_get_bv_convergence_cfg` default to it. The concentration backend was removed in the May 2026 cleanup. Dispatcher silently falls through to `logc` for unknown formulations, so this never errors — but the stored config can claim a backend that no longer exists. | Chunk 4 |
-| 7 | warning | `config.py:24–26` | `_get_bv_cfg` skips per-element range validation when `alpha` is supplied as a `list`/`tuple`. `_get_bv_reactions_cfg:316–318` does validate each entry — inconsistent. Could accept `alpha=[0.5, 1.5]` on the legacy single-reaction path. | Chunk 4 |
-| 8 | warning | `config.py:285–326` | `cathodic_species` and `anodic_species` parsed via bare `int(...)` with no `[0, n_species)` bounds check (the `cathodic_conc_factors` indices DO get bounds-checked). Out-of-range index would surface as an obscure UFL `IndexError` at form-assembly time. | Chunk 4 |
-| 9 | warning | `config.py:224` | `_get_bv_boltzmann_counterions_cfg` accepts `z=0` silently. Would produce `exp(0·phi)=1`, a constant Poisson source — physically meaningless. Bikerman closure was derived for `z<0`; even `z>0` should at minimum warn. | Chunk 4 |
-| 10 | warning | `grid_per_voltage.py` Phase 2 (lines 503–600) | Phase 2 warm-walk uses `anchor_lo=cold_idxs[0]`, `anchor_hi=cold_idxs[-1]`. Cold-failed interior points (`anchor_lo < k < anchor_hi`) are never visited by either the cathodic or anodic walk and remain `method="cold-failed"` silently. Practical risk low for the production grid (failures cluster above `anchor_hi`); behavior is silent and undocumented. | Chunk 3 |
-| 11 | warning | `_bv_common.py:407–411, 421` | `DEFAULT_CLO4_BOLTZMANN_COUNTERION{,_STERIC}` uses `phi_clamp=50.0`. Doesn't bite at `V_RHE ≤ +1.0 V` (clamp activates ~+1.28 V physical), but inconsistent with the raised `exponent_clip=100`/`u_clamp=100`. | Chunk 6 |
-| 12 | warning | `_bv_common.py:313–314, 444–445` | Factory defaults `E_eq_r1=0.0`, `E_eq_r2=0.0`. Most production-relevant scripts (e.g. `peroxide_window_3sp_bikerman_muh.py`, `peroxide_window_stern_test.py`, `anodic_cold_start.py`, `ic_refinement_study.py`) omit these kwargs and silently run with `E_eq=0`. CLAUDE.md Hard Rule 4: "Use physical `E_eq` (R1 = 0.68 V, R2 = 1.78 V vs RHE), never `E_eq = 0`." Factory should export `E_EQ_R1=0.68`/`E_EQ_R2=1.78` as named constants and/or warn when omitted with a non-zero formulation. | Chunk 6 |
-| 13 | note | `forms_logc.py:310` vs 329/332 | Sign convention in inline comments: line 310 writes physical flux `J_i = -D·c·(∇u + z∇φ)` (with leading minus); lines 329/332 label `Jflux = D·c·(...)` as `J` (no minus). Code is correct (`Jflux = −J_i` physically and `F_res += dot(Jflux, ∇v) dx` is the right IBP form), but the inconsistent labeling could mislead a future maintainer modifying the steric or migration term. | Chunk 2 |
-| 14 | note | `boltzmann.py:360–362` (called from `forms_logc_muh.py:589`) | When all counterions are `bikerman` and `skip_bikerman=True`, the loop skips every entry but still re-derives `J_form` from an unchanged `F_res`. Wasted Jacobian computation at form-build time (not solve time). Harmless. | Chunk 1 |
-| 15 | note | `grid_per_voltage.py` (entire body) | Adjoint tape annotation suppression is caller-controlled, not internal. Production driver wraps the call in `with adj.stop_annotating():`. The debye_boltzmann ICs self-suppress; the linear-phi IC and z-ramp solves do not. By design but easy to miss if a new caller forgets the wrapper. | Chunk 3 |
-| 16 | note | `grid_per_voltage.py:66–76` | `PerVoltagePointResult` stores `U_data` and `diagnostics` but no assembled observables (current density, peroxide current). Production driver pulls them via `per_point_callback`. Future-facing improvement, not a current bug. | Chunk 3 |
-| 17 | note | `grid_per_voltage.py:379–388` (`_solve_warm`) | `_build_for_voltage` computes an IC at `V_target` immediately overwritten by `_restore_U(anchor_snap)`. For the debye_boltzmann IC (a Picard solve) this is non-trivial wasted work per warm-walked voltage. No correctness impact. | Chunk 3 |
-| 18 | note | `Forward/bv_solver/sweep_order.py` (whole file) | Neither `_build_sweep_order` nor `_apply_predictor` is used by the C+D path; they are re-exported only by `FluxCurve/bv_point_solve/predictor.py`. Both are correctly implemented. | Chunk 3 |
-| 19 | note | `config.py:323` (also legacy path) | `k0` parsed as `float(...)` with no nonnegative check. Negative k0 would yield a negative BV flux — physically meaningless. | Chunk 4 |
-| 20 | note | `nondim.py:8–101` | No idempotency guard on `_add_bv_scaling_to_transform`. If the function were ever called twice on the same scaling dict, it would re-scale `bv_k0_model_vals`. Currently called exactly once per build path; latent risk if call graph changes. | Chunk 4 |
-| 21 | note | `nondim.py:30` | `thermal_voltage_v` fallback `0.02569` (RT/F at ~297.8 K) is a magic literal. Production `build_model_scaling` always populates the key from `temperature_k`; fallback is unreachable in production but stale at non-standard temperatures. | Chunk 4 |
-| 22 | note | `Forward/bv_solver/solvers.py` (entire 21-line stub) | After the May 2026 cleanup, the actual PETSc/SNES options live in `scripts/_bv_common.py` (`DEFAULT_SOLVER_PARAMS` — SNES newtonls + L2 line search + direct LU/MUMPS, tolerances reasonable). The `solvers.py` stub is misleading as a scope entry point. | Chunk 4 |
-| 23 | note | `diagnostics.py` (whole file) | Mass balance (`∫_Ω r_i dx − ∫_∂Ω_electrode J_i·n dA`) and Stern surface-charge consistency (`σ = C_S·(φ_metal − φ_solution)`) checks are not implemented. The file's docstring accurately scopes itself to "failure-mode information"; the planned checks live in `docs/physics_validation_plan.md`. Scope gap, not incorrect logic. | Chunk 5 |
-| 24 | note | `__init__.py:58–67` | Six private `_get_bv_*` / `_add_bv_*` helpers imported into `__init__.py` but not in `__all__`. Accessible as `Forward.bv_solver._get_bv_cfg` etc. Looks like a leftover from before logic was split into submodules. | Chunk 5 |
-| 25 | note | `validation.py` (NaN/Inf coverage) | NaN DoFs are not detected by any check inside `validate_solution_state` (`NaN < threshold` and `NaN > threshold` both evaluate False). SNES upstream catches NaN before the validator runs in practice; defense-in-depth gap only. | Chunk 5 |
-| 26 | note | `_bv_common.py:276` vs `config.py:113, 132` | Factory `_make_bv_convergence_cfg` writes `conc_floor=1e-12`; `_default_bv_convergence_cfg`/`_get_bv_convergence_cfg` fallback is `1e-8`. Factory always wins through the params dict; mismatch only matters for tests passing manual params. | Chunk 6 |
+| # | Location in doc | Issue | Found by |
+|---|-----------------|-------|----------|
+| C1 | line 73, line 179 (Layer 1 row) | Function name `solve_reaction_k0_model` does not exist anywhere. Actual function at `anchor_continuation.py:246` is `set_reaction_k0_model` (it's a setter, not a solve routine). | Opus-A, Sonnet-C, Opus-C (3 of 3 in scope) |
+| C2 | lines 56-58 (Stage 1 step 2 inside `build_forms_logc_muh`) | `NonlinearVariationalProblem`, `NonlinearVariationalSolver`, and `ctx['_last_solver']` are NOT created inside `build_forms_logc_muh`. They are created in `anchor_continuation.py:1101-1107`, after `build_forms` has returned. Doc misattributes a key piece of Stage 1 orchestration. | Sonnet-B, Opus-B (both) |
+| C3 | line 57 | `SNES_OPTS_CHARGED` is a phantom constant — `grep` finds it nowhere in the codebase. Solver options are read from `params['solver_options']` at call time with `snes_error_if_not_converged=True` as the only unconditional default. | Sonnet-B, Opus-B (both) |
+| C4 | line 104 (Stage 2 Stern bump) | `ctx['stern_capacitance_func']` is wrong — actual ctx key is `ctx['stern_coeff_const']` (a `fd.Constant`, not a `Function`). The mechanism described (mutate-in-place so residual sees new C_S without rebuild) is correct in spirit; just the key name is wrong. | Sonnet-C, Opus-C (both) |
+| C5 | line 48, line 225 (Files-touched table) | `build_model_scaling` is annotated to `nondim.py` and the table puts it under `Forward/bv_solver/nondim.py`. The function actually lives in `Nondim/transform.py:172` (top-level Nondim package). The local `Forward/bv_solver/nondim.py` only contains BV-specific scaling augmenters. | Sonnet-A, Opus-A, Sonnet-B, Opus-B (4 of 4) |
+
+---
+
+## Findings — Warnings (parameter/field name mismatches)
+
+| # | Location in doc | Issue | Found by |
+|---|-----------------|-------|----------|
+| W1 | lines 20-21 | `_make_sp(stern=0.10, ...)` — actual kwarg is `stern_capacitance_f_m2`, not `stern`. Calling as documented yields `TypeError`. | Sonnet-A |
+| W2 | line 23 | Doc lists `THREE_SPECIES_LOGC_BOLTZMANN` as the species preset. Demo does NOT pass this preset; it constructs a fresh `SpeciesConfig` inline with physical Marcus/Stokes `a_vals_hat=[A_O2_PHYSICAL, A_H2O2_PHYSICAL, A_HP_PHYSICAL]` (this IS the point of the demo per CLAUDE.md Hard Rule #7). The doc's "physical a_nondim" claim is substantively correct; the preset-name shorthand is misleading because it implies the unmodified preset is passed. | Sonnet-A (critical), Opus-A (warning, with reframing) |
+| W3 | line 102 (Stage 2 ladder annotation) | `_stern_bump_ladder(target)` is annotated as `← (0.20, 0.50, 1.0, 2.0, 5.0, 10.0, 100.0)`, implying 7 rungs every run. For the default production run (`target=0.20`), it returns `[0.20]` — a SINGLE rung. The full 7-tuple is only returned for the no-Stern path (`target=100.0`). | Sonnet-A, Opus-A (both) |
+| W4 | line 187 (Layer 9 row) | `adj.stop_annotating()` is described as wrapping demo "solver calls" generally. Demo only wraps Stages 1 (line 397) and 2 (line 457). Stage 3 is wrapped *internally* inside `solve_grid_with_anchor` at `grid_per_voltage.py:1060`, not at the demo level. The doc's framing is technically false for Stage 3. | Sonnet-A, Opus-A (with location nuance) |
+| W5 | line 104 | `set_stern_capacitance_model` is described as living "in anchor_continuation.py" with no line number. It's actually at `anchor_continuation.py:448`. Minor — but worth pinning for the doc's pattern. | Sonnet-C, Opus-C |
+| W6 | line 108 | `PreconvergedAnchor(phi_eta, ...)` — actual field name is `phi_applied_eta`, not `phi_eta`. | Sonnet-C, Opus-C (both) |
+| W7 | line 109 | `PreconvergedAnchor(... dof_count ...)` — actual field name is `mesh_dof_count`. | Opus-C |
+| W8 | line 139 (warm_walk_phi signature) | Doc shows `warm_walk_phi(..., bisect_depth_warm=5)`. Inside `warm_walk_phi` the kwarg is named `bisect_depth` (default 3); `bisect_depth_warm` is the *outer* parameter on `solve_grid_with_anchor` (default 5) that gets passed through as `bisect_depth=bisect_depth_warm`. | Sonnet-C, Opus-C (both) |
+| W9 | line 43, "build_context_logc_muh" description | Doc says this function constructs `W = V_u × V_μH × V_φ`, `U`, `U_prev`. It actually delegates entirely to `build_context_logc` (in `forms_logc.py`) and only adds `ctx["logc_muh_transform"] = True`. The W/U/U_prev construction is one level down. | Sonnet-B |
+| W10 | line 63 ("2×2 scalar Picard on (ψ_S, ψ_D)") | Picard does NOT iterate on (ψ_S, ψ_D) as primary unknowns. It iterates on per-reaction surface rates `R = (R_1, ..., R_N)` (N=2 for the production parallel-2e/4e stack, hence the "2×2" coincidence). ψ_S, ψ_D are *derived* each iter via a 1-D Stern-Robin bisection (single-ion) or linear-Debye match (multi-ion). Also, the actual call goes to `picard_outer_loop_general` (N-reaction), not a `2×2` legacy variant. | Sonnet-B, Opus-B (both) |
+| W11 | line 64 ("falls back to linear_phi if Picard oscillates") | Fallback fires on *any* Picard failure path — singular Jacobian, non-finite state, `mu_h_idx_unsupported`, `no_boltzmann_counterion`, n<3, plus oscillation/max-iters. Doc's "if Picard oscillates" is one trigger among many. | Sonnet-B, Opus-B (both) |
+| W12 | lines 80-83, line 184 (Layer 6 plateau formula) | Doc shows the plateau predicate as additive `|Δj_cd| < ss_rel_tol·|j_cd| + ss_abs_tol`. The actual code (`grid_per_voltage.py:195-198`) uses OR-of-two-tests with a max-denominator: `is_steady = (Δ/max(\|fv\|,\|prev\|,abs_tol) <= rel_tol) or (Δ <= abs_tol)`. Not algebraically equivalent — the code is more forgiving at small fluxes. | Opus-C |
+| W13 | OPUS deeper item I framing | "Consecutive counter resets on failure" — the counter resets when the *plateau test* is False, not when Newton fails (Newton failure exits the closure via `return False`). Semantically close but imprecise. | Opus-C |
+
+---
+
+## Findings — Notes (correct but easy to misread)
+
+| # | Location in doc | Issue | Found by |
+|---|-----------------|-------|----------|
+| N1 | line 72 (Stage 1 pseudocode) | Pseudocode `for j, k_target in k0_targets:` would fail in Python since `k0_targets` is a `Dict[int, float]`. Real code uses `.items()`. Minor pseudocode issue; the described behavior is correct. | Sonnet-C, Opus-C (both) |
+| N2 | line 50 (Tresset annotation) | "Tresset Eq. (19)" attribution exists only in `writeups/May13th/analytic_counterion_derivation.tex` — the `boltzmann.py` source code and docstrings have NO Tresset citation. The math is defensible (the function does implement the Tresset form on the equilibrium subset), but a reader inspecting the code won't find the label. | Sonnet-B, Opus-B |
+| N3 | line 50 (steric mention) | The shorthand `set_ic_debye_boltzmann_logc_muh` is consistently used in the doc — actual function is `set_initial_conditions_debye_boltzmann_logc_muh`. Doc-style abbreviation; readers searching for the literal won't find it without the longer prefix. | Opus-A, Opus-B |
+| N4 | line 53 (add_boltzmann_counterion_residual mention) | This function is called with `skip_bikerman=True` from `build_forms_logc_muh` (forms_logc_muh.py:881). For the Cs⁺/SO₄²⁻ demo (both are bikerman), it is effectively a no-op. The real Poisson source for these species is built inline at `forms_logc_muh.py:652-660`. The doc places it in the flow as if it does work — for this demo it doesn't. | Opus-B |
+| N5 | line 186 (Layer 8, "32× refinement") | 2⁵ = 32 is correct for "times the *failed interval* is halved". But each recursion still uses `n_substeps=8` inside the halved interval, so the *finest substep* is 8·32 = 256× smaller than depth-0. A reader could misread "32× refinement" as the substep ratio. | Opus-C |
+| N6 | line 43 (mixed space notation) | "W = V_u × V_μH × V_φ" notation is conceptually correct but the blocks are all n+1 copies of the same scalar CG-`order` space. The μH transform changes only the interpretation of `U.sub(mu_h_idx)`, not the function space itself. | Opus-B |
 
 ---
 
 ## Agreement Analysis
 
-- **Agreed on (all chunks):** The production logc_muh stack is mathematically correct on the canonical call path. mu_H bookkeeping, log-rate BV form, `exponent_clip=100` convention, Stern Robin BC, Bikerman analytic ClO4⁻ counterion (no double-count, shared `c_steric` between Poisson and NP saturation), debye_boltzmann IC with composite-ψ + multispecies-γ cancellation, C+D orchestrator (cold + warm-walk, NaN-safe per-voltage isolation, deterministic seeding), and flag wiring through `_bv_common.py → config.py → dispatch.py → forms_logc_muh.py` are all consistent.
+**Agreement (high confidence):**
+- All 4 sub-agents that touched it agree on **build_model_scaling location** (C5). One critical, three warnings.
+- Both Chunk-B agents agree on **solver creation misattribution** (C2) and **phantom SNES_OPTS_CHARGED** (C3).
+- Both Chunk-C agents agree on **wrong ctx key `stern_capacitance_func`** (C4), **wrong PreconvergedAnchor field name** (W6), and **bisect_depth vs bisect_depth_warm signature mismatch** (W8).
+- Opus-A and both Chunk-C agents agree on **solve_reaction_k0_model → set_reaction_k0_model** (C1) — found across two independent chunks.
+- Both Chunk-B agents agree on **Picard iterates on R not ψ** (W10) and **fallback fires on any failure** (W11).
 
-- **Disagreement: severity of the IC `exponent_clip=50.0` fallback.**
-  - Chunks 1 (forms_logc_muh) and 2 (forms_logc + boltzmann) classified the stale literal as **note** because the fallback is unreachable on the normal `_get_bv_convergence_cfg` path (which always populates the key).
-  - Chunk 4 (config) classified it as **critical**, arguing the IC sets Newton's starting iterate and a wrong value would directly corrupt the cold-start solve.
-  - **Resolution:** Reconciled to **warning** (Issue 1 above). Chunks 1 and 2 are right that production is unaffected because `build_forms_logc[_muh]` always passes a fully populated `conv_cfg`; chunk 4 is right that the magic literal is dangerous if a test or helper builds `conv_cfg` manually. The fix is one-line and should be done — but it is not currently producing wrong production output.
+**Disagreements:**
+1. **Stage 2 Stern bump mechanism (CRITICAL by Sonnet-C, PASS by Opus-C).** Resolved against source: `solver_demo_slide15_no_speculative_cs.py:454-458` literally does `for cs_target in bump_ladder: set_stern_capacitance_model(...); with adj.stop_annotating(): ctx_anchor["_last_solver"].solve()` — exactly as the doc says. Sonnet-C found a *different* code path inside `solve_anchor_with_continuation` (at `anchor_continuation.py:1271-1317`) that triggers when the caller passes a `c_s_ladder` parameter, which *does* run `_run_k0_ladder` per rung. The demo does NOT use that path. **Opus-C correct; Sonnet-C confused the alternative branch with the demo's actual path.** No critical issue here. ❌ Sonnet-C false positive.
 
-- **No other tier-internal disagreements.** Chunks generally complemented each other; cross-chunk interface checks (dispatcher imports vs. forms function names, factory keys vs. config parser keys, NP/Poisson saturation agreement, observable surface marker vs. residual surface marker) all aligned.
+2. **Stage 3 adj-wrap location.** Sonnet-A flagged "Stage 3 not wrapped at demo level"; Opus-A added the nuance "Stage 3 IS wrapped internally inside `solve_grid_with_anchor` at `grid_per_voltage.py:1060`". Both true; Opus's framing is more complete. The doc's Layer-9 wording ("demo script around solver calls") is the source of the imprecision.
 
----
+3. **THREE_SPECIES_LOGC_BOLTZMANN preset (CRITICAL by Sonnet-A, WARNING by Opus-A).** Both agents found the same fact: demo constructs a fresh `SpeciesConfig` with physical radii, overriding the preset. Disagreement is on severity. The doc's "physical a_nondim" claim is **substantively correct**; the preset name shorthand misleads only readers who would grep for `THREE_SPECIES_LOGC_BOLTZMANN`. **Opus-A's warning framing is more accurate** — graded as W2 here.
 
-## Recommended Fixes (Priority Ordered)
-
-1. **Issue 12 (factory `E_eq_r1/r2=0.0` defaults)** — Highest impact. Most production-relevant scripts run with unphysical `E_eq=0` because they omit the kwargs. Either change the factory defaults to the physical values, or export `E_EQ_R1=0.68`/`E_EQ_R2=1.78` as named constants and add a warning when omitted. **CLAUDE.md Hard Rule 4 explicitly requires this.**
-
-2. **Issues 1, 2 (stale 50.0 / 30.0 fallbacks in `forms_logc[_muh].py`)** — One-line fixes per file. Either bump fallbacks to match `_default_bv_convergence_cfg` (100.0 / 100.0) or drop the `.get(..., default)` and use `conv_cfg["..."]` so missing keys fail loudly the same way the rest of the build path does.
-
-3. **Issue 3 (validator omits `mu_species`/`em` for muh contexts)** — Two-line fix at each caller in `FluxCurve/bv_point_solve/`. CLAUDE.md already documents this footgun. Without the fix, validator-flagged H⁺ violations in muh runs are physically meaningless.
-
-4. **Issue 4 (`exponent_clip` is a dead parameter on validator)** — Either implement W1 (clip-saturation warning) or remove the parameter from the signature so it stops misleading callers.
-
-5. **Issue 9 (Boltzmann counterion `z=0` silently accepted)** — One-line guard.
-
-6. **Issues 7, 8 (alpha-list and species-index bounds checks)** — Defensive validation gaps. Easy to add.
-
-7. **Issue 6 (`"concentration"` still in formulation whitelist)** — Drop it, change defaults to `"logc"`. The dispatcher's silent fallthrough hides the inconsistency today.
-
-8. **Issue 11 (factory `phi_clamp=50.0`)** — Bump to 100.0 for consistency with `exponent_clip` and `u_clamp`.
-
-9. **Issue 10 (interior cold-failed gap in Phase 2)** — Document the behavior, or extend Phase 2 to walk gaps from the nearest-converged neighbor in either direction.
-
-Issues 5, 13–26 are notes — fix opportunistically, no rush.
+**Coverage gaps (none material):** All 11 files in scope received at least 2 agent reviews. All 16+ `file:line` annotations in the doc were checked.
 
 ---
 
-## Per-Chunk Reports
+## Suggested edits (priority order)
 
-Detailed findings, evidence, and correctness arguments are in:
-- `.verification/sonnet-chunk-1-muh-report.md`
-- `.verification/sonnet-chunk-2-logc-bz-report.md`
-- `.verification/sonnet-chunk-3-orchestrator-report.md`
-- `.verification/sonnet-chunk-4-config-report.md`
-- `.verification/sonnet-chunk-5-obs-diag-report.md`
-- `.verification/sonnet-chunk-6-factory-report.md`
+1. **C1** — `solve_reaction_k0_model` → `set_reaction_k0_model` (doc lines 73 and 197, plus the files-touched table at line 196)
+2. **C2 + C3** — Move "NonlinearVariationalProblem / NonlinearVariationalSolver(options=SNES_OPTS_CHARGED) → ctx['_last_solver']" from inside `build_forms_logc_muh` (line 56-58) to a new step under `solve_anchor_with_continuation`. Replace `SNES_OPTS_CHARGED` with "options from `sp[10]['solver_options']`".
+3. **C4** — `ctx['stern_capacitance_func']` → `ctx['stern_coeff_const']` (line 104)
+4. **C5** — `build_model_scaling` location: change "(nondim.py)" → "(Nondim/transform.py)" (line 48 and files-touched table at line 225)
+5. **W1** — `_make_sp(stern=0.10, ...)` → `_make_sp(stern_capacitance_f_m2=0.10, ...)` (lines 20-21)
+6. **W2** — Replace `THREE_SPECIES_LOGC_BOLTZMANN` (line 23) with a note that the demo builds a custom `SpeciesConfig` with physical Marcus/Stokes radii, *overriding* the preset's `A_DEFAULT=0.01`.
+7. **W3** — Annotate `_stern_bump_ladder(target)` as returning `[0.20]` for production / `(0.20…100.0)` for no-Stern (line 102).
+8. **W6 + W7** — `PreconvergedAnchor` field rename: `phi_eta` → `phi_applied_eta`, `dof_count` → `mesh_dof_count` (lines 108-109).
+9. **W8** — In `warm_walk_phi(...)` pseudocode (line 139), use `bisect_depth=5`; clarify `bisect_depth_warm` is the orchestrator kwarg upstream.
+10. **W10 + W11** — Rewrite Picard description (lines 62-65) to say "Picard iterates on per-reaction surface rates `R`; ψ_S, ψ_D are derived each iter via Stern-Robin bisection (single-ion) or linear-Debye match (multi-ion). Fallback to muh linear-phi IC fires on any Picard failure (singular Jacobian, non-finite state, mu_h_idx mismatch, oscillation/max-iters)."
+11. **W12** — Rewrite plateau formula (lines 80-83) to match the actual OR-of-two-tests: `(Δ/max(|fv|,|prev|,abs_tol) ≤ rel_tol) or (Δ ≤ abs_tol)`.
+12. **W4** — Adjust Layer-9 row (line 187) to acknowledge that Stage 3's `adj.stop_annotating()` is *inside* `solve_grid_with_anchor`, not at the demo level.
+
+---
+
+## What the doc gets right (worth preserving)
+
+- Every `file:line` annotation for *function definitions* points to the real definition: `anchor_continuation.py:902`, `:719`, `:246`, `dispatch.py:82/89/96`, `forms_logc_muh.py:152/166/997`, `boltzmann.py:91/272`, `grid_per_voltage.py:135/218/875`, `observables.py:67`. (15 of 16 are exact; line 246 hits the function but with the wrong name attached — see C1.)
+- Mesh, grid, anchor voltage, K0_R4e factor set, output path, default kwargs (`initial_scales`, `max_inserts_per_step`, `ic_at_target`) all verified.
+- Convergence-mechanism table (Layers 1-8) is correct in spirit for all 8 mechanisms; some specific identifier transcriptions are wrong but the *physics* attribution is accurate.
+- `_build_eta_clipped` clips η_scaled BEFORE α·n_e — matches Hard Rule #2 exactly (Sonnet-B and Opus-B both confirmed).
+- `exponent_clip = 100` is the production default (forms_logc_muh.py:871, picard_ic.py:1185, config.py:138).
+- (1−A_dyn) factor IS applied to both Cs⁺ and SO₄²⁻ via the shared `free_dyn` variable (boltzmann.py:204, 254).
+- AdaptiveLadder sqrt-midpoint rule (`midpoint = math.sqrt(prev * scale)`) is correct geometric mean (anchor_continuation.py:884).
+- `solve_grid_with_anchor` static-sort + growing-source-pool semantics verified (grid_per_voltage.py:1039-1050).
+- `_march` recursive bisection (with deliberate `v_prev_substep` tracking, left-then-right recursion, and outer/inner checkpoint pattern) verified.
+- `(n_e/2)·R_j` weighting in `current_density` mode uses `N_ELECTRONS_REF = 2` — this is the I_SCALE electron-count anchor, NOT Mangan/Ruggiero collection efficiency (Opus-C clarified).
+- `solve_grid_with_anchor` is the Phase 5γ/6 successor to C+D — coexists with `solve_grid_per_voltage_cold_with_warm_fallback`; doc correctly uses the newer function.
+
+---
+
+## Verdict
+
+**ISSUES FOUND** — 5 critical (4 agreed across tiers, 1 cross-chunk agreement), 13 warnings, 6 notes.
+
+The doc is **useful as a high-level roadmap** and the call-graph topology is sound. The fixes above are mostly s/old/new/ edits in the doc, not code changes. No bug in the implementation was discovered by this audit — only doc-vs-code drift in identifier names, attribution boundaries, and one phantom constant (`SNES_OPTS_CHARGED`) that may once have existed and been refactored away.
+
+Per-chunk reports preserved at:
+- `.verification/sonnet-chunk-A-report.md`, `.verification/opus-chunk-A-report.md`
+- `.verification/sonnet-chunk-B-report.md`, `.verification/opus-chunk-B-report.md`
+- `.verification/sonnet-chunk-C-report.md`, `.verification/opus-chunk-C-report.md`

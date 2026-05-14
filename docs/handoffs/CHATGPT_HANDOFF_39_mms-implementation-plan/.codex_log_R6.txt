@@ -1,0 +1,1071 @@
+OpenAI Codex v0.129.0 (research preview)
+--------
+workdir: /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/jakeweinstein/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e2715-a886-7453-9e24-baa70c8257b0
+--------
+user
+# Critique session 39 — Round 6
+
+(Loop extended from cap=5 to cap=7. R5 issues are real and your
+"cap reached" framing turned out to be premature — keep pushing.)
+
+## Section 1: Acknowledgment
+
+All 5 R5 issues accepted. They're a coherent cluster around
+**ownership-tracking and ordering** of the independence check, which
+the plan had hand-waved.
+
+### Re point 1 — independence check ordering
+
+**Accept.** Source terms `S_c_i`, `g_i`, `S_φ`, `g_S` only exist after
+construction inside `_build_manufactured_source`. So an independence
+check cannot fire in `_assert_runtime_stack_invariants` before sources
+exist. Two-stage source construction:
+
+```python
+@dataclass
+class MMSSourceTerms:
+    """Local container for the four source UFL expressions, built BEFORE
+    F_res mutation so they can be inspected by the independence check."""
+    S_c: list                # one per dynamic species (UFL)
+    g_elec: list             # one per dynamic species (UFL, on ds_elec)
+    S_phi: object            # UFL (on dx)
+    g_S: object              # UFL (on ds_elec)
+
+
+def _build_source_terms(
+    ctx, sp, *, manuf, closure, rxn_rates, owned: OwnedCoeffTracker,
+    quad_degree: int,
+) -> MMSSourceTerms:
+    """Pure construction: compose source UFL expressions WITHOUT mutating
+    F_res. Returns the container; F_res mutation happens later in
+    _inject_source_terms after the independence check passes."""
+    ...
+    return MMSSourceTerms(...)
+
+
+def _assert_source_independence(sources: MMSSourceTerms, ctx: dict,
+                                 owned: OwnedCoeffTracker) -> None:
+    """Inspect each source UFL expression. Forbidden: ctx['U'],
+    ctx['U_prev']. Allowed: live ctx coefficients + owned literals.
+    Anything else is unknown → AssertionError."""
+    ...
+
+
+def _inject_source_terms(ctx: dict, sources: MMSSourceTerms, *,
+                          quad_degree: int) -> dict:
+    """Mutate ctx['F_res'] by subtracting each source, then rederive J_form."""
+    ...
+
+
+def _build_manufactured_source(ctx, sp, *, manuf, closure, rxn_rates,
+                                quad_degree, owned):
+    sources = _build_source_terms(ctx, sp, manuf=manuf, closure=closure,
+                                   rxn_rates=rxn_rates, owned=owned,
+                                   quad_degree=quad_degree)
+    _assert_source_independence(sources, ctx, owned)
+    return _inject_source_terms(ctx, sources, quad_degree=quad_degree)
+```
+
+The runtime invariant harness (`_assert_runtime_stack_invariants`) no
+longer tries to check source independence — it covers the margin
+checks only (clamps, R_ratio, θ_inner). Source independence is its own
+phase, run BETWEEN `_build_source_terms` and `_inject_source_terms`.
+
+### Re point 2 — owned-constant tracker threads through all builders
+
+**Accept.** Replaced the module-global `_OWNED_COEFFS` set with an
+explicit per-mesh tracker that every MMS expression builder receives:
+
+```python
+class OwnedCoeffTracker:
+    """Per-mesh ledger of fd.Constant objects created by MMS builders.
+    Threaded through all expression-construction helpers so the
+    independence check has a complete whitelist by source identity."""
+
+    def __init__(self):
+        self._owned: set[fd.Constant] = set()
+
+    def constant(self, value: float, *, label: str = "") -> fd.Constant:
+        c = fd.Constant(float(value))
+        self._owned.add(c)
+        return c
+
+    @property
+    def coeffs(self) -> set:
+        return frozenset(self._owned)
+```
+
+Threaded into every builder signature:
+
+```python
+def _make_manufactured_fields(mesh, ctx, sp, *, owned: OwnedCoeffTracker) -> dict: ...
+def _build_shared_theta_closure_ex(*, owned: OwnedCoeffTracker, ...) -> dict: ...
+def _build_bv_rates_ex(*, owned: OwnedCoeffTracker, ...) -> list: ...
+def _build_source_terms(..., *, owned: OwnedCoeffTracker, ...) -> MMSSourceTerms: ...
+```
+
+Every `fd.Constant(...)` call inside an MMS builder is replaced with
+`owned.constant(...)`. `_assert_source_independence` consumes
+`owned.coeffs` as the whitelist of MMS-owned literals.
+
+### Re point 3 — no `isinstance(fd.Constant)` filter; identity-only
+
+**Accept.** The whitelist is purely object-identity-based:
+
+```python
+def _assert_source_independence(sources, ctx, owned):
+    FORBIDDEN = {ctx['U'], ctx['U_prev']}
+    ALLOWED_LIVE = {
+        ctx['phi_applied_func'],
+        ctx['stern_coeff_const'],
+        *ctx.get('bv_k0_funcs', []),
+        *ctx.get('bv_alpha_funcs', []),
+        ctx['boltzmann_z_scale'],
+    }
+    ALLOWED_LIVE.discard(None)
+    ALLOWED = ALLOWED_LIVE | owned.coeffs
+
+    for label, S in _iter_source_terms(sources):
+        coeffs = set(extract_coefficients(S))
+        bad = coeffs & FORBIDDEN
+        assert not bad, (
+            f"Source {label} references {bad} — independence violation"
+        )
+        unknown = coeffs - ALLOWED
+        assert not unknown, (
+            f"Source {label} references unrecognized coefficients {unknown}. "
+            f"Either route through OwnedCoeffTracker or add to ALLOWED_LIVE."
+        )
+```
+
+No `isinstance` filtering. Anything outside FORBIDDEN ∪ ALLOWED fails.
+
+### Re point 4 — `OwnedCoeffTracker` per mesh, not module global
+
+**Accept.** Tracker is created at the top of `run_mms` per-mesh
+iteration and passed down:
+
+```python
+def run_mms(N_list, ...):
+    results = {...}
+    for N in N_list:
+        mesh = fd.UnitSquareMesh(N, N)
+        sp = make_sp_production_muh()
+        ctx = build_context(sp, mesh=mesh)
+        ctx = build_forms(ctx, sp)
+        _assert_static_stack_invariants(ctx, sp, solver_params=sp)
+
+        owned = OwnedCoeffTracker()   # fresh tracker per mesh
+        manuf    = _make_manufactured_fields(mesh, ctx, sp, owned=owned)
+        closure  = _build_shared_theta_closure_ex(..., owned=owned)
+        rxn_rates= _build_bv_rates_ex(..., owned=owned)
+
+        _assert_runtime_stack_invariants(ctx, sp,
+                                          manuf=manuf, closure=closure,
+                                          rxn_rates=rxn_rates,
+                                          quad_degree=quad_degree)
+        _build_manufactured_source(ctx, sp,
+                                    manuf=manuf, closure=closure,
+                                    rxn_rates=rxn_rates,
+                                    quad_degree=quad_degree,
+                                    owned=owned)
+
+        U_manuf = _interpolate_U_manuf(ctx, manuf)
+        ctx['U'].assign(U_manuf)
+        ctx['U_prev'].assign(U_manuf)
+
+        # snapshot live continuation values
+        snapshots = _snapshot_live_coeffs(ctx)
+        out_mesh = _solve_and_measure(ctx, sp, mesh, manuf)
+        _assert_live_coeffs_unchanged(ctx, snapshots)
+        _append_results(results, N, out_mesh)
+    return results
+```
+
+No global state. Tests can run in any order, nested smoke tests can
+spin up their own tracker.
+
+### Re point 5 — explicit ordering statement (with diagram)
+
+**Accept.** Added to PLAN.md §3 as a new "Build-time pipeline" subsection:
+
+```
+Per-mesh pipeline (left-to-right, top-to-bottom):
+
+  build_context(sp)
+      ↓
+  build_forms(ctx, sp)
+      ↓
+  _assert_static_stack_invariants(ctx, sp)            ← formulation, reactions,
+      ↓                                                  species, dt, SNES, etc.
+  OwnedCoeffTracker()
+      ↓
+  manuf    = _make_manufactured_fields(mesh, ctx, sp, owned=owned)
+  closure  = _build_shared_theta_closure_ex(..., owned=owned)
+  rxn_rates= _build_bv_rates_ex(..., owned=owned)
+      ↓
+  _assert_runtime_stack_invariants(ctx, sp, manuf, closure, rxn_rates)
+                                                      ← clip/floor margins,
+      ↓                                                  R_ratio, θ_inner
+                                                         (margin asserts MUST
+                                                          pass BEFORE next step,
+                                                          otherwise unclamped
+                                                          source builder uses
+                                                          wrong algebra)
+  sources  = _build_source_terms(ctx, sp, manuf, closure, rxn_rates,
+                                  owned=owned, quad_degree=quad_degree)
+      ↓
+  _assert_source_independence(sources, ctx, owned)    ← extract_coefficients
+                                                         vs FORBIDDEN ∪ ALLOWED
+      ↓
+  _inject_source_terms(ctx, sources, quad_degree=quad_degree)
+                                                      ← mutates F_res
+      ↓
+  U_manuf = _interpolate_U_manuf(ctx, manuf)
+  ctx['U'].assign(U_manuf); ctx['U_prev'].assign(U_manuf)
+      ↓
+  snapshots = _snapshot_live_coeffs(ctx)
+      ↓
+  solver.solve()
+      ↓
+  _assert_live_coeffs_unchanged(ctx, snapshots)
+      ↓
+  compute errors per primary unknown
+```
+
+The **load-bearing ordering invariant**: `_assert_runtime_stack_invariants`
+must succeed before `_build_source_terms` runs, because the source
+builder uses unclamped/unfloored expressions whose validity DEPENDS on
+the margin checks passing. If a margin check fires, the test
+correctly aborts before the unclamped source builder produces a
+mathematically-wrong residual.
+
+The smoke test (`_independent_closure_smoke`) mirrors production
+clamps/floors exactly, so it works regardless of margins — it's a pure
+algebra-equivalence diagnostic.
+
+---
+
+## Section 2: Plan state after R6
+
+`OwnedCoeffTracker` + 4-phase pipeline (static asserts → field-builders
+→ runtime asserts → source-terms → independence → inject → solve) make
+the implementation contract explicit. The plan is now structured so
+that:
+
+- Wrong ordering raises before the next phase can mask the error.
+- Source independence is checked on the actual source UFL.
+- Owned constants don't pollute across meshes or tests.
+- Type-based filtering is gone; identity-based whitelist only.
+
+(Full revised PLAN.md lands via auto-revise after the loop closes.)
+
+---
+
+## Section 3: Continued critique prompt
+
+Loop now extended to cap = 7 (was 5). Two rounds remain after this one.
+
+Review my responses to the 5 R5 issues. Push back where any "accept"
+is superficial. Raise any new issues these structural changes
+introduce. Re-issue anything from R1–R4 you don't think I addressed.
+Same numbered format and verdict line:
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN
+
+codex
+I’m checking one remaining ordering edge: some “static” broken configs may make `build_forms` fail before the MMS invariant layer ever runs, which would invalidate the claim that all 12 cases are caught by MMS invariants.
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/cation_hydrolysis.py | sed -n '600,820p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/cation_hydrolysis.py | sed -n '1,180p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+     1	"""Cation hydrolysis closure (Phase 6β v9 Gates 3 + 4, v10a Langmuir cap).
+     2	
+     3	Adds a global surface coverage ``Γ_MOH`` representing the cation-
+     4	hydrolysis reservoir at the OHP::
+     5	
+     6	    M⁺(H₂O)ₙ + H₂O  ⇌  MOH⁰(H₂O)ₙ₋₁ + H₃O⁺                     (Singh 2016 Eq. 2)
+     7	
+     8	with field-dependent rate balance::
+     9	
+    10	    R_net  =  k_hyd · c_M⁺(0) · 10^(−ΔpKa(σ_S)) · (1 − Γ/Γ_max)
+    11	              −  k_prot · c_H(0) · Γ / δ_OHP                       (forward − reverse)
+    12	    R_des  =  k_des · Γ                                            (desorption)
+    13	
+    14	The proton boundary residual gains a source ``+λ · R_net`` (one H⁺
+    15	produced per hydrolysis event); the cation boundary residual gains a
+    16	sink ``−λ · R_net``.  The ``(1 − Γ/Γ_max)`` vacancy factor (Phase 6β
+    17	v10a, 2026-05-10) caps surface coverage at one monolayer of MOH at
+    18	the OHP: without it, every v9 result at converged ``k_hyd ≥ 1e-3`` sat
+    19	at Γ ≈ 6+ monolayers (physically invalid; ~64 monolayers at
+    20	``k_hyd=1e-2``).  Steady state for Γ becomes::
+    21	
+    22	    Γ_ss(λ)  =  λ · F₀
+    23	                /  (λ · k_des + (1 − λ) + λ · k_prot · ⟨c_H⟩ / δ_OHP
+    24	                    + λ · F₀ / Γ_max)
+    25	
+    26	where ``F₀ = k_hyd · ⟨c_M · 10^(−ΔpKa)⟩`` is the boundary-area-averaged
+    27	forward forcing and ``⟨c_H⟩`` is the boundary-averaged proton
+    28	concentration.  In the limit ``Γ_max → ∞`` the cap term ``λ · F₀ / Γ_max``
+    29	vanishes and the formula reduces to the v9 Γ_ss expression.
+    30	
+    31	Architecture mirrors :mod:`Forward.bv_solver.water_ionization`'s
+    32	``kw_eff_func`` *coefficient* pattern:
+    33	
+    34	* Γ is an R-space ``Function`` that the Newton residual reads as a
+    35	  coefficient.  The mixed function space stays at the legacy
+    36	  ``species + phi`` layout (no extra Newton unknown for Γ).  This
+    37	  side-steps the Firedrake R-space-in-mixed-space matnest format
+    38	  limitation that breaks monolithic LU assembly.
+    39	* Between continuation rungs the orchestrator calls
+    40	  :func:`update_gamma_from_solution` to recompute Γ from the
+    41	  converged ``c_M(0)`` and ``c_H(0)`` boundary integrals via the
+    42	  closed-form ``Γ_ss(λ)`` formula.  At ``λ=0`` this returns ``Γ=0``
+    43	  exactly — the Dirichlet pin invariant.
+    44	* :func:`build_cation_hydrolysis_terms` is called from inside
+    45	  ``build_forms_logc[_muh]`` when ``enable_cation_hydrolysis=True``;
+    46	  it constructs the R-space Functions and stashes the bundle on
+    47	  ``ctx``.
+    48	* :func:`build_proton_boundary_source` returns the UFL expression
+    49	  for ``R_net`` so the form code can plumb it into both the proton
+    50	  boundary residual and the cation boundary residual with the
+    51	  correct signs.
+    52	* :func:`build_pka_shift` returns ``ΔpKa(σ)`` UFL expression.  At
+    53	  Gate 3B this is a placeholder returning ``Constant(0.0)``; Gate 4A
+    54	  swaps in Singh 2016 SI Eq. (4).
+    55	
+    56	Default-off contract: when
+    57	``solver_options['bv_convergence']['enable_cation_hydrolysis']`` is
+    58	False the bundle is never constructed and every UFL plumbing site
+    59	short-circuits, leaving the residual byte-equivalent to the pre-Gate-3
+    60	stack.
+    61	
+    62	References
+    63	----------
+    64	
+    65	* ``docs/singh_2016_pka_formula.md`` — Singh 2016 SI Eq. (3)/(4)
+    66	  extraction with sign convention recovered from Tables S1/S3.
+    67	* ``.claude/plans/write-up-the-formal-joyful-papert.md`` §"Phase 1 —
+    68	  Gate 3" / §"Phase 2 — Gate 4" for the gating + tests.
+    69	"""
+    70	from __future__ import annotations
+    71	
+    72	import math
+    73	import warnings
+    74	from dataclasses import dataclass
+    75	from typing import Any, Optional, Sequence
+    76	
+    77	import firedrake as fd
+    78	
+    79	
+    80	# ---------------------------------------------------------------------------
+    81	# Data + gating
+    82	# ---------------------------------------------------------------------------
+    83	
+    84	
+    85	@dataclass(frozen=True)
+    86	class CationHydrolysisBundle:
+    87	    """Frozen handle to the cation-hydrolysis UFL pieces and continuation knobs.
+    88	
+    89	    Attributes
+    90	    ----------
+    91	    counterion_idx
+    92	        Role-resolved index of the cation species in the dynamic NP
+    93	        list (Gate 1).  At Gate 4 (K2SO4 stack) this is the K⁺ index.
+    94	    h_idx
+    95	        Role-resolved index of the proton species (the H⁺ NP residual).
+    96	    delta_ohp_func
+    97	        R-space ``Function`` holding the OHP thickness ``δ_OHP``
+    98	        (nondim length).  Production prior 0.40 nm (Bohra 2019).
+    99	    k_hyd_func, k_prot_func, k_des_func
+   100	        R-space ``Function`` objects holding the forward / reverse /
+   101	        desorption rates.  All mutable by the continuation
+   102	        orchestrator via the ``set_reaction_k_*_model`` accessors.
+   103	    lambda_hydrolysis_func
+   104	        R-space ``Function`` holding the smooth activation knob
+   105	        ``λ ∈ [0, 1]`` walked by ``lambda_hydrolysis_ladder``.  At
+   106	        ``λ=0`` the cation-hydrolysis source contribution to the
+   107	        proton/cation residuals is byte-zeroed (matches the
+   108	        disabled-feature path observables to within Newton tolerance).
+   109	    r_H_El_pm_func
+   110	        R-space ``Function`` holding the cation-specific Singh r_H_El
+   111	        distance (pm).  Made live so the Gate 4B sensitivity sweep
+   112	        can swap in different values without rebuilding the form.
+   113	        Mutable via ``set_reaction_r_H_El_pm_model``.
+   114	    gamma_func
+   115	        R-space ``Function`` holding the surface coverage Γ_MOH.
+   116	        Treated as an external coefficient — the Newton solver reads
+   117	        it but does not include it in the monolithic system.  The
+   118	        orchestrator updates it via :func:`update_gamma_from_solution`
+   119	        between continuation rungs (outer Picard).
+   120	    gamma_max_func
+   121	        R-space ``Function`` holding the Langmuir saturation cap
+   122	        ``Γ_max`` (Phase 6β v10a, 2026-05-10).  The residual reads
+   123	        ``(1 − Γ / Γ_max)`` as the vacancy factor on the forward
+   124	        branch so coverage saturates at one monolayer.  Mutable via
+   125	        the ``set_reaction_gamma_max_model`` accessor.  Default at
+   126	        bundle build time is ``cation_hydrolysis_config['gamma_max_nondim']``
+   127	        or the smoke baseline ``0.047`` (1 monolayer of MOH at the
+   128	        OHP; ``5.6e-6 mol/m² / (C_SCALE · L_REF)``).  The v10b
+   129	        literature-calibration step will replace the default.
+   130	    cation_params
+   131	        Per-cation Singh 2016 Table S1 row + r_H_El plus solver-side
+   132	        switches (anode_clamp).  Held verbatim as a Python dict.
+   133	        ``cation_params['r_H_El_pm']`` is the *initial* value mirrored
+   134	        into ``r_H_El_pm_func`` at build time; ``r_H_El_pm_func`` is
+   135	        the residual-side authoritative value during continuation.
+   136	        ``cation_params['beta_offset_pm2']`` mirrors the live β offset
+   137	        for diagnostics consumers; the residual reads
+   138	        ``beta_offset_pm2_func`` directly.
+   139	    beta_offset_pm2_func
+   140	        Phase 6β step 10 Phase D — carbon-vs-Cu β offset in pm².  Sums
+   141	        with the live β_per_cation (computed from r_H_El_pm_func) inside
+   142	        ``_build_singh_2016_eq_4_pka_shift`` to give ``β_carbon =
+   143	        β_per_cation_Cu(r_H_El_live) + Δ_β``.  Default 0.0 at build
+   144	        time → byte-equivalent to the pre-D1 v10a/v10b residual.
+   145	        Mutable via :func:`set_reaction_beta_offset_pm2_model`.
+   146	    """
+   147	
+   148	    counterion_idx: int
+   149	    h_idx: int
+   150	    delta_ohp_func: Any
+   151	    k_hyd_func: Any
+   152	    k_prot_func: Any
+   153	    k_des_func: Any
+   154	    lambda_hydrolysis_func: Any
+   155	    r_H_El_pm_func: Any
+   156	    gamma_func: Any
+   157	    gamma_max_func: Any
+   158	    cation_params: dict
+   159	    beta_offset_pm2_func: Any
+   160	
+   161	
+   162	def is_cation_hydrolysis_enabled(conv_cfg: dict) -> bool:
+   163	    """Centralised gate check on ``enable_cation_hydrolysis``.
+   164	
+   165	    Returns False both when the key is missing (legacy params dict)
+   166	    and when set to a falsy value, so callers can rely on a uniform
+   167	    default-off behaviour.
+   168	    """
+   169	    return bool(conv_cfg.get("enable_cation_hydrolysis", False))
+   170	
+   171	
+   172	def resolve_counterion_index(
+   173	    roles: Optional[Sequence[str]], *, role_label: str = "counterion",
+   174	) -> int:
+   175	    """Return the index of the cation species in the dynamic NP list.
+   176	
+   177	    Phase 6β v9 Gate 3B requires explicit ``roles=`` because the
+   178	    K2SO4 stack carries multiple ``z=+1`` species (H⁺ + K⁺) and
+   179	    inferring "the cation" from charge alone is ambiguous.  Mirrors
+   180	    the role-aware fork in
+
+ succeeded in 0ms:
+   600	    )
+   601	    # β_per_cation_Cu in pm² — live UFL expression that tracks the
+   602	    # current r_H_El_pm value.  At r_H_El_pm = 200.98 (K+ Cu default)
+   603	    # this evaluates numerically to -45.608196 pm², matching
+   604	    # ``calibration.singh2016.compute_beta_per_cation("K+")``.
+   605	    beta_per_cation_live = (
+   606	        fd.Constant(2.0 * A_pm * z) * r_H_El_expr * G_expr
+   607	    )
+   608	    # Phase 6β step 10 Phase D — add the carbon-vs-Cu offset when
+   609	    # provided.  At Δ_β=0 the UFL `x + 0` is numerically equivalent
+   610	    # to `x`, so the residual at offset=0 matches the pre-D1 path
+   611	    # to machine precision.
+   612	    if beta_offset_pm2_func is not None:
+   613	        beta_carbon_expr = beta_per_cation_live + beta_offset_pm2_func
+   614	    else:
+   615	        beta_carbon_expr = beta_per_cation_live
+   616	    delta_pKa = beta_carbon_expr * sigma_singh
+   617	    return delta_pKa
+   618	
+   619	
+   620	def build_proton_boundary_source(
+   621	    *,
+   622	    bundle: CationHydrolysisBundle,
+   623	    c_M_bdy_expr: Any,
+   624	    c_H_bdy_expr: Any,
+   625	    pka_shift_expr: Any,
+   626	):
+   627	    """Return UFL expression for ``R_net`` (the proton boundary source).
+   628	
+   629	    Layout (Phase 6β v10a)::
+   630	
+   631	        R_net  =  k_hyd · c_M⁺ · 10^(−ΔpKa) · (1 − Γ/Γ_max)
+   632	                  −  k_prot · c_H · Γ / δ_OHP
+   633	
+   634	    Γ is read from ``bundle.gamma_func`` (an R-space *coefficient*,
+   635	    not a Newton unknown).  The orchestrator updates Γ between
+   636	    continuation rungs via :func:`update_gamma_from_solution`.  The
+   637	    Langmuir vacancy factor ``(1 − Γ/Γ_max)`` caps the forward rate
+   638	    once the OHP is saturated with adsorbed MOH (v10a — 2026-05-10).
+   639	    In the limit ``Γ_max → ∞`` the factor goes to 1 and the residual
+   640	    is byte-equivalent to the v9 formulation.
+   641	
+   642	    Parameters
+   643	    ----------
+   644	    bundle
+   645	        Output of :func:`build_cation_hydrolysis_terms`.
+   646	    c_M_bdy_expr
+   647	        UFL expression for ``c_M⁺`` evaluated at the electrode
+   648	        boundary.  Caller passes ``ci[counterion_idx]`` from the
+   649	        forms module.
+   650	    c_H_bdy_expr
+   651	        UFL expression for ``c_H`` at the electrode boundary.
+   652	    pka_shift_expr
+   653	        Output of :func:`build_pka_shift`.  Constant(0.0) at Gate 3B.
+   654	
+   655	    Returns
+   656	    -------
+   657	    UFL expression for ``R_net``.
+   658	    """
+   659	    pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
+   660	    vacancy_factor = (
+   661	        fd.Constant(1.0) - bundle.gamma_func / bundle.gamma_max_func
+   662	    )
+   663	    R_forward = (
+   664	        bundle.k_hyd_func * c_M_bdy_expr * pka_factor * vacancy_factor
+   665	    )
+   666	    R_backward = (
+   667	        bundle.k_prot_func
+   668	        * c_H_bdy_expr
+   669	        * bundle.gamma_func
+   670	        / bundle.delta_ohp_func
+   671	    )
+   672	    return R_forward - R_backward
+   673	
+   674	
+   675	def build_forward_branch(
+   676	    *,
+   677	    bundle: CationHydrolysisBundle,
+   678	    c_M_bdy_expr: Any,
+   679	    pka_shift_expr: Any,
+   680	):
+   681	    """Return UFL expression for the forward branch including the Langmuir cap.
+   682	
+   683	    Phase 6β v10a::
+   684	
+   685	        R_net_forward = k_hyd · c_M⁺ · 10^(−ΔpKa) · (1 − Γ/Γ_max)
+   686	
+   687	    Used by :func:`update_gamma_from_solution` to compute the
+   688	    boundary integral that drives the closed-form Γ_ss formula.
+   689	    Returning the capped branch (rather than the uncapped ``F₀``) is
+   690	    deliberate — the rung_callback diagnostics expose both the
+   691	    average of this expression (``R_forward_capped``) and the
+   692	    average of the uncapped ``F₀`` separately so observers can see
+   693	    how close the OHP is to saturation.
+   694	    """
+   695	    pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
+   696	    vacancy_factor = (
+   697	        fd.Constant(1.0) - bundle.gamma_func / bundle.gamma_max_func
+   698	    )
+   699	    return (
+   700	        bundle.k_hyd_func * c_M_bdy_expr * pka_factor * vacancy_factor
+   701	    )
+   702	
+   703	
+   704	def build_forward_branch_uncapped(
+   705	    *,
+   706	    bundle: CationHydrolysisBundle,
+   707	    c_M_bdy_expr: Any,
+   708	    pka_shift_expr: Any,
+   709	):
+   710	    """Return UFL expression for the Γ-independent forward forcing ``F₀``.
+   711	
+   712	    ``F₀ = k_hyd · c_M⁺ · 10^(−ΔpKa)`` — the v9 forward branch, used
+   713	    by the Langmuir closed-form Γ_ss formula and by diagnostics that
+   714	    want to see the saturated-coverage limit.  Independent of Γ.
+   715	    """
+   716	    pka_factor = fd.Constant(10.0) ** (-pka_shift_expr)
+   717	    return bundle.k_hyd_func * c_M_bdy_expr * pka_factor
+   718	
+   719	
+   720	# ---------------------------------------------------------------------------
+   721	# Outer Picard update for Γ
+   722	# ---------------------------------------------------------------------------
+   723	
+   724	
+   725	def gamma_ss_langmuir(
+   726	    *,
+   727	    lambda_val: float,
+   728	    k_hyd: float,
+   729	    k_prot: float,
+   730	    k_des: float,
+   731	    delta_ohp: float,
+   732	    forward_avg: float,
+   733	    c_H_avg: float,
+   734	    gamma_max: float,
+   735	) -> tuple:
+   736	    """Pure-Python closed-form Γ_ss for the Langmuir-capped residual.
+   737	
+   738	    Phase 6β v10a — the formula that
+   739	    :func:`update_gamma_from_solution` evaluates after assembling the
+   740	    boundary integrals on the converged FE state.  Lifted to a
+   741	    standalone helper so unit tests can exercise the arithmetic
+   742	    without standing up a Firedrake mesh.
+   743	
+   744	    With ``F₀ = k_hyd · forward_avg`` the closed form is::
+   745	
+   746	        Γ_ss(λ) = λ · F₀ / (
+   747	            λ · k_des
+   748	            + (1 − λ)
+   749	            + λ · k_prot · ⟨c_H⟩ / δ_OHP
+   750	            + λ · F₀ / Γ_max
+   751	        )
+   752	
+   753	    Returns
+   754	    -------
+   755	    tuple
+   756	        ``(gamma_clamped, gamma_unclamped, denominator_terms)`` where
+   757	        ``denominator_terms`` is a dict with keys
+   758	        ``{'constant', 'kdes', 'kprot', 'cap', 'total'}`` so tests
+   759	        can verify the v9-equivalence and saturation limits term by
+   760	        term.
+   761	
+   762	    Raises
+   763	    ------
+   764	    ValueError
+   765	        If ``gamma_max <= 0`` (the Langmuir cap is required) or any
+   766	        kinetic rate is negative.  The closed form is undefined
+   767	        outside those bounds.
+   768	    RuntimeError
+   769	        Denominator collapses to a non-positive value — should never
+   770	        happen for non-negative kinetic rates and ``λ ∈ [0, 1]``, so
+   771	        signals a calling-site bug.
+   772	    """
+   773	    if gamma_max <= 0.0:
+   774	        raise ValueError(
+   775	            f"gamma_max must be positive (got {gamma_max!r})"
+   776	        )
+   777	    if not (0.0 <= lambda_val <= 1.0):
+   778	        raise ValueError(
+   779	            f"lambda_val must lie in [0, 1] (got {lambda_val!r})"
+   780	        )
+   781	    for name, val in (
+   782	        ("k_hyd", k_hyd), ("k_prot", k_prot), ("k_des", k_des),
+   783	    ):
+   784	        if val < 0.0:
+   785	            raise ValueError(f"{name} must be non-negative (got {val!r})")
+   786	    if delta_ohp <= 0.0:
+   787	        raise ValueError(
+   788	            f"delta_ohp must be positive (got {delta_ohp!r})"
+   789	        )
+   790	
+   791	    F0 = k_hyd * forward_avg
+   792	    numerator = lambda_val * F0
+   793	    denom_constant = 1.0 - lambda_val
+   794	    denom_kdes = lambda_val * k_des
+   795	    denom_kprot = lambda_val * k_prot * c_H_avg / delta_ohp
+   796	    denom_cap = lambda_val * F0 / gamma_max
+   797	    denominator = denom_constant + denom_kdes + denom_kprot + denom_cap
+   798	    if denominator <= 0.0:
+   799	        raise RuntimeError(
+   800	            "gamma_ss_langmuir: denominator non-positive "
+   801	            f"(λ={lambda_val}, k_des={k_des}, k_prot={k_prot}, "
+   802	            f"Γ_max={gamma_max})"
+   803	        )
+   804	    gamma_unclamped = numerator / denominator
+   805	    gamma_clamped = max(0.0, min(gamma_max, gamma_unclamped))
+   806	    return gamma_clamped, gamma_unclamped, {
+   807	        "constant": denom_constant,
+   808	        "kdes": denom_kdes,
+   809	        "kprot": denom_kprot,
+   810	        "cap": denom_cap,
+   811	        "total": denominator,
+   812	    }
+   813	
+   814	
+   815	def update_gamma_from_solution(
+   816	    ctx: dict, *, electrode_marker: Optional[int] = None,
+   817	) -> float:
+   818	    """Update ``bundle.gamma_func`` from the current ``ctx['U']``.
+   819	
+   820	    Phase 6β v10a — Langmuir-capped closed form.  Solving the smooth
+
+exec
+/bin/zsh -lc 'rg -n "def build_cation_hydrolysis_terms|cation_hydrolysis_config|required|counterion_idx|resolve" Forward/bv_solver/cation_hydrolysis.py Forward/bv_solver/config.py tests/test_phase6b_v9_gate1_roles.py tests/test_phase6b_v9_gate2_dynamic_k.py -S' in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+Forward/bv_solver/cation_hydrolysis.py:91:    counterion_idx
+Forward/bv_solver/cation_hydrolysis.py:92:        Role-resolved index of the cation species in the dynamic NP
+Forward/bv_solver/cation_hydrolysis.py:95:        Role-resolved index of the proton species (the H⁺ NP residual).
+Forward/bv_solver/cation_hydrolysis.py:126:        bundle build time is ``cation_hydrolysis_config['gamma_max_nondim']``
+Forward/bv_solver/cation_hydrolysis.py:148:    counterion_idx: int
+Forward/bv_solver/cation_hydrolysis.py:172:def resolve_counterion_index(
+Forward/bv_solver/cation_hydrolysis.py:181:    :func:`Forward.bv_solver.water_ionization.resolve_h_index`.
+Forward/bv_solver/cation_hydrolysis.py:188:        K2SO4 stack.  Required (non-None).
+Forward/bv_solver/cation_hydrolysis.py:201:            "resolve_counterion_index requires explicit roles= "
+Forward/bv_solver/cation_hydrolysis.py:211:            f"resolve_counterion_index: no species with role={role_label!r} "
+Forward/bv_solver/cation_hydrolysis.py:216:            f"resolve_counterion_index: multiple species with "
+Forward/bv_solver/cation_hydrolysis.py:280:def build_cation_hydrolysis_terms(
+Forward/bv_solver/cation_hydrolysis.py:289:    """Build R-space ``Function`` objects + resolve the cation index.
+Forward/bv_solver/cation_hydrolysis.py:292:    ``conv_cfg['cation_hydrolysis_config']`` (a sub-dict).
+Forward/bv_solver/cation_hydrolysis.py:307:        Pre-resolved proton index.  Caller passes the same index it
+Forward/bv_solver/cation_hydrolysis.py:317:    counterion_idx = resolve_counterion_index(roles)
+Forward/bv_solver/cation_hydrolysis.py:319:    raw_cfg = conv_cfg.get("cation_hydrolysis_config") or {}
+Forward/bv_solver/cation_hydrolysis.py:322:            "cation_hydrolysis_config must be a dict; got "
+Forward/bv_solver/cation_hydrolysis.py:413:    # resolve so the Phase D fit's outer loop can sweep Δ_β without
+Forward/bv_solver/cation_hydrolysis.py:426:        counterion_idx=int(counterion_idx),
+Forward/bv_solver/cation_hydrolysis.py:500:        v10b path.  Re-read at each Newton resolve.
+Forward/bv_solver/cation_hydrolysis.py:648:        boundary.  Caller passes ``ci[counterion_idx]`` from the
+Forward/bv_solver/cation_hydrolysis.py:765:        If ``gamma_max <= 0`` (the Langmuir cap is required) or any
+Forward/bv_solver/cation_hydrolysis.py:891:    c_M_expr = ci[bundle.counterion_idx]
+Forward/bv_solver/cation_hydrolysis.py:1144:    c_M_expr = ci[bundle.counterion_idx]
+Forward/bv_solver/cation_hydrolysis.py:1320:            if c0_vals is not None and bundle.counterion_idx < len(c0_vals):
+Forward/bv_solver/cation_hydrolysis.py:1321:                c_K_bulk = float(c0_vals[bundle.counterion_idx])
+Forward/bv_solver/cation_hydrolysis.py:1516:    "resolve_counterion_index",
+Forward/bv_solver/config.py:205:    # (Gate 3B).  ``cation_hydrolysis_config`` carries the per-cation
+Forward/bv_solver/config.py:209:    cation_hydrolysis_config = raw.get("cation_hydrolysis_config", None)
+Forward/bv_solver/config.py:211:        if cation_hydrolysis_config is not None and not isinstance(
+Forward/bv_solver/config.py:212:            cation_hydrolysis_config, dict
+Forward/bv_solver/config.py:215:                "cation_hydrolysis_config must be a dict (or None) when "
+Forward/bv_solver/config.py:217:                f"{type(cation_hydrolysis_config).__name__}"
+Forward/bv_solver/config.py:294:        "cation_hydrolysis_config":   cation_hydrolysis_config,
+Forward/bv_solver/config.py:373:        a_nondim       (float, required when ``steric_mode='bikerman'``)
+Forward/bv_solver/config.py:404:                f"bv_bc.boltzmann_counterions[{j}] missing required key 'z'."
+Forward/bv_solver/config.py:408:                f"bv_bc.boltzmann_counterions[{j}] missing required key 'c_bulk_nondim'."
+Forward/bv_solver/config.py:474:            raise ValueError(f"Reaction {j}: 'cathodic_species' is required")
+Forward/bv_solver/config.py:493:            raise ValueError(f"Reaction {j}: 'stoichiometry' is required")
+tests/test_phase6b_v9_gate1_roles.py:5:* Phase 1A: ``SpeciesConfig.roles`` field + ``resolve_role_index`` helper
+tests/test_phase6b_v9_gate1_roles.py:7:* Phase 1B: solver-side resolvers (``resolve_h_index`` /
+tests/test_phase6b_v9_gate1_roles.py:8:  ``_resolve_mu_h_index``) accept the optional ``roles`` argument and
+tests/test_phase6b_v9_gate1_roles.py:39:    resolve_role_index,
+tests/test_phase6b_v9_gate1_roles.py:101:# Phase 1A — resolve_role_index legacy / explicit / ambiguous paths
+tests/test_phase6b_v9_gate1_roles.py:105:class TestResolveRoleIndexBackwardCompat:
+tests/test_phase6b_v9_gate1_roles.py:109:        assert resolve_role_index(None, [0, 0, 1], "proton") == 2
+tests/test_phase6b_v9_gate1_roles.py:110:        assert resolve_role_index(None, [1, 0, 0], "proton") == 0
+tests/test_phase6b_v9_gate1_roles.py:114:            resolve_role_index(None, [0, 0, 0], "proton")
+tests/test_phase6b_v9_gate1_roles.py:120:            resolve_role_index(None, [0, 0, 1, -1], "counterion")
+tests/test_phase6b_v9_gate1_roles.py:123:class TestResolveRoleIndexExplicit:
+tests/test_phase6b_v9_gate1_roles.py:132:        assert resolve_role_index(roles, z_vals, "proton") == 2
+tests/test_phase6b_v9_gate1_roles.py:137:        assert resolve_role_index(roles, z_vals, "counterion") == 3
+tests/test_phase6b_v9_gate1_roles.py:141:        assert resolve_role_index(roles, [0, 0, 1], "proton") == 2
+tests/test_phase6b_v9_gate1_roles.py:146:            resolve_role_index(roles, [0, 0, 1], "counterion")
+tests/test_phase6b_v9_gate1_roles.py:151:            resolve_role_index(roles, [0, 1, 1], "proton")
+tests/test_phase6b_v9_gate1_roles.py:154:class TestResolveRoleIndexAmbiguousZRejected:
+tests/test_phase6b_v9_gate1_roles.py:159:            resolve_role_index(None, [0, 0, 1, 1], "proton")
+tests/test_phase6b_v9_gate1_roles.py:185:# Phase 1B — solver-side resolvers accept ``roles=`` (no Firedrake)
+tests/test_phase6b_v9_gate1_roles.py:189:class TestResolveHIndexRolesAware:
+tests/test_phase6b_v9_gate1_roles.py:190:    """``Forward.bv_solver.water_ionization.resolve_h_index`` legacy + roles."""
+tests/test_phase6b_v9_gate1_roles.py:193:        from Forward.bv_solver.water_ionization import resolve_h_index
+tests/test_phase6b_v9_gate1_roles.py:194:        assert resolve_h_index([0, 0, 1]) == 2
+tests/test_phase6b_v9_gate1_roles.py:197:        from Forward.bv_solver.water_ionization import resolve_h_index
+tests/test_phase6b_v9_gate1_roles.py:199:            resolve_h_index([0, 0, 1, 1])
+tests/test_phase6b_v9_gate1_roles.py:202:        from Forward.bv_solver.water_ionization import resolve_h_index
+tests/test_phase6b_v9_gate1_roles.py:203:        assert resolve_h_index(
+tests/test_phase6b_v9_gate1_roles.py:209:        from Forward.bv_solver.water_ionization import resolve_h_index
+tests/test_phase6b_v9_gate1_roles.py:211:            resolve_h_index(
+tests/test_phase6b_v9_gate1_roles.py:217:        from Forward.bv_solver.water_ionization import resolve_h_index
+tests/test_phase6b_v9_gate1_roles.py:219:            resolve_h_index(
+tests/test_phase6b_v9_gate1_roles.py:225:class TestMuHResolverRolesAware:
+tests/test_phase6b_v9_gate1_roles.py:226:    """``Forward.bv_solver.forms_logc_muh._resolve_mu_h_index`` legacy + roles."""
+tests/test_phase6b_v9_gate1_roles.py:229:        from Forward.bv_solver.forms_logc_muh import _resolve_mu_h_index
+tests/test_phase6b_v9_gate1_roles.py:230:        assert _resolve_mu_h_index([0, 0, 1]) == 2
+tests/test_phase6b_v9_gate1_roles.py:233:        from Forward.bv_solver.forms_logc_muh import _resolve_mu_h_index
+tests/test_phase6b_v9_gate1_roles.py:235:            _resolve_mu_h_index([0, 0, 1, 1])
+tests/test_phase6b_v9_gate1_roles.py:238:        from Forward.bv_solver.forms_logc_muh import _resolve_mu_h_index
+tests/test_phase6b_v9_gate1_roles.py:239:        assert _resolve_mu_h_index(
+tests/test_phase6b_v9_gate1_roles.py:339:    bikerman-consistent IC because explicit ``species_roles`` resolve K⁺
+
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/cation_hydrolysis.py | sed -n '172,230p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+   172	def resolve_counterion_index(
+   173	    roles: Optional[Sequence[str]], *, role_label: str = "counterion",
+   174	) -> int:
+   175	    """Return the index of the cation species in the dynamic NP list.
+   176	
+   177	    Phase 6β v9 Gate 3B requires explicit ``roles=`` because the
+   178	    K2SO4 stack carries multiple ``z=+1`` species (H⁺ + K⁺) and
+   179	    inferring "the cation" from charge alone is ambiguous.  Mirrors
+   180	    the role-aware fork in
+   181	    :func:`Forward.bv_solver.water_ionization.resolve_h_index`.
+   182	
+   183	    Parameters
+   184	    ----------
+   185	    roles
+   186	        Per-species role labels; usually
+   187	        ``["neutral", "neutral", "proton", "counterion"]`` for the
+   188	        K2SO4 stack.  Required (non-None).
+   189	    role_label
+   190	        Role string identifying the dynamic counterion.  Default
+   191	        ``"counterion"``; case-insensitive.
+   192	
+   193	    Raises
+   194	    ------
+   195	    ValueError
+   196	        ``roles`` is None, no species has the requested role, or
+   197	        multiple species share it.
+   198	    """
+   199	    if roles is None:
+   200	        raise ValueError(
+   201	            "resolve_counterion_index requires explicit roles= "
+   202	            "(no z-inference fallback because the K2SO4 stack has H⁺ "
+   203	            "and K⁺ both at z=+1)."
+   204	        )
+   205	    candidates = [
+   206	        i for i, r in enumerate(roles)
+   207	        if str(r).strip().lower() == role_label.lower()
+   208	    ]
+   209	    if not candidates:
+   210	        raise ValueError(
+   211	            f"resolve_counterion_index: no species with role={role_label!r} "
+   212	            f"in roles={list(roles)}."
+   213	        )
+   214	    if len(candidates) > 1:
+   215	        raise ValueError(
+   216	            f"resolve_counterion_index: multiple species with "
+   217	            f"role={role_label!r} in roles={list(roles)} (indices "
+   218	            f"{candidates}); roles must be unique."
+   219	        )
+   220	    return candidates[0]
+   221	
+   222	
+   223	# ---------------------------------------------------------------------------
+   224	# Bundle builder
+   225	# ---------------------------------------------------------------------------
+   226	
+   227	
+   228	_DEFAULT_CATION_PARAMS = {
+   229	    # K⁺ Singh 2016 Table S1 + Cu r_H_El back-fit prior (Gate 4A
+   230	    # makes these per-cation; Gate 3B uses K⁺ defaults).
+
+exec
+/bin/zsh -lc "nl -ba Forward/bv_solver/cation_hydrolysis.py | sed -n '280,460p'" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+   280	def build_cation_hydrolysis_terms(
+   281	    *,
+   282	    ctx: dict,
+   283	    conv_cfg: dict,
+   284	    z_vals: Sequence[float],
+   285	    roles: Optional[Sequence[str]],
+   286	    h_idx: int,
+   287	    R_space: Any,
+   288	) -> CationHydrolysisBundle:
+   289	    """Build R-space ``Function`` objects + resolve the cation index.
+   290	
+   291	    Reads continuation defaults from
+   292	    ``conv_cfg['cation_hydrolysis_config']`` (a sub-dict).
+   293	
+   294	    Parameters
+   295	    ----------
+   296	    ctx
+   297	        Firedrake context.  Mutated in place: sets
+   298	        ``ctx['cation_hydrolysis']`` to the returned bundle.
+   299	    conv_cfg
+   300	        ``solver_options['bv_convergence']`` sub-dict.
+   301	    z_vals
+   302	        Per-species charge list (used only by guard checks; the
+   303	        actual counterion index comes from ``roles``).
+   304	    roles
+   305	        Per-species role labels (Phase 6β v9 Gate 1).
+   306	    h_idx
+   307	        Pre-resolved proton index.  Caller passes the same index it
+   308	        would use for the proton boundary residual.
+   309	    R_space
+   310	        ``firedrake.FunctionSpace(mesh, "R", 0)``; reused for every
+   311	        mutable scalar.
+   312	
+   313	    Returns
+   314	    -------
+   315	    CationHydrolysisBundle
+   316	    """
+   317	    counterion_idx = resolve_counterion_index(roles)
+   318	
+   319	    raw_cfg = conv_cfg.get("cation_hydrolysis_config") or {}
+   320	    if not isinstance(raw_cfg, dict):
+   321	        raise ValueError(
+   322	            "cation_hydrolysis_config must be a dict; got "
+   323	            f"{type(raw_cfg).__name__}"
+   324	        )
+   325	
+   326	    k_hyd_init = float(raw_cfg.get("k_hyd", 0.0))
+   327	    k_prot_init = float(raw_cfg.get("k_prot", 0.0))
+   328	    k_des_init = float(raw_cfg.get("k_des", K_DES_NONDIM_V10B))
+   329	    delta_ohp_init = float(raw_cfg.get("delta_ohp_hat", 1.0))
+   330	    gamma_max_init = float(
+   331	        raw_cfg.get("gamma_max_nondim", GAMMA_MAX_HAT_V10B)
+   332	    )
+   333	    if delta_ohp_init <= 0.0:
+   334	        raise ValueError(
+   335	            f"delta_ohp_hat must be positive (got {delta_ohp_init!r}); "
+   336	            "δ_OHP is the OHP thickness — non-positive values would "
+   337	            "give an undefined Γ/δ surface concentration."
+   338	        )
+   339	    if k_des_init <= 0.0:
+   340	        raise ValueError(
+   341	            f"k_des must be positive (got {k_des_init!r}); k_des = 0 "
+   342	            "leaves Γ unbounded at λ=1."
+   343	        )
+   344	    if gamma_max_init <= 0.0:
+   345	        raise ValueError(
+   346	            f"gamma_max_nondim must be positive (got {gamma_max_init!r}); "
+   347	            "Γ_max = 0 forces the vacancy factor (1 − Γ/Γ_max) to "
+   348	            "diverge."
+   349	        )
+   350	
+   351	    cation_params = dict(_DEFAULT_CATION_PARAMS)
+   352	    if "pka_shift_params" in raw_cfg and isinstance(
+   353	        raw_cfg["pka_shift_params"], dict
+   354	    ):
+   355	        cation_params.update(raw_cfg["pka_shift_params"])
+   356	    if "pka_shift_form" in raw_cfg:
+   357	        cation_params["pka_shift_form"] = str(raw_cfg["pka_shift_form"])
+   358	
+   359	    delta_ohp_func = fd.Function(R_space, name="cation_hydrolysis_delta_ohp")
+   360	    delta_ohp_func.assign(delta_ohp_init)
+   361	
+   362	    k_hyd_func = fd.Function(R_space, name="cation_hydrolysis_k_hyd")
+   363	    k_hyd_func.assign(k_hyd_init)
+   364	
+   365	    k_prot_func = fd.Function(R_space, name="cation_hydrolysis_k_prot")
+   366	    k_prot_func.assign(k_prot_init)
+   367	
+   368	    k_des_func = fd.Function(R_space, name="cation_hydrolysis_k_des")
+   369	    k_des_func.assign(k_des_init)
+   370	
+   371	    lambda_init = float(conv_cfg.get("lambda_hydrolysis", 0.0))
+   372	    if not (0.0 <= lambda_init <= 1.0):
+   373	        raise ValueError(
+   374	            f"lambda_hydrolysis must lie in [0, 1] (got {lambda_init!r}); "
+   375	            "it is the smooth activation knob ramped 0 → 1 by the "
+   376	            "continuation orchestrator."
+   377	        )
+   378	    lambda_hydrolysis_func = fd.Function(
+   379	        R_space, name="cation_hydrolysis_lambda"
+   380	    )
+   381	    lambda_hydrolysis_func.assign(lambda_init)
+   382	
+   383	    # Γ_MOH external coefficient.  Newton reads this; orchestrator
+   384	    # updates it via update_gamma_from_solution after each rung.
+   385	    # Initial value 0 — the disabled-feature / λ=0 baseline.
+   386	    gamma_func = fd.Function(R_space, name="cation_hydrolysis_gamma")
+   387	    gamma_func.assign(0.0)
+   388	
+   389	    # Phase 6β v10a Langmuir saturation cap.  Mutable R-space Function
+   390	    # so the v10b literature-calibration sweep + diagnostics drivers can
+   391	    # swap values without rebuilding the form.
+   392	    gamma_max_func = fd.Function(
+   393	        R_space, name="cation_hydrolysis_gamma_max",
+   394	    )
+   395	    gamma_max_func.assign(gamma_max_init)
+   396	
+   397	    # r_H_El_pm — Singh's hydration-shell H to electrode distance.
+   398	    # Promoted to a live R-space Function so the Gate 4B sensitivity
+   399	    # sweep can swap values without rebuilding the form.
+   400	    r_H_El_pm_init = float(cation_params.get("r_H_El_pm", 200.98))
+   401	    if r_H_El_pm_init <= 0.0:
+   402	        raise ValueError(
+   403	            f"r_H_El_pm must be positive (got {r_H_El_pm_init!r})"
+   404	        )
+   405	    r_H_El_pm_func = fd.Function(
+   406	        R_space, name="cation_hydrolysis_r_H_El_pm",
+   407	    )
+   408	    r_H_El_pm_func.assign(r_H_El_pm_init)
+   409	
+   410	    # Phase 6β step 10 Phase D — Δ_β offset (carbon-vs-Cu pKa shift
+   411	    # coefficient).  Default 0.0 keeps the residual byte-equivalent to
+   412	    # the pre-D1 v10b stack.  Live coefficient: re-read at every Newton
+   413	    # resolve so the Phase D fit's outer loop can sweep Δ_β without
+   414	    # rebuilding the form.  Sign convention: positive Δ_β raises
+   415	    # ``β_carbon`` (less negative under Singh's cathodic geometry,
+   416	    # smaller |ΔpKa|).
+   417	    beta_offset_init = float(raw_cfg.get("beta_offset_pm2", 0.0))
+   418	    beta_offset_pm2_func = fd.Function(
+   419	        R_space, name="cation_hydrolysis_beta_offset_pm2",
+   420	    )
+   421	    beta_offset_pm2_func.assign(beta_offset_init)
+   422	    # Mirror initial offset into cation_params so diagnostics see it.
+   423	    cation_params["beta_offset_pm2"] = beta_offset_init
+   424	
+   425	    bundle = CationHydrolysisBundle(
+   426	        counterion_idx=int(counterion_idx),
+   427	        h_idx=int(h_idx),
+   428	        delta_ohp_func=delta_ohp_func,
+   429	        k_hyd_func=k_hyd_func,
+   430	        k_prot_func=k_prot_func,
+   431	        k_des_func=k_des_func,
+   432	        lambda_hydrolysis_func=lambda_hydrolysis_func,
+   433	        r_H_El_pm_func=r_H_El_pm_func,
+   434	        gamma_func=gamma_func,
+   435	        gamma_max_func=gamma_max_func,
+   436	        cation_params=cation_params,
+   437	        beta_offset_pm2_func=beta_offset_pm2_func,
+   438	    )
+   439	    ctx["cation_hydrolysis"] = bundle
+   440	    return bundle
+   441	
+   442	
+   443	# ---------------------------------------------------------------------------
+   444	# UFL builders — boundary source, ΔpKa
+   445	# ---------------------------------------------------------------------------
+   446	
+   447	
+   448	def build_pka_shift(
+   449	    *,
+   450	    cation_params: dict,
+   451	    sigma_S: Any,
+   452	    r_H_El_func: Any = None,
+   453	    beta_offset_pm2_func: Any = None,
+   454	):
+   455	    """Return ``ΔpKa(σ_S)`` UFL expression.
+   456	
+   457	    Two paths:
+   458	
+   459	    * ``pka_shift_form='placeholder'`` (Gate 3B) — returns
+   460	      ``Constant(0.0)`` (no field-dependent shift).  Used by the
+
+codex
+1. WHAT: `cation_hydrol_on` still may not reach the MMS static invariant layer.
+WHY: In this 3-species stack the roles are `["neutral", "neutral", "proton"]`; enabling cation hydrolysis makes `build_forms` call `resolve_counterion_index`, which raises because there is no dynamic species with role `"counterion"`. That happens before `_assert_static_stack_invariants`.
+WHAT TO DO: Add a pre-build config invariant phase that inspects `sp[10]["bv_convergence"]` before `build_forms`, at least for feature gates like water/cation hydrolysis. Pipeline should be: pre-build static config asserts → `build_forms` → post-build static ctx asserts.
+
+2. WHAT: The “all 12 cases fire at MMS invariant layer” claim is still too strong.
+WHY: Any broken config that makes production form construction fail cannot be counted as post-build MMS invariant coverage. `cation_hydrol_on` is one such case unless you add the pre-build phase above.
+WHAT TO DO: Either move those cases to a pre-build MMS invariant harness and count them there, or categorize them honestly as production-validation/build-forms failures.
+
+3. WHAT: `_build_bv_rates_ex` is still built before the eta-clip margin assert.
+WHY: The helper uses the unclipped manufactured BV algebra. If an envelope change violates the eta margin, you can still construct invalid/extreme `rxn_rates` before the check that proves they are valid.
+WHAT TO DO: Split runtime checks: evaluate eta/u/phi/floor margins before building `rxn_rates`, then build rates and run `R_ratio`. Or ensure `_assert_runtime_stack_invariants` checks eta margin before it ever assembles/evaluates `rxn_rates`.
+
+4. WHAT: The source-independence whitelist may falsely reject geometric coefficients.
+WHY: Source expressions depend on `SpatialCoordinate(mesh)` and `FacetNormal(mesh)`. Depending on Firedrake/UFL extraction behavior, mesh coordinate/geometric terminals may appear in coefficient extraction.
+WHAT TO DO: Add a tiny pre-flight assertion documenting actual `extract_coefficients` behavior on `x`, `FacetNormal`, and a simple manufactured source. If geometry appears, explicitly whitelist mesh geometry coefficients; do not discover this during the pilot.
+
+5. WHAT: The ordering diagram still says runtime margins happen after closure and rates are built.
+WHY: Closure is fine because margin checks inspect closure quantities, but BV rates are different: they can overflow or encode the wrong clipped branch if eta margins fail.
+WHAT TO DO: Refine the diagram to: build manufactured fields/closure → margin checks that do not need rates → build BV rates → R_ratio → source terms.
+
+VERDICT: ISSUES_REMAIN
+tokens used
+230,047
+1. WHAT: `cation_hydrol_on` still may not reach the MMS static invariant layer.
+WHY: In this 3-species stack the roles are `["neutral", "neutral", "proton"]`; enabling cation hydrolysis makes `build_forms` call `resolve_counterion_index`, which raises because there is no dynamic species with role `"counterion"`. That happens before `_assert_static_stack_invariants`.
+WHAT TO DO: Add a pre-build config invariant phase that inspects `sp[10]["bv_convergence"]` before `build_forms`, at least for feature gates like water/cation hydrolysis. Pipeline should be: pre-build static config asserts → `build_forms` → post-build static ctx asserts.
+
+2. WHAT: The “all 12 cases fire at MMS invariant layer” claim is still too strong.
+WHY: Any broken config that makes production form construction fail cannot be counted as post-build MMS invariant coverage. `cation_hydrol_on` is one such case unless you add the pre-build phase above.
+WHAT TO DO: Either move those cases to a pre-build MMS invariant harness and count them there, or categorize them honestly as production-validation/build-forms failures.
+
+3. WHAT: `_build_bv_rates_ex` is still built before the eta-clip margin assert.
+WHY: The helper uses the unclipped manufactured BV algebra. If an envelope change violates the eta margin, you can still construct invalid/extreme `rxn_rates` before the check that proves they are valid.
+WHAT TO DO: Split runtime checks: evaluate eta/u/phi/floor margins before building `rxn_rates`, then build rates and run `R_ratio`. Or ensure `_assert_runtime_stack_invariants` checks eta margin before it ever assembles/evaluates `rxn_rates`.
+
+4. WHAT: The source-independence whitelist may falsely reject geometric coefficients.
+WHY: Source expressions depend on `SpatialCoordinate(mesh)` and `FacetNormal(mesh)`. Depending on Firedrake/UFL extraction behavior, mesh coordinate/geometric terminals may appear in coefficient extraction.
+WHAT TO DO: Add a tiny pre-flight assertion documenting actual `extract_coefficients` behavior on `x`, `FacetNormal`, and a simple manufactured source. If geometry appears, explicitly whitelist mesh geometry coefficients; do not discover this during the pilot.
+
+5. WHAT: The ordering diagram still says runtime margins happen after closure and rates are built.
+WHY: Closure is fine because margin checks inspect closure quantities, but BV rates are different: they can overflow or encode the wrong clipped branch if eta margins fail.
+WHAT TO DO: Refine the diagram to: build manufactured fields/closure → margin checks that do not need rates → build BV rates → R_ratio → source terms.
+
+VERDICT: ISSUES_REMAIN

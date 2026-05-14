@@ -1,0 +1,657 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\newcommand{\dynset}{\mathcal{D}}      % dynamic-species index set
+\newcommand{\anset}{\mathcal{A}}       % analytic-counterion index set
+\DeclareMathOperator{\diag}{diag}
+\newcommand{\dd}{\mathrm{d}}
+
+\title{Derivation of the Analytic Bikerman Counterion Closure}
+\author{PNPInverse / Forward solver}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We derive the analytic concentration profile used in
+\texttt{Forward/bv\_solver/boltzmann.py} for inert supporting-electrolyte
+counterions. Starting from the electrochemical potential of an ideal
+dilute species we obtain the classical Boltzmann distribution
+$c = c_b \exp(-z\phi)$. We then replace the ideal entropy with the
+Bikerman lattice-gas correction $-\ln\theta$, derive the resulting
+algebraic closure for a single inert counterion in equilibrium with a
+prescribed potential $\phi(x)$ and a set of dynamic species $\{c_i(x)\}$,
+and finally generalize to several inert counterions sharing a common
+packing fraction. The result is the steady-state algebraic reduction of
+the dynamic Bikerman--Poisson--Nernst--Planck (BPNP) problem in which
+the counterion equation is eliminated exactly.
+\end{abstract}
+
+%==============================================================
+\section{Setup and notation}
+%==============================================================
+
+\paragraph{Nondimensionalization.}
+All quantities below are nondimensional with the same scales used in the
+solver. Potentials are scaled by the thermal voltage
+$V_T = k_B T / e$, concentrations by a reference $c_{\mathrm{ref}}$, and
+steric coefficients by $1/c_{\mathrm{ref}}$. Dropping tildes, we write
+\begin{equation}
+\phi \;\leftarrow\; \frac{e\,\phi^{\mathrm{dim}}}{k_B T},
+\qquad
+c \;\leftarrow\; \frac{c^{\mathrm{dim}}}{c_{\mathrm{ref}}},
+\qquad
+a \;\leftarrow\; a^{\mathrm{dim}}\, c_{\mathrm{ref}}.
+\end{equation}
+The Boltzmann factor for an ion of charge $z$ in potential $\phi$ is
+$\exp(-z\phi)$ (no explicit $k_BT$). The product $a\,c$ is the local
+volume fraction occupied by that species.
+
+\paragraph{Species partition.}
+We split the chemical species into
+\begin{align}
+\dynset &= \{i = 1,\dots,N_d\} \quad
+  \text{dynamic species (each has its own NP equation)},\\
+\anset &= \{k = 1,\dots,N_a\} \quad
+  \text{inert analytic counterions (no electrode reaction, no flux)}.
+\end{align}
+In the production stack $\dynset = \{\mathrm{O}_2,\mathrm{H}_2\mathrm{O}_2,
+\mathrm{H}^+\}$ and $\anset \subseteq \{\mathrm{K}^+,
+\mathrm{SO}_4^{2-}, \mathrm{Cs}^+, \mathrm{OH}^-\}$. For each $k\in\anset$
+the bulk concentration $c_{b,k}$, charge $z_k$, and steric coefficient
+$a_k$ are fixed inputs; the spatially varying $\phi(x)$ is treated as
+given by the outer Poisson solve.
+
+\paragraph{Bulk packing fractions.}
+Let
+\begin{align}
+A_{\mathrm{dyn}}(x) &= \sum_{i\in\dynset} a_i\, c_i(x),
+   \qquad A^{\mathrm{bulk}}_{\mathrm{dyn}} = \sum_{i\in\dynset} a_i\, c_{b,i}, \\
+A_{\mathrm{an}}^{\mathrm{bulk}}  &= \sum_{k\in\anset} a_k\, c_{b,k},
+   \qquad
+\theta_b = 1 - A^{\mathrm{bulk}}_{\mathrm{dyn}} - A_{\mathrm{an}}^{\mathrm{bulk}}.
+\label{eq:thetab}
+\end{align}
+The bulk free-volume fraction $\theta_b$ is a constant determined entirely
+by configuration. The closure below is well posed only if $\theta_b > 0$,
+which is enforced at config-parse time.
+
+%==============================================================
+\section{Ideal Boltzmann distribution}
+%==============================================================
+
+For a dilute species in a potential $\phi$ the electrochemical potential
+(in nondimensional form) is~\cite{Newman2004}
+\begin{equation}
+\mu_i^{\mathrm{id}}(x) \;=\; \ln c_i(x) \;+\; z_i\,\phi(x).
+\label{eq:mu_ideal}
+\end{equation}
+The standard-state contribution $\mu_i^{(0)}$ is suppressed because it
+drops out of every equation we use.
+
+\paragraph{Equilibrium of an inert species.}
+An ``inert'' species $k$ has
+\begin{enumerate}
+\item no source or sink anywhere in the domain,
+\item zero normal flux on every non-bulk boundary,
+\item Dirichlet $c_k = c_{b,k}$ on the bulk boundary, where $\phi = 0$.
+\end{enumerate}
+Its Nernst--Planck flux is $\mathbf{J}_k = -D_k\,c_k\,\nabla \mu_k$.
+At steady state the divergence vanishes and the boundary conditions
+above force $\mathbf{J}_k \equiv \mathbf{0}$. With $c_k > 0$ this gives
+\begin{equation}
+\nabla \mu_k(x) = 0
+\qquad\Longrightarrow\qquad
+\mu_k(x) = \mu_k^{\mathrm{bulk}}.
+\label{eq:zero_grad}
+\end{equation}
+
+\paragraph{Boltzmann profile.}
+Substituting \eqref{eq:mu_ideal} into \eqref{eq:zero_grad},
+\begin{equation}
+\ln c_k(x) + z_k\,\phi(x) \;=\; \ln c_{b,k} + z_k\cdot 0,
+\end{equation}
+so
+\begin{equation}
+\boxed{\;c_k(x) \;=\; c_{b,k}\,\exp\!\bigl(-z_k\,\phi(x)\bigr).\;}
+\label{eq:boltzmann_ideal}
+\end{equation}
+This is the legacy \texttt{steric\_mode="ideal"} closure. It is unbounded:
+for an anion ($z_k=-1$) at large anodic $\phi$, $c_k$ grows
+exponentially, eventually exceeding any physical packing limit.
+
+%==============================================================
+\section{Bikerman chemical potential}
+%==============================================================
+
+The ideal entropy $\ln c_i$ in \eqref{eq:mu_ideal} assumes ions are point
+particles. Bikerman's lattice-gas correction accounts for the finite
+volume each ion occupies by treating the solvent + ions as a fully
+packed lattice with site fraction $a_i$ per ion. Minimizing the
+resulting free energy~\cite{Tresset2008} gives the modified chemical
+potential
+\begin{equation}
+\mu_i(x) \;=\; \ln c_i(x) \;+\; z_i\,\phi(x) \;-\; \ln\theta(x),
+\label{eq:mu_bikerman}
+\end{equation}
+where
+\begin{equation}
+\theta(x) \;=\; 1 - \sum_{j\in\dynset\cup\anset} a_j\,c_j(x)
+\label{eq:theta_def}
+\end{equation}
+is the local free-volume fraction. The extra term $-\ln\theta$ is the
+excluded-volume contribution to the free energy: as ions pack into a
+region $\theta \to 0$, $\mu_i\to +\infty$, and the species is
+electrostatically expelled.
+
+\paragraph{Sign convention.}
+The codebase uses the \emph{sign-corrected} form
+$\mu_{\mathrm{steric}} = -\ln\theta$ consistently in
+\texttt{forms\_logc.py} (\texttt{forms\_logc.py:402}). The
+counterion closure below assumes the same sign; mixing the legacy
+$+\ln\theta$ branch (still present in \texttt{Forward/dirichlet\_solver.py}
+and \texttt{robin\_solver.py}, neither of which is in the production
+dispatch) with the closure here would be inconsistent.
+
+%==============================================================
+\section{Single-counterion algebraic closure}
+%==============================================================
+
+Consider one inert counterion ($N_a = 1$, label it ``$-$''). Equation
+\eqref{eq:zero_grad} together with \eqref{eq:mu_bikerman} gives
+\begin{equation}
+\ln c_-(x) + z_-\,\phi(x) - \ln\theta(x)
+\;=\; \ln c_{b,-} - \ln\theta_b,
+\label{eq:mu_match}
+\end{equation}
+i.e.
+\begin{equation}
+\frac{c_-(x)\,\exp\!\bigl(z_-\,\phi(x)\bigr)}{\theta(x)}
+\;=\; \frac{c_{b,-}}{\theta_b}.
+\label{eq:zero_flux_alg}
+\end{equation}
+Introduce the convenient abbreviations
+\begin{equation}
+q(x) \;=\; \exp\!\bigl(-z_-\,\phi(x)\bigr),
+\qquad
+B(x) \;=\; \frac{c_{b,-}\,q(x)}{\theta_b}.
+\end{equation}
+Then \eqref{eq:zero_flux_alg} reads $c_- = B\,\theta$. Splitting
+$\theta = 1 - A_{\mathrm{dyn}} - a_-\,c_-$ and isolating $c_-$:
+\begin{align}
+c_- &= B\bigl(1 - A_{\mathrm{dyn}} - a_- c_-\bigr), \\
+c_-\,(1 + a_-\,B) &= B\,(1 - A_{\mathrm{dyn}}), \\
+\boxed{\;
+c_-(x) \;=\; \frac{c_{b,-}\,q(x)\,\bigl(1-A_{\mathrm{dyn}}(x)\bigr)}
+                  {\theta_b + a_-\,c_{b,-}\,q(x)}.
+\;}
+\label{eq:single_closure}
+\end{align}
+This is the formula implemented in
+\texttt{build\_steric\_boltzmann\_expressions}
+(\texttt{Forward/bv\_solver/boltzmann.py:254}).
+
+\paragraph{Limits.}
+Three checks recover the expected physics.
+\begin{enumerate}
+\item \emph{Bulk recovery.} At $\phi = 0$, $q = 1$, and
+$A_{\mathrm{dyn}} = A^{\mathrm{bulk}}_{\mathrm{dyn}}$, so
+\begin{equation}
+c_-^{\mathrm{bulk}}
+  = \frac{c_{b,-}\,(1 - A^{\mathrm{bulk}}_{\mathrm{dyn}})}
+         {\theta_b + a_-\,c_{b,-}}
+  = c_{b,-},
+\end{equation}
+since $\theta_b + a_-\,c_{b,-} = 1 - A^{\mathrm{bulk}}_{\mathrm{dyn}}$
+(\eqref{eq:thetab} with $N_a=1$).
+
+\item \emph{Dilute limit.} If $a_- \to 0$ and $A_{\mathrm{dyn}} \to 0$
+then $\theta_b \to 1$ and \eqref{eq:single_closure} collapses to
+$c_- = c_{b,-}\,q = c_{b,-}\exp(-z_-\phi)$, the ideal Boltzmann profile
+\eqref{eq:boltzmann_ideal}.
+
+\item \emph{High-field saturation.} For an anion at large anodic
+$\phi$, $q\to\infty$ and the denominator is dominated by
+$a_-\,c_{b,-}\,q$, giving
+\begin{equation}
+c_-(x) \;\longrightarrow\;
+\frac{1 - A_{\mathrm{dyn}}(x)}{a_-}.
+\label{eq:saturation}
+\end{equation}
+The counterion fills exactly the free volume left by the dynamic
+species, never more. Contrast with the unbounded ideal Boltzmann, where
+$c_- \sim c_{b,-}\,q$ diverges.
+\end{enumerate}
+
+\paragraph{Total packing.}
+Substituting \eqref{eq:single_closure} into
+$\theta = 1 - A_{\mathrm{dyn}} - a_- c_-$ yields
+\begin{equation}
+\theta(x) \;=\;
+\bigl(1 - A_{\mathrm{dyn}}(x)\bigr)\,
+\frac{\theta_b}{\theta_b + a_-\,c_{b,-}\,q(x)},
+\label{eq:theta_single}
+\end{equation}
+which is strictly positive whenever $1-A_{\mathrm{dyn}} > 0$ and
+$\theta_b > 0$.
+
+%==============================================================
+\section{\texorpdfstring{Multi-counterion shared-$\theta$ closure}{Multi-counterion shared-theta closure}}
+\label{sec:multi}
+%==============================================================
+
+When $|\anset| > 1$ each analytic counterion satisfies its own
+zero-flux equilibrium, but all of them share the same packing
+fraction $\theta$. Writing
+\eqref{eq:zero_flux_alg} for each $k\in\anset$ and abbreviating
+\begin{equation}
+q_k(x) = \exp(-z_k\,\phi(x)),
+\qquad
+B_k(x) = \frac{c_{b,k}\,q_k(x)}{\theta_b},
+\end{equation}
+we have one algebraic equation per counterion,
+\begin{equation}
+c_k \;=\; B_k\,\theta
+\;=\; B_k\Bigl(1 - A_{\mathrm{dyn}} - \sum_{k'\in\anset} a_{k'}\,c_{k'}\Bigr).
+\label{eq:multi_system}
+\end{equation}
+
+\paragraph{Reduction via the analytic packing sum.}
+Let $S(x) = \sum_{k\in\anset} a_k\,c_k(x)$. Multiplying
+\eqref{eq:multi_system} by $a_k$ and summing,
+\begin{equation}
+S = \Bigl(\sum_k a_k B_k\Bigr)\,
+   (1 - A_{\mathrm{dyn}} - S),
+\end{equation}
+hence
+\begin{equation}
+S \;=\; (1 - A_{\mathrm{dyn}})\,
+\frac{\sum_k a_k B_k}{1 + \sum_k a_k B_k}.
+\end{equation}
+The remaining free volume is
+\begin{equation}
+1 - A_{\mathrm{dyn}} - S
+\;=\; \frac{1 - A_{\mathrm{dyn}}}{1 + \sum_k a_k B_k}
+\;=\; \frac{\theta_b\,(1-A_{\mathrm{dyn}})}
+           {\theta_b + \sum_k a_k\,c_{b,k}\,q_k(x)}.
+\label{eq:shared_freevol}
+\end{equation}
+Substituting back into \eqref{eq:multi_system} gives the closed-form
+expression for each counterion:
+\begin{equation}
+\boxed{\;
+c_k(x) \;=\;
+\frac{c_{b,k}\,q_k(x)\,\bigl(1-A_{\mathrm{dyn}}(x)\bigr)}
+     {\theta_b + \sum_{k'\in\anset} a_{k'}\,c_{b,k'}\,q_{k'}(x)},
+\qquad k\in\anset.
+\;}
+\label{eq:multi_closure}
+\end{equation}
+With $A_{\mathrm{dyn}}\equiv 0$ this collapses to the standard
+full-equilibrium asymmetric-Bikerman ion-distribution formula
+of~\cite{Tresset2008}; the $(1-A_{\mathrm{dyn}})$ pre-factor is the
+contribution of the dynamic species' local packing, retained because
+they obey their own NP equations rather than being in equilibrium
+with $\phi$. The relation is worked out in detail in
+\S\ref{sec:tresset}.
+
+\paragraph{Structure of the closure.}
+\begin{itemize}
+\item The numerator $c_{b,k}\,q_k\,(1-A_{\mathrm{dyn}})$ is
+\emph{per-ion}: each counterion has its own Boltzmann factor and the
+common dynamic-species free-volume multiplier.
+\item The denominator
+$\theta_b + \sum_{k'} a_{k'}\,c_{b,k'}\,q_{k'}$ is \emph{shared} across
+all $k$. This is exactly what makes the multi-ion problem decouple:
+the algebra never requires solving a coupled local nonlinear system.
+\item For $|\anset| = 1$ the denominator reduces to
+$\theta_b + a_-\,c_{b,-}\,q$ and \eqref{eq:multi_closure} collapses to
+\eqref{eq:single_closure}.
+\item For two oppositely charged ions (e.g.\ $\mathrm{K}^+$ with
+$z=+1$ and $\mathrm{SO}_4^{2-}$ with $z=-2$) the denominator contains
+both $\exp(-\phi)$ and $\exp(+2\phi)$, so it is bounded away from zero
+on both sides of $\phi = 0$.
+\end{itemize}
+
+\paragraph{High-field saturation, multi-ion.}
+For large $\phi$ of either sign, one term in
+$\sum_{k'} a_{k'}\,c_{b,k'}\,q_{k'}$ dominates. Call its index
+$k^\star = \arg\max_{k'} (-z_{k'}\,\phi)$. Then
+\begin{align}
+c_{k^\star}(x) &\;\longrightarrow\;
+   \frac{1 - A_{\mathrm{dyn}}(x)}{a_{k^\star}}, \\
+c_k(x) &\;\longrightarrow\; 0
+\quad \text{for } k\neq k^\star,
+\end{align}
+i.e. the most strongly attracted analytic counterion fills all of the
+remaining free volume and the others are depleted. This is the multi-ion
+analog of \eqref{eq:saturation}.
+
+%==============================================================
+\section{Relation to Tresset's generalized Poisson--Fermi formula}
+\label{sec:tresset}
+%==============================================================
+
+The full-equilibrium limit ($A_{\mathrm{dyn}} \equiv 0$) of
+\eqref{eq:multi_closure} is not new: it coincides with Tresset's
+generalized Fermi-like ion distribution for size-asymmetric
+multi-species lattice gases~\cite[Eq.~(19), page 061506-4]{Tresset2008}.
+The hybrid extension we use here --- closing only the inert subset
+analytically while the reactive species remain dynamic --- amounts to
+one additional algebraic step that introduces the explicit
+$(1 - A_{\mathrm{dyn}}(x))$ pre-factor.
+
+\paragraph{Tresset's full-equilibrium formula.}
+Minimizing the lattice-gas free energy for $M$ species of
+valence $z_i$ and excluded volume $v_i$ and imposing thermodynamic
+equilibrium $\mu_i(\mathbf{r}) = \mu_i^{\mathrm{bulk}}$ for
+\emph{every} species, Tresset~\cite[Eq.~(19)]{Tresset2008} obtains
+\begin{equation}
+\phi_i(x)
+\;=\;
+\frac{\exp\!\bigl(-z_i\,\psi^*(x)\bigr)\,\phi_i^\infty}
+     {\phi_{\mathrm{FS}}^\infty +
+      \sum_{j=1}^M \exp\!\bigl(-z_j\,\psi^*(x)\bigr)\,\phi_j^\infty},
+\qquad 1 \le i \le M,
+\label{eq:tresset19}
+\end{equation}
+where $\phi_i = c_i\,v_i$ is the local volume fraction of species
+$i$, $\phi_i^\infty = c_i^\infty v_i$ its bulk value,
+$\phi_{\mathrm{FS}}^\infty = 1 - \sum_j \phi_j^\infty$ the bulk
+free-space volume fraction, and $\psi^* = e\psi/k_BT$ the
+dimensionless electrostatic potential.
+
+\paragraph{Notation map.}
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Tresset~\cite{Tresset2008} & This work \\
+\midrule
+$v_i$ (excluded volume) & $a_i$ (nondim steric coefficient) \\
+$\phi_i = c_i\,v_i$ & $a_i\,c_i$ \\
+$\phi_i^\infty = c_i^\infty\,v_i$ & $a_i\,c_{b,i}$ \\
+$\phi_{\mathrm{FS}}^\infty = 1 - \sum_j \phi_j^\infty$ & $\theta_b$ \eqref{eq:thetab} \\
+$\psi^*(x) = e\psi(x)/k_BT$ & $\phi(x)$ (already nondim) \\
+$\exp(-z_i\,\psi^*)$ & $q_i = \exp(-z_i\,\phi)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\emph{Notation caveat:} Tresset uses $\phi$ for volume fraction and
+$\psi$ for potential; we use $\phi$ for potential. The collision is
+unfortunate but the dictionary above is unambiguous.
+
+\paragraph{Equivalence on the full-equilibrium subset.}
+Set $A_{\mathrm{dyn}}\equiv 0$ in \eqref{eq:multi_closure}, multiply
+both sides by $a_k$, and apply the dictionary:
+\begin{equation}
+a_k\,c_k(x)
+\;=\;
+\frac{a_k\,c_{b,k}\,q_k(x)}
+     {\theta_b + \sum_{k'} a_{k'}\,c_{b,k'}\,q_{k'}(x)}
+\;\;\overset{\text{map}}{\longleftrightarrow}\;\;
+\phi_k(x)
+\;=\;
+\frac{\phi_k^\infty\,e^{-z_k\psi^*}}
+     {\phi_{\mathrm{FS}}^\infty + \sum_{k'} \phi_{k'}^\infty\,e^{-z_{k'}\psi^*}},
+\end{equation}
+which is \eqref{eq:tresset19} verbatim. The algebraic steps in
+Tresset (his Eqs.~(15)--(19), pages 061506-3 to 061506-4) coincide
+with \S\ref{sec:multi} of this note: identical chemical potential
+$\mu_i = \ln c_i + z_i\phi - \ln\theta$, identical equilibrium
+condition $\nabla\mu_i = 0$, identical algebraic inversion.
+
+\paragraph{Modification for hybrid coupling.}
+Tresset's \eqref{eq:tresset19} assumes \emph{every} species is in
+equilibrium with $\phi$. In the modified-PNP problem the dynamic
+species $i \in \dynset$ are not: they obey Nernst--Planck equations
+with electrode-reaction source terms, and their profiles
+$c_i(x)$ are determined by transport and kinetics. The zero-flux
+argument $\nabla\mu_i = 0$ \eqref{eq:zero_grad} \emph{fails for
+them}; it still holds for the inert subset $k \in \anset$.
+
+Repeating Tresset's algebra on the inert subset only, with the
+dynamic species' packing $A_{\mathrm{dyn}}(x) =
+\sum_{i\in\dynset} a_i c_i(x)$ treated as a known spatial
+background, the equilibrium condition for $k \in \anset$ becomes
+\begin{equation}
+\ln c_k(x) + z_k\,\phi(x)
+\;-\; \ln\bigl[1 - A_{\mathrm{dyn}}(x) - S(x)\bigr]
+\;=\; \ln c_{b,k} - \ln\theta_b,
+\label{eq:hybrid_equilibrium}
+\end{equation}
+with $S(x) = \sum_{k\in\anset} a_k\,c_k(x)$ the analytic-counterion
+packing. The only difference from Tresset's intermediate step is
+that the local free-space fraction
+$\phi_{\mathrm{FS}}(x) = 1 - \sum_j \phi_j(x)$ has been split into
+a dynamic part $A_{\mathrm{dyn}}(x)$ (now a spatial background, not
+a sum-of-equilibrium-profiles) and an inert part $S(x)$ (the
+unknown). Following exactly the same multiply-by-$a_k$/sum/isolate
+procedure as in \S\ref{sec:multi} returns
+\begin{equation}
+c_k(x) \;=\;
+\frac{c_{b,k}\,q_k(x)\,\bigl(1 - A_{\mathrm{dyn}}(x)\bigr)}
+     {\theta_b + \sum_{k'\in\anset} a_{k'}\,c_{b,k'}\,q_{k'}(x)},
+\qquad k\in\anset,
+\label{eq:hybrid_closure}
+\end{equation}
+which is \eqref{eq:multi_closure}. The lone structural difference
+from Tresset's \eqref{eq:tresset19} is the explicit
+$\bigl(1 - A_{\mathrm{dyn}}(x)\bigr)$ factor in the numerator.
+
+\paragraph{When the modification matters.}
+If the dynamic species' local packing equals its bulk value
+everywhere ($A_{\mathrm{dyn}}(x) \equiv A_{\mathrm{dyn}}^{\mathrm{bulk}}$),
+the pre-factor is a global constant. Defining $\theta_b' =
+\theta_b/(1 - A_{\mathrm{dyn}}^{\mathrm{bulk}})$ and
+$c_{b,k}' = c_{b,k}/(1 - A_{\mathrm{dyn}}^{\mathrm{bulk}})$ absorbs
+it into rescaled bulk quantities and \eqref{eq:hybrid_closure}
+reduces to Tresset's \eqref{eq:tresset19} exactly. The correction
+matters precisely when $A_{\mathrm{dyn}}(x)$ varies in space, which
+is the rule, not the exception, in PNP problems with electrode
+reactions. In the production stack the proton $\mathrm{H}^+$
+Boltzmann-piles up at the OHP under cathodic polarization, so
+$A_{\mathrm{dyn}}(\mathrm{OHP}) \gg A_{\mathrm{dyn}}^{\mathrm{bulk}}$
+and the inert counterion is volumetrically squeezed out of the
+diffuse layer.
+
+\paragraph{What is and is not novel.}
+Equation \eqref{eq:tresset19} --- the size-asymmetric,
+all-equilibrium lattice-gas distribution --- is
+Tresset~\cite{Tresset2008}. The hybrid-coupling
+extension \eqref{eq:hybrid_closure} = \eqref{eq:multi_closure} ---
+closing the inert subset analytically while keeping the reactive
+species dynamic, with the explicit $(1 - A_{\mathrm{dyn}}(x))$
+pre-factor --- is, to our knowledge, not previously written in
+closed form in the modified-PNP literature. The algebraic
+modification is one step; the use case (reactive analyte species
+coupled to an inert supporting electrolyte through a closed-form
+analytic counterion in a steric-aware modified-PNP problem)
+appears to be original to this work.
+
+%==============================================================
+\section{Poisson coupling and remaining BVP}
+%==============================================================
+
+The closure \eqref{eq:multi_closure} eliminates the analytic
+counterion(s) from the dynamic problem. What remains is
+
+\paragraph{(i) Poisson with closed-form counterion charge.}
+\begin{equation}
+-\nabla\!\cdot\!\bigl(\varepsilon\,\nabla\phi\bigr)
+\;=\; \rho_{\mathrm{chg}}\Bigl(
+        \sum_{i\in\dynset} z_i\,c_i
+        \;+\; \sum_{k\in\anset} z_k\,c_k[\phi,\{c_i\}]
+      \Bigr),
+\end{equation}
+where $\rho_{\mathrm{chg}}$ is the nondimensional charge prefactor
+($\texttt{charge\_rhs\_prefactor}$) and the $c_k[\phi,\{c_i\}]$ are the
+explicit functionals \eqref{eq:multi_closure}.
+
+\paragraph{(ii) Nernst--Planck for dynamic species with full packing.}
+For each $i \in \dynset$, the modified Poisson--Nernst--Planck
+flux~\cite{Kilic2007b} reads
+\begin{align}
+\partial_t c_i + \nabla\!\cdot\!\mathbf{J}_i &= R_i,\\
+\mathbf{J}_i &= -D_i\, c_i\, \nabla \mu_i,
+\qquad
+\mu_i = \ln c_i + z_i\phi - \ln\theta,
+\end{align}
+with the \emph{total} packing
+\begin{equation}
+\theta(x) \;=\; 1 - A_{\mathrm{dyn}}(x) - \sum_{k\in\anset} a_k\,c_k[\phi,\{c_i\}],
+\end{equation}
+which by \eqref{eq:shared_freevol} simplifies to
+\begin{equation}
+\theta(x) \;=\;
+\frac{\theta_b\,\bigl(1-A_{\mathrm{dyn}}(x)\bigr)}
+     {\theta_b + \sum_{k\in\anset} a_k\,c_{b,k}\,q_k(x)}.
+\end{equation}
+This is the key cross-check on consistency: \emph{the same} closure
+expression must appear in (a)~the Poisson charge density and
+(b)~the dynamic-species steric chemical potential. Wiring them from
+distinct expressions would amount to solving two different models, and
+was the failure mode that prompted the refactor of the original
+ideal-Boltzmann path (see
+\texttt{docs/solver/steric\_analytic\_clo4\_reduction\_handoff.md}).
+
+%==============================================================
+\section{Equivalence to dynamic Bikerman--NP}
+%==============================================================
+
+The reduction \eqref{eq:multi_closure} is \emph{not} an approximation:
+it is the exact steady-state solution of the dynamic Bikerman--NP
+equation for each inert counterion, provided
+\begin{enumerate}
+\item the system is at steady state,
+\item each counterion has no electrode reaction, no source/sink, and
+no imposed flux on any non-bulk boundary,
+\item the bulk boundary fixes $c_k = c_{b,k}$ and $\phi = 0$,
+\item the same Bikerman chemical potential
+\eqref{eq:mu_bikerman} acts on dynamic and counterion species, and
+\item the total packing $\theta$ in the dynamic species' residual
+includes the analytic counterion's contribution.
+\end{enumerate}
+Under these assumptions an explicit calculation shows
+$\mathbf{J}_k = 0$ for the closure profile, so it is the unique
+solution of the counterion's Nernst--Planck equation up to a
+multiplicative gauge that the bulk Dirichlet condition fixes.
+
+The reduction is \emph{not} equivalent in any of the following
+situations and should not be used: (a) transient double-layer charging
+with finite analyte flux through the supporting electrolyte;
+(b)~ion-specific adsorption or chemisorption on the electrode;
+(c)~models with a finite closest-approach plane treated dynamically
+rather than as a Stern boundary condition.
+
+%==============================================================
+\section{Numerical implementation notes}
+%==============================================================
+
+Three numerical guards in the implementation are worth noting because
+they appear in the production UFL but are not part of the formal
+derivation.
+
+\paragraph{Potential clamp.} The Boltzmann factor $q_k = \exp(-z_k\phi)$
+is replaced with $\exp(-z_k\,\widetilde\phi)$ where
+$\widetilde\phi = \min(\max(\phi,-\phi_{\mathrm{clamp},k}),
+\phi_{\mathrm{clamp},k})$. This is a Newton-stability guard during
+continuation; on a converged solution $\widetilde\phi \equiv \phi$
+provided $|\phi|$ stays inside the clamp. The clamp is per-ion to allow
+asymmetric bounds. The shared denominator
+in \eqref{eq:multi_closure} uses each ion's own clamp for its own term,
+which is consistent because each $\phi_{\mathrm{clamp},k}$ only ever
+appears multiplied by $z_k$ inside the $k$-th summand.
+
+\paragraph{Free-volume floor.} The factor $1-A_{\mathrm{dyn}}$ in the
+numerator is replaced by $\max(1-A_{\mathrm{dyn}},\,\epsilon_{\mathrm{floor}})$
+with $\epsilon_{\mathrm{floor}} = 10^{-10}$. This is a finite-element
+interpolation safety: even with $\theta > 0$ pointwise in the analytic
+solution, the FE basis can produce small negative $(1-A_{\mathrm{dyn}})$
+values on coarse meshes inside Newton iterates. The floor is never
+active on a converged, physically meaningful solution.
+
+\paragraph{$z$-ramp scaling.} The Poisson charge contribution
+$z_k\,c_k[\phi,\{c_i\}]$ is multiplied by a shared scaling Function
+$z_{\mathrm{scale}} \in [0,1]$. Continuation strategies that ramp
+dynamic-species charges from $0$ to $z_i$ also ramp the analytic
+counterion's charge through this factor, keeping the bulk
+electroneutral throughout the homotopy. Default $z_{\mathrm{scale}} = 1$
+recovers the physical model.
+
+%==============================================================
+\section{Code map}
+%==============================================================
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Mathematical object & Location \\
+\midrule
+$\mu_i = \ln c_i + z_i\phi - \ln\theta$
+   & \texttt{Forward/bv\_solver/forms\_logc.py:402} \\
+$c_k$ \eqref{eq:multi_closure}
+   & \texttt{boltzmann.py:254} (\texttt{c\_steric\_expr}) \\
+$a_k\,c_k$ packing contribution
+   & \texttt{boltzmann.py:257} (\texttt{packing\_contribution}) \\
+$z_k\,c_k$ Poisson source
+   & \texttt{boltzmann.py:258} (\texttt{charge\_density}) \\
+$\theta_b > 0$ validation
+   & \texttt{boltzmann.py:159--171} \\
+Double-counting validation
+   & \texttt{boltzmann.py:176--201} \\
+Ideal closure $c_k = c_{b,k}\exp(-z_k\phi)$
+   & \texttt{boltzmann.py:380--382} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Configuration entry.}
+Each analytic counterion is declared as a dict in
+\texttt{bv\_bc.boltzmann\_counterions}, e.g.\
+\begin{verbatim}
+{
+  "z": +1,
+  "c_bulk_nondim": C_KPLUS_HAT,
+  "a_nondim":      A_KPLUS_HAT,
+  "phi_clamp":     50.0,
+  "steric_mode":   "bikerman",
+}
+\end{verbatim}
+with \texttt{steric\_mode="ideal"} selecting the legacy closure
+\eqref{eq:boltzmann_ideal} and \texttt{steric\_mode="bikerman"}
+selecting \eqref{eq:multi_closure}.
+
+%==============================================================
+\begin{thebibliography}{9}
+
+\bibitem{Kilic2007b}
+M.~S.~Kilic, M.~Z.~Bazant, and A.~Ajdari.
+\newblock Steric effects in the dynamics of electrolytes at large applied
+voltages.\ {II}.~{M}odified {P}oisson--{N}ernst--{P}lanck equations.
+\newblock \emph{Physical Review E}, 75(2):021503, 2007.
+\newblock \url{https://doi.org/10.1103/PhysRevE.75.021503}
+\newblock arXiv preprint: \url{https://arxiv.org/abs/physics/0611232}
+
+\bibitem{Tresset2008}
+G.~Tresset.
+\newblock Generalized {P}oisson--{F}ermi formalism for investigating size
+correlation effects with multiple ions.
+\newblock \emph{Physical Review E}, 78(6):061506, 2008.
+\newblock \url{https://doi.org/10.1103/PhysRevE.78.061506}
+
+\bibitem{Newman2004}
+J.~Newman and K.~E.~Thomas-Alyea.
+\newblock \emph{Electrochemical Systems}.
+\newblock Wiley-Interscience, Hoboken NJ, 3rd edition, 2004.
+
+\end{thebibliography}
+
+\end{document}

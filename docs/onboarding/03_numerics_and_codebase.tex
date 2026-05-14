@@ -1,0 +1,420 @@
+\documentclass[11pt]{article}
+\input{preamble}
+
+\title{\bfseries Numerics \& Codebase Tour \\
+       \large from Newton's method to the production solver}
+\author{Onboarding doc 03 of 06}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{callout}{What this document is for}
+A guided tour of how the equations from doc 02 turn into running
+code. Covers the finite-element library (Firedrake), the nonlinear
+solver strategies (Newton + continuation + Picard), and the layout
+of the actual repository. By the end you should be able to find
+where any reaction term, IC seed, or solver flag lives.
+\end{callout}
+
+\tableofcontents
+\bigskip\hrule\bigskip
+
+% =========================================================================
+\section{The pipeline at a glance}
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=8mm and 14mm,
+  box/.style={draw, rounded corners=3pt, minimum height=8mm,
+              minimum width=32mm, align=center, font=\small},
+  arr/.style={-{Latex[length=2mm]}}
+]
+\node[box, fill=blue!10]   (driver) {driver script\\(\texttt{scripts/studies/...py})};
+\node[box, right=of driver, fill=blue!10] (factory) {\texttt{make\_bv\_solver\_params}\\\texttt{scripts/\_bv\_common.py}};
+\node[box, right=of factory, fill=calloutbg] (orch) {orchestrator\\\texttt{anchor\_continuation.py}};
+\node[box, below=of orch, fill=orange!20] (forms) {residual builder\\\texttt{forms\_logc\_muh.py}};
+\node[box, left=of forms, fill=orange!20] (newton) {Firedrake\\Newton + PETSc};
+\node[box, left=of newton, fill=green!15] (results) {\texttt{StudyResults/...}\\(JSON, plots)};
+
+\draw[arr] (driver)  -- (factory);
+\draw[arr] (factory) -- (orch);
+\draw[arr] (orch)    -- (forms);
+\draw[arr] (forms)   -- (newton);
+\draw[arr] (newton)  -- (results);
+\draw[arr] (newton.north) .. controls +(0,1) and +(0,-1) .. (orch.south west) node[midway, fill=white, font=\scriptsize] {next $V$};
+\end{tikzpicture}
+\end{center}
+
+A driver script picks bulk concentrations, kinetic constants, and a
+voltage grid; it asks the factory for a packed
+\texttt{solver\_params} object; it hands those to the orchestrator,
+which loops over voltages and continuation rungs; for each rung the
+orchestrator builds the FEM residual via the forms file and asks
+Firedrake to Newton-solve it. Converged solutions get post-processed
+into a JSON of observables and saved under \texttt{StudyResults/}.
+
+% =========================================================================
+\section{Finite elements in 60 seconds}
+
+You saw the weak form briefly in doc 02 \S 9. The
+\concept{finite-element method (FEM)} approximates each unknown
+function $u(x)$ as
+\[
+  u_h(x) = \sum_{j=1}^{N} U_j\, \varphi_j(x),
+\]
+where $\{\varphi_j\}$ is a basis of \concept{tent functions}
+(piecewise polynomial, supported on a few mesh elements each). The
+$U_j$ are the unknown \concept{degrees of freedom (DoFs)}. Plugging
+this into the weak form turns each PDE into an equation per basis
+function, giving a square nonlinear system $F(U) = 0$ for
+$U = (U_1, \dots, U_N)$.
+
+\paragraph{Why FEM rather than finite differences?} FEM handles
+non-rectangular domains, variable mesh resolution, and Robin
+boundary conditions natively. We do not need any of those
+features in the strict sense (we use a 2D rectangular mesh with
+graded refinement near the electrode), but FEM gives us:
+(i) trivial mesh refinement near the EDL singular layer;
+(ii) a well-developed adjoint capability via Firedrake's
+\texttt{firedrake.adjoint} (Pyadjoint), which we will need for the
+inverse problem when it un-pauses; and
+(iii) symbolic assembly of the Jacobian for Newton, which would be
+brittle to write by hand.
+
+\paragraph{Firedrake.} The Python library that makes this all
+declarative. You write the weak form with operators like
+\texttt{inner(grad(u), grad(v))*dx}, declare a function space, and
+ask it to \texttt{solve(F == 0, u)}. Under the hood it generates C
+kernels for assembly (via TSFC), assembles the sparse Jacobian, and
+hands it to PETSc for the linear solve. You will not need to read
+the Firedrake internals; treat it as a tool.
+
+\subsection{The mesh}
+
+We use a 2D \concept{graded rectangle} of width $\sim 1$ scaled
+unit and height $\hat{L} = 1$ (which corresponds to physical
+$L_{\mathrm{eff}} \sim 16$--$100\,\mu$m). The graded grid puts most
+nodes near the electrode at $x = 0$ where the EDL lives:
+\[
+  y_j = \hat{L} \cdot \frac{e^{\beta j/N_y} - 1}{e^{\beta} - 1},
+  \qquad \beta \approx 3,
+\]
+giving $\sim 80$ nodes spaced over five decades of physical
+distance. The mesh constructor lives in
+\texttt{Forward/bv\_solver/mesh.py} (\texttt{make\_graded\_rectangle\_mesh}).
+\warn{Keep $\hat{L}$ matched to whatever \texttt{l\_eff\_m} the
+solver was built with}: an $\hat{L}$-mismatch silently puts the bulk
+Dirichlet BC at the wrong physical location.
+
+% =========================================================================
+\section{Newton's method and where it goes wrong}
+
+Newton's method (you have seen it):
+\[
+  J(U^k)\,\Delta U = -F(U^k), \qquad U^{k+1} = U^k + s_k\,\Delta U,
+\]
+with line-search step $s_k \in (0,1]$. Firedrake delegates the
+linear solve to PETSc; we use a sparse direct solver (MUMPS) at
+this problem size since the Jacobian fits in memory.
+
+\subsection{Why cold-start often fails}
+
+Two failure modes dominate:
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{The Jacobian is poorly conditioned} when $|\eta|$ is
+      large. The BV exponentials (doc 01) saturate
+      to $10^{40}$-ish numbers; pre-clipping helps but does not
+      eliminate the problem. We use $\texttt{exponent\_clip} = 100$
+      (clip on $\eta_{\mathrm{scaled}} = (V - \Eeq)/V_T$ before
+      multiplication by $\alpha n_e$); see
+      \texttt{docs/solver/clipping\_conventions.md}.
+\item \textbf{The initial guess is too far from the solution.} For
+      a target like $\Vrhe = +1.0$ V at production $\kzero$, a
+      cold-start from a uniform-bulk profile lands the Newton
+      iteration on the wrong side of a manifold and diverges.
+\end{enumerate}
+
+\subsection{Continuation: walk to the solution one step at a time}
+
+The fix is \concept{continuation}: replace the hard problem with a
+sequence of easier problems whose solutions are close together.
+We use three layered continuations:
+
+\begin{description}[leftmargin=*]
+  \item[Voltage continuation.] Solve at a sequence of $\Vrhe$
+      values, using each converged solution as the warm-start
+      initial guess for the next $\Vrhe$. Implemented as the
+      ``warm-walk'' phase of the orchestrator.
+  \item[$\kzero$ continuation.] Within a single $\Vrhe$, scale the
+      kinetic prefactor down by many orders of magnitude
+      ($10^{-12}, 10^{-9}, 10^{-6}, 10^{-3}, 10^{0}$ relative to
+      target), solve, then scale back up. Tagged
+      \texttt{initial\_scales} in the code.
+  \item[Phase 6$\beta$-only: $\lambda_{\mathrm{hyd}}$ and
+      $k_w^{\mathrm{eff}}$ ladders.] Smooth turn-on of the cation
+      hydrolysis source ($\lambda$) and water self-ionization rate
+      ($k_w$) via outer loops, similar to a homotopy from the
+      Phase 5$\gamma$ solution to the Phase 6$\beta$ target.
+\end{description}
+
+The orchestrator that owns these loops is in
+\texttt{Forward/bv\_solver/anchor\_continuation.py}, specifically:
+\begin{itemize}[leftmargin=*]
+\item \texttt{solve\_anchor\_with\_continuation}: build a converged
+      ``anchor'' solution at one well-chosen voltage, ramping
+      $\kzero$ and $k_w^{\mathrm{eff}}$ ladders to target.
+\item \texttt{extract\_preconverged\_anchor}: repackage the anchor
+      for warm-start use.
+\item \texttt{solve\_grid\_with\_anchor}: warm-walk the converged
+      anchor across a list of voltages.
+\end{itemize}
+This pair is the production entry point for the multi-ion + Stern
++ Phase 6$\alpha$/6$\beta$ stack. The older
+\texttt{solve\_grid\_per\_voltage\_cold\_with\_warm\_fallback}
+(``C+D'' orchestrator) is used for the legacy single-counter-ion
+ClO$_4^-$ stack but cold-fails on the multi-ion stack near
+$\Vrhe \approx +0.55$ V (13/13 fail). \warn{Do not pick C+D for
+deck-aligned work}; use the anchor-and-grid pair.
+
+\subsection{Picard for the outer loop}
+
+Newton converges quadratically near the solution but needs a smooth
+residual. The cation hydrolysis coverage equation
+(doc 02, $\dot\Gamma$ formula) has algebraic clamps and is not smooth
+enough for Newton to like it. We solve it with a separate outer
+\concept{Picard iteration}: solve the inner PNP+BV Newton with
+$\Gamma$ held fixed; update $\Gamma$ from the new fields; repeat
+until $\Gamma$ stops moving. The Picard helper lives in
+\texttt{Forward/bv\_solver/cation\_hydrolysis.py}.
+
+\subsection{Adaptive ladders (step 9.5 onwards)}
+
+Late Phase 6$\beta$ added \texttt{AdaptiveLadder} in the
+\texttt{Forward/bv\_solver/anchor\_continuation.py}, which
+arithmetic-bisects the $\lambda_{\mathrm{hyd}}$ ramp when a Newton
+solve fails partway up. The
+\texttt{warm\_start\_floor} option in step 9.5 (May 2026) added
+the ability to bisect from the warm-start floor ($\lambda = 0$),
+rescuing 3/14 high-$k_{\mathrm{hyd}}$ configurations in the step 9
+B.2 sweep.
+
+% =========================================================================
+\section{Repository layout}
+
+A 30-second tour of the top of \texttt{PNPInverse/}:
+
+\begin{center}
+\begin{tabular}{p{0.30\linewidth} p{0.66\linewidth}}
+\toprule
+\textbf{Path} & \textbf{What lives there} \\
+\midrule
+\texttt{Forward/} & Forward solver code. The active surface. \\
+\texttt{Forward/bv\_solver/} & The PNP--BV Firedrake package. Most of your work will be here. \\
+\texttt{scripts/studies/} & Driver scripts. One file per study. \\
+\texttt{scripts/derive/} & Data-derivation scripts (Tafel slopes, etc.) \\
+\texttt{scripts/verification/} & MMS and other verification tests. \\
+\texttt{calibration/} & Top-level constants (\texttt{v10b.py}). Firedrake-free. \\
+\texttt{Nondim/} & Physical constants \& nondim transforms. \\
+\texttt{tests/} & Pytest tests. \texttt{slow}-marked ones need Firedrake. \\
+\texttt{docs/} & All written documentation. \\
+\texttt{StudyResults/} & Output of every run we have kept. JSONs + plots. \\
+\texttt{data/} & \emph{Gitignored.} Experimental data (273 MB). Ask for the drop. \\
+\texttt{Inverse/}, \texttt{FluxCurve/}, \texttt{Surrogate/} & \emph{Paused.} Don't touch. \\
+\texttt{archive/} & Old code, reference only. \\
+\texttt{CLAUDE.md} & The hard rules. Read once, refer often. \\
+\texttt{README.md} & The project narrative. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Inside \texttt{Forward/bv\_solver/}}
+
+\begin{center}
+\begin{tabular}{p{0.32\linewidth} p{0.62\linewidth}}
+\toprule
+\textbf{File} & \textbf{Role} \\
+\midrule
+\texttt{forms\_logc.py}        & Residual builder, log-c on all species (legacy backend, kept for cross-check). \\
+\texttt{forms\_logc\_muh.py}   & Residual builder, $\mu_H$ on protons (\textbf{production backend}). \\
+\texttt{boltzmann.py}          & Bikerman analytic counter-ion expressions (multi-ion). \\
+\texttt{water\_ionization.py}  & Phase 6$\alpha$ $\HtwoO \rightleftharpoons \Hp + \OHm$ closure. \\
+\texttt{cation\_hydrolysis.py} & Phase 6$\beta$ $\Gamma_{\mathrm{MOH}}$ Picard + Singh pK$_a$ shift. \\
+\texttt{anchor\_continuation.py} & Phase 5$\gamma$ orchestrator: anchor + grid + ladders. \\
+\texttt{grid\_per\_voltage.py} & Legacy C+D orchestrator (ClO$_4^-$ stack only). \\
+\texttt{picard\_ic.py}         & Shared Picard outer loop for the \texttt{debye\_boltzmann} IC. \\
+\texttt{dispatch.py}           & Routes \texttt{build\_context}, \texttt{build\_forms},
+                                  \texttt{set\_initial\_conditions} to the right backend. \\
+\texttt{config.py}             & Reads/validates the \texttt{bv\_convergence} options. \\
+\texttt{diagnostics.py}        & Per-voltage diagnostics (BV-rate components, $F_0$, $\theta$, \dots). \\
+\texttt{rrde\_observables.py}  & Postprocesses to ring/disk currents, selectivity, $n_e$. \\
+\texttt{validation.py}         & W1--W5 sanity checks on a converged solution. \\
+\texttt{mesh.py}               & Graded rectangle mesh constructor. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Inside \texttt{scripts/studies/}}
+
+Each driver corresponds to one named study or one paper-figure
+target. The current ones to know:
+
+\begin{center}
+\begin{tabular}{p{0.42\linewidth} p{0.52\linewidth}}
+\toprule
+\textbf{Driver} & \textbf{What it does} \\
+\midrule
+\texttt{phase6b\_step6\_plumbing\_ablation.py}
+  & K$^+$/SO$_4^{2-}$ + cation hydrolysis at $V_{\mathrm{kin}}$ with
+    Step 6 ablation flags. \\
+\texttt{phase6b\_v10a\_phase\_A2\_v\_kin.py}
+  & Phase A.2 baseline reproduction at $V_{\mathrm{kin}}$ with v10a
+    Langmuir cap. \\
+\texttt{phase6b\_v10a\_v\_sweep\_diagnostic.py}
+  & V-sweep diagnostic for $V_{\mathrm{kin}}$ selection. \\
+\texttt{l\_eff\_transport\_sweep\_csplus\_so4.py}
+  & Cs$^+$/SO$_4^{2-}$ multi-ion + Phase 6$\alpha$ validation. \\
+\texttt{mangan\_full\_grid\_csplus\_so4.py}
+  & Cs$^+$/SO$_4^{2-}$ deck page-15 V-band sweep. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Where the tests live}
+
+\texttt{tests/} contains pytest regression tests. Two markers:
+\texttt{not slow} (no Firedrake required) and \texttt{slow} (need
+the Firedrake venv active). Run them with
+\begin{lstlisting}
+python -m pytest -m "not slow"
+python -m pytest -m slow
+\end{lstlisting}
+Phase 6$\beta$ has its own test files
+(\texttt{test\_phase6b\_v9\_*.py},
+\texttt{test\_phase6b\_step10\_phase\_D\_*.py}).
+
+% =========================================================================
+\section{Anatomy of a study run}
+
+\subsection{Outputs}
+
+A study run drops a folder under \texttt{StudyResults/<study\_name>/}
+containing:
+
+\begin{center}
+\begin{tabular}{p{0.30\linewidth} p{0.64\linewidth}}
+\toprule
+\textbf{File} & \textbf{Contents} \\
+\midrule
+\texttt{iv\_curve.json}     & The current--voltage curve at each grid voltage; the headline observable. \\
+\texttt{summary.json}       & Per-voltage convergence flags, BV-rate components, surface concentrations, $\Gamma$. \\
+\texttt{verdict.json}       & PASS/FAIL of the study's predefined acceptance gates. \\
+\texttt{*.png}              & Plots (cd, peroxide, surface pH, etc.). \\
+\texttt{run.log}            & Console output of the driver. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+When you wonder ``did anyone already run this?'', open the
+\texttt{StudyResults/} subdirectory and read the existing
+\texttt{summary.json}. \warn{A full sweep can take minutes to
+hours} (production = $\sim 30$ min for 8 combos $\times$ 13
+voltages); do not regenerate without checking.
+
+\subsection{The convergence flags}
+
+Each voltage point in \texttt{summary.json} has a
+\texttt{converged} flag and an \texttt{exit\_status}. The most
+common values:
+\begin{itemize}[leftmargin=*]
+\item \texttt{newton\_converged}: rosy, residual $L^2$ below tol.
+\item \texttt{ladder\_partial}: a continuation ramp made it part of
+      the way; the recorded fields are at a partially-converged
+      $\kzero$ scale.
+\item \texttt{cold\_fail}: cold-start Newton diverged; warm-fallback
+      may or may not have rescued.
+\item \texttt{stagnant}: Newton stopped reducing residual.
+\end{itemize}
+
+\subsection{Cross-checking: validation pass}
+
+\texttt{validation.py} runs a fast set of W1--W5 sanity checks on
+each converged field set. They check things like clip saturation
+(W1), counter-ion depletion (W5), BV-rate vs.\ Faraday's law
+consistency. These are cheap; always look at them before believing
+a result.
+
+% =========================================================================
+\section{Writing a new diagnostic}
+
+The most common first contribution from a new collaborator is
+adding a diagnostic plot or a new observable. The pattern:
+
+\begin{enumerate}[leftmargin=*]
+\item Pick the quantity you want to compute (e.g.\ ``volume-averaged
+      pH in the diffusion layer'').
+\item Write a function in
+      \texttt{Forward/bv\_solver/diagnostics.py} that takes
+      \texttt{ctx} (the solver context, a dict of UFL functions)
+      and returns a Python float.
+\item Add a regression test under \texttt{tests/} that pins it on a
+      reference field.
+\item Wire the diagnostic into the driver script you care about.
+\item Run the study; verify the new field shows up in
+      \texttt{summary.json}.
+\end{enumerate}
+
+The repo has dozens of examples of this pattern;
+\texttt{diagnostics.py} itself is a good model.
+
+% =========================================================================
+\section{The adjoint pipeline (paused, but useful background)}
+
+\texttt{firedrake.adjoint} (Pyadjoint) provides reverse-mode
+automatic differentiation through Firedrake solves. When the inverse
+work resumes, this is what gives us $\partial L/\partial \theta$
+where $L$ is a misfit and $\theta = \{\kzero, \alpha, \dots\}$. The
+hard rule for adjoints is:
+\begin{callout}{Adjoint tape hygiene}
+Any unannotated cold-ramp or continuation work must be wrapped in
+\texttt{with adj.stop\_annotating(): ...}. Otherwise the tape
+records intermediate ladder solves and the gradient is wrong /
+slow. This is in CLAUDE.md and in the inverse handoff
+\texttt{docs/inverse/CHATGPT\_HANDOFF\_10\_LM\_TIKHONOV\_BASIN\_GEOMETRY.md}.
+\end{callout}
+
+You will not need to write adjoints in your first months. Just know
+that ``annotate'' and ``stop\_annotating'' are jargon for ``record
+this solve onto the tape so we can backprop through it later''.
+
+% =========================================================================
+\section{Hard rules summary}
+
+These are the project's CLAUDE.md hard rules, condensed:
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Use anchor-and-grid (or C+D for legacy ClO$_4^-$),
+      not Strategy B.} Strategy B
+      (\texttt{solve\_grid\_with\_charge\_continuation}) Phase-1
+      cold-fails on the logc + counter-ion stack.
+\item \textbf{\texttt{exponent\_clip = 100} is the only
+      PC-trustworthy setting.} Lower clips create fictitious
+      peroxide currents at high $\Vrhe$.
+\item \textbf{The IC and the residual must agree about steric
+      saturation.} Bikerman IC + ideal residual cold-fails; same
+      goes vice versa.
+\item \textbf{Use the parallel R$_{2e}$ + R$_{4e}$ topology}
+      (Ruggiero 2022). Sequential R$_0$/R$_1$ is wrong and is kept
+      only for backward-compat.
+\item \textbf{Check \texttt{data/EChem Reactor Modeling-Seitz-Mangan/}
+      first.} Do not conjecture about the experimental physics.
+      The hypothesis is cation hydrolysis at the polarized OHP, not
+      sulfate, not carbonate, not water self-ionization.
+\item \textbf{$C_S = 0.20$ F/m$^2$ is the literature-anchored
+      target} (Bohra--Koper--Choi consensus). Lower values were
+      used historically without citation.
+\end{enumerate}
+
+\onboardingfooter
+\end{document}

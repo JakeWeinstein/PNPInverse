@@ -1,0 +1,298 @@
+# Critique session 39 — Round 7 (final per extended cap)
+
+## Section 1: Acknowledgment
+
+All 5 R6 issues accepted. The R6 cluster forces a third invariant
+phase (pre-build) and a finer split of the runtime margin checks.
+
+### Re point 1 — pre-build static config invariants (before `build_forms`)
+
+**Accept.** Verified the failure mode: with
+`enable_cation_hydrolysis=True` and species roles
+`["neutral", "neutral", "proton"]` (no role "counterion"),
+`build_forms` calls `resolve_counterion_index` which raises
+`ValueError` before the MMS invariant layer can run. Same risk for
+other feature-gated paths.
+
+New **pre-build** invariant phase, runs on `solver_params` alone:
+
+```python
+def _assert_prebuild_config_invariants(sp) -> None:
+    """Phase 0 — invariants on solver_params BEFORE build_forms runs.
+    Catches feature-flag drift that would otherwise crash build_forms
+    with a production validation error before our invariants fire.
+    """
+    params = sp[10]
+    conv_cfg = params.get('bv_convergence', {})
+    bv_bc    = params.get('bv_bc', {})
+
+    # Feature flags
+    assert not is_water_ionization_enabled(conv_cfg), \
+        "MMS plan requires enable_water_ionization=False"
+    assert not is_cation_hydrolysis_enabled(conv_cfg), \
+        "MMS plan requires cation hydrolysis disabled"
+
+    # Formulation, log_rate, BV bundle
+    assert str(conv_cfg.get('formulation', '')).lower() == 'logc_muh'
+    assert bool(conv_cfg.get('bv_log_rate', False)) is True
+
+    # Reactions list shape + counterion count BEFORE forms
+    rxns = bv_bc.get('reactions', [])
+    assert isinstance(rxns, (list, tuple)) and len(rxns) == 2
+
+    counterions = bv_bc.get('boltzmann_counterions', [])
+    bikerman = [e for e in counterions
+                if e.get('steric_mode') == 'bikerman']
+    assert len(bikerman) == 2
+
+    # Suppress-Poisson flag (lives on nondim, not bv_convergence — read
+    # before build_forms by introspecting params dict directly)
+    nondim_cfg = _get_nondim_cfg(sp)
+    assert not bool(nondim_cfg.get('suppress_poisson_source', False))
+
+    # dt and SNES tolerances (don't depend on build_forms)
+    assert float(sp[2]) >= 1e12   # dt
+    snes_opts = params
+    assert float(snes_opts.get('snes_atol', 1e-7)) <= 1e-5
+    assert float(snes_opts.get('snes_rtol', 1e-8)) <= 1e-7
+
+    # Species counts and role labels read directly from sp
+    assert int(sp[0]) == 3
+    assert list(sp[4]) == [0, 0, 1]
+    roles = list(bv_bc.get('species_roles', []))
+    assert roles == ['neutral', 'neutral', 'proton']
+    # a_vals_hat directly from sp[6]
+    a_vals = list(sp[6])
+    _assert_close('a[O2]',   a_vals[0], A_O2_PHYSICAL,   rel=1e-9)
+    _assert_close('a[H2O2]', a_vals[1], A_H2O2_PHYSICAL, rel=1e-9)
+    _assert_close('a[H]',    a_vals[2], A_HP_PHYSICAL,   rel=1e-9)
+
+
+def _assert_postbuild_static_ctx_invariants(ctx, sp) -> None:
+    """Phase 1 — invariants on the BUILT ctx that need build_forms to
+    have created its derived state (e.g. scaling['bv_stern_capacitance_model'],
+    ctx['mixed_space_indices'], live coefficient Functions)."""
+    scaling = ctx['nondim']
+    # Stern coefficient (converted in build_forms)
+    csm = scaling.get('bv_stern_capacitance_model')
+    assert csm is not None and float(csm) > 0
+    # mu_species, logc_muh_transform
+    assert ctx.get('logc_muh_transform') is True
+    # No Γ slot
+    indices = ctx.get('mixed_space_indices')
+    assert indices is None or indices.gamma_index is None
+    # Reaction identity (reads converted E_eq_model, k0_model)
+    rxns = scaling['bv_reactions']
+    r2e, r4e = rxns[0], rxns[1]
+    # ... full reaction identity asserts (E_eq, α, n_e, reversible,
+    # stoichiometry, k0, conc factors, enabled) ...
+    # c0_model_vals
+    c0_vals = list(scaling['c0_model_vals'])
+    _assert_close('c0[O2]',   c0_vals[0], C_O2_HAT,         rel=1e-9)
+    _assert_close('c0[H2O2]', c0_vals[1], H2O2_SEED_NONDIM, rel=1e-9)
+    _assert_close('c0[H]',    c0_vals[2], C_HP_HAT,         rel=1e-9)
+```
+
+### Re point 2 — recategorize broken configs honestly
+
+**Accept.** Updated `BROKEN_CONFIGS` table with three layers
+(`prebuild`, `postbuild`, `runtime`):
+
+| Label | Mutation | Layer | Match regex |
+|---|---|---|---|
+| `formulation_logc` | `_force_formulation("logc")` | prebuild | `formulation.*logc_muh` |
+| `log_rate_off` | `_force_log_rate(False)` | prebuild | `bv_log_rate` |
+| `water_on` | `_force_water_ionization(True)` | prebuild | `enable_water_ionization` |
+| `cation_hydrol_on` | `_force_cation_hydrol(True)` | prebuild | `cation hydrolysis` |
+| `dt_small` | `_force_dt(0.1)` | prebuild | `dt` |
+| `snes_loose` | `_force_snes_tol(atol=1e-2)` | prebuild | `snes_atol` |
+| `poisson_suppressed` | `_force_suppress_poisson(True)` | prebuild | `suppress_poisson_source` |
+| `missing_reaction` | `_drop_reaction("R4e")` | prebuild | `len.*rxns` or `n_reactions` |
+| `one_counterion` | `_drop_counterion("SO4")` | prebuild | `bikerman.*counterion` |
+| `wrong_counterion` | `_replace_counterion("Cs","ClO4")` | prebuild | `z.*c_bulk` or `counterion` |
+| `no_stern` | `_force_stern(None)` | postbuild | `bv_stern_capacitance_model` |
+| `k0_r4e_wrong` | `_force_k0_r4e_factor(1.0)` | postbuild | `k0_model.*R4e` |
+
+12 broken configs, **all** caught by MMS invariants (no
+production-validation-only cases). The harness updates accordingly:
+
+```python
+def _prepare_mms_context_for_asserts(sp, mesh, *, phase: str = "both"):
+    """phase ∈ {'prebuild', 'postbuild', 'runtime', 'source', 'both'}."""
+    _assert_prebuild_config_invariants(sp)
+    if phase == "prebuild":
+        return {"sp": sp}
+    ctx = build_context(sp, mesh=mesh)
+    ctx = build_forms(ctx, sp)
+    _assert_postbuild_static_ctx_invariants(ctx, sp)
+    if phase == "postbuild":
+        return {"ctx": ctx, "sp": sp}
+    owned = OwnedCoeffTracker()
+    manuf = _make_manufactured_fields(mesh, ctx, sp, owned=owned)
+    closure = _build_shared_theta_closure_ex(..., owned=owned)
+    _assert_pre_rates_margin_invariants(ctx, sp, manuf=manuf, closure=closure)
+    if phase == "pre_rates":
+        return {...}
+    rxn_rates = _build_bv_rates_ex(..., owned=owned)
+    _assert_post_rates_invariants(ctx, sp, manuf=manuf, rxn_rates=rxn_rates)
+    if phase == "runtime":
+        return {...}
+    sources = _build_source_terms(ctx, sp, ..., owned=owned)
+    _assert_source_independence(sources, ctx, owned)
+    return {...}
+```
+
+### Re point 3 — split runtime margins around BV rate construction
+
+**Accept.** Runtime invariants split into two sub-phases:
+
+```python
+def _assert_pre_rates_margin_invariants(ctx, sp, *, manuf, closure):
+    """Pre-rates: η margin, u_clamp margin, ion phi_clamp margin,
+    free_dyn_floor margin, packing_floor margin.
+
+    Must pass BEFORE BV rate UFL is composed, because the rate-builder
+    uses unclipped η expressions whose validity depends on the η
+    margin. If η-margin fails, the rates would be built with an
+    out-of-range exp(η) which can overflow during assembly.
+    """
+    phi_ex = manuf['phi_ex']
+    # eta margins
+    bv_exp_scale = float(ctx['nondim']['bv_exponent_scale'])
+    phi_app_model = float(ctx['nondim']['phi_applied_model'])
+    exp_clip = float(ctx['nondim'].get('exponent_clip', 100.0))
+    for label, E_eq in [('R2e', E_EQ_R2E_V/V_T), ('R4e', E_EQ_R4E_V/V_T)]:
+        eta_expr = bv_exp_scale * (phi_app_model - phi_ex - E_eq)
+        eta_abs_max = _expr_abs_max(eta_expr, ctx['mesh'], degree=4)
+        assert eta_abs_max < 0.9 * exp_clip, (
+            f"η_{label} max abs = {eta_abs_max:.3g} too close to clip "
+            f"{exp_clip}; envelope must be tightened"
+        )
+    # u_clamp margin per field (incl. mu_H_recon = ln c_H)
+    ...
+    # ion phi_clamp margin
+    ...
+    # free_dyn_floor, packing_floor margins (use DG-interp + indicator)
+    ...
+
+
+def _assert_post_rates_invariants(ctx, sp, *, manuf, rxn_rates):
+    """Post-rates: R_ratio finite window check, which needs rxn_rates."""
+    mesh = ctx['mesh']
+    ds_e = fd.ds(ctx['bv_settings']['electrode_marker'], domain=mesh)
+    R2e_norm = float(fd.assemble(rxn_rates[0]**2 * ds_e))**0.5
+    R4e_norm = float(fd.assemble(rxn_rates[1]**2 * ds_e))**0.5
+    R_ratio = R4e_norm / max(R2e_norm, 1e-300)
+    assert 10 < R_ratio < 1e5, (
+        f"R4e/R2e = {R_ratio:.3e} outside finite window — "
+        f"K0_R4e_factor likely mis-set"
+    )
+```
+
+Pipeline diagram refined:
+
+```
+prebuild_config_asserts (sp only)
+  ↓
+build_context + build_forms
+  ↓
+postbuild_static_ctx_asserts (Stern, mu_species, reaction & species identity on built ctx)
+  ↓
+OwnedCoeffTracker()
+  ↓
+manuf, closure  (no rates yet)
+  ↓
+pre_rates_margin_asserts (η, u, φ, free_dyn, packing — all unclipped/unfloored)
+  ↓
+rxn_rates  (built only after η margin proven)
+  ↓
+post_rates_invariants (R_ratio)
+  ↓
+sources = build_source_terms
+  ↓
+source_independence_asserts
+  ↓
+inject_sources (mutate F_res)
+  ↓
+U.assign(U_manuf); U_prev.assign(U_manuf)
+  ↓
+snapshot live coeffs
+  ↓
+solve()
+  ↓
+verify live coeffs unchanged
+  ↓
+compute errors
+```
+
+### Re point 4 — geometric-coefficient pre-flight
+
+**Accept.** Added a pilot-step zero (executed before any of the
+quadrature/Newton/R_ratio pilots):
+
+```python
+# Pilot 10.0 — extract_coefficients behavior on geometry
+mesh = fd.UnitSquareMesh(8, 8)
+x, y = fd.SpatialCoordinate(mesh)
+n_vec = fd.FacetNormal(mesh)
+test_expr_1 = fd.cos(pi*x) * (1-y)**2
+test_expr_2 = fd.dot(fd.grad(test_expr_1), n_vec) * fd.ds
+geom_coeffs = set(extract_coefficients(test_expr_1)) | \
+              set(extract_coefficients(test_expr_2))
+# Document what geom_coeffs contains. If non-empty, populate
+# ALLOWED_GEOMETRY = geom_coeffs and include in the source-independence
+# whitelist. If empty, document that geometry doesn't appear in
+# coefficient extraction for this Firedrake version.
+print(f"[MMS pilot] geom coefficients from extract_coefficients: {geom_coeffs}")
+```
+
+The independence check then:
+
+```python
+ALLOWED = ALLOWED_LIVE | owned.coeffs | ALLOWED_GEOMETRY
+```
+
+`ALLOWED_GEOMETRY` is a module-level set populated by the pilot
+function and reused by the source-independence check. Pilot output is
+recorded in the test docstring; if a future Firedrake version changes
+behavior, the pilot fires first and the user updates the whitelist.
+
+### Re point 5 — ordering-diagram refinement (already addressed in point 3)
+
+**Accept.** The refined pipeline diagram in §3 above already splits
+runtime margins around BV rate construction. No further changes needed
+beyond what's in point 3.
+
+---
+
+## Section 2: Plan state after R7
+
+Three-phase invariant hierarchy:
+
+| Phase | When | What |
+|---|---|---|
+| **prebuild** | on `sp` only, before `build_forms` | feature flags, formulation, log_rate, reactions count, counterions count, suppress_poisson, dt, SNES, species counts/charges/roles/a_vals |
+| **postbuild static** | on `ctx` after `build_forms` | Stern coefficient, mu_species/logc_muh_transform, mixed_space_indices, reaction identity (E_eq, α, n_e, reversible, stoichiometry, k0, conc factors, enabled), c0_model_vals |
+| **runtime — pre-rates** | after manuf+closure built, before rates | η-clip margin, u-clamp margin, ion phi_clamp margin, free_dyn_floor margin, packing_floor margin (DG-interp min/max + quadrature indicator) |
+| **runtime — post-rates** | after rates built, before source-terms | R_ratio finite window |
+| **source-independence** | after source-terms built, before F_res mutation | extract_coefficients vs FORBIDDEN ∪ (ALLOWED_LIVE ∪ owned.coeffs ∪ ALLOWED_GEOMETRY) |
+
+12 parametrized broken-config tests, all caught by MMS invariants
+(10 prebuild + 2 postbuild).
+
+Pilot adds a new step 10.0: geometric-coefficient extraction pre-flight.
+
+`OwnedCoeffTracker` per mesh, threaded through every MMS builder.
+Identity-only whitelist (no isinstance filtering).
+
+---
+
+## Section 3: Continued critique prompt
+
+Final round per extended cap = 7. Whatever issues remain at the end of
+this round will be listed in `FINAL_REVISION.md` as either incorporated
+fixes or unresolved items (with rationale). Push back hard. Same
+numbered format and verdict line:
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN

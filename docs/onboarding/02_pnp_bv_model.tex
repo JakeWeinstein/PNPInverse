@@ -1,0 +1,444 @@
+\documentclass[11pt]{article}
+\input{preamble}
+
+\title{\bfseries The PNP--BV Mathematical Model \\
+       \large from mass conservation to the residual our solver inverts}
+\author{Onboarding doc 02 of 06}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{callout}{What this document is for}
+Builds the equations of the forward solver from scratch.
+Assumes you remember what a partial derivative is and have done
+multivariable calculus and ODEs; assumes you have \emph{not} taken a
+PDE course. By the end you should be able to read the file
+\texttt{Forward/bv\_solver/forms\_logc\_muh.py} and recognise every
+term as something with a physical name.
+\end{callout}
+
+\tableofcontents
+\bigskip\hrule\bigskip
+
+% =========================================================================
+\section{Why we need PDEs at all}
+
+The simplest model of an electrochemical cell would be a single
+\concept{stirred tank}: pretend the electrolyte has uniform
+concentrations everywhere, the surface chemistry happens at one
+``rate'', and you write down a system of ODEs in time. Many ORR
+papers do this.
+
+The problem: the chemistry happens in a region (the electric double
+layer + the diffusion layer) that is at most $\sim 100\,\mu$m thick,
+inside which concentrations and the electric potential vary by
+\emph{many orders of magnitude}. Local pH near the surface can swing
+from the bulk value of 4 up to almost 10; the electric potential
+$\phi$ can drop by 1 V over a Debye length of less than 1 nm.
+Treating any of those as ``uniform'' throws away the physics.
+
+So we keep $c_i(x,t)$ and $\phi(x,t)$ as functions of position
+$x \in [0, L_{\mathrm{eff}}]$ and time $t$. Mass conservation and
+Gauss's law give us coupled \concept{partial differential
+equations}: derivatives in both $x$ and $t$.
+
+\subsection{Steady state}
+
+For analyzing a single $\Vrhe$ point in a current-voltage curve we
+hold the applied voltage fixed for long enough that
+$\partial_t c_i = 0$. So in practice the residual we solve is the
+\emph{steady-state} system. The time-dependent form is in the
+\texttt{forms\_logc\_muh.py} \texttt{\_build\_residual} routine but
+the time derivative gets multiplied by an artificial relaxation
+parameter that we drive to zero (this is sometimes called
+``pseudo-time stepping'' and helps Newton's method).
+
+% =========================================================================
+\section{Building the PDE system one piece at a time}
+
+\subsection{Mass conservation}
+
+For each chemical species $i$ in the electrolyte, write down its
+concentration $c_i(x,t)$ in mol/m$^3$ and its molar flux
+$\mathbf{J}_i(x,t)$ in mol/m$^2$/s. Conservation of moles gives
+\concept{the continuity equation}:
+\begin{equation}
+  \frac{\partial c_i}{\partial t} + \divg \mathbf{J}_i = R_i,
+  \label{eq:mass}
+\end{equation}
+where $R_i$ is a volumetric source/sink (units mol/m$^3$/s) due to
+homogeneous chemical reactions. For most of our species $R_i = 0$
+because we lump all chemistry into a boundary condition at the
+electrode. Phase 6$\alpha$ added a non-zero $R_{\Hp}$ from water
+self-ionization and Phase 6$\beta$ adds a boundary source from
+cation hydrolysis at the OHP.
+
+\subsection{The flux: Nernst--Planck}
+
+The Nernst--Planck equation (doc 01 \S 6.1):
+\begin{equation}
+  \mathbf{J}_i = -D_i \grad c_i
+                 - \frac{z_i F D_i}{RT}\, c_i\, \grad\phi
+                 + c_i \mathbf{v}.
+  \label{eq:np-2}
+\end{equation}
+The three terms are diffusion (down the concentration gradient),
+migration (charged ions drift along the electric field), and
+convection (carried by the bulk velocity field). In our 1D slab the
+convection term is folded into the choice of $L_{\mathrm{eff}}$ ---
+see doc 01 \S 6.3 --- so the operative flux is just the first two
+terms.
+
+\subsection{The potential: Poisson}
+
+In a continuous medium, Gauss's law of electrostatics is
+\begin{equation}
+  -\divg(\varepsilon\, \grad\phi) = \rho,
+  \label{eq:poisson}
+\end{equation}
+where $\varepsilon$ is the dielectric permittivity of the solvent
+(for water at 25$^{\circ}$C, $\varepsilon = 80\,\varepsilon_0$) and
+$\rho$ is the local volumetric charge density. The charge density is
+just the sum of ion charges:
+\begin{equation}
+  \rho = F \sum_i z_i\, c_i.
+  \label{eq:rho}
+\end{equation}
+(\ref{eq:poisson}) and (\ref{eq:rho}) close the system: $\phi$ is
+determined by the ion distribution, and the ion distribution is
+shaped by $\phi$ through (\ref{eq:np-2}). This nonlinear feedback is
+the heart of EDL physics.
+
+\subsection{Putting it together: the PNP system}
+
+\begin{empheq}[box=\fbox]{align}
+  \frac{\partial c_i}{\partial t}
+     + \divg\!\Big(-D_i \grad c_i - \tfrac{z_i F D_i}{RT}\,c_i\,\grad\phi\Big) &= R_i
+     \quad \text{for each species } i \\
+  -\divg(\varepsilon\, \grad\phi) &= F \sum_i z_i\, c_i
+\end{empheq}
+This is a coupled, nonlinear, parabolic--elliptic system. In 1D
+steady state on $x \in (0, L_{\mathrm{eff}})$ it becomes a
+coupled boundary-value problem.
+
+% =========================================================================
+\section{Boundary conditions}
+
+\subsection{At the bulk side $x = L_{\mathrm{eff}}$ (easy)}
+
+Here we are far enough from the electrode that the EDL has fully
+relaxed and concentrations recover their bulk values. Dirichlet:
+\[
+  c_i(L_{\mathrm{eff}}) = c_i^{\mathrm{bulk}}, \qquad
+  \phi(L_{\mathrm{eff}}) = 0.
+\]
+The choice of $\phi=0$ at the bulk is just a gauge: we measure
+electric potential relative to the bulk solution.
+
+\subsection{At the electrode side $x = 0$ (the interesting one)}
+
+Three conditions hold simultaneously here:
+
+\paragraph{(a) Faradaic flux from BV.} The flux of each species
+into the boundary equals its stoichiometric draw in the surface
+reactions. For a reaction $\sum_p \nu_p \,\mathrm{S}_p + n_e e^- \to
+\sum_q \nu_q \,\mathrm{S}_q$ proceeding at rate $r$
+[mol/m$^2$/s]:
+\begin{equation}
+  \mathbf{J}_i \cdot \hat{\mathbf{n}}\big|_{x=0}
+     = \sum_{\text{rxns}} \nu_i \, r,
+  \label{eq:bv-flux}
+\end{equation}
+where $\hat{\mathbf{n}}$ is the outward normal (pointing into the
+bulk). $r$ is the Butler--Volmer rate (the BV equation in doc 01,
+or its log-rate form). For us, summing over R$_{2e}$
+and R$_{4e}$ in parallel, the boundary flux of $\Otwo$ is
+$\nu_{\Otwo}^{(2e)} r_{2e} + \nu_{\Otwo}^{(4e)} r_{4e}$ with
+$\nu_{\Otwo} = -1$ for both reactions.
+
+\paragraph{(b) The Stern compact layer.} The metal-side surface
+charge $\sigma_{\mathrm{metal}}$ is set by the rigid Stern
+capacitor as
+\begin{equation}
+  \sigma_{\mathrm{metal}} = C_S \,(\phi_m - \phi(0)) = C_S \,\psi_S,
+  \label{eq:stern}
+\end{equation}
+where $\phi_m$ is the metal potential, $\phi(0)$ is the diffuse-side
+solution potential at the OHP, and $\psi_S$ is the
+\concept{Stern voltage drop}. Continuity of the electric
+displacement gives a Robin condition for $\phi$ at $x=0$:
+\begin{equation}
+  -\varepsilon \frac{\partial \phi}{\partial x}\bigg|_{x=0}
+     = -\sigma_{\mathrm{metal}}
+     = -C_S\,(\phi_m - \phi(0)).
+  \label{eq:phi-bc}
+\end{equation}
+The applied potential $V$ enters through $\phi_m$ via
+$\phi_m = V - V^{\circ}_{\mathrm{ref}}$ for whatever reference is
+chosen.
+
+\paragraph{(c) Equilibrium for non-reactive species.} For ions that
+do not react at the surface (e.g.\ $\SOfour$, $\Kp$ in our
+baseline), the flux into the boundary is zero:
+$\mathbf{J}_i\cdot \hat{\mathbf{n}}|_{x=0} = 0$. In our
+\concept{analytic Bikerman counter-ion} treatment we go further: we
+\emph{don't even keep} a NP equation for these ions, but instead
+substitute their equilibrium Boltzmann profile (Bikerman form, doc 01)
+directly. They act as a closed-form contribution to the
+charge density in (\ref{eq:rho}). This saves a degree of freedom per
+species and is exact at steady state for non-reactive ions.
+
+% =========================================================================
+\section{The Bikerman closure for multi-ion electrolytes}
+
+For non-reactive analytic counter-ions we use a
+\concept{multi-ion shared-$\theta$ Bikerman closure}. In the
+single-ion form it reduced to the standard Bikerman expression (doc 01). The multi-ion form
+that the codebase implements (in
+\texttt{Forward/bv\_solver/boltzmann.py}) is:
+\begin{equation}
+  c_i(x) = \frac{c_i^{\mathrm{bulk}}\,\exp(-z_i \phi(x)/V_T)\,(1 - A_{\mathrm{dyn}}(x))}
+                {\theta_b + \sum_j a_j\, c_j^{\mathrm{bulk}}\,\exp(-z_j \phi(x)/V_T)},
+  \label{eq:multi-bikerman}
+\end{equation}
+where $a_i$ is the molar volume of species $i$, $\theta_b$ is the
+bulk packing fraction, and $A_{\mathrm{dyn}}(x)$ is the local
+volume fraction occupied by the dynamic species (the ones for which
+we still solve a NP equation). This makes the steric saturation a
+\emph{shared} budget: the dynamic species crowding takes up part of
+the available volume; the analytic Bikerman ions split what's left
+according to their bulk concentrations and their Boltzmann factors.
+
+The single hard rule about this:
+\begin{callout}{Hard rule (don't violate)}
+The IC seed and the residual must agree about steric saturation.
+The initializer (\texttt{set\_initial\_conditions\_debye\_boltzmann\_*})
+seeds the composite-$\psi$ matched-asymptotic with multi-species
+$\gamma$; the residual side calls
+\texttt{build\_steric\_boltzmann\_expressions}. Mixing a Bikerman IC
+with an ideal-counter-ion residual (or vice versa) cold-fails on
+the saturated manifold. This is documented as ``Hard rule \#3'' in
+the project \texttt{CLAUDE.md}.
+\end{callout}
+
+% =========================================================================
+\section{Choosing the primary variables wisely}
+
+\subsection{Why log-concentration ($u_i = \ln c_i$)}
+
+Concentrations in our problem range from $10^{-12}$ mol/m$^3$
+(deep-cathodic $\Hp$ depletion) up to $\sim 10^{4}$ mol/m$^3$
+(close-packed counter-ion) --- 16 orders of magnitude. Solving for
+$c_i$ directly causes Newton iterates to step into negative
+concentrations and crash. Instead we change variable to
+\begin{equation}
+  u_i = \ln c_i, \qquad c_i = e^{u_i},
+  \label{eq:u}
+\end{equation}
+which automatically keeps $c_i > 0$ no matter what Newton step is
+taken. The diffusion and migration terms (\ref{eq:np-2}) become:
+\[
+  \mathbf{J}_i = -D_i\, c_i \,\grad u_i
+                 - \tfrac{z_i F D_i}{RT}\, c_i\, \grad\phi
+               = -D_i\, c_i\, \grad\!\left(u_i + \tfrac{z_i F}{RT}\phi\right).
+\]
+Notice the bracketed combination $u_i + (z_i F/RT)\phi$ is exactly
+the dimensionless electrochemical potential
+$\tilde\mu_i / RT$ minus its standard-state piece. This is the cue
+for the next step.
+
+\subsection{Why $\mu$ for protons (the \texttt{logc\_muh}
+            formulation)}
+
+Even with $u_i = \ln c_i$, the proton variable $u_H$ and the
+potential $\phi$ each vary by tens of $V_T$ across the diffuse
+layer, while their \emph{sum} (the electrochemical potential $\mu_H$)
+varies much more gently. The combination
+\[
+  \mu_H = u_H + e_m\, z_H\, \phi/V_T \quad (z_H = +1)
+\]
+(where $e_m$ is the dimensionless electromigration prefactor, equal
+to 1 in physical units) becomes our new primary variable. Then $u_H$
+is recovered as $u_H = \mu_H - z_H \phi/V_T$. Newton iterates on
+$\mu_H$ are smooth where iterates on $u_H$ would oscillate.
+
+This is the meaning of the formulation tag \texttt{formulation =
+"logc\_muh"}. The other species ($\Otwo$, $\HtwoOtwo$) stay in
+plain $u_i = \ln c_i$ since they are uncharged ($z = 0$) and their
+behaviour is dominated by diffusion, not migration.
+
+\paragraph{Practical bookkeeping.} The dispatcher in
+\texttt{Forward/bv\_solver/dispatch.py} routes the residual builder
+to either \texttt{forms\_logc.py} (all species in $\ln c$) or
+\texttt{forms\_logc\_muh.py} (proton in $\mu_H$, others in $\ln c$).
+Production work is on \texttt{forms\_logc\_muh.py}; the legacy
+\texttt{forms\_logc.py} is kept for cross-check.
+
+% =========================================================================
+\section{Nondimensionalization}
+
+The solver works in scaled (``hatted'') variables to keep matrix
+conditioning sane. The scales are:
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Quantity} & \textbf{Scale} \\
+\midrule
+position $x$    & $\hat{x} = x/L_{\mathrm{eff}}$ \\
+concentration $c_i$ & $\hat{c}_i = c_i / c_{\mathrm{ref}}$ where $c_{\mathrm{ref}} = $ bulk $\Otwo$ typically\\
+potential $\phi$    & $\hat{\phi} = \phi / V_T$ \\
+time $t$        & $\hat{t} = t \cdot D_{\mathrm{ref}} / L_{\mathrm{eff}}^2$ \\
+rate $r$        & $\hat{r} = r \cdot L_{\mathrm{eff}} / (D_{\mathrm{ref}} c_{\mathrm{ref}})$ \\
+$\kzero$        & rate constant scaled the same way as $r$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two dimensionless numbers fall out of the scaling:
+\begin{itemize}[leftmargin=*]
+\item The \concept{electromigration prefactor} $e_m = 1$ (it goes
+      away in the natural scaling but is kept as a knob for
+      diagnostic use).
+\item The \concept{Debye number}
+      $\hat{\lambda}_D^2 = \varepsilon V_T / (F^2 c_{\mathrm{ref}}
+      L_{\mathrm{eff}}^2)$, which is tiny ($\sim 10^{-10}$). It
+      multiplies the Poisson Laplacian, so the EDL is a
+      \emph{singular perturbation} layer of width
+      $\hat{\lambda}_D \sim 10^{-5}$ in scaled units. The mesh has
+      to resolve this layer; doc 03 explains how.
+\end{itemize}
+
+The constants live in \texttt{Nondim/} (scaling transforms +
+physical constants) and \texttt{scripts/\_bv\_common.py} (production
+constants like \texttt{V\_T}, \texttt{C\_O2\_BULK\_HAT},
+\texttt{K0\_HAT\_R2E}, etc.). Cross-check any dimensional formula
+by computing in SI and then dividing by the scales above.
+
+% =========================================================================
+\section{Phase 6$\alpha$ and 6$\beta$ extensions}
+
+The above is the production stack as of Phase 5$\gamma$. Two
+extensions are layered on top.
+
+\subsection{Phase 6$\alpha$: water self-ionization}
+
+Adds the homogeneous reaction $\HtwoO \rightleftharpoons
+\Hp + \OHm$ with equilibrium $K_w = c_{\Hp}\, c_{\OHm}$. Because
+$\OHm$ is not a tracked species, we close it algebraically:
+$c_{\OHm}(x) = K_w / c_{\Hp}(x)$. The $\Hp$ source becomes
+\[
+  R_{\Hp}(x) = k_w^{\mathrm{eff}} (1 - c_{\Hp}(x) c_{\OHm}(x) / K_w)
+\]
+which vanishes at equilibrium. The flag is
+\texttt{enable\_water\_ionization=True}; default is off and the
+default-off code path is byte-equivalent to pre-6$\alpha$.
+
+\subsection{Phase 6$\beta$: cation hydrolysis at the OHP}
+
+Adds a coverage variable $\Gamma_{\mathrm{MOH}}(t)$ at the OHP
+satisfying:
+\begin{equation}
+  \dot\Gamma_{\mathrm{MOH}}
+     = k_{\mathrm{hyd}}\,(1 - \Gamma_{\mathrm{MOH}}/\Gamma_{\max})\,c_M(0)
+     - k_{\mathrm{des}}\,\Gamma_{\mathrm{MOH}},
+  \label{eq:gamma}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=*]
+\item $c_M(0)$ is the cation concentration at the OHP from the
+      Bikerman closure;
+\item $k_{\mathrm{hyd}}$ depends on the local field through Singh's
+      field-dependent pK$_a$ (Singh 2016 formula, doc 01);
+\item the Langmuir factor $(1 - \Gamma/\Gamma_{\max})$ caps the
+      coverage at one monolayer; this was added in v10a after v9
+      converged at $\sim$6 monolayers (unphysical);
+\item $k_{\mathrm{des}}$ is the desorption rate (the inverse step).
+\end{itemize}
+Each forward step of $\Gamma_{\mathrm{MOH}}$ injects a proton flux
+into the boundary condition for $\Hp$, modifying the BV reaction
+rates indirectly. The whole thing is solved as an outer Picard loop
+around the inner Newton solve for the PNP+BV residual.
+
+The relevant code is in
+\texttt{Forward/bv\_solver/cation\_hydrolysis.py}. Calibration of
+$\Gamma_{\max}$, $k_{\mathrm{hyd}}$, $k_{\mathrm{des}}$ to literature
+values is the v10b work documented in
+\texttt{docs/phase6/v10b\_calibration\_summary.md}.
+
+% =========================================================================
+\section{From PDE to a residual: a quick FEM tour}
+
+Doc 03 covers this in detail; here is the quick version so you can
+read \texttt{forms\_logc\_muh.py} without panic.
+
+\subsection{Weak form}
+
+You cannot solve PDEs exactly on a computer. The
+\concept{finite-element method (FEM)} chooses a finite-dimensional
+function space $V_h$ (e.g.\ piecewise-linear functions on a mesh) and
+demands that the residual of the PDE be \emph{orthogonal to} every
+test function $v \in V_h$:
+\[
+  \mathcal R(c_h, \phi_h)[v] = 0 \qquad \forall v \in V_h.
+\]
+For a NP equation like $\partial_t c + \divg \mathbf{J} = R$ on the
+domain $\Omega$, you multiply by a test function $v$, integrate
+over $\Omega$, integrate the divergence by parts, and pull out
+boundary terms:
+\[
+  \int_\Omega \partial_t c \, v \,\diff x
+  - \int_\Omega \mathbf{J}\cdot \grad v \,\diff x
+  + \int_{\partial\Omega} (\mathbf{J}\cdot \hat{\mathbf{n}})\, v \,\diff s
+  - \int_\Omega R\, v\, \diff x = 0.
+\]
+The boundary integral is exactly where the Butler--Volmer flux
+(\ref{eq:bv-flux}) and the Stern term (\ref{eq:phi-bc}) enter.
+Firedrake (the FEM library we use) lets you write each of these
+integrals as one Python expression on a UFL form
+(\texttt{F = inner(J, grad(v))*dx + bv\_flux*v*ds(electrode)}, and
+so on); see \texttt{forms\_logc\_muh.py} lines $\sim$200--400.
+
+\subsection{Newton}
+
+After discretization, the residual becomes a vector function $F(U)$
+of the global degrees-of-freedom vector $U$ (one entry per mesh node
+per primary variable). We solve $F(U) = 0$ by Newton's method:
+\[
+  J(U^k) \,\Delta U = -F(U^k), \qquad U^{k+1} = U^k + \Delta U,
+\]
+with $J = \partial F/\partial U$ assembled symbolically by Firedrake
+and the linear solve done by PETSc. You have seen Newton in
+numerical methods; the only twist here is that $J$ is a sparse
+matrix of size $\sim$$10^4$--$10^5$, and that $F$ is so nonlinear
+that Newton from cold-start frequently fails. Doc 03 covers the
+\concept{continuation} tricks that get around this.
+
+% =========================================================================
+\section{What goes in, what comes out}
+
+\paragraph{Inputs to the solver.}
+\begin{itemize}[leftmargin=*]
+\item Geometry: $L_{\mathrm{eff}}$, mesh $N_x \times N_y$, grading
+      factor for the EDL refinement.
+\item Bulk concentrations $c_i^{\mathrm{bulk}}$.
+\item Reaction set: $\{E^{\circ}_r, k_0^{(r)}, \alpha^{(r)}, n_e^{(r)}\}$ for
+      $r \in \{2e, 4e\}$.
+\item Stern capacitance $C_S$.
+\item Counterion list (Bikerman entries with charge, molar volume,
+      and bulk concentration).
+\item Applied voltage $\Vrhe$ (often a list, swept).
+\end{itemize}
+
+\paragraph{Outputs.}
+\begin{itemize}[leftmargin=*]
+\item Per voltage point: convergence flag, total disk current $i_D$,
+      peroxide current $i_P$, surface concentrations
+      $c_i(0)$, surface electric potential $\phi(0)$, $\Gamma_{\mathrm{MOH}}$
+      coverage, BV-rate diagnostics.
+\item A JSON dump under \texttt{StudyResults/<study\_name>/}.
+\item Plots, when the driver script generates them.
+\end{itemize}
+
+\onboardingfooter
+\end{document}

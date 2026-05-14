@@ -1,0 +1,289 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\newcommand{\OHP}{\mathrm{OHP}}
+\newcommand{\CS}{C_{\!S}}
+\newcommand{\CSeff}{C_{\!S,\mathrm{eff}}}
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\eb}{\varepsilon_{b}}
+\newcommand{\eS}{\varepsilon_{S}}
+
+\title{The Stern Compact-Layer Robin Boundary Condition\\
+       \large Derivation and exact code mapping from
+              Bonnefont--Argoul--Bazant (2001)}
+\author{PNPInverse / Forward solver}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The PNP--BV forward solver imposes a single Robin boundary condition
+on the Poisson equation at the electrode,
+$\eb\,\partial_{n}\Phi = \CS\,(V_{\mathrm{app}}-\Phi)$, implemented as
+the residual line
+\begin{verbatim}
+F_res -= stern_coeff * (phi_applied - phi) * w * ds(electrode_marker)
+\end{verbatim}
+in \texttt{Forward/bv\_solver/forms\_logc.py:631} and
+\texttt{forms\_logc\_muh.py:668}. This note derives that line, term by
+term, from Section~2.2 of Bonnefont, Argoul, and Bazant
+(2001)~\cite{bonnefont2001}, the original PNP-with-Faradaic-kinetics
+treatment in which this exact boundary condition appears coupled to a
+Butler--Volmer flux at the outer Helmholtz plane.
+\end{abstract}
+
+%==============================================================
+\section{The ``missing'' boundary condition}
+%==============================================================
+
+Once the diffuse layer is resolved as a continuum (rather than
+collapsed into an effective $\zeta$-potential), Poisson's equation
+acquires a degree of freedom at the electrode that the species flux
+conditions do not constrain. Bonnefont, Argoul, and Bazant make this
+explicit in their Section~2.2~\cite[p.~54]{bonnefont2001}:
+
+\begin{quote}
+\emph{``No other boundary conditions are typically mentioned in
+electrochemistry textbooks because none are needed when the common
+assumption of electroneutrality is made. In this work, however, since
+we treat diffuse charge explicitly we also need another boundary
+condition on the potential. Ignorance of this boundary condition is
+typically hidden in the `zeta-potential' $\zeta$ \dots\ but in
+electrochemistry, the zeta potential of an electrode should be
+determined self-consistently from the microscopic electrochemical
+boundary conditions.''}
+\end{quote}
+
+The Stern compact layer supplies this missing condition.
+
+%==============================================================
+\section{The Stern boundary condition}
+%==============================================================
+
+Bonnefont \emph{et al.}~adopt the Stern model: a thin charge-free
+dielectric slab of permittivity $\eS$ and effective thickness $L_{S}$
+between the metal and the outer Helmholtz plane, modelled as a
+constant areal capacitance
+\begin{equation}
+\CS \;=\; \eS / L_{S}\qquad [\mathrm{F/m^{2}}].
+\label{eq:cs-defn}
+\end{equation}
+With $\Delta\Phi_{S}\equiv\Phi_{e}-\Phi_{r}$ denoting the potential
+drop across the slab (metal minus reaction plane), the paper writes
+the boundary condition as~\cite[Eq.~(8)]{bonnefont2001}:
+\begin{equation}
+\Delta\Phi_{S}\;=\;
+\begin{cases}
+-\,\eS\,\partial_{X}\Phi / \CS &\text{at } X=0,\\[2pt]
++\,\eS\,\partial_{X}\Phi / \CS &\text{at } X=L,
+\end{cases}
+\label{eq:bab-eq8}
+\end{equation}
+together with the definition of the effective Stern length
+\begin{equation}
+\lambda_{S}\;=\;\eS/\CS,
+\label{eq:lambda-s}
+\end{equation}
+which is~\cite[Eq.~(9)]{bonnefont2001}.
+
+%==============================================================
+\section{From \texorpdfstring{Eq.~(\ref{eq:bab-eq8})}{Eq. (8)} to the
+standard Robin form}
+%==============================================================
+
+Let $\mathbf{n}$ be the outward normal to the PNP domain
+$\Omega$ at the electrode boundary $\partial\Omega_{\mathrm{el}}$. At
+the right electrode $X=L$, $\mathbf{n}=+\hat{x}$ and
+$\partial_{n}\Phi=\partial_{X}\Phi$; at the left electrode $X=0$,
+$\mathbf{n}=-\hat{x}$ and $\partial_{n}\Phi=-\partial_{X}\Phi$. Both
+cases of Eq.~(\ref{eq:bab-eq8}) then collapse to the single
+expression
+\begin{equation}
+\Delta\Phi_{S}\;=\;\lambda_{S}\,\partial_{n}\Phi.
+\label{eq:robin-bab}
+\end{equation}
+Now $\Delta\Phi_{S}=V_{\mathrm{app}}-\Phi_{\OHP}$, where $\Phi_{\OHP}$
+is the boundary value of $\Phi$ on the diffuse-layer side of the
+outer Helmholtz plane (the value the PNP solver actually controls).
+Multiplying both sides of (\ref{eq:robin-bab}) by $\eb/\lambda_{S}$
+gives
+\begin{equation}
+\boxed{\;\;
+\eb\,\partial_{n}\Phi \;=\; \CSeff\,
+\bigl(V_{\mathrm{app}} - \Phi_{\OHP}\bigr),
+\qquad \CSeff \;\equiv\; \eb/\lambda_{S},
+\;\;}
+\label{eq:our-robin}
+\end{equation}
+which is the Robin boundary condition the solver imposes.
+Two remarks on the identification of $\CSeff$ with the
+physical compact-layer capacitance:
+
+\begin{itemize}
+\item In the special case $\eS=\eb$, $\lambda_{S}=L_{S}$ exactly and
+$\CSeff=\eb/L_{S}=\CS$ literally.
+\item In the general case $\eS\neq\eb$, the displacement field is
+continuous across the Stern slab,
+$\eb\,\partial_{n}\Phi|_{\mathrm{diffuse}} =
+\eS\,\partial_{n}\Phi|_{\mathrm{Stern}}$, so
+$\eb\,\partial_{n}\Phi$ on the diffuse side equals
+$\sigma_{M}=\CS\,\Delta\Phi_{S}$ (the metal surface charge). The Robin
+coefficient appearing in (\ref{eq:our-robin}) is then identified with
+the literature value of the compact-layer capacitance directly, and
+the role of $\lambda_{S}$ in Eq.~(\ref{eq:bab-eq8}) is to encode the
+dielectric mismatch.
+\end{itemize}
+For the production target $\CS=0.20~\mathrm{F/m^{2}}$
+($L_{S}\approx 5~\textup{\AA}$, $\eS\approx 11.3\,\varepsilon_{0}$),
+see \texttt{docs/phase6/CMK3\_capacitance\_literature.md}.
+
+%==============================================================
+\section{Weak form: term-by-term derivation of the residual line}
+%==============================================================
+
+The solver does not implement (\ref{eq:our-robin}) directly; it
+substitutes it into the natural-BC slot of the Poisson weak form.
+We trace each term of the resulting residual to a specific equation
+in~\cite{bonnefont2001}.
+
+Multiply the Poisson equation $-\nabla\!\cdot\!(\eb\,\nabla\Phi)=\rho$
+(Bonnefont--Argoul--Bazant Eq.~(3)) by a test function $w$ and
+integrate over $\Omega$:
+\begin{equation}
+-\!\int_{\Omega} \nabla\!\cdot\!(\eb\,\nabla\Phi)\,w\,\dd x
+\;=\;\int_{\Omega}\rho\,w\,\dd x.
+\label{eq:poisson-weak0}
+\end{equation}
+Integration by parts (Green's identity) gives
+\begin{equation}
+\int_{\Omega}\eb\,\nabla\Phi\cdot\nabla w\,\dd x
+\;-\;\int_{\partial\Omega}\eb\,(\partial_{n}\Phi)\,w\,\dd s
+\;=\;\int_{\Omega}\rho\,w\,\dd x.
+\label{eq:poisson-weak-ibp}
+\end{equation}
+The test space vanishes on the Dirichlet (bulk) boundary, so only the
+electrode boundary $\partial\Omega_{\mathrm{el}}$ contributes. On that
+boundary we substitute (\ref{eq:our-robin}):
+\begin{equation}
+\int_{\Omega}\eb\,\nabla\Phi\cdot\nabla w\,\dd x
+\;-\;\int_{\partial\Omega_{\mathrm{el}}}
+\CS\,(V_{\mathrm{app}}-\Phi)\,w\,\dd s
+\;=\;\int_{\Omega}\rho\,w\,\dd x.
+\label{eq:poisson-after-robin}
+\end{equation}
+Moving the source to the left and identifying the assembled residual
+$F_{\mathrm{res}}(\Phi,w)$,
+\begin{equation}
+F_{\mathrm{res}}(\Phi,w)\;=\;
+\underbrace{\int_{\Omega}\eb\,\nabla\Phi\cdot\nabla w\,\dd x}_{\textsc{poisson-vol}}
+\;\;\underbrace{-\;\int_{\Omega}\rho\,w\,\dd x}_{\textsc{poisson-rhs}}
+\;\;\underbrace{-\;\int_{\partial\Omega_{\mathrm{el}}}\CS\,(V_{\mathrm{app}}-\Phi)\,w\,\dd s}_{\textsc{stern}}
+\;=\;0.
+\label{eq:Fres-final}
+\end{equation}
+
+\subsection*{Term-by-term mapping}
+
+Each piece of (\ref{eq:Fres-final}) corresponds to one residual
+assignment in the solver and to one equation in~\cite{bonnefont2001}:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.18\linewidth}
+                >{\raggedright\arraybackslash}p{0.26\linewidth}
+                >{\raggedright\arraybackslash}p{0.30\linewidth}
+                >{\raggedright\arraybackslash}p{0.18\linewidth}}
+\toprule
+\textbf{Term} & \textbf{Math} & \textbf{Code (\texttt{forms\_logc.py})} &
+\textbf{Source in \cite{bonnefont2001}}\\
+\midrule
+\textsc{poisson-vol} &
+$\displaystyle\int_{\Omega}\eb\,\nabla\Phi\!\cdot\!\nabla w\,\dd x$ &
+\texttt{F\_res += eps\_coeff * dot(grad(phi),} \texttt{grad(w)) * dx}
+\;\;(line~600) &
+Eq.~(3), volume term after IBP \\
+\textsc{poisson-rhs} &
+$\displaystyle-\!\int_{\Omega}\rho\,w\,\dd x$ &
+\texttt{F\_res -= charge\_rhs * sum(z[i]*ci[i]*w) * dx}
+\;\;(line~602) &
+Eq.~(3), RHS source $\rho = zF(C_{C}-C_{A})$\\
+\textsc{stern} &
+$\displaystyle -\!\int_{\partial\Omega_{\mathrm{el}}}\!\!
+\CS\,(V_{\mathrm{app}}-\Phi)\,w\,\dd s$ &
+\texttt{F\_res -= stern\_coeff *} \texttt{(phi\_applied - phi) * w *} \texttt{ds(electrode\_marker)}
+\;\;(line~631) &
+Eq.~(8) substituted into the boundary integral of
+Eq.~(\ref{eq:poisson-weak-ibp})\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The Butler--Volmer Faradaic flux (\cite[Eq.~(7)]{bonnefont2001},
+applied at the same $\partial\Omega_{\mathrm{el}}$ with
+$\eta = \Delta\Phi_{S}-E_{\mathrm{eq}} = V_{\mathrm{app}}-\Phi-E_{\mathrm{eq}}$)
+enters the species residuals in the same file at
+\texttt{forms\_logc.py:540--590}; this is the second half of the
+Bonnefont \emph{et al.}~boundary system and uses the
+\emph{same} $\Phi$ that the Stern term controls.
+
+\subsection*{Nondimensional form}
+
+In dimensionless variables $\phi=zF\Phi/RT$, $x=X/L$,
+Bonnefont \emph{et al.}~recast the BC as Eq.~(20),
+$\Delta\phi_{S} = \mp\,\delta_{D}\,\varepsilon\,\partial_{x}\phi$, with
+$\varepsilon=\lambda_{D}/L$ and $\delta_{D}=\lambda_{S}/\lambda_{D}$.
+The solver carries the same rescaling internally: see the docstring
+in \texttt{Forward/bv\_solver/nondim.py:62--78}, which states
+verbatim
+\begin{quote}
+\texttt{Physical BC: epsilon * grad(phi).n = C\_stern * (phi\_m - phi)}\\
+\texttt{stern\_model = C\_stern * V\_T / (F * c\_ref * L)\quad[dimensionless]}
+\end{quote}
+i.e.\ the dimensionless residual is identical to
+(\ref{eq:Fres-final}) with $\eb$, $\rho$, $\CS$, $V_{\mathrm{app}}$
+and $\Phi$ all replaced by their nondimensional counterparts.
+
+%==============================================================
+\section{Limiting cases}
+%==============================================================
+
+Eq.~(\ref{eq:our-robin}) interpolates between two familiar limits:
+\begin{itemize}
+\item $\CS\to\infty$ (vanishing compact layer): the Robin condition
+forces $\Phi\to V_{\mathrm{app}}$ on $\partial\Omega_{\mathrm{el}}$,
+which is the legacy no-Stern Dirichlet boundary the solver falls back
+to when \texttt{stern\_capacitance\_f\_m2} is \texttt{None}. In
+Bonnefont \emph{et al.}~notation this is the Helmholtz limit
+$\delta_{D}\to 0$.
+\item $\CS\to 0$ (perfectly blocking compact layer): the condition
+forces $\eb\,\partial_{n}\Phi\to 0$, i.e.\ no net displacement-current
+flux into the metal. In~\cite{bonnefont2001} this is the
+``Gouy--Chapman model with $\delta_{D}\to\infty$.''
+\end{itemize}
+Finite $\CS$ partitions the applied voltage between the compact layer
+($\Delta\Phi_{S}=\sigma_{M}/\CS$) and the diffuse layer
+($\Phi_{\OHP}$), exactly as motivated in~\cite[\S2.2]{bonnefont2001}.
+
+%==============================================================
+\begin{thebibliography}{9}
+
+\bibitem{bonnefont2001}
+A.~Bonnefont, F.~Argoul, and M.~Z. Bazant.
+\newblock Analysis of diffuse-layer effects on time-dependent interfacial
+  kinetics.
+\newblock \emph{J.~Electroanal.~Chem.}, 500:52--61, 2001.
+\newblock \href{https://doi.org/10.1016/S0022-0728(00)00470-8}%
+              {doi:10.1016/S0022-0728(00)00470-8}.
+
+\end{thebibliography}
+
+\end{document}

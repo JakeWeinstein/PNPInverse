@@ -1,0 +1,733 @@
+\documentclass[11pt]{article}
+\input{preamble}
+
+\title{\bfseries Electrochemistry Primer for ORR \\
+       \large with just enough physical chemistry to read the codebase}
+\author{Onboarding doc 01 of 06}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{callout}{What this document is for}
+The longest of the onboarding docs. It builds, from first
+principles, the chemistry vocabulary you need to talk about the
+oxygen reduction reaction (ORR), the electric double layer, and the
+Butler--Volmer (BV) kinetic equation. Read it once now; you will
+return to specific sections as they come up. There are exercises at
+the end of each major section --- do them in your notebook before the
+meeting; we will go over them together.
+\end{callout}
+
+\tableofcontents
+\bigskip\hrule\bigskip
+
+% =========================================================================
+\section{What an electrochemical cell is}
+
+An \concept{electrochemical cell} is two pieces of metal (or other
+electronic conductor) called \concept{electrodes} dipped into a
+liquid called the \concept{electrolyte}. The electrolyte is a
+solvent (water for us) containing dissolved \concept{ions}: charged
+particles that can move through the liquid. The two electrodes are
+connected externally through a wire and possibly a power supply.
+
+\textbf{Why is this interesting?} Because \emph{electrons can only
+flow in the wire, not in the electrolyte}. So whenever current goes
+around the loop, something has to convert electron flow at the
+electrode--electrolyte interface into ion flow in the electrolyte.
+That ``something'' is a chemical reaction at the interface. Different
+reactions happen at different rates and at different applied
+voltages, and that is the entire content of electrochemistry.
+
+\subsection{Half-cells, oxidation, reduction}
+
+Each electrode hosts a \concept{half-reaction}. By convention,
+\concept{reduction} (gain of electrons) happens at the
+\concept{cathode}; \concept{oxidation} (loss of electrons) happens
+at the \concept{anode}. The classical mnemonic is
+``\textsc{red cat}, \textsc{an ox}.'' For the ORR cell we model:
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Cathode (the disk):} oxygen is reduced.
+  $\Otwo + n\Hp + n e^- \rightarrow \text{products}$.
+\item \textbf{Anode (somewhere far away in the cell, often a Pt
+  counter electrode):} water is oxidized to $\Otwo$, the so-called
+  oxygen evolution reaction.
+\end{itemize}
+
+We model only the cathode region because that is where the
+interesting physics is. The counter-electrode is treated as a
+boundary condition implicitly through the bulk concentrations.
+
+\subsection{Faraday's law (the dimensional anchor)}
+
+The central conversion factor between electricity and chemistry is
+\concept{Faraday's constant}:
+\[
+  F \approx 96\,485 \;\; \mathrm{C/mol\;e^-}.
+\]
+Faraday's law of electrolysis states that the amount of substance
+reacted is proportional to the charge passed:
+\[
+  \text{(moles reacted)} = \frac{Q}{n_e\,F},
+\]
+where $Q$ is the integrated current (in coulombs) and $n_e$ is the
+number of electrons transferred per molecule. Differentiating:
+\begin{equation}
+  i = n_e\,F\,r_{\text{rxn}},
+  \label{eq:faraday}
+\end{equation}
+where $i$ is the current density (A/m$^2$) and $r_{\text{rxn}}$ is
+the molar reaction rate per unit area (mol/m$^2$/s). This equation
+is the bridge between the chemical models in our code and the
+\textit{measured} quantity $i$.
+
+\subsection{Convention: cathodic current is negative}
+
+Electrochemistry sign conventions are a constant source of bugs.
+The convention this codebase uses (and the one most ORR papers use):
+
+\begin{callout}{Sign convention}
+\begin{itemize}[leftmargin=*]
+\item Current density $i > 0$ for \textbf{anodic} (oxidative) flow.
+\item $i < 0$ for \textbf{cathodic} (reductive) flow --- ORR makes
+      $i < 0$.
+\item The disk-current curves you will see plotted are typically
+      plotted as $|i|$ vs.\ $V$, so visually the cathodic ``ramp up''
+      goes \textit{up}, even though the underlying $i$ is going more
+      negative.
+\end{itemize}
+\end{callout}
+
+\section{Equilibrium electrochemistry}
+
+\subsection{Standard reduction potential $\eo$}
+
+Each half-reaction has a thermodynamic equilibrium voltage. By
+convention, half-reactions are written as reductions and tabulated
+relative to the \concept{standard hydrogen electrode (SHE)}, which
+is defined to have $\eo \equiv 0$. For the ORR we care about two:
+
+\begin{align}
+  \Otwo + 4\Hp + 4 e^- &\rightleftharpoons 2\,\HtwoO &
+  &\eo_{4e} = +1.23\;\Vrhe \\
+  \Otwo + 2\Hp + 2 e^- &\rightleftharpoons \HtwoOtwo &
+  &\eo_{2e} = +0.695\;\Vrhe
+\end{align}
+
+These are the values from Ruggiero 2022 \S 1, reported on the
+\emph{reversible hydrogen electrode} (RHE) scale --- the convention
+used throughout this codebase, the deck, and the ORR literature. The
+RHE scale absorbs the pH dependence of any proton-coupled electron
+transfer (PCET) reaction. Numerically, at pH $= 0$ these coincide
+with the standard reduction potentials vs SHE; at other pH the
+SHE-referenced values shift by $-0.059\,\mathrm{V}\cdot\mathrm{pH}$,
+exactly cancelling the RHE-vs-SHE shift, so the values quoted above
+are pH-independent. The next subsection makes the SHE/RHE conversion
+explicit.
+
+The 4-electron pathway is more thermodynamically favorable (higher
+$\eo$) but also requires breaking the strong $\Oxy\text{--}\Oxy$
+bond, which can be slow --- hence the kinetic ``why does the 2e
+pathway happen at all?'' question that drives the field.
+
+\subsection{The Nernst equation}
+
+If the reactants and products are not at standard concentration
+(1 mol/L for solutes, 1 atm for gases), the equilibrium voltage
+shifts. For a generic half-reaction
+$\nu_O \,\mathrm{O} + n_e e^- \rightleftharpoons \nu_R\,\mathrm{R}$,
+the \concept{Nernst equation} gives:
+\begin{equation}
+  \Eeq = \eo - \frac{RT}{n_e F} \ln\!\left(
+    \frac{a_R^{\nu_R}}{a_O^{\nu_O}}\right),
+  \label{eq:nernst}
+\end{equation}
+where $a_i$ is the \concept{activity} of species $i$ (close to
+concentration in dilute solution, with corrections we will discuss).
+The prefactor $RT/F$ at room temperature is the
+\concept{thermal voltage}:
+\[
+  V_T \;\eqdef\; \frac{RT}{F} \approx 25.7 \;\text{mV \, at \,} T = 298\,\mathrm{K}.
+\]
+You will see $V_T$ everywhere in the code (\texttt{V\_T} in
+\texttt{scripts/\_bv\_common.py}).
+
+\subsection{Reference electrodes: SHE, Ag/AgCl, RHE}
+
+In the lab, nobody uses a hydrogen electrode --- it requires
+bubbling explosive H$_2$ at exactly 1 atm over a Pt black surface.
+Real experiments use practical references like
+\concept{Ag/AgCl in saturated KCl}, then \emph{convert} to a
+common pH-aware reference, the \concept{reversible hydrogen
+electrode (RHE)}:
+\[
+  V_{\mathrm{RHE}} = V_{\mathrm{Ag/AgCl}}
+                   + 0.197\,\mathrm{V}
+                   + 0.059\,\mathrm{V}\cdot \mathrm{pH}.
+\]
+The 0.059 V/pH conversion is just $V_T \ln 10 \approx 59$ mV at room
+temperature, applied to the Nernstian pH dependence of the H$_2$
+half-reaction. \textbf{Every voltage in our code and in the deck data
+is reported as $\Vrhe$.} If you ever see a paper quoting voltages
+``vs.\ SHE'' or ``vs.\ Ag/AgCl,'' convert before comparing.
+
+\subsection{Overpotential $\eta$}
+
+When the applied voltage $V$ at an electrode differs from the
+local equilibrium $\Eeq$, a current flows. The driving force is the
+\concept{overpotential}:
+\begin{equation}
+  \eta \;\eqdef\; V - \Eeq.
+  \label{eq:overpotential}
+\end{equation}
+
+\textbf{Note the sign:} $\eta < 0$ drives the reduction direction
+(cathodic), $\eta > 0$ drives oxidation (anodic). Most of the ORR
+voltage range we care about has $\eta < 0$.
+
+\paragraph{Exercise 2.1.}
+For the 4e ORR, the standard reduction potential at pH 0 is
+$E^{\circ}(\mathrm{SHE}) = +1.229$ V. Apply the Nernst equation at
+bulk pH 4 ($[\Hp] = 10^{-4}$ M, $[\Otwo] = 1.2 \times 10^{-3}$ M,
+$P_{\Otwo} = 1$ atm; activity of liquid water $= 1$) to compute
+$\Eeq$ vs.\ SHE. Then convert to $\Vrhe$ using the RHE/SHE relation
+in \S 2.3. You should recover $\Eeq \approx +1.23\;\Vrhe$,
+confirming that the RHE-referenced potential of any PCET reaction
+with $n_{\Hp}/n_e = 1$ is pH-independent.
+
+% =========================================================================
+\section{The electric double layer (EDL)}
+
+This section is the bridge between equilibrium thermodynamics and
+the much stranger world of the electrode-electrolyte
+\textit{interface}.
+
+\subsection{Why an interface develops a charge layer}
+
+When a metal electrode is immersed in an electrolyte and held at
+some applied potential $V$, electrons accumulate (or deplete) at the
+metal surface. To maintain overall electroneutrality on the
+solution side within a few nanometers, ions of the opposite sign
+crowd toward the surface and ions of the same sign are repelled.
+The result is a thin region of net charge in the electrolyte adjacent
+to the metal, balancing the surface electronic charge: this is the
+\concept{electric double layer (EDL)}.
+
+The EDL controls almost everything we care about:
+\begin{itemize}[leftmargin=*]
+\item It sets the local concentrations of $\Hp$, cations, etc.\ at
+      the electrode surface --- where the chemistry happens.
+\item It absorbs a portion of the applied voltage, so the
+      ``available driving force'' for the reaction is less than
+      $V - \Eeq^{\mathrm{bulk}}$.
+\item It depends on cation identity and salt concentration, which is
+      one mechanism for the cation effect.
+\end{itemize}
+
+\subsection{Three increasingly realistic EDL models}
+
+\paragraph{Helmholtz (1853).}
+A single rigid sheet of counter-ions sits one ionic radius from the
+metal, like a parallel-plate capacitor. Predicts a constant
+capacitance independent of voltage and concentration. Wrong, but
+simple.
+
+\paragraph{Gouy--Chapman (1910--13).}
+The counter-ion ``sheet'' is allowed to spread out as a continuous
+\concept{diffuse layer} obeying a Boltzmann distribution:
+\begin{equation}
+  c_i(x) = c_i^{\mathrm{bulk}}\,\exp\!\left(-\frac{z_i F \phi(x)}{RT}\right),
+  \label{eq:boltzmann}
+\end{equation}
+where $\phi(x)$ is the local electrostatic potential measured
+relative to the bulk and $z_i$ is the ion charge number. The width
+of this layer is the \concept{Debye length}:
+\begin{equation}
+  \lambda_D = \sqrt{\frac{\varepsilon RT}{F^2 \sum_i z_i^2 c_i^{\mathrm{bulk}}}},
+  \label{eq:debye}
+\end{equation}
+which for our 0.3 M ionic strength electrolyte gives
+$\lambda_D \approx 0.55$ nm. Submerged in this region, a continuum
+description still works (it has been re-derived from first
+principles; see Bard \& Faulkner Ch.\ 13).
+
+\paragraph{Stern (1924).}
+Combines the two: a rigid \concept{compact layer} (Stern layer) of
+finite thickness right against the electrode, beyond which the
+Gouy--Chapman diffuse layer takes over. The Stern layer is treated
+as a parallel-plate capacitor with capacitance $C_S$
+(F/m$^2$). Most of the applied voltage drops across the Stern
+layer at high overpotential.
+
+\paragraph{Bikerman (1942).}
+Adds the missing physics that ions have finite size: the
+exponential Boltzmann factor (\ref{eq:boltzmann}) cannot pile up
+arbitrary amounts of counter-ion at the surface, because once you
+hit close-packing the local steric pressure resists further
+crowding. Bikerman's modification:
+\begin{equation}
+  c_i(x) = \frac{c_i^{\mathrm{bulk}}\,e^{-z_i F\phi(x)/RT}}
+                {1 + \sum_j \frac{c_j^{\mathrm{bulk}}}{c_{\max}}
+                       \left(e^{-z_j F\phi(x)/RT} - 1\right)}.
+  \label{eq:bikerman}
+\end{equation}
+At large $|\phi|$, this saturates at $c_i \to c_{\max}$ instead of
+diverging. The codebase uses a multi-species Bikerman closure
+defined in \texttt{Forward/bv\_solver/boltzmann.py}; we will look at
+it in doc 03.
+
+\subsection{A picture of the EDL}
+
+\begin{center}
+\begin{tikzpicture}[
+  every node/.style={font=\small},
+  ion/.style={circle, draw, minimum size=4mm, inner sep=0pt},
+]
+% metal electrode
+\fill[gray!50] (0,-1.2) rectangle (0.6,1.2);
+\node[rotate=90] at (0.3,0) {\bfseries metal};
+
+% Stern layer
+\draw[dashed] (1.4,-1.2) -- (1.4,1.2);
+\draw[dashed] (2.6,-1.2) -- (2.6,1.2);
+\node[align=center] at (2.0,1.5) {Stern \\ (compact)};
+
+% diffuse layer
+\node[align=center] at (4.5,1.5) {Diffuse \\ (Gouy--Chapman)};
+\draw[dashed] (6.5,-1.2) -- (6.5,1.2);
+\node[align=center] at (8.2,1.5) {Bulk \\ electrolyte};
+
+% counter-ions in Stern + diffuse
+\node[ion, fill=blue!30] at (2.0, 0.7) {$+$};
+\node[ion, fill=blue!30] at (2.0, 0.0) {$+$};
+\node[ion, fill=blue!30] at (2.0,-0.7) {$+$};
+\node[ion, fill=blue!30] at (3.2, 0.4) {$+$};
+\node[ion, fill=blue!30] at (3.2,-0.4) {$+$};
+\node[ion, fill=blue!30] at (4.5, 0.5) {$+$};
+\node[ion, fill=blue!30] at (4.5,-0.6) {$+$};
+\node[ion, fill=red!40]  at (5.7, 0.6) {$-$};
+\node[ion, fill=blue!30] at (5.5,-0.4) {$+$};
+\node[ion, fill=red!40]  at (5.9,-0.7) {$-$};
+\node[ion, fill=blue!30] at (7.2, 0.5) {$+$};
+\node[ion, fill=red!40]  at (7.5,-0.4) {$-$};
+\node[ion, fill=blue!30] at (8.0, 0.0) {$+$};
+\node[ion, fill=red!40]  at (8.4, 0.7) {$-$};
+
+% potential profile
+\draw[thick,blue!70!black] plot[smooth, tension=0.6]
+   coordinates {(0.6,1.0) (1.4,0.7) (2.6,0.5) (4.0,0.18) (6.5,0.04) (8.5,0.0)};
+\node[blue!70!black] at (4,-1.6) {$\phi(x)$ falls off over $\lambda_D \sim 0.5$--$1$ nm};
+
+\draw[<-, thick] (0.6,-1.4) -- (0.6,-1.7);
+\node[below] at (0.6,-1.7) {$x=0$ (metal surface)};
+\end{tikzpicture}
+\end{center}
+
+The metal sits at $x=0$ at the left. The Stern layer is one or two
+ionic radii thick (about 0.3 nm). Beyond it the diffuse layer
+extends a few Debye lengths into the electrolyte before the
+potential and concentrations relax to their bulk values.
+
+\paragraph{Exercise 3.1.} For $z_i = +1$, $V_T = 25.7$ mV at room
+temperature, what is the ratio $c_i(0)/c_i^{\mathrm{bulk}}$ from the
+plain Boltzmann form (\ref{eq:boltzmann}) at $\phi(0) = -0.3$ V? Why
+is this physically absurd, and what does Bikerman do about it?
+
+% =========================================================================
+\section{Electrochemical potential}
+
+\subsection{Definition}
+
+When a charged species $i$ sits in a region of nonzero electric
+potential $\phi$, its true thermodynamic ``willingness to be there''
+is not just its chemical potential $\mu_i$ but the
+\concept{electrochemical potential}:
+\begin{equation}
+  \tilde\mu_i = \mu_i^{\circ} + RT \ln a_i + z_i F \phi.
+  \label{eq:echempot}
+\end{equation}
+\textit{This is the central thermodynamic quantity of the entire
+field}, and it is also the variable our solver uses internally for
+$\Hp$ (the so-called \texttt{logc\_muh} formulation: ``log-c with
+$\mu_H$''). We will see in doc 02 why that choice makes Newton's
+method behave better.
+
+At equilibrium, $\tilde\mu_i$ is uniform across the electrolyte. So
+if you know $\phi(x)$, you can solve for $c_i(x)$ from
+$\tilde\mu_i = \tilde\mu_i^{\mathrm{bulk}}$, which immediately
+recovers the Boltzmann distribution (\ref{eq:boltzmann}).
+
+\subsection{The thermal voltage $V_T$ as a unit}
+
+Notice that everywhere $z F \phi$ appears, it is divided by $RT$ to
+form $z\phi/V_T$. So in our nondimensionalized code, voltages are
+always reported in units of $V_T$, and the variable
+\texttt{phi\_hat} $= \phi/V_T$ is what the residual sees. Doc 02 has
+the full nondimensionalization.
+
+% =========================================================================
+\section{Butler--Volmer kinetics}
+
+\subsection{The classical form}
+
+For a single elementary electron-transfer reaction
+\[
+  \mathrm{O} + n_e e^- \rightleftharpoons \mathrm{R},
+\]
+\concept{transition-state theory} (sketch in any electrochemistry
+textbook, e.g.\ Bard \& Faulkner Ch.\ 3) gives the net forward
+current density:
+\begin{equation}
+  i = i_0 \left[
+       \exp\!\left(\frac{(1-\alpha) n_e F \eta}{RT}\right)
+     - \exp\!\left(\frac{-\alpha n_e F \eta}{RT}\right)
+  \right],
+  \label{eq:bv}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=*]
+\item $\eta = V - \Eeq$ is the overpotential.
+\item $\alpha \in (0,1)$ is the \concept{symmetry factor} or
+      \concept{transfer coefficient} (often $\alpha \approx 0.5$).
+\item $i_0$ is the \concept{exchange current density} at $\eta = 0$;
+      it depends on $\kzero$ (the rate constant) and the local
+      concentrations.
+\end{itemize}
+
+We use a slightly different decomposition that scales better
+numerically (the ``log-rate'' form, \texttt{bv\_log\_rate=True}):
+\begin{equation}
+  \log r = \log \kzero + \sum_p p \cdot \log a_p
+           - \alpha n_e \, \frac{\eta}{V_T},
+  \label{eq:logbv}
+\end{equation}
+where $p$ runs over the species in the rate law with stoichiometric
+coefficient $\nu_p$. The reason for log-rate is that $\kzero$ varies
+over many orders of magnitude in our calibration, and Newton iterates
+on $\log r$ stay smooth even in regions where $r$ itself underflows
+double precision.
+
+\subsection{Tafel limits}
+
+When $|\eta|$ is large enough that one of the exponentials in
+(\ref{eq:bv}) dwarfs the other, the equation reduces to the
+\concept{Tafel form}:
+\[
+  \log_{10}|i| \approx \log_{10} i_0 + \frac{(1-\alpha) n_e}{2.303\,V_T}\,\eta
+  \quad\text{(anodic)},
+\]
+giving a straight line of slope $\sim 60/[(1-\alpha) n_e]$ mV/decade.
+Plotting $\log|i|$ vs.\ $\eta$ and fitting straight-line slopes is
+how experimentalists historically measured $\alpha$ and $\kzero$.
+Look up \concept{Tafel slope} when you see it in commit messages.
+
+\subsection{Multi-step ORR and the parallel topology}
+
+The ORR is not a single elementary step. It proceeds through
+several adsorbed intermediates:
+\[
+  \Otwo \to {}^*\!\Otwo \to {}^*\!\mathrm{OOH} \to {}^*\!\Oxy
+  \to {}^*\!\mathrm{OH} \to \HtwoO,
+\]
+where ${}^*$ denotes a surface-adsorbed species. At any point along
+this chain the system can branch off: if the $*\!\mathrm{OOH}$
+intermediate desorbs as $\HtwoOtwo$, you exit early with the
+2-electron product; if it stays bound and gets further reduced, you
+proceed to water through the 4-electron path. Following Ruggiero
+2022 \S 1 we do not resolve the intermediates; instead we lump them
+into two \emph{parallel} effective Butler--Volmer reactions,
+\textbf{R$_{\text{2e}}$} and \textbf{R$_{\text{4e}}$}, each with
+its own $\eo$, $\kzero$, and $\alpha$:
+\begin{align}
+  \mathrm{R_{2e}}: && \Otwo + 2\Hp + 2 e^- &\to \HtwoOtwo & \eo &= 0.695\;\Vrhe \\
+  \mathrm{R_{4e}}: && \Otwo + 4\Hp + 4 e^- &\to 2\,\HtwoO & \eo &= 1.23\;\Vrhe
+\end{align}
+Both reactions consume $\Otwo$. They share no surface intermediate
+in the lumped model. The total disk current is
+$i_D = 2F r_{2e} + 4F r_{4e}$. The peroxide that escapes is
+$2F r_{2e}$.
+
+\warn{Historical hazard:} the codebase used to use a different,
+\emph{sequential} reaction set (R$_0$: $\Otwo \to \HtwoOtwo$;
+R$_1$: $\HtwoOtwo \to \HtwoO$). That set was wrong --- it
+conflicts with Ruggiero 2022 --- and was retired in May 2026
+(commit M3a.2). You will still see ``R$_0$/R$_1$'' in old commits,
+old plot legends, and old constants like \texttt{E\_eq\_r1=0.68}.
+\textbf{All deck-aligned work uses the parallel 2e/4e set.}
+
+\subsection{Selectivity and electron number}
+
+In an RRDE experiment (next section) you measure two currents: the
+disk current $I_D$ (negative, all the cathode reduction at the disk)
+and the ring current $I_R$ (positive, peroxide that escaped is being
+re-oxidized at the downstream ring). From these:
+\begin{align}
+  \mathrm{H_2O_2}\,\% &= \frac{200 \cdot (I_R / N)}{|I_D| + I_R/N} \label{eq:selectivity}\\
+  n_e &= \frac{4 \cdot |I_D|}{|I_D| + I_R/N}
+\end{align}
+where $N \in (0,1)$ is the geometry-determined
+\concept{collection efficiency}: only a fraction of the peroxide
+made at the disk reaches the ring before being washed downstream.
+For our deck, $N = 0.224$.
+
+If \emph{all} of the disk current came through R$_{2e}$,
+selectivity is 100\% and $n_e = 2$. If \emph{all} comes through
+R$_{4e}$, selectivity is 0\% and $n_e = 4$. Real experiments fall
+in between.
+
+\paragraph{Exercise 5.1.} Derive the factor of 200 in
+(\ref{eq:selectivity}) by counting electrons. Hint: you have to
+correct $I_R$ by $1/N$ to recover the actual $\HtwoOtwo$ flux out
+of the disk; then the ratio (peroxide-equivalent current at the
+disk) / (total disk current as 4e-equivalent) gives the fraction.
+
+% =========================================================================
+\section{Mass transport: how reactants reach the electrode}
+
+The BV equation tells you the rate at which the surface chemistry
+\textit{would} consume reactants if there were unlimited supply. In
+reality, $\Otwo$ has to diffuse from the bulk to the electrode and
+$\Hp$ has to as well. Above some current density, you run out of
+reactant at the surface and the kinetic equation is no longer the
+bottleneck --- you are \concept{mass-transport limited}.
+
+\subsection{The flux equation: Nernst--Planck}
+
+For a dilute species $i$, the flux per unit area is the sum of three
+contributions:
+\begin{equation}
+  \mathbf{J}_i = \underbrace{-D_i \grad c_i}_{\text{diffusion}}
+                 \underbrace{- \frac{z_i F}{RT}D_i c_i \grad\phi}_{\text{migration}}
+                 + \underbrace{c_i \mathbf{v}}_{\text{convection}}.
+  \label{eq:np}
+\end{equation}
+Mass conservation gives $\partial_t c_i + \divg \mathbf{J}_i = 0$.
+This is the \concept{Nernst--Planck equation}, the ``NP'' in PNP.
+We almost always work in steady state ($\partial_t = 0$) and 1D, so
+this becomes a coupled boundary-value problem.
+
+\subsection{The rotating disk electrode (RDE)}
+
+The disk in our experiment rotates at $\omega = 1600$ rpm. This
+creates a well-defined hydrodynamic flow that brings fresh
+electrolyte from the bulk toward the disk and then flings it
+radially outward. Levich (1962) showed that the convection and the
+diffusion combine into an effective \concept{diffusion layer
+thickness}:
+\begin{equation}
+  \delta \approx 1.612\, D_i^{1/3} \nu^{1/6} \omega^{-1/2},
+  \label{eq:levich-thickness}
+\end{equation}
+where $\nu$ is the kinematic viscosity of the electrolyte. For
+$\Otwo$ in our system, $\delta \approx 16$ $\mu$m at 1600 rpm.
+
+The corresponding maximum (Levich-limited) current density when the
+surface reactant is fully depleted is:
+\begin{equation}
+  i_{\mathrm{lim}} = 0.62 \cdot n_e F \, D_i^{2/3}\nu^{-1/6}\omega^{1/2}\, c_i^{\mathrm{bulk}}.
+  \label{eq:levich}
+\end{equation}
+For our $\Otwo$ system at 1600 rpm,
+$i_{\mathrm{lim}}^{(4e)} \approx 5.7$ mA/cm$^2$. Whenever you see a
+plateau in a current-voltage curve, the first thing to check is
+whether you have hit Levich.
+
+\subsection{Why we use a 1D slab geometry in the model}
+
+The RDE setup creates flow that is ``\concept{uniformly accessible}''
+across the disk: every point on the disk surface sees the same
+$\delta$ and the same bulk feed. So we can model the whole disk
+problem as a 1D slab from $x=0$ (electrode) to $x=L_{\mathrm{eff}}$
+(bulk), with bulk concentrations as Dirichlet boundary conditions at
+$x = L_{\mathrm{eff}}$. The convection term in (\ref{eq:np}) is
+absorbed by choosing $L_{\mathrm{eff}}$ to match the Levich
+$\delta$. Our default is
+$L_{\mathrm{eff}} \approx 16$--$100\,\mu$m depending on the study.
+
+\subsection{The ring of the RRDE}
+
+Add a second concentric Pt ring electrode just downstream of the
+disk, held at a much more positive voltage (+1.2 V vs.\ RHE) where
+\emph{any} $\HtwoOtwo$ that reaches it gets oxidized back to
+$\Otwo$. The ring current $I_R$ then directly measures the flux of
+peroxide leaving the disk. The fraction of disk-released peroxide
+that reaches the ring is the \emph{collection efficiency} $N$ you saw
+above (eq.~\ref{eq:selectivity}). Geometry-only; calibrated with a
+known redox couple.
+
+\begin{center}
+\begin{tikzpicture}[scale=0.9]
+\fill[gray!30] (-3.5,0) rectangle (3.5,1.5);
+\fill[blue!50] (-3.5,0) rectangle (-2.0,-0.4);
+\fill[orange!80] (-1.0,0) rectangle (1.0,-0.4);
+\fill[blue!50] (2.0,0) rectangle (3.5,-0.4);
+\node at (0,-0.7) {\small disk (carbon, ORR)};
+\node at (-2.7,-0.7) {\small ring};
+\node at ( 2.7,-0.7) {\small ring};
+\draw[->, thick, blue!70!black] (0,1.2) -- (0,0.2);
+\node[blue!70!black, right] at (0.1,0.7) {bulk feed (rotation)};
+\draw[->, thick, red!70!black] (0.5,0.2) .. controls (1.6,0.6) .. (2.6,0.2);
+\node[red!70!black, above] at (1.4,0.5) {\scriptsize peroxide flux $\to$ ring};
+\node at (-3.5,1.0) [right] {electrolyte};
+\end{tikzpicture}
+\end{center}
+
+\paragraph{Exercise 6.1.} If $|I_D| = 2.5$ mA, $I_R = 0.090$ mA,
+$N = 0.224$: compute selectivity $\HtwoOtwo$\% and effective
+electron number $n_e$.
+
+% =========================================================================
+\section{Cation effects: the Phase 6$\beta$ story}
+
+This section is the bridge to current research. It is the
+\textit{specific} chemistry our group is working on, and you will
+see all of these terms in commits, plots, and the
+\texttt{docs/phase6/} directory.
+
+\subsection{The empirical observation}
+
+Hold everything fixed --- catalyst, pH, total ionic strength, applied
+voltage --- and only change which alkali cation is in the salt:
+$\mathrm{Li_2SO_4} \to \mathrm{Na_2SO_4} \to \mathrm{K_2SO_4} \to
+\mathrm{Cs_2SO_4}$. The disk current and the peroxide selectivity
+shift substantially. This is the \concept{cation effect}. It has
+been reproducibly observed for decades and across many catalysts. The
+mystery: cations don't appear in the ORR half-reaction.
+
+\subsection{The currently leading hypothesis: cation hydrolysis at
+                                              the OHP}
+
+The hypothesis our group works under (following Singh 2016, Co \&
+Zhang 2019, Ringe 2019) is that the ``inert'' cation participates in
+a side reaction at the outer edge of the Stern layer (the
+\concept{outer Helmholtz plane}, OHP). The hydrated cation
+$\mathrm{M(H_2O)_n^+}$ can give up a proton in a hydrolysis
+equilibrium:
+\begin{equation}
+  \mathrm{M(H_2O)_n^+} + \HtwoO
+  \;\rightleftharpoons\;
+  \mathrm{M(OH)(H_2O)_{n-1}^{0}} + \mathrm{H_3 O^+}.
+  \label{eq:catnion-hyd}
+\end{equation}
+Two things make this matter near a polarized cathode:
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Field-dependent pK$_a$.} Singh 2016 derived that the
+      bulk pK$_a$ of (\ref{eq:catnion-hyd}) shifts by an
+      electric-field-dependent amount near the cathode:
+      \begin{equation}
+        \mathrm{pKa}(\sigma) = \mathrm{pKa}_{\mathrm{bulk}}
+          + 2 A z \sigma\, r_{H\!-\!El}
+            \left(1 - \frac{r_{M-O}^2}{r_{H\!-\!El}^2}\right),
+        \label{eq:singh}
+      \end{equation}
+      with $\sigma$ the surface charge density at the electrode,
+      $r_{M-O}$ the cation--O distance, $r_{H\!-\!El}$ the
+      hydration-shell-H-to-electrode distance, and $A = 620.32$ pm.
+      The geometry makes $\Delta\mathrm{pKa} < 0$ for cathodic
+      $\sigma > 0$: the hydrolysis becomes much more favorable near
+      the surface than in the bulk. For Cs$^+$ near a Cu cathode,
+      pK$_a$ drops from $14.8$ in bulk to $\sim 4.3$ at typical
+      ORR field strengths.
+\item \textbf{Cation identity sets the bulk pK$_a$.} Smaller, more
+      strongly hydrating cations (Li$^+$) have lower bulk pK$_a$
+      values; larger ones (Cs$^+$) have higher ones (see Singh
+      Table S1). At a fixed bulk pH and fixed $\sigma$, this
+      changes \emph{which} cations are actively releasing protons
+      at the OHP and which are not.
+\end{enumerate}
+
+The protons released by (\ref{eq:catnion-hyd}) are released exactly
+where the ORR cathodic chemistry is consuming them, locally
+shielding the surface from the otherwise severe alkalinization
+($\HtwoO + e^- \to \tfrac{1}{2}\Otwo + \OHm$ raises local pH a lot).
+This converts the cation from a passive spectator into an active,
+local pH-buffering species, even though it never enters the formal
+ORR equation.
+
+\subsection{Why this is hard to model}
+
+The cation enters through:
+\begin{itemize}[leftmargin=*]
+\item the EDL physics (Bikerman steric crowding at the OHP),
+\item a coupled \concept{coverage} variable
+      $\Gamma_{\mathrm{MOH}}$ on the OHP that obeys
+      its own ODE in time (rate of (\ref{eq:catnion-hyd}) forward
+      vs.\ reverse, both functions of the local field, which is
+      itself a function of $\Gamma$ via charge balance, etc.),
+\item a feedback into the proton residual at the boundary that
+      changes the BV reaction rates.
+\end{itemize}
+This nonlinear feedback loop is what \concept{Phase 6$\beta$ v9},
+\concept{v10a}, and \concept{v10b} have been progressively wiring
+into the solver. Doc 04 walks the chronology; for now, the bullet
+to remember is: \emph{the next big science our model needs to
+reproduce is cation-dependent peroxide selectivity, and the
+mechanism we are betting on is field-dependent hydrolysis of
+hydrated alkali cations at the OHP.}
+
+\paragraph{Exercise 7.1.} Given Singh's bulk pK$_a$ values
+\{Li: 13.6, Na: 14.2, K: 14.5, Cs: 14.8\} and a uniform
+$\Delta \mathrm{pKa} = -10$ shift near a polarized Cu cathode, which
+of the four cations is most strongly buffering at $\Vrhe = -0.2$ V
+in a pH 4 bulk? (Hint: ask yourself which cations have a local
+pK$_a$ near or below the local pH, since only those will donate
+appreciable proton.)
+
+% =========================================================================
+\section{Glossary of terms you will see in commits}
+
+\begin{center}
+\begin{tabular}{p{0.20\linewidth} p{0.74\linewidth}}
+\toprule
+\textbf{Term} & \textbf{Meaning} \\
+\midrule
+ORR     & Oxygen reduction reaction. $\Otwo \to \HtwoO$ or $\HtwoOtwo$. \\
+RRDE    & Rotating ring--disk electrode --- the experimental setup. \\
+$\Vrhe$ & Voltage vs.\ reversible hydrogen electrode. \\
+$\eta$  & Overpotential, $V - \Eeq$. Negative is cathodic. \\
+$\kzero$ & Reaction-rate prefactor (intrinsic activity). \\
+$\alpha$ & Symmetry factor in BV, typically $\sim 0.5$. \\
+$E^{\circ}$ & Standard reduction potential. \\
+EDL     & Electric double layer. \\
+OHP     & Outer Helmholtz plane: the boundary between the Stern and diffuse layers. \\
+$C_S$   & Stern (compact-layer) capacitance, F/m$^2$. We use 0.20 F/m$^2$. \\
+$\lambda_D$ & Debye length: width of the diffuse layer, $\sim 0.55$ nm here. \\
+$\delta$    & Levich diffusion-layer thickness, $\sim 16$ $\mu$m at 1600 rpm. \\
+$L_{\mathrm{eff}}$ & Slab thickness in our 1D model, set to $\delta$. \\
+$N$         & RRDE collection efficiency, $0.224$ here. \\
+$n_e$       & Effective electron number, between 2 and 4. \\
+PNP    & Poisson--Nernst--Planck. The PDE system. \\
+BV     & Butler--Volmer. The kinetic boundary condition. \\
+Bikerman & Steric correction to the Boltzmann distribution. \\
+Phase 6$\alpha$ & Project epoch: water self-ionization landed. \\
+Phase 6$\beta$  & Project epoch: cation hydrolysis at OHP (\textit{ongoing}). \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Where to read more}
+
+\begin{itemize}[leftmargin=*]
+\item Bard \& Faulkner, \textit{Electrochemical Methods} (2nd ed.):
+      Chapters 1, 3, 12, 13. The standard textbook; chapters 1 and 3
+      give you everything in this primer in proper depth.
+\item Ruggiero 2022 PDF
+      (\texttt{docs/papers/Ruggiero2022\_JCatal\_manuscript.pdf}):
+      our experimental anchor. Read \S 1, \S 2, and Fig.\ 1B.
+\item Internal cheat-sheet
+      (\texttt{docs/papers/Ruggiero2022\_JCatal\_source\_paper.md}):
+      compact list of every number in the paper we use.
+\item Singh 2016 SI extraction
+      (\texttt{docs/phase6/singh\_2016\_pka\_formula.md}): how
+      Eq.~\ref{eq:singh} is derived and verified against
+      experimental titration data for the alkali metals.
+\item CMK-3 capacitance literature
+      (\texttt{docs/phase6/CMK3\_capacitance\_literature.md}): the
+      citation chain behind our $C_S = 0.20$ F/m$^2$ choice.
+\end{itemize}
+
+\onboardingfooter
+\end{document}

@@ -1,0 +1,516 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\DeclareMathOperator{\divg}{div}
+\newcommand{\Omegabar}{\overline{\Omega}}
+\newcommand{\elec}{\mathrm{elec}}
+\newcommand{\ster}{\mathrm{ster}}
+\newcommand{\dyn}{\mathrm{dyn}}
+\newcommand{\bulk}{\mathrm{bulk}}
+\newcommand{\app}{\mathrm{app}}
+\newcommand{\modl}{\mathrm{model}}
+
+\title{MMS source terms for the \texttt{logc\_muh} + multi-ion + Stern stack}
+\author{PNPInverse / Forward solver verification}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A brief derivation of the four manufactured-solution source terms required
+to convergence-test the production PNP--BV stack used by
+\verb|scripts/studies/solver_demo_slide15_no_speculative_cs.py|: muh-formulation
+proton primary variable, three dynamic species $\{\mathrm{O_2}, \mathrm{H_2O_2},
+\mathrm{H^+}\}$, two analytic Bikerman counterions $\{\mathrm{Cs^+},
+\mathrm{SO_4^{2-}}\}$ in the shared-$\theta$ closure, Stern Robin BC at the
+electrode, and parallel R2e/R4e Butler--Volmer in log-rate form. Full
+discussion (clip-safety bounds, runtime asserts, coverage table) is in
+\verb|docs/solver/mms_pnpbv_muh_multi_ion_stern_derivation.md|; this writeup
+captures only the algebra of the source injections.
+\end{abstract}
+
+\section{Setup}
+
+\paragraph{Primary unknowns.} On a mixed FE space $W = V_{O_2} \times V_{H_2O_2}
+\times V_{\mu_H} \times V_\varphi$:
+\[
+  U = (u_{O_2},\ u_{H_2O_2},\ \mu_H,\ \varphi),
+  \qquad
+  z = (0, 0, +1, \cdot),
+  \qquad
+  e_m z_H = +1.
+\]
+The proton enters via its electrochemical potential
+$\mu_H = u_H + e_m z_H \varphi$; concentrations are reconstructed as
+$c_H = \exp(\mu_H - e_m z_H \varphi)$, $c_i = \exp(u_i)$ for $i \in \{O_2,
+H_2O_2\}$.
+
+\paragraph{Domain and BCs.} $\Omega = (0,1)^2$ with electrode marker at $y=0$,
+bulk at $y=1$. Bulk Dirichlets $u_i = \ln c_{0,i}$, $\mu_H = \ln c_{0,H}$,
+$\varphi = 0$. Electrode: BV-flux Neumann on $c_i$ (implicit) and a Stern
+Robin on $\varphi$. Side walls: natural zero-flux ($J_i \cdot n = 0$ for
+species, $\nabla \varphi \cdot n = 0$ for Poisson).
+
+\paragraph{Shared-$\theta$ multi-ion Bikerman closure.}
+For counterions $k \in \{\mathrm{Cs^+}, \mathrm{SO_4^{2-}}\}$ with valence
+$z_k$, bulk concentration $c_k^\bulk$, and hard-sphere $a_k^{\mathrm{ctn}}$,
+\begin{align}
+  q_k(\varphi)        &= \exp(-z_k\, \varphi), \\
+  A_\dyn(c_\dyn)      &= \sum_{i \in \dyn} a_i^\dyn\, c_i, \\
+  \theta_b            &= 1 - \sum_{i \in \dyn} a_i^\dyn\, c_{0,i}
+                          - \sum_k a_k^{\mathrm{ctn}}\, c_k^\bulk, \\
+  D(\varphi)          &= \theta_b + \sum_k a_k^{\mathrm{ctn}}\, c_k^\bulk\,
+                          q_k(\varphi), \\
+  c_k^\ster(\varphi; c_\dyn)
+                      &= c_k^\bulk\, q_k(\varphi)\, \frac{1 - A_\dyn}{D(\varphi)}, \\
+  \rho_k(\varphi; c_\dyn) &= z_k\, c_k^\ster, \qquad
+  P_k(\varphi; c_\dyn) = a_k^{\mathrm{ctn}}\, c_k^\ster.
+\end{align}
+The steric chemical potential acting on dynamic species:
+\begin{equation}
+  \theta_\mathrm{inner}(\varphi; c_\dyn) = 1 - A_\dyn - \sum_k P_k,
+  \qquad
+  \mu_\ster = -\ln \theta_\mathrm{inner}.
+\end{equation}
+(Per-ion $\varphi$-clamps, $\mathtt{free\_dyn\_floor}$, and
+$\mathtt{packing\_floor}$ are identity at the manufactured solution by
+design; see the markdown writeup \S5.)
+
+\paragraph{Production residual.} Production builds the residual (mobility-flux
+convention $J_i = +D_i\, c_i\, \nabla(\cdot)$, not the physical
+$N_i = -J_i$):
+\begin{align}
+  F_\mathrm{res} \ni
+  &\sum_{i} \int_\Omega \frac{c_i - c_{i,\mathrm{old}}}{\Delta t}\, v_i\, \mathrm{d}x
+   + \sum_i \int_\Omega J_i \cdot \nabla v_i\, \mathrm{d}x
+   - \sum_{i,j} \int_{\Gamma_\elec} s_{ij}\, R_j\, v_i\, \mathrm{d}s
+   \notag\\
+  &+ \int_\Omega \varepsilon_c\, \nabla \varphi \cdot \nabla w\, \mathrm{d}x
+   - \int_\Omega \rho_c \Bigl(\sum_i z_i c_i + \sum_k z_k\, c_k^\ster\Bigr) w\, \mathrm{d}x
+   - \int_{\Gamma_\elec} C_S^\modl\, (\varphi_\app^\modl - \varphi)\, w\, \mathrm{d}s,
+   \label{eq:Fres}
+\end{align}
+with $\varepsilon_c = \mathtt{scaling['poisson\_coefficient']}$,
+$\rho_c = \mathtt{scaling['charge\_rhs\_prefactor']}$, $C_S^\modl =
+\mathtt{scaling['bv\_stern\_capacitance\_model']}$, and
+$\varphi_\app^\modl = V_\mathrm{RHE}/V_T$ (nondim).
+
+\paragraph{Butler--Volmer log-rates.} For $j \in \{R_{2e}, R_{4e}\}$ in the
+Stern-on branch ($\eta_j$ depends on the local $\varphi$):
+\begin{align}
+  \eta_j(x,y)
+  &= \mathtt{bv\_exp\_scale}\, \bigl(\varphi_\app^\modl - \varphi(x,y) - E_{eq,j}^\modl\bigr), \\
+  \log r_{j,\mathrm{cath}}
+  &= \ln k_{0,j} + u_{c_j} + \sum_f p_f (u_{s_f} - \ln c_{\mathrm{ref},f})
+                  - \alpha_j n_{e,j}\, \eta_j, \\
+  \log r_{j,\mathrm{anod}}
+  &= \begin{cases}
+       \ln k_{0,j} + u_{a_j} + (1{-}\alpha_j) n_{e,j}\, \eta_j
+         & \text{(reversible, anodic species defined)} \\
+       -\infty
+         & \text{(R4e: irreversible $\Rightarrow$ anodic $=0$)}
+     \end{cases} \\
+  R_j &= \exp(\log r_{j,\mathrm{cath}}) - \exp(\log r_{j,\mathrm{anod}}).
+\end{align}
+\textbf{Critical muh substitution:} wherever $u_H$ appears in the BV
+expressions, the muh-aware code uses $u_H^\mathrm{recon} = \mu_H - e_m z_H \varphi$,
+not the raw $\mu_H$ primary.
+
+\section{Manufactured solution}
+
+Choose smooth fields satisfying all bulk Dirichlets exactly:
+\begin{align}
+  c_i^\mathrm{ex}(x,y) &= c_{0,i}\bigl[1 + \delta_i \cos(\pi x)\, (1-y)^2\bigr],
+    \qquad i \in \{O_2, H_2O_2, H\}, \\
+  \varphi^\mathrm{ex}(x,y) &= (1-y)\bigl[\alpha_0 + \alpha_1 \cos(\pi x)\bigr]
+    + \gamma\, y\, (1-y)\, \cos(\pi x), \\
+  \mu_H^\mathrm{ex}(x,y) &= \ln c_H^\mathrm{ex}(x,y) + e_m z_H \varphi^\mathrm{ex}(x,y),
+\end{align}
+with envelope $\delta_i = 0.30$, $\alpha_0 = \alpha_1 = \gamma = 0.5$. At $y=1$,
+$c_i^\mathrm{ex} = c_{0,i}$ and $\varphi^\mathrm{ex} = 0$ (bulk
+Dirichlets met). At $y=0$, $\varphi^\mathrm{ex}(x,0) = \alpha_0 + \alpha_1
+\cos(\pi x) \in [0,1]$, which differs from $\varphi_\app^\modl \approx 21.41$
+so the Stern Robin is non-trivially exercised. At $x \in \{0,1\}$,
+$\partial_x = 0$ for every field, so side-wall natural BCs are auto-satisfied
+and no side-wall source is needed.
+
+Reconstructed exact closure quantities are obtained by direct UFL composition
+at the manufactured fields:
+\begin{align}
+  A_\dyn^\mathrm{ex} &= \sum_i a_i^\dyn\, c_i^\mathrm{ex},
+   \qquad
+  D^\mathrm{ex} = \theta_b + \sum_k a_k^{\mathrm{ctn}}\, c_k^\bulk\, q_k^\mathrm{ex},
+   \\
+  c_k^{\ster,\mathrm{ex}} &= c_k^\bulk\, q_k^\mathrm{ex}\,
+                              \frac{1 - A_\dyn^\mathrm{ex}}{D^\mathrm{ex}},
+   \qquad
+  \theta_\mathrm{inner}^\mathrm{ex} = 1 - A_\dyn^\mathrm{ex} - \sum_k P_k^\mathrm{ex},
+   \\
+  \mu_\ster^\mathrm{ex} &= -\ln \theta_\mathrm{inner}^\mathrm{ex},
+   \\
+  J_i^\mathrm{ex} &= D_i\, c_i^\mathrm{ex}\, \bigl(\nabla u_i^\mathrm{ex} + \nabla \mu_\ster^\mathrm{ex}\bigr),
+    \quad i \in \{O_2, H_2O_2\},
+   \\
+  J_H^\mathrm{ex} &= D_H\, c_H^\mathrm{ex}\, \bigl(\nabla \mu_H^\mathrm{ex} + \nabla \mu_\ster^\mathrm{ex}\bigr).
+\end{align}
+
+\section{Source terms}
+
+\textbf{Pattern.} For each production weak-form contribution
+$+\int X\, v\, \mathrm{d}\mu$, subtract a source $-\int X|_{u_\mathrm{ex}}\, v\, \mathrm{d}\mu$
+so that the discrete operator drives $U_h$ towards the manufactured field at
+the FE discretization rate. We do not use \verb|ufl.replace| on $F_\mathrm{res}$
+itself: each source integrand is written from the strong-form residual,
+independent of the discrete weak form, so that any wiring bug in $F_\mathrm{res}$
+shows up as a convergence-rate violation rather than canceling symmetrically.
+
+\subsection{Nernst--Planck interior source}
+
+Integrating $\int J_i \cdot \nabla v_i\, \mathrm{d}x$ by parts moves the
+divergence onto $J_i$ and produces a boundary trace on $\partial \Omega$. The
+interior strong-form residual at $u_\mathrm{ex}$ is $-\divg J_i^\mathrm{ex}$,
+so the interior NP source is
+\begin{equation}
+\boxed{
+  S_{c_i}(x,y) = -\divg J_i^\mathrm{ex}(x,y),
+  \qquad
+  F_\mathrm{res} \leftarrow F_\mathrm{res} - \int_\Omega S_{c_i}\, v_i\, \mathrm{d}x_q,
+}
+\end{equation}
+implemented as \verb|fd.div(J_i_ex)| with elevated quadrature
+$\mathtt{SRC\_QUAD\_DEGREE} \geq 8$ (final value pinned by a one-time sweep
+on $N=32$). The boundary trace $\int J_i^\mathrm{ex} \cdot n\, v_i\, \mathrm{d}s$
+vanishes on bulk (Dirichlet test functions) and on side walls
+($\partial_x c_i^\mathrm{ex} = 0$); the electrode trace is handled below.
+
+\subsection{Nernst--Planck electrode boundary source}
+
+At $y=0$ the production residual contains, after IBP, an implicit
+$\int J_i \cdot n\, v_i\, \mathrm{d}s$ from the Laplacian plus an explicit
+$-\int \sum_j s_{ij} R_j\, v_i\, \mathrm{d}s$ from the BV term. The natural
+BC at $u_\mathrm{ex}$ is therefore $J_i^\mathrm{ex} \cdot n =
+\sum_j s_{ij} R_j^\mathrm{ex}$; the gap between the manufactured profile and
+this natural BC is supplied as a source:
+\begin{equation}
+\boxed{
+  g_i^\elec(x) = J_i^\mathrm{ex}\cdot n\bigl|_{y=0}
+               - \sum_j s_{ij}\, R_j^\mathrm{ex}\bigl|_{y=0},
+  \qquad
+  F_\mathrm{res} \leftarrow F_\mathrm{res}
+                       - \int_{\Gamma_\elec} g_i^\elec\, v_i\, \mathrm{d}s_q.
+}
+\end{equation}
+The outward normal at $y=0$ is $n = (0,-1)$, so for the
+mobility-convention fluxes
+\begin{align}
+  J_i^\mathrm{ex} \cdot n\bigl|_{y=0}
+   &= -D_i\, c_i^\mathrm{ex}\bigl|_{y=0}\,
+       \partial_y\!\bigl(u_i^\mathrm{ex} + \mu_\ster^\mathrm{ex}\bigr)\bigl|_{y=0},
+   && i \in \{O_2, H_2O_2\}, \\
+  J_H^\mathrm{ex} \cdot n\bigl|_{y=0}
+   &= -D_H\, c_H^\mathrm{ex}\bigl|_{y=0}\,
+       \partial_y\!\bigl(\mu_H^\mathrm{ex} + \mu_\ster^\mathrm{ex}\bigr)\bigl|_{y=0}.
+\end{align}
+Implementations should compose $J_i^\mathrm{ex}$ as a UFL expression and
+use \verb|fd.dot(J_i_ex, fd.FacetNormal(mesh))| rather than expanding the
+sign by hand. $R_j^\mathrm{ex}|_{y=0}$ is genuinely $x$-dependent in
+the Stern-on branch because $\eta_j^\mathrm{ex}$ varies with
+$\varphi^\mathrm{ex}(x,0)$.
+
+\paragraph{Sign sanity.} For $\mathrm{O_2}$ with $s = -1$ and cathodic
+$R_{R2e} > 0$, the natural BC gives $J_{O_2}^\mathrm{ex} \cdot n = -R_{R2e} < 0$
+at $y=0$, hence $J_{O_2,y}^\mathrm{ex} > 0$ and
+$\partial_y u_{O_2}^\mathrm{ex} > 0$: $c_{O_2}$ increases away from the
+electrode (boundary-layer depletion), as expected.
+
+\subsection{Poisson interior source}
+
+IBP on the Laplacian:
+$\int \varepsilon_c \nabla\varphi \cdot \nabla w\, \mathrm{d}x
+ = -\int \varepsilon_c\, \Delta\varphi\, w\, \mathrm{d}x
+ + \int \varepsilon_c\, \nabla\varphi \cdot n\, w\, \mathrm{d}s$.
+The interior strong-form residual at $u_\mathrm{ex}$ collects the Laplacian
+piece with both charge densities:
+\begin{equation}
+\boxed{
+  S_\varphi(x,y) = -\varepsilon_c\, \Delta\varphi^\mathrm{ex}
+                 - \rho_c\, \bigl(z_H\, c_H^\mathrm{ex}\bigr)
+                 - \rho_c\, \sum_k z_k\, c_k^{\ster,\mathrm{ex}},
+  \qquad
+  F_\mathrm{res} \leftarrow F_\mathrm{res} - \int_\Omega S_\varphi\, w\, \mathrm{d}x_q.
+}
+\end{equation}
+For the chosen $\varphi^\mathrm{ex}$,
+\begin{equation}
+  \Delta\varphi^\mathrm{ex} = -\pi^2 \cos(\pi x)\,\bigl[(1-y)\alpha_1 + \gamma y(1-y)\bigr]
+                            - 2\gamma \cos(\pi x).
+\end{equation}
+Implementations use \verb|fd.div(fd.grad(phi_ex))| directly. The bulk
+trace vanishes (Dirichlet); the side-wall trace vanishes
+($\partial_x\varphi^\mathrm{ex} = 0$ at $x \in \{0,1\}$); the electrode
+trace is the Stern Robin source below.
+
+\subsection{Stern Robin boundary source}
+
+At $y=0$, the $\varphi$-equation residual aggregates the IBP byproduct
+$\int \varepsilon_c \nabla\varphi \cdot n\, w\, \mathrm{d}s$ from the
+Laplacian and the explicit Stern term $-\int C_S^\modl(\varphi_\app^\modl
+- \varphi)\, w\, \mathrm{d}s$. Subtracting their value at $u_\mathrm{ex}$:
+\begin{equation}
+\boxed{
+  g_S(x) = \varepsilon_c\,\bigl(\nabla\varphi^\mathrm{ex}\cdot n\bigr)\bigl|_{y=0}
+         - C_S^\modl\,\bigl(\varphi_\app^\modl - \varphi^\mathrm{ex}\bigl|_{y=0}\bigr),
+  \qquad
+  F_\mathrm{res} \leftarrow F_\mathrm{res} - \int_{\Gamma_\elec} g_S\, w\, \mathrm{d}s_q.
+}
+\end{equation}
+With $n = (0,-1)$ at $y=0$,
+\begin{align}
+  \bigl(\nabla\varphi^\mathrm{ex}\cdot n\bigr)\bigl|_{y=0}
+  &= -\partial_y \varphi^\mathrm{ex}\bigl|_{y=0}
+   = \alpha_0 + (\alpha_1 - \gamma) \cos(\pi x), \\
+  \varphi^\mathrm{ex}\bigl|_{y=0} &= \alpha_0 + \alpha_1 \cos(\pi x),
+\end{align}
+so
+\begin{equation}
+  g_S(x) = \varepsilon_c\bigl[\alpha_0 + (\alpha_1-\gamma)\cos(\pi x)\bigr]
+         - C_S^\modl\bigl[\varphi_\app^\modl - \alpha_0 - \alpha_1\cos(\pi x)\bigr].
+\end{equation}
+The sign on the $-C_S^\modl(\cdot)$ piece matches production
+(\verb|forms_logc_muh.py:668| has $F_\mathrm{res} \mathrel{-{=}} C_S^\modl(\varphi_\app
+- \varphi)\, w\, \mathrm{d}s$), so subtracting $g_S \cdot w\, \mathrm{d}s$ from
+$F_\mathrm{res}$ exactly cancels the residual at $u_\mathrm{ex}$.
+
+\section{Summary of what the four source terms catch}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Source piece & Catches a bug in \\
+\midrule
+$S_{c_i}$, $i \in \{O_2, H_2O_2\}$
+  & $\mu_\ster$ inclusion in NP flux; shared-$\theta$ Cs$^+$/SO$_4^{2-}$
+    contributions to packing \\
+$S_{c_H}$
+  & muh reconstruction ($\nabla u_H \to \nabla\mu_H$); $\mu_\ster$
+    coupling for the proton \\
+$g_i^\elec$ with muh-aware $R_j^\mathrm{ex}$
+  & muh substitution $u_H \to \mu_H - e_m z_H \varphi$ inside BV
+    cathodic factors (powers 2 vs 4); $\alpha\, n_e$ signs; reversible
+    vs irreversible branch \\
+spatial $\eta_j^\mathrm{ex}(x,0)$
+  & Stern-on branch of \verb|_build_eta_clipped|; $\varphi$-coupling
+    into BV that only fires when $C_S > 0$ \\
+$S_\varphi$ interior
+  & shared-$\theta$ numerator $(1 - A_\dyn)$; per-ion $\varphi$-clamp
+    inside $D(\varphi)$; sign on $\rho_c \sum z_k c_k^\ster$ \\
+$g_S$
+  & sign of $-C_S^\modl(\varphi_\app - \varphi)$; \emph{use} of the
+    ctx-stored Stern coefficient in the residual; IBP byproduct on
+    $\mathrm{d}s_\elec$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Out of scope}
+
+By construction the four sources above do not exercise
+(i) inactive clamp/floor branches ($u_\mathrm{clamp}$,
+$\mathtt{phi\_clamp}_k$, $\mathtt{exponent\_clip}$, $\mathtt{free\_dyn\_floor}$,
+$\mathtt{packing\_floor}$ -- all identity at $u_\mathrm{ex}$);
+(ii) runtime mutation of ctx values (voltage continuation,
+$\mathtt{set\_stern\_capacitance\_model}$, $K_0$ ramps, $z$-scale ramps);
+(iii) the Stern coefficient's nondim conversion at form-build time
+(source and residual both consume the converted value);
+(iv) the $c_\mathrm{ref}$-anchored anodic branch of BV (neither R2e
+nor R4e enters it);
+(v) the legacy per-species $\mathtt{bv\_c\_ref\_model\_vals}$ path
+(gated off by $\mathtt{use\_reactions} = \mathtt{True}$);
+(vi) IC machinery and continuation/anchor logic; (vii) Phase-6
+speculative physics (water self-ionization, cation hydrolysis).
+
+The full coverage table, runtime invariants (boundary-norm bound
+$10 < \lVert R_{4e}^\mathrm{ex} \rVert / \lVert R_{2e}^\mathrm{ex} \rVert
+< 10^5$ enforcing $K_{0,R_{4e}}^\mathrm{factor} = 10^{-18}$,
+discrete-min check on $\theta_\mathrm{inner}^\mathrm{ex}$, stack-invariant
+asserts), and parameter envelope justification are in
+\verb|docs/solver/mms_pnpbv_muh_multi_ion_stern_derivation.md| (post-GPT
+critique session 38, verdict APPROVED).
+
+\section{Verification results}
+
+Implementation lands in
+\verb|scripts/verification/mms_pnpbv_muh_multi_ion_stern.py| (source
+builder; $\sim 1100$ LOC) and
+\verb|tests/test_mms_logc_muh_multi_ion_stern.py| (18-test suite). All
+tests pass on Firedrake/PETSc as of 2026-05-14.
+
+\paragraph{Convergence rates.} A four-mesh
+\verb|UnitSquareMesh| sweep on $N \in \{8, 16, 32, 64\}$ with
+$\mathtt{SRC\_QUAD\_DEGREE} = 8$ recovers textbook CG1 convergence on
+every primary unknown (log-log linear regression on the four-mesh chain;
+$R^2 > 0.99$ in every row):
+
+\begin{center}
+\begin{tabular}{lcc cc}
+\toprule
+Field & $L^2$ rate & $H^1$ rate & $L^2$ $R^2$ & $H^1$ $R^2$ \\
+\midrule
+$u_{O_2}$     & $1.9974$ & $0.9991$ & $>0.999$ & $>0.999$ \\
+$u_{H_2O_2}$  & $1.9972$ & $0.9993$ & $>0.999$ & $>0.999$ \\
+$\mu_H$       & $1.9999$ & $1.0003$ & $>0.999$ & $>0.999$ \\
+$\varphi$     & $2.0086$ & $1.0011$ & $>0.999$ & $>0.999$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Full per-mesh error table:
+
+\begin{center}
+\footnotesize
+\begin{tabular}{rr cccc cccc}
+\toprule
+& & \multicolumn{4}{c}{$L^2$ error} & \multicolumn{4}{c}{$H^1$ error} \\
+\cmidrule(lr){3-6}\cmidrule(lr){7-10}
+$N$ & $h$ & $u_{O_2}$ & $u_{H_2O_2}$ & $\mu_H$ & $\varphi$
+      & $u_{O_2}$ & $u_{H_2O_2}$ & $\mu_H$ & $\varphi$ \\
+\midrule
+ 8 & $0.1250$ & $1.97{\times}10^{-3}$ & $4.13{\times}10^{-3}$ & $4.21{\times}10^{-3}$ & $2.13{\times}10^{-3}$
+              & $7.03{\times}10^{-2}$ & $7.05{\times}10^{-2}$ & $1.80{\times}10^{-1}$ & $1.34{\times}10^{-1}$ \\
+16 & $0.0625$ & $5.01{\times}10^{-4}$ & $1.06{\times}10^{-3}$ & $1.06{\times}10^{-3}$ & $5.15{\times}10^{-4}$
+              & $3.55{\times}10^{-2}$ & $3.55{\times}10^{-2}$ & $8.96{\times}10^{-2}$ & $6.67{\times}10^{-2}$ \\
+32 & $0.0312$ & $1.26{\times}10^{-4}$ & $2.67{\times}10^{-4}$ & $2.64{\times}10^{-4}$ & $1.27{\times}10^{-4}$
+              & $1.78{\times}10^{-2}$ & $1.78{\times}10^{-2}$ & $4.48{\times}10^{-2}$ & $3.33{\times}10^{-2}$ \\
+64 & $0.0156$ & $3.15{\times}10^{-5}$ & $6.70{\times}10^{-5}$ & $6.60{\times}10^{-5}$ & $3.16{\times}10^{-5}$
+              & $8.89{\times}10^{-3}$ & $8.89{\times}10^{-3}$ & $2.24{\times}10^{-2}$ & $1.66{\times}10^{-2}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Newton converges in $2$--$3$ iterations on every mesh
+(well below the $30$-iteration cap) using a backtracking line search
+($\mathtt{snes\_linesearch\_type} = \mathtt{bt}$,
+$\mathtt{snes\_linesearch\_maxlambda} = 0.5$) and tight tolerances
+($\mathtt{snes\_atol} = \mathtt{snes\_rtol} = 10^{-8}$). The default
+PETSc \texttt{l2} line search overshoots on this multi-ion + Stern
+stack and triggers \texttt{DIVERGED\_DTOL} on the first Newton step;
+\texttt{bt} resolves it cleanly.
+
+\paragraph{Quadrature degree.} A pilot sweep at $N \in \{32, 64\}$ with
+$\mathtt{SRC\_QUAD\_DEGREE} \in \{6, 8, 10, 12, 16\}$ yields field
+errors that agree to all reported digits for every degree $\geq 8$.
+$\mathtt{SRC\_QUAD\_DEGREE} = 8$ is therefore pinned for the test
+suite; degree $6$ is marginal and not used.
+
+\paragraph{Graded production mesh recovery.} A single-solve check on
+the demo's graded rectangle ($N_x = 8$, $N_y = 80$, $\beta = 3$ ---
+identical to the mesh
+\verb|scripts/studies/solver_demo_slide15_no_speculative_cs.py|
+uses) verifies that Newton recovers the manufactured solution within
+the expected $\mathcal{O}(h_x^2)$ floor of the coarse $x$-direction:
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Field & $L^2$ error & $H^1$ error \\
+\midrule
+$u_{O_2}$     & $1.40{\times}10^{-3}$ & $5.45{\times}10^{-2}$ \\
+$u_{H_2O_2}$  & $2.41{\times}10^{-3}$ & $5.46{\times}10^{-2}$ \\
+$\mu_H$       & $2.93{\times}10^{-3}$ & $1.57{\times}10^{-1}$ \\
+$\varphi$     & $1.55{\times}10^{-3}$ & $1.19{\times}10^{-1}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Newton: $3$ iterations.  Test-suite thresholds are pinned at $\sim 6\times$
+above these baseline values to absorb compiler / solver-version drift while
+remaining $\sim 10^2\times$ below what an $\mathcal{O}(1)$ wiring bug would
+produce.
+
+\paragraph{Broken-config invariant suite.} Twelve parametrized tests
+verify that the prebuild and postbuild invariant phases catch every
+known way the test problem can silently drift from the production
+stack:
+
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+Mutation & Layer & Match pattern \\
+\midrule
+$\mathtt{formulation} = \mathtt{logc}$       & prebuild & \verb|formulation| \\
+$\mathtt{bv\_log\_rate} = \mathtt{False}$    & prebuild & \verb|bv_log_rate| \\
+$\mathtt{enable\_water\_ionization}$ on      & prebuild & \verb|water_ionization| \\
+$\mathtt{enable\_cation\_hydrolysis}$ on     & prebuild & \verb|cation hydrolysis| \\
+$\Delta t = 0.1$ (time term not negligible)  & prebuild & \verb|dt| \\
+$\mathtt{snes\_atol} = 10^{-2}$ (too loose)  & prebuild & \verb|snes_atol| \\
+$\mathtt{suppress\_poisson\_source}$ on      & prebuild & \verb|suppress_poisson_source| \\
+$R_{4e}$ reaction missing                    & prebuild & \verb|rxns| \\
+$\mathrm{SO_4^{2-}}$ counterion missing      & prebuild & \verb|bikerman| \\
+$\mathrm{Cs^+} \to \mathrm{ClO_4^-}$         & prebuild & \verb|Cs|, \verb|a_Cs|, \verb|c_b_Cs| \\
+Stern off ($C_S = \mathtt{None}$)            & postbuild & \verb|bv_stern_capacitance_model| \\
+$K_{0,R_{4e}}^\mathrm{factor} = 1$           & postbuild & \verb|k0_R4e| \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+All twelve raise \verb|AssertionError| at the documented invariant
+layer with a recognizable message that \verb|pytest.raises(match=...)|
+catches.
+
+\paragraph{Acceptance.} The full $18$-test suite
+(\verb|TestMMSConvergence|: $3$ tests; \verb|TestMMSProductionGradedMesh|:
+$3$ tests; \verb|TestMMSAsserts|: $12$ tests) passes in
+$\sim\!12\,\text{s}$ under
+\verb|pytest -p no:xdist -m slow tests/test_mms_logc_muh_multi_ion_stern.py|.
+JSON + PNG artifacts land in
+\verb|StudyResults/mms_logc_muh_multi_ion_stern/|.
+
+\section{Implementation note: $\mathrm{H_2O_2}$ bulk concentration}
+
+Production runs use $c_{0,H_2O_2}^\bulk = \mathtt{H2O2\_SEED\_NONDIM} =
+10^{-4}$, a "seed" value chosen so that the log-concentration
+formulation can start from a finite $u_{H_2O_2}$ at cold-start; the
+actual $c_{H_2O_2}$ at the electrode grows several orders of
+magnitude away from this seed via voltage continuation. The MMS
+test, in contrast, starts Newton directly at $U = U_\mathrm{ex}$ with
+no continuation, so any test-time choice of $c_{0,H_2O_2}^\bulk$ must
+place the manufactured state inside Newton's basin of attraction.
+
+At $c_{0,H_2O_2}^\bulk = 10^{-4}$ the $\mathrm{H_2O_2}$ sub-equation
+is Newton-ill-conditioned for the parallel-$2e$/$4e$ topology used
+here. The cathodic $R_{4e}$ has stoichiometry $s_{H_2O_2} = 0$, so
+the only BV coupling on $\mathrm{H_2O_2}$ is the $+1 \cdot R_{R_{2e}}$
+term ($R_{R_{2e}}\approx 2.5$ at $V_\mathrm{RHE} = +0.55\,\mathrm{V}$),
+and the diagonal block of the Jacobian for $\mathrm{H_2O_2}$ scales as
+$c_{H_2O_2}^\mathrm{ex} \approx 10^{-4}$. Empirically, Newton accepts a
+step that drives $u_{H_2O_2}$ to $\sim\!-25$ in the interior --- a
+state where the $\mathrm{H_2O_2}$ sub-equation is residual-satisfied
+($c_{H_2O_2} \to 0$ collapses every $\mathrm{H_2O_2}$ term) but
+$u_{H_2O_2}$ has wandered $\mathcal{O}(15)$ away from
+$u_{H_2O_2}^\mathrm{ex}$, giving $\lVert u_{H_2O_2} \rVert_{L^2} \sim
+20$ instead of the $\sim\!10^{-3}$ achieved on every other field.
+
+Setting $c_{0,H_2O_2}^\bulk = 1$ for the MMS test problem rebalances
+the $\mathrm{H_2O_2}$ Jacobian column against the other species; Newton
+then converges in $2$--$3$ iterations to the manufactured solution.
+The operator under test is unchanged --- $c_{0,H_2O_2}^\bulk$ enters
+only the bulk Dirichlet BC, the bulk packing constant $\theta_b$
+(contribution $a_{H_2O_2}\, c_{0,H_2O_2}^\bulk = 2.42\times 10^{-5}$,
+negligible against $\theta_b \approx 0.991$), and the BV $c_\mathrm{ref}$
+references for the anodic branch --- so the convergence rates above
+verify exactly the production stack the demo script uses, with one
+unrelated BC value rescaled. The test-suite constant
+\verb|H2O2_C0_MMS = 1.0| in
+\verb|scripts/verification/mms_pnpbv_muh_multi_ion_stern.py| carries
+this note inline.
+
+\end{document}

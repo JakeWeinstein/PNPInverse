@@ -1,0 +1,79 @@
+% Shared preamble for the PNPInverse onboarding docs.
+% Each document does \input{preamble} after \documentclass.
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
+\usepackage{empheq}
+\usepackage{siunitx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{framed}
+\usepackage{microtype}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, decorations.pathreplacing, calligraphy}
+\usepackage[hidelinks]{hyperref}
+
+% --- branding -------------------------------------------------------------
+\definecolor{pnpblue}{RGB}{30,70,120}
+\definecolor{pnpgray}{RGB}{90,90,90}
+\definecolor{calloutbg}{RGB}{245,245,235}
+\definecolor{shadecolor}{RGB}{245,245,235}
+
+% --- callouts (uses framed.sty's shaded environment) ----------------------
+\newenvironment{callout}[1]
+  {\begin{shaded}\noindent\textbf{\color{pnpblue}#1}\par\smallskip\ignorespaces}
+  {\end{shaded}}
+
+\newcommand{\concept}[1]{\textbf{\color{pnpblue}#1}}
+\newcommand{\warn}[1]{\textbf{\color{red!70!black}#1}}
+
+% --- code listings --------------------------------------------------------
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  frame=single,
+  framesep=4pt,
+  backgroundcolor=\color{calloutbg},
+  rulecolor=\color{pnpgray!40},
+}
+
+% --- math shortcuts -------------------------------------------------------
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\diff}{\mathrm{d}}
+\newcommand{\eqd}{\overset{!}{=}}
+\newcommand{\grad}{\nabla}
+\newcommand{\divg}{\nabla\!\cdot}
+\newcommand{\eqdef}{\;\coloneqq\;}
+\newcommand{\evalat}[2]{\left.#1\right\rvert_{#2}}
+\newcommand{\set}[1]{\{#1\}}
+
+% common chemistry / physics symbols
+\newcommand{\Hyd}{\mathrm{H}}
+\newcommand{\Oxy}{\mathrm{O}}
+\newcommand{\HtwoO}{\mathrm{H_2O}}
+\newcommand{\HtwoOtwo}{\mathrm{H_2O_2}}
+\newcommand{\Otwo}{\mathrm{O_2}}
+\newcommand{\Hp}{\mathrm{H^+}}
+\newcommand{\OHm}{\mathrm{OH^-}}
+\newcommand{\Kp}{\mathrm{K^+}}
+\newcommand{\Csp}{\mathrm{Cs^+}}
+\newcommand{\SOfour}{\mathrm{SO_4^{2-}}}
+\newcommand{\Vrhe}{V_{\mathrm{RHE}}}
+\newcommand{\eo}{E^{\circ}}
+\newcommand{\Eeq}{E_{\mathrm{eq}}}
+\newcommand{\kzero}{k_0}
+
+\newcommand{\onboardingfooter}{%
+  \vfill\noindent\rule{\linewidth}{0.4pt}\par
+  {\small\color{pnpgray} PNPInverse intern onboarding,
+  compiled \today. Source under \texttt{docs/onboarding/}.}\par}

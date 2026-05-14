@@ -1,0 +1,199 @@
+\documentclass[11pt]{article}
+\input{preamble}
+
+\title{\bfseries PNPInverse \\
+       \large Project Overview \& Motivation}
+\author{Onboarding doc 00 of 06}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{callout}{What this document is for}
+A bird's-eye view of the project: the scientific question we are
+trying to answer, what kind of code we write to answer it, where you
+fit in, and what the rest of the onboarding documents will cover.
+You should be able to read this in 15--20 minutes. The next docs go
+deep into the chemistry, the math, and the code.
+\end{callout}
+
+\tableofcontents
+\bigskip\hrule\bigskip
+
+% =========================================================================
+\section{The big picture in one paragraph}
+
+We are building a computational model of an
+\concept{electrochemical cell} --- specifically the surface where an
+electrode meets a salt-water electrolyte and the
+\concept{oxygen reduction reaction (ORR)} happens. The ORR is how
+oxygen gas, $\Otwo$, gets reduced to either water ($\HtwoO$) or
+hydrogen peroxide ($\HtwoOtwo$). Which product you get, and at what
+voltage, depends on a tangled mix of catalyst surface chemistry,
+local pH, and how ions arrange themselves in the few nanometers
+nearest the electrode. Our group at Northwestern (the Mangan and
+Seitz labs) has experimental data showing that the choice of
+\concept{spectator cation} --- the ``inert'' positive ion in the
+salt, like $\Kp$, $\Csp$, $\mathrm{Na^+}$, $\mathrm{Li^+}$ ---
+strongly changes which ORR product the cell makes, even though the
+cation itself doesn't appear in the chemical equation. We want to
+build a forward simulator that reproduces this cation-dependent
+behavior from physical principles, and then (later) run that
+simulator backward to extract the underlying kinetic constants.
+
+\section{Why this matters scientifically}
+
+\begin{itemize}[leftmargin=*]
+\item \concept{$\HtwoOtwo$ is a useful product.} Hydrogen peroxide is
+  a green oxidant used in water treatment, paper bleaching, and
+  potentially as a fuel. Today industrial $\HtwoOtwo$ is made by the
+  energy-intensive anthraquinone process. Electrochemical $\HtwoOtwo$
+  generation from $\Otwo$ + electricity is a candidate replacement,
+  but only if you can hit it \textit{selectively} --- if your
+  electrode reduces $\Otwo$ all the way to water you get nothing
+  useful.
+\item \concept{Cation effects are mysterious and reproducible.} For
+  decades, electrochemists have noticed that swapping
+  $\mathrm{Li^+} \leftrightarrow \mathrm{Cs^+}$ in an ORR cell can
+  shift current densities and selectivities by factors of 2--10.
+  Modern theories (Co \& Zhang 2019, Singh 2016, Ringe 2019) blame
+  this on cations modulating the electric double layer and the local
+  pH near the electrode, not on cations entering the reaction. There
+  is no first-principles forward model that nails this quantitatively.
+\item \concept{Inverse parameter inference is the long game.} The
+  rate constants for ORR ($\kzero$, transfer coefficient $\alpha$, etc.)
+  cannot be measured directly --- they are inferred by fitting an
+  assumed kinetic model to current-voltage curves. Most groups fit
+  toy models (no spatial transport, no double layer). Ours is one of
+  very few attempts to fit a full PDE-based model with adjoint
+  gradients, which is what gives the inverse problem any hope of being
+  identifiable. \warn{This pipeline is currently paused} until the
+  forward model is mature enough to be trusted; that's what we are
+  working on now.
+\end{itemize}
+
+\section{What kind of code we write}
+
+\subsection{The \emph{forward} problem}
+
+Given:
+\begin{itemize}[leftmargin=*]
+  \item a 1D or 2D slice of the electrode--electrolyte region
+        (typically $\sim$10--100 $\mu$m thick),
+  \item bulk concentrations of $\Otwo$, $\Hp$, $\OHm$, $\Kp$,
+        $\SOfour$,
+  \item a set of \concept{kinetic parameters}
+        $\{\kzero^{(2e)}, \kzero^{(4e)}, \alpha^{(2e)}, \alpha^{(4e)}\}$
+        for the two parallel ORR reactions,
+  \item a value of the applied electrode potential $\Vrhe$,
+\end{itemize}
+the forward solver computes the steady-state distribution of every
+species concentration and the electric potential everywhere in the
+domain, and from those it computes the \concept{disk current density}
+(total current at the electrode) and the \concept{peroxide current
+density} (the slice of that current going into $\HtwoOtwo$).
+
+The math underneath is the \concept{Poisson--Nernst--Planck (PNP)}
+system coupled to a \concept{Butler--Volmer (BV)} boundary condition
+at the electrode. Doc 02 derives both. Doc 03 explains how we
+discretize and solve them.
+
+\subsection{The \emph{inverse} problem (paused)}
+
+Given experimental current-voltage data from a real electrochemistry
+experiment, find the kinetic parameters that, when fed into the
+forward solver, reproduce the data. This is a nonlinear PDE-constrained
+optimization problem; we solve it with adjoint gradients (each forward
+solve is expensive, so we cannot afford finite-difference Jacobians).
+The math is interesting but the pipeline is paused until the forward
+model is trustworthy enough that fitting it is meaningful. You will
+not touch this in your first few months.
+
+\section{The experimental anchor: Seitz / Mangan / Ruggiero 2022}
+
+Everything we model is grounded in real data from our collaborators.
+The canonical paper is:
+
+\begin{quote}
+\small
+Ruggiero, Sanroman Gutierrez, George, Mangan, Notestein, Seitz.
+\textit{Probing the Relationship Between Bulk and Local Environments
+to Understand Impacts on Electrocatalytic Oxygen Reduction Reaction.}
+\textbf{Journal of Catalysis}, 2022.
+\end{quote}
+
+Niall Mangan (one of the co-authors) is the PI of our lab on the
+applied-math side. Linsey Seitz's group does the experiments. The
+paper measures ORR currents on a CMK-3 mesoporous-carbon electrode
+in $\mathrm{K_2SO_4}$ electrolyte at bulk pH 4--6, using a
+\concept{rotating ring--disk electrode (RRDE)}. The disk current
+tells you how fast oxygen is being consumed; the ring current is
+calibrated to tell you how much $\HtwoOtwo$ leaves the disk and gets
+re-oxidized at the (downstream) ring. Together they let you extract
+selectivity (\% peroxide) and effective electron number $n_e$.
+
+The 2022 paper is the peer-reviewed source. A 2025 conference deck
+extends the dataset to four cations ($\mathrm{Li^+}$,
+$\mathrm{Na^+}$, $\mathrm{K^+}$, $\mathrm{Cs^+}$) at the same
+electrochemistry. The deck is the moving target our forward model is
+chasing.
+
+You should at some point read the Ruggiero 2022 PDF
+(\texttt{docs/papers/Ruggiero2022\_JCatal\_manuscript.pdf}) and skim
+the doc \texttt{docs/papers/Ruggiero2022\_JCatal\_source\_paper.md}
+which is our internal cheat-sheet of the paper's hard numbers (the
+collection efficiency $N=0.224$, the rotation rate 1600 rpm, the
+electrolyte composition, etc.). Doc 01 in this onboarding series is
+basically a chemistry tour of the same physics.
+
+\section{Where the project is right now (May 2026)}
+
+The codebase has gone through several major versions. The current
+production stack is sometimes called the
+\concept{three-species log-c muh stack} (don't worry about the
+acronyms yet --- doc 03 unpacks them). It models:
+
+\begin{itemize}[leftmargin=*]
+  \item three dynamic species: $\Otwo$, $\HtwoOtwo$, $\Hp$;
+  \item one or two analytic counter-ions ($\Kp$, $\SOfour$) computed
+        from a closed-form Boltzmann-with-steric-saturation expression;
+  \item parallel 2-electron and 4-electron ORR pathways at their
+        Ruggiero 2022 standard potentials ($\eo = 0.695$ V and 1.23 V
+        vs.\ RHE respectively);
+  \item a finite \concept{Stern compact-layer} capacitance at the
+        electrode surface ($C_S = 0.20$ F/m$^2$);
+  \item optionally, water self-ionization ($\HtwoO \rightleftharpoons
+        \Hp + \OHm$) and \concept{cation hydrolysis at the OHP}
+        (Singh 2016 field-dependent pK$_a$).
+\end{itemize}
+
+We are deep in \concept{Phase 6$\beta$}, which is the project name
+for adding cation hydrolysis. The most recent landed work, as of
+2026-05-11, is ``Step 9 B.2'' --- a 14-rung sweep over hydrolysis
+rate $\times$ activation parameter at a single calibration voltage.
+Doc 04 chronicles the Phase~6 history; you don't need to memorize
+it but the language (``Phase 6$\alpha$'', ``v10b'', ``Step 9'',
+``Phase D'') comes up constantly in commits and in the Slack-style
+handoff notes under \texttt{docs/handoffs/}.
+
+
+\section{Map of the rest of these docs}
+
+\begin{description}[leftmargin=*]
+  \item[Doc 01 --- Electrochemistry primer.] Everything you need
+    about electrodes, the electric double layer, Butler--Volmer
+    kinetics, and the ORR reaction set. This is the longest doc.
+  \item[Doc 02 --- The PNP--BV mathematical model.] How the PDEs are
+    written and what each term means. Limited PDE background
+    assumed.
+  \item[Doc 03 --- Numerics and codebase tour.] Newton, continuation,
+    Firedrake, and a guided tour of the most-edited files.
+  \item[Doc 04 --- Phase 6$\beta$ status and open questions.]
+    Where the science is right now, what's blocked, and what kinds
+    of contributions are useful for a new contributor.
+  \item[Doc 05 --- Meeting agenda \& getting started.]
+    The plan for our first meeting and a hands-on setup checklist.
+\end{description}
+
+\onboardingfooter
+\end{document}

@@ -1,0 +1,338 @@
+\documentclass[11pt]{article}
+\input{preamble}
+
+\title{\bfseries Phase 6$\beta$ Status \& Open Questions \\
+       \large where the science is right now (May 2026)}
+\author{Onboarding doc 04 of 06}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{callout}{What this document is for}
+Maps the recent project history onto the actual code so that the
+strange-sounding labels in commit messages (``v9'', ``v10a'',
+``Step~9.5'', ``Phase~D'') connect to what the model is doing and
+why. Closes with a list of contributions a new collaborator can
+realistically pick up.
+\end{callout}
+
+\tableofcontents
+\bigskip\hrule\bigskip
+
+% =========================================================================
+\section{The arc in one paragraph}
+
+Phase 6 is the project epoch in which we moved from a
+\emph{transport-only} model that could not match the experimental
+local-pH excursions to a \emph{chemistry-augmented} model that
+accounts for the cation's role in modulating local proton supply.
+The first sub-phase (Phase 6$\alpha$) added water self-ionization
+($\HtwoO \rightleftharpoons \Hp + \OHm$) and showed it cannot
+explain the deck data. The second sub-phase (Phase 6$\beta$, ongoing)
+adds the actual mechanism the experimental group believes in:
+field-dependent hydrolysis of hydrated alkali cations at the outer
+Helmholtz plane (OHP), per Singh 2016. Phase 6$\beta$ has gone
+through several internal revisions (v9, v10a, v10b) and is currently
+in its first \emph{fitting} stage (Step 10 / Phase D), trying to
+recover the cation-specific Singh parameters from peroxide-onset
+data in the Mangan deck.
+
+% =========================================================================
+\section{Phase 6$\alpha$: water self-ionization (landed)}
+
+\paragraph{Question.} Does adding $\HtwoO \rightleftharpoons \Hp + \OHm$
+as a homogeneous bulk source/sink in the proton equation lower the
+predicted surface pH from $\sim 14$ (Phase 5 baseline) into the
+deck-observed window of $\sim 5$--$7$?
+
+\paragraph{Answer.} Partially, and not enough.
+\begin{itemize}[leftmargin=*]
+  \item Surface pH dropped from 14.14 (transport-saturated) to 10.58
+        with $K_w$ active --- a 3.5-unit improvement.
+  \item The 10.58 plateau is independent of the boundary-layer
+        thickness $L_{\mathrm{eff}}$: making the diffusion layer
+        thinner does not lower it further. Surface pH is set by the
+        \emph{kinetic-transport balance}, not by transport alone.
+  \item The textbook bulk water-dissociation rate is
+        $\sim 1.4$ mol/m$^3$/s; the deficit at $L = 16\,\mu$m
+        cathodic demands $\sim 30$ mol/m$^3$/s --- 20$\times$
+        faster than water can actually supply. So the Phase 6$\alpha$
+        prediction of 10.58 is itself optimistic; the true gap to
+        the deck pH window is even larger.
+\end{itemize}
+
+\paragraph{Take-away.} Water self-ionization is universal aqueous
+physics and we keep it as an opt-in residual (default-off; flag
+\texttt{enable\_water\_ionization}). But it is \emph{not} the
+mechanism that explains cation effects. Documented in
+\texttt{docs/phase6/PHASE\_6A\_INVESTIGATION\_SUMMARY.md}.
+
+% =========================================================================
+\section{Phase 6$\beta$: the cation-hydrolysis program}
+
+\subsection{The hypothesis (recap)}
+
+The reaction (cation hydrolysis, doc 01):
+\[
+   \mathrm{M(H_2O)_n^+} + \HtwoO
+   \;\rightleftharpoons\;
+   \mathrm{M(OH)(H_2O)_{n-1}^{0}} + \Hp,
+\]
+with field-dependent pK$_a$ (Singh formula, doc 01):
+\[
+  \mathrm{pKa}(\sigma) = \mathrm{pKa}_{\mathrm{bulk}}
+     + 2 A z \sigma\, r_{H\!-\!El}
+       \left(1 - \frac{r_{M-O}^2}{r_{H\!-\!El}^2}\right).
+\]
+This makes the cation a local proton donor whose strength depends on
+both its identity (bulk pK$_a$) and the local Stern-layer surface
+charge $\sigma$.
+
+\subsection{v9: the architectural skeleton (May 2026, landed)}
+
+v9 wired this into the solver. Specifically:
+\begin{itemize}[leftmargin=*]
+  \item Promoted $\Kp$ from an analytic Bikerman counter-ion to a
+        \emph{dynamic} NP species (constants
+        \texttt{FOUR\_SPECIES\_LOGC\_DYNAMIC\_K2SO4} in
+        \texttt{scripts/\_bv\_common.py}); $\SOfour$ stays analytic.
+        Reason: the Boltzmann profile gives zero NP flux by
+        construction, so the kinetic source from
+        $c_M(0) \cdot k_{\mathrm{hyd}}$ has nothing to drain.
+  \item Added a global Real-element scalar $\Gamma_{\mathrm{MOH}}$ (mol/m$^2$)
+        on the electrode, evolving by the coverage-rate ODE
+        (doc 02, $\dot\Gamma$ formula).
+  \item Implemented Singh's pK$_a$ formula in
+        \texttt{Forward/bv\_solver/cation\_hydrolysis.py} (function
+        \texttt{singh\_pka\_field\_dependent}).
+  \item Outer Picard for $\Gamma_{\mathrm{MOH}}$ around the inner
+        Newton solve.
+\end{itemize}
+
+\paragraph{What v9 found.} The architecture works, but the v9
+formula has \emph{no Langmuir cap} on $\Gamma_{\mathrm{MOH}}$.
+Converged solutions at $k_{\mathrm{hyd}} \ge 10^{-3}$ pile up
+$\sim 6$ monolayers of MOH$^{0}$ at the OHP --- physically absurd
+since you cannot have more than one monolayer of adsorbed species
+without a second layer beneath it. v9 is therefore a
+\emph{numerical} achievement, not a physically defensible model.
+Documented in
+\texttt{docs/phase6/PHASE\_6B\_V9\_PHASES\_A\_B\_RESULTS\_2026-05-10.md}.
+
+\subsection{v10a: the Langmuir cap (May 2026, landed)}
+
+v10a multiplied the hydrolysis-forward rate by
+$(1 - \Gamma/\Gamma_{\max})$ so $\Gamma$ saturates at one monolayer
+worth of MOH coverage:
+\[
+  \dot\Gamma = k_{\mathrm{hyd}} (1 - \Gamma/\Gamma_{\max})\,c_M(0)
+             - k_{\mathrm{des}} \Gamma.
+\]
+This restored physical sensibility and unlocked the next round of
+calibration questions: \emph{what is $\Gamma_{\max}$? what is
+$k_{\mathrm{hyd}}$? what is $k_{\mathrm{des}}$?}
+
+\subsection{v10a$'$ and Phase A.2: pick a calibration voltage}
+
+The current-voltage curve has many points; if you fit cation
+parameters using all 24 points at once, you cannot tell which point
+the residual is being driven by. v10a$'$ proposed a
+\concept{kinetic-anchor voltage} $V_{\mathrm{kin}}$ where (i) the
+current is well in the kinetic-controlled regime (not Levich-limited),
+(ii) the Stern surface charge is large enough that cation hydrolysis
+matters, and (iii) the multi-ion solver actually converges from
+cold-start. The chosen value: $V_{\mathrm{kin}} = -0.10$ V vs.\ RHE.
+
+Phase A.2 then re-derived a clean baseline at $V_{\mathrm{kin}}$
+with v10a's Langmuir cap, providing a high-confidence anchor for
+later sweeps. Driver:
+\texttt{scripts/studies/phase6b\_v10a\_phase\_A2\_v\_kin.py}.
+
+\subsection{v10b: literature anchoring of constants (May 2026, landed)}
+
+v10b set the three free Phase 6$\beta$ constants to their
+literature-anchored values:
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Source} \\
+\midrule
+$\Gamma_{\max}$ (nondim) & 0.047 & V10A chain (tightened); literature compatibility audit (4 cross-tests). \\
+$k_{\mathrm{des}}$ (nondim) & 1.0 & Engineering choice; Eyring prior $[10^{-2}, 10^{2}]$ $\Leftrightarrow$ $\Delta G_{\mathrm{des}} \in [0.69, 0.94]$ eV. \\
+$C_S$ (F/m$^2$) & 0.20 & Bohra--Koper--Choi consensus on CMK-3 carbon. \\
+\bottomrule
+\end{tabular}
+\end{center}
+The constants live in the top-level Firedrake-free
+\texttt{calibration/v10b.py}, importable without the heavy stack.
+\warn{Deprecation alias:} \texttt{SMOKE = V10A\_SMOKE} (NEVER
+\texttt{SMOKE = V10B}). Documented in
+\texttt{docs/phase6/v10b\_calibration\_summary.md}.
+
+\subsection{Steps 6--9: ablation, audit, sweeps}
+
+After v10b landed, the project enumerated a series of
+\emph{step-numbered} verification and sweeping tasks that lock in
+plumbing-level correctness before a fitting attempt:
+
+\begin{description}[leftmargin=*]
+  \item[Step 6: ablation flags.] Five default-off knobs in
+       \texttt{Forward/bv\_solver/config.py} that let you turn
+       individual physics terms on or off
+       (\texttt{apply\_h\_source}, \texttt{apply\_k\_sink}, etc.).
+       All five ablations passed at A.2 baseline.
+  \item[Step 7: $C_S$ literature lock.]
+       \texttt{docs/phase6/CMK3\_capacitance\_literature.md} is the
+       citation chain that pins $C_S = 0.20$ F/m$^2$.
+  \item[Step 8: missing-data ledger.] Open data items the project
+       still needs from the experimental group; tracked in
+       \texttt{docs/phase6/missing\_data.md}.
+  \item[Step 9: $k_{\mathrm{hyd}} \times \lambda$ ramp at v10b
+       parameters.] A 14$\times$10 = 140-rung sweep over hydrolysis
+       rate and the activation parameter $\lambda \in [0,1]$ at
+       $V_{\mathrm{kin}}$. \textbf{Result (2026-05-11):} 14/14
+       converge with mass balance $\le 5\!\times\!10^{-13}$;
+       baseline reproduction byte-equivalent to v10b A.2.
+       Documented in
+       \texttt{docs/phase6/phase6b\_step9\_B2\_summary.md}.
+  \item[Step 9.5: \texttt{warm\_start\_floor} in AdaptiveLadder.]
+       Required to converge the three highest-$k_{\mathrm{hyd}}$
+       extension points in step 9. Opt-in floor; default-off behavior
+       is byte-equivalent. Documented in the same summary.
+\end{description}
+
+\subsection{Step 10 / Phase D: derivative-free fit of $\Delta_\beta$
+                                                (in flight)}
+
+\textbf{This is where the project is right now} (May 2026).
+
+\paragraph{Question.} Given the v10b-anchored model with all other
+constants pinned, what value of the free coupling parameter
+$\Delta_\beta$ (the additive shift to Singh's $\beta_M = -A z r_{H-El}
+(1 - r_{M-O}^2/r_{H-El}^2)$ per cation) best reproduces the
+peroxide-onset voltage in the Mangan deck for $\Kp$ at pH 4?
+
+\paragraph{Status.} Plan was iterated through 7 critique rounds
+(\texttt{docs/handoffs/CHATGPT\_HANDOFF\_37\_phase6b-step10-phase-D/});
+APPROVED at round 7. Two structural corrections in early rounds:
+\begin{enumerate}[leftmargin=*]
+\item the original $\Delta_\beta$ bracket was off by 7 decades
+      (units: $\beta$ is in pm$^{2}$, not 1/pm$^{2}$);
+\item the original continuation topology was invented; switched to
+      the validated A.2 topology (anchor at $\lambda=0$, V warm-walk
+      at $\lambda=0$, per-V $\lambda$-ramp $0 \to 1$). Wall budget
+      grew from 5 hours to 15 hours --- overnight execution scope.
+\end{enumerate}
+
+Phase D code is in active development:
+\begin{itemize}[leftmargin=*]
+\item \texttt{scripts/studies/phase6b\_step10\_phase\_D\_orchestrate.py}
+\item \texttt{scripts/studies/phase6b\_step10\_phase\_D\_fit\_eval.py}
+\item \texttt{scripts/studies/\_phase\_D\_validate\_optimized\_path.py}
+\item Tests:
+      \texttt{tests/test\_phase6b\_step10\_phase\_D\_\{orchestrate,fit\_eval,plumbing\}.py}.
+\end{itemize}
+
+The optimizer is \texttt{scipy.optimize.minimize\_scalar} with
+\texttt{method="bounded"} (Brent's method), since adjoints through
+the Picard outer loop are not yet hooked up. The bounded interval
+in target-$\Delta\mathrm{pKa}$-effect space gives a one-sided search
+respecting the negative-$\Delta_\beta$ sign-guard requirement.
+
+% =========================================================================
+\section{What is locked vs.\ what is open}
+
+\subsection{Locked (don't change without conversation)}
+
+\begin{itemize}[leftmargin=*]
+  \item Production stack: 3 dynamic species + analytic Bikerman
+        counter-ions, \texttt{logc\_muh}, log-rate BV with parallel
+        2e/4e at Ruggiero $\eo$.
+  \item $C_S = 0.20$ F/m$^2$ (Step 7 lock; CMK-3 literature
+        consensus).
+  \item $\Gamma_{\max} = 0.047$ (nondim) and
+        $k_{\mathrm{des}} = 1.0$ (nondim) (v10b lock).
+  \item Hard rules \#1--\#6 from CLAUDE.md (anchor-and-grid,
+        \texttt{exponent\_clip = 100}, IC/residual saturation
+        agreement, parallel 2e/4e topology, Singh 2016 mechanism,
+        $C_S$ value).
+  \item Acceptance bundle (the gate set Phase D will be judged
+        against): primary metric $\HtwoOtwo$\% within $\pm 10$ pp of
+        deck $\Kp$ pH 4; secondaries on disk current and surface pH
+        envelopes. Documented in
+        \texttt{docs/phase6/PHASE\_0\_ACCEPTANCE\_BUNDLE\_LOCK\_2026-05-10.md}.
+\end{itemize}
+
+\subsection{Open}
+
+\begin{itemize}[leftmargin=*]
+  \item Phase D fit completion across all four cations (the current
+        scope is $\Kp$-only first; $\mathrm{Li^+}$, $\mathrm{Na^+}$,
+        $\Csp$ are queued).
+  \item Adjoint annotation through the cation-hydrolysis Picard
+        loop (currently a derivative-free fit; to be replaced when
+        the inverse pipeline restarts).
+  \item Phase 6$\alpha$.1: a finite-rate water-dissociation
+        refinement, since textbook $K_w$ relaxation is too slow to
+        feed the surface at the rate the equilibrium model assumes.
+        Queued, not started.
+  \item Per-cation Tafel slope extraction from Brianna's 2019 LSV
+        data (\texttt{scripts/derive/extract\_k\_plus\_tafel\_slopes.py};
+        K$^+$ done, others pending).
+  \item Comparison plotting between simulated and deck observables
+        (currently ad-hoc; no canonical figure-generation script).
+  \item Test coverage for the new Phase D helpers
+        (\texttt{tests/test\_phase6b\_step10\_phase\_D\_*.py} are
+        scaffolds; flesh out parameterizations).
+\end{itemize}
+
+% =========================================================================
+\section{Where a new contributor can plug in}
+
+In rough increasing order of scope:
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Read the chronology and ask questions.} You are coming
+      in mid-stream; spend the first week on docs 00--04 and the
+      acceptance-bundle lock. Bring a list of things you don't
+      understand to our next 1:1.
+
+\item \textbf{Run the Phase A.2 baseline yourself.} Activate the
+      Firedrake venv (doc 05), run
+      \texttt{phase6b\_v10a\_phase\_A2\_v\_kin.py}, look at the JSON
+      and the plot. Verify it matches the existing
+      \texttt{StudyResults/} subdirectory.
+
+\item \textbf{Add a small diagnostic.} For example: a plot of
+      $\Gamma_{\mathrm{MOH}}$ vs.\ $\Vrhe$ overlaid on the BV-rate
+      contributions, or a histogram of pK$_a$($\sigma$) over the
+      deck V-band. The pattern is in doc 03 \S 6.
+
+\item \textbf{Reproduce a Singh table number.} Pick a row of the
+      Singh Table S1 (Li, Na, K, Rb, Cs); plug $r_M$ and $z$ into
+      the bulk pK$_a$ formula (Singh formula with $\sigma=0$);
+      verify our \texttt{calibration/singh2016.py} returns the same
+      number to four decimal places. This is exactly the kind of
+      numerical-verification test the project values most.
+
+\item \textbf{Improve a regression test.} The Phase D scaffolding
+      tests are minimal; pick one and add three or four
+      property-based parameterizations (e.g.\
+      ``$\Delta_\beta = 0$ should reproduce the v10b A.2 baseline
+      byte-for-byte''; ``$\Delta_\beta \to \infty$ should saturate
+      $\Gamma_{\mathrm{MOH}}$ at $\Gamma_{\max}$''; etc.).
+
+\item \textbf{Independently audit a Phase D handoff round.} The
+      seven-round critique on the Phase D plan is checked into
+      \texttt{docs/handoffs/CHATGPT\_HANDOFF\_37\_*}. Read R1 and
+      R2; can you spot the dimensional-bracket error \emph{before}
+      reading R1's accepted issues? This trains you to read the
+      acceptance ledgers.
+\end{enumerate}
+
+After 4--6 weeks of these we will pick something more ambitious from
+the ``open'' list above.
+
+\onboardingfooter
+\end{document}
