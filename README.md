@@ -28,38 +28,90 @@ Seitz/Mangan 2019–2025 ORR datasets under
 `data/EChem Reactor Modeling-Seitz-Mangan/` (gitignored; lives
 outside git) and `docs/papers/Ruggiero2022_JCatal_source_paper.md`.
 
-## Current State (2026-05-10)
+## Current State (2026-05-14)
 
 The production forward model is the **3-dynamic-species + analytic
-Bikerman counterion + proton electrochemical potential + log-rate
-parallel 2e⁻/4e⁻ Butler–Volmer + finite Stern + Phase 6α water
-self-ionization** stack. The deck baseline electrolyte is
-**K⁺/SO₄²⁻** (Linsey 2025 ACS-CATL deck slide 9; Ruggiero 2022 §2).
-Cs⁺/SO₄²⁻, Na⁺/SO₄²⁻, Li⁺/SO₄²⁻ are studied as part of the
-cation-comparison study (slide 27). The legacy ClO₄⁻ single-
-counterion stack is preserved as a backward-compat reference. The
-legacy 4-species concentration backend was removed in the May 2026
-cleanup.
+Bikerman counterion(s) + proton electrochemical potential + log-rate
+parallel 2e⁻/4e⁻ Butler–Volmer + finite Stern** stack, with optional
+**Phase 6α water self-ionization** and **Phase 6β v10b cation
+hydrolysis** layered on as opt-in physics. The deck baseline
+electrolyte is **K⁺/SO₄²⁻** (Linsey 2025 ACS-CATL deck slide 9;
+Ruggiero 2022 §2); Cs⁺/SO₄²⁻, Na⁺/SO₄²⁻, Li⁺/SO₄²⁻ are studied as
+part of the cation-comparison study (slide 27). The legacy ClO₄⁻
+single-counterion stack and the legacy 4-species concentration backend
+are gone except as backward-compat references in tests.
 
-**Phase 6α landed (2026-05-09):** water self-ionization residual
-`E = c_H − c_OH` added via `Forward/bv_solver/water_ionization.py`.
-New `solve_anchor_with_continuation` + `solve_grid_with_anchor` in
-`Forward/bv_solver/anchor_continuation.py` with a `kw_eff_ladder`
-outer-loop continuation. Default-off path is byte-equivalent to
-pre-Phase-6α.
+**Stern compact-layer Robin BC (production: `C_S = 0.20 F/m²`).**
+The Bonnefont–Argoul–Bazant (2001) Stern model is implemented as a
+Robin BC on the Poisson equation at the electrode; derivation +
+exact code mapping in `writeups/May13th/stern_robin_bc_derivation.tex`.
+The value is literature-locked at the Bohra–Koper–Choi consensus
+(`docs/phase6/CMK3_capacitance_literature.md`, step 7, 2026-05-10);
+it replaces the uncited `C_S = 0.10` used in earlier v9 work.
+Convergence at `C_S = 0.20` requires the **Stern bump ladder** —
+build the anchor cold at `C_S = 0.10` then ramp through verified
+rungs `(0.20, 0.50, 1.0, 2.0, 5.0, 10.0, 100.0)` via
+`set_stern_capacitance_model` without rebuilding forms.
 
-**Phase 6β v9 in progress (cation hydrolysis at OHP):** Singh 2016
-SI Eq. (4) field-dependent pKa with finite-rate Γ_MOH outer Picard.
-Gate 3 (Γ machinery) and Gate 4 (Singh formula + 9-combination
-sweep) landed. **Phases A/B post-Gate-4 found cd plateau is at the
-4e O₂ Levich limit (5.50 mA/cm² with code constants); v9 lacks a
-Langmuir capacity on Γ so converged k_hyd ≥ 1e-3 is at ≥6
-monolayers of MOH — physically invalid above ~1 monolayer.**
-Phase 6β v10a (Langmuir cap + integrated diagnostics) is the next
-executable step; the revised plan is locked in
-`docs/phase6/PHASE_6B_V9_PHASES_A_B_RESULTS_2026-05-10.md` (post
-two critique sessions: CHATGPT_HANDOFF_30 cd-invariance, capped at
-ISSUES_REMAIN; CHATGPT_HANDOFF_31 strategic pivot, **APPROVED**).
+**Phase 6α (water self-ionization)** — *retired as primary mechanism
+(2026-05-09 → 2026-05-13 writeup).* Residual `E = c_H − c_OH` is
+plumbed via `Forward/bv_solver/water_ionization.py` with a
+`kw_eff_ladder` outer loop, but the gate P3 failed (max surface pH
+10.58 at L_eff=16 µm, L-invariant) and a bulk-rate estimate puts
+water dissociation ~20× too slow to backfill the cathodic H⁺ demand.
+Plumbing preserved as opt-in (`enable_water_ionization=True`); default
+path is byte-equivalent to pre-6α.
+
+**Phase 6β v10b (cation hydrolysis at the OHP) — calibrated and
+shipped (2026-05-10), Phase D fit blocked (2026-05-12).** Singh 2016
+SI Eq. (4) field-dependent pKa with finite-rate Γ_MOH outer Picard
+and Langmuir `(1 − Γ/Γ_max)` cap. K⁺ is promoted to a fourth dynamic
+NP species (`FOUR_SPECIES_LOGC_DYNAMIC_K2SO4`) so the hydrolysis
+residual can read `c_K(0)` at the OHP; SO₄²⁻ stays analytic. Three
+parameters locked from literature in
+`docs/phase6/v10b_calibration_summary.md` (live in `calibration/v10b.py`,
+Firedrake-free):
+
+| Symbol | Value | Origin |
+|---|---|---|
+| `GAMMA_MAX_HAT_V10B` | 0.047 (nondim) | One-monolayer hard-sphere areal coverage; V10A chain tightened |
+| `K_DES_NONDIM_V10B` | 1.0 | Eyring prior, ΔG_des ∈ [0.69, 0.94] eV |
+| `C_S_F_M2_V10B` | 0.20 F/m² | Bohra/Koper/Choi consensus (step 7) |
+
+**Step 10 Phase D K-only Δ_β fit (2026-05-12) returned
+`OUTCOME_C_NON_IDENTIFIABLE_flagged`:** scanning the carbon-vs-Cu
+β-offset Δ_β through 11 orders of magnitude leaves the loss flat at
+15.629 pp² under Stern σ-mapping; Ablation σ-override also flat.
+Model max H₂O₂% = 66.58 pp vs deck K@pH 4 mean 50.95 pp → uniform
+**+15.6 pp overshoot** that Δ_β alone cannot close. **Phase E
+predictive screen MUST NOT launch on this Δ_β.** Open scope:
+re-fit `k_des`/`Γ_max`, sweep `r_H_El`, examine local-pH /
+mass-transport coupling.
+
+**Known discrepancy — Bikerman `a_nondim` for dynamic species.**
+Both `THREE_SPECIES_LOGC_BOLTZMANN` and
+`FOUR_SPECIES_LOGC_DYNAMIC_K2SO4` seed O₂/H₂O₂/H⁺ with
+`A_DEFAULT = 0.01` (≈ hard-sphere radius 14.9 Å, ~150× larger than
+the physical values: O₂ 1.7 Å, H₂O₂ 2.0 Å, H₃O⁺ 2.8 Å Stokes).
+Counterion entries (`A_KPLUS_HAT`, `A_CSPLUS_HAT`, `A_SO4_HAT`,
+`A_OH_HAT`) use real radii. H⁺ in particular is Bikerman-clamped
+~150× tighter than its physical cap, so anything that depends on
+the H⁺ Levich plateau is suspect until the physical-`a` bridge runs
+in `scripts/studies/_phase_D_bridge_corrected_a*.py` disambiguate.
+The Phase D non-identifiability verdict is independent of this, but
+the +15.6 pp overshoot might not be.
+
+**MMS verification of the muh + multi-ion + Stern stack landed
+2026-05-14.** Four manufactured-solution source terms (NP interior +
+NP electrode + Poisson interior + Stern Robin) recover textbook CG1
+rates ($L^2$≈2.0, $H^1$≈1.0; $R^2$>0.999) for $(u_{O_2}, u_{H_2O_2},
+\mu_H, \varphi)$ on the production stack used by the
+`solver_demo_slide15_no_speculative_cs.py` Cs⁺/SO₄²⁻ baseline.
+Driver: `scripts/verification/mms_pnpbv_muh_multi_ion_stern.py`
+(~1100 LOC). Tests: `tests/test_mms_logc_muh_multi_ion_stern.py`
+(18 cases incl. 12 broken-config invariants). Algebraic derivation:
+`writeups/May13th/mms_source_terms_derivation.tex` +
+`docs/solver/mms_pnpbv_muh_multi_ion_stern_derivation.md`.
 
 **All inverse work is paused** until the forward solver is mature
 enough for a clean re-entry — the v13–v24 study scripts, the FIM
@@ -70,16 +122,18 @@ work, and the FluxCurve adjoint pipeline are reference-only.
 1. **3 dynamic species** (O₂, H₂O₂, H⁺) plus **analytic Bikerman
    counterion(s)** via `bv_bc.boltzmann_counterions` with
    `steric_mode="bikerman"`. Deck baseline uses **two** entries
-   (K⁺ + SO₄²⁻) and requires `multi_ion_enabled=True`; the legacy
-   ClO₄⁻ single-counterion stack is preserved as a reference. The
-   K2SO4 stack additionally promotes K⁺ to a fully-dynamic NP
-   species (`FOUR_SPECIES_LOGC_DYNAMIC_K2SO4`) so the Phase 6β
-   cation-hydrolysis residual can read `c_K(0)` at the OHP, leaving
-   SO₄²⁻ as the analytic Bikerman counterion. The closure is the
-   steric-aware
-   `c_b · exp(−z·φ) · (1 − A_dyn) / (θ_b + a_b · c_b · exp(−z·φ))`,
-   matched between the IC seed and the residual side
+   (K⁺ + SO₄²⁻) and requires `multi_ion_enabled=True`. For the
+   Phase 6β hydrolysis path, K⁺ is additionally promoted to a
+   fully-dynamic NP species (`FOUR_SPECIES_LOGC_DYNAMIC_K2SO4`) so
+   the cation-hydrolysis residual can read `c_K(0)` at the OHP,
+   leaving SO₄²⁻ as the analytic Bikerman counterion. The closure
+   is the shared-θ multi-ion Tresset extension
+   `c_k = c_{b,k} · q_k · (1 − A_dyn) / (θ_b + Σ a_{k'} c_{b,k'} q_{k'})`
+   with `q_k = exp(−z_k φ)`, matched between the IC seed and the
+   residual side
    (`Forward/bv_solver/boltzmann.py:build_steric_boltzmann_expressions`).
+   Full derivation including the hybrid `(1−A_dyn)` pre-factor
+   (original to this work): `writeups/May13th/analytic_counterion_derivation.tex`.
 2. **Proton electrochemical-potential primary variable**
    (`bv_convergence.formulation = "logc_muh"`):
    `mu_H = u_H + em·z_H·φ`. Keeps Newton smooth in deep-ψ regions
@@ -93,56 +147,122 @@ work, and the FluxCurve adjoint pipeline are reference-only.
    default (clip=50 produces a fictitious peroxide current — see
    `docs/solver/clipping_conventions.md`). E°_R2e = 0.695 V vs RHE
    (Ruggiero 2022 §1); E°_R4e = 1.23 V vs RHE.
-4. **Phase 6α water self-ionization**
-   (`enable_water_ionization=True`, `kw_eff_hat=KW_HAT`): residual
-   `E = c_H − c_OH = 0` with `c_OH = Kw_eff / c_H` closure. The
-   orchestrator walks a `kw_eff_ladder` outside the k0 ladder
-   (typical: `(0, KW_HAT·1e-6, KW_HAT·1e-3, KW_HAT·0.1, KW_HAT)`).
-   Default-off path is byte-equivalent to pre-Phase-6α.
-5. **Bikerman-consistent IC** (`initializer = "debye_boltzmann"` or
+4. **Bikerman-consistent IC** (`initializer = "debye_boltzmann"` or
    `"linear_phi"`): composite-ψ (BKSA matched-asymptotic, saturated
    zone + outer exponential) plus multispecies-γ. The IC's surface
    activity and the residual's Bikerman closure agree on the
    saturated counterion concentration.
-6. **Finite Stern compact layer**
-   (`stern_capacitance_f_m2 ≈ 0.10` F/m²): absorbs ≈10–13 V_T of
-   applied potential at high anodic V_RHE so the diffuse-layer drop
-   ψ_D stays modest and the proton supply does not underflow the
-   BV cathodic terms. **Note:** the 0.10 F/m² value is uncited
-   (see `docs/phase6/CONJECTURE_AUDIT_2026-05-09.md`); v10b's
-   `docs/phase6/CMK3_capacitance_literature.md` is a prerequisite
-   for any literature anchor.
+5. **Stern compact-layer Robin BC**
+   (`stern_capacitance_f_m2 = 0.20` F/m², literature-locked at
+   Bohra/Koper/Choi consensus). Imposes
+   `ε_b · ∂_n φ = C_S · (V_app − φ_OHP)` at the electrode marker via
+   `F_res -= stern_coeff · (φ_app − φ) · w · ds`; partitions the
+   applied voltage between compact and diffuse layers, keeping the
+   diffuse drop ψ_D modest at high V_RHE. Cold-start at `C_S = 0.20`
+   is unreliable on the multi-ion stack — build the anchor at
+   `C_S = 0.10` and use the Stern bump ladder
+   `(0.10 → 0.20 → 0.50 → 1.0 → 2.0 → 5.0 → 10.0 → 100.0)` via
+   `set_stern_capacitance_model(ctx, c_s)` (no form rebuild).
+   Derivation + BAB(2001) code mapping:
+   `writeups/May13th/stern_robin_bc_derivation.tex`.
+6. **Phase 6α water self-ionization (opt-in)**
+   `enable_water_ionization=True`, `kw_eff_hat=KW_HAT`: residual
+   `E = c_H − c_OH = 0` with `c_OH = Kw_eff / c_H` closure. The
+   orchestrator walks a `kw_eff_ladder` outside the k0 ladder
+   (typical: `(0, KW_HAT·1e-6, KW_HAT·1e-3, KW_HAT·0.1, KW_HAT)`).
+   Default-off path is byte-equivalent to pre-Phase-6α. Retired as
+   primary peak mechanism (Phase 6α P3 gate fail; see Phase 6α
+   summary).
+7. **Phase 6β v10b cation hydrolysis (opt-in)**
+   `enable_cation_hydrolysis=True` with v10b literature parameters
+   (`GAMMA_MAX_HAT_V10B = 0.047`, `K_DES_NONDIM_V10B = 1.0`,
+   `C_S_F_M2_V10B = 0.20`; `calibration/v10b.py`). Singh Eq. (4)
+   field-dependent pKa shift drives a global Γ_MOH Real-element
+   scalar on the electrode boundary via an outer Picard; Langmuir
+   `(1 − Γ/Γ_max)` cap prevents super-monolayer Γ. Step 10 Phase D
+   fit returned `OUTCOME_C_NON_IDENTIFIABLE_flagged`; the
+   architecture and machinery pass all hard gates, but the fit
+   step is blocked. Don't claim physics conclusions from
+   Γ-dependent observables yet. See Phase D summary.
 
 This stack reaches **V_RHE = +1.0 V at 15/15** (cold ceiling
 +0.60 V; warm-walk to +1.00 V) on a 15-voltage grid spanning
 V_RHE ∈ [−0.5, +1.0] via the C+D orchestrator
 (`solve_grid_per_voltage_cold_with_warm_fallback`). For the
-multi-ion + Stern + Phase 6α stack, **prefer the newer
+multi-ion + Stern + Phase 6α/6β stack, **prefer the newer
 `solve_anchor_with_continuation` + `solve_grid_with_anchor`** in
 `Forward/bv_solver/anchor_continuation.py` (C+D's Phase-1 cold-
-start fails 13/13 around V ≈ +0.55 V on the multi-ion stack).
-Cross-stack equivalence with the 4sp ClO₄⁻ dynamic reference
-holds to ~10⁻⁹ in the cathodic regime and ~5·10⁻³ at the +0.5 V
-edge. See `docs/ic_studies/4sp_bikerman_ic_option_2b_results.md`
-for the legacy sweep, `StudyResults/phase6b_v9_gate4_smoke/` for
-the deck-aligned Phase 6β v9 Gate 4 baseline, and
-`docs/PHASE_6B_V9_GATE_4B_SWEEP_RESULTS.md` for the 9-combination
-sensitivity sweep.
+start fails 13/13 around V ≈ +0.55 V on the multi-ion stack). The
+anchor+grid orchestrator wraps an `AdaptiveLadder` (k₀ continuation
+with `sqrt`-midpoint failure recovery, optional `warm_start_floor`
+arithmetic bisection for λ-from-warm-start added in step 9.5) +
+recursive `warm_walk_phi` (8 substeps × depth-5 bisection,
+32× refinement max) to absorb the Frumkin cliff near V ≈ 0 V
+caused by SO₄²⁻ Bikerman saturation. Visual call graph of this
+codepath: `writeups/May13th/forward_codepath_demo_slide15.tex`.
 
-### Recent timeline (2026-04-27 → 2026-05-10)
+### Recent timeline (2026-04-27 → 2026-05-14)
 
-- **2026-05-10 — Phase 6β v9 Phases A/B/F + critique sessions
-  (this commit).** Two GPT critique loops (CHATGPT_HANDOFF_30
-  cd-invariance + CHATGPT_HANDOFF_31 strategic pivot) converged
-  on a revised 11-step plan. Key findings: cd plateau is **O₂
-  Levich-limited** (not H⁺ Levich); v9 Γ has no Langmuir capacity
-  (~64-monolayer Γ at converged k_hyd=1e-2 — physically invalid);
-  slide 27 IS Singh's Cu pKa table reproduced (not an independent
-  experimental target); real validation target is per-cation
-  experimental Cation Summary Table from `Summary Data-Error.xlsx`.
-  Output: `docs/phase6/PHASE_6B_V9_PHASES_A_B_RESULTS_2026-05-10.md`
-  + `docs/phase6/PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md`. Also
-  delivered: K⁺ Tafel slopes from Brianna 2019 LSV
+- **2026-05-14 — MMS verification for muh + multi-ion + Stern stack
+  (this commit).** Four manufactured-solution source terms (NP
+  interior + NP electrode + Poisson interior + Stern Robin) recover
+  textbook CG1 rates on the production stack used by
+  `solver_demo_slide15_no_speculative_cs.py`. Driver:
+  `scripts/verification/mms_pnpbv_muh_multi_ion_stern.py` (~1100
+  LOC); 18-test suite at `tests/test_mms_logc_muh_multi_ion_stern.py`
+  including 12 broken-config invariants. Algebra:
+  `writeups/May13th/mms_source_terms_derivation.tex`. The MMS
+  baseline rescales `c_{0,H₂O₂}^bulk = 1` (instead of the production
+  seed `1e-4`) to keep Newton in basin without continuation; an
+  identity check confirms this leaves the operator unchanged.
+- **2026-05-12 — Phase 6β step 10 Phase D K-only Δ_β fit.**
+  Verdict `OUTCOME_C_NON_IDENTIFIABLE_flagged`: scanning Δ_β across
+  11 orders of magnitude leaves loss flat at 15.629 pp² under
+  Stern σ-mapping (local σ ~10⁻⁷ counts/pm²); Ablation σ-override
+  also flat. Model max H₂O₂% = 66.58 pp vs deck K@pH4 mean
+  50.95 pp = uniform +15.6 pp overshoot. Phase E predictive screen
+  blocked. Also surfaced during bridge diagnostics: dynamic species
+  Bikerman `a_nondim` discrepancy (O₂/H₂O₂/H⁺ use `A_DEFAULT = 0.01`
+  ≈ r 14.9 Å, ~150× tighter than physical for H₃O⁺). Bridge runs
+  in `scripts/studies/_phase_D_bridge_corrected_a*.py`. Writeup:
+  `docs/phase6/phase6b_step10_phase_D_summary.md`.
+- **2026-05-11 — Phase 6β step 9 B.2 (densified k_hyd × λ ramp).**
+  14×10 = 140-rung grid at V_kin = −0.10 V on v10b parameters;
+  14/14 k_hyd × 10/10 λ converge after step 9.5 added
+  `warm_start_floor` arithmetic bisection to `AdaptiveLadder` for
+  λ-from-warm-start rescue. Mass balance ≤ 5×10⁻¹³. Summary:
+  `docs/phase6/phase6b_step9_B2_summary.md`.
+- **2026-05-10 — Phase 6β v10b literature calibration shipped.**
+  Three parameters locked from literature: `GAMMA_MAX_HAT_V10B =
+  0.047` (one-monolayer hard-sphere areal coverage; V10A chain
+  tightened), `K_DES_NONDIM_V10B = 1.0` (Eyring prior ΔG_des ∈
+  [0.69, 0.94] eV), `C_S_F_M2_V10B = 0.20` F/m² (Bohra/Koper/Choi
+  consensus, step 7). Source of truth: `calibration/v10b.py`
+  (Firedrake-free). D7-D1 (C_S bracket) 4/4 + D7-D4 (Γ_max ×
+  k_des matrix) 30/30 hard gates pass. Summary:
+  `docs/phase6/v10b_calibration_summary.md`,
+  `docs/phase6/CMK3_capacitance_literature.md`.
+- **2026-05-10 — Phase 6β v10a (Langmuir cap) + v10a' V-sweep
+  + Phase A.2 k_hyd ramp.** Langmuir `(1 − Γ/Γ_max)` cap added to
+  hydrolysis residual + Picard formula; Γ clamp `[0, Γ_max]` with
+  RuntimeWarning. V10a' V-sweep at `C_S = 0.20` +
+  `K0_R4e_factor = 1e-14` returned V_kin = −0.10 V (primary path:
+  σ_S < 0, branch active, not transport-artifact, not
+  cap-dominated). 10-rung k_hyd ladder at V_kin × λ = 1.0:
+  10/10 converge; selectivity gap at V_kin = +5 pp so
+  Γ_max/k_des retune flagged LOW priority going into v10b.
+- **2026-05-10 — Phase 6β v9 Phases A/B/F + critique sessions.**
+  Two GPT critique loops (CHATGPT_HANDOFF_30 cd-invariance +
+  CHATGPT_HANDOFF_31 strategic pivot) converged on a revised
+  11-step plan. Key findings: cd plateau is **O₂ Levich-limited**
+  (not H⁺ Levich); v9 Γ has no Langmuir capacity (~64-monolayer Γ
+  at converged k_hyd=1e-2 — physically invalid); slide 27 IS
+  Singh's Cu pKa table reproduced (not an independent experimental
+  target); real validation target is per-cation experimental Cation
+  Summary Table from `Summary Data-Error.xlsx`. Output:
+  `docs/phase6/PHASE_6B_V9_PHASES_A_B_RESULTS_2026-05-10.md`
+  + `docs/phase6/PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md`.
+  Also delivered: K⁺ Tafel slopes from Brianna 2019 LSV
   (`scripts/derive/extract_k_plus_tafel_slopes.py`; pH 6.39 only,
   3 cycles, 270–310 mV/decade R²>0.995; scope caveat in
   `docs/phase6/missing_data.md` M1).
@@ -200,16 +320,30 @@ sensitivity sweep.
 
 ### Next executable step
 
-**Phase 6β v10a** — add Langmuir `(1 − Γ/Γ_max)` cap to cation-
-hydrolysis residual + Picard formula; Γ clamp `[0, Γ_max]` with
-`RuntimeWarning` on out-of-bounds; integrated rung diagnostics
-(F₀, Γ, θ, R_forward_capped, denominator, R_2e/R_4e separately,
-σ_S from solved fields); new helper
-`Forward/bv_solver/units.py:sigma_C_m2_to_counts_pm2`; regression
-tests for Γ → Γ_max and Γ_max → ∞ byte-equivalence to v9.
-Estimated 5–7 days. See
-`docs/phase6/PHASE_6B_V9_PHASES_A_B_RESULTS_2026-05-10.md` §
-"Sequenced re-do plan" steps 2.
+**Phase D′ / Phase 6γ scoping — the selectivity gap is open.** With
+Δ_β alone ruled out, candidate next moves in rough order of
+likelihood (`docs/phase6/phase6b_step10_phase_D_summary.md` §7,
+`writeups/May13th/phase_6_overview.tex` §6):
+
+1. **Physical-`a` Bikerman bridge runs disambiguate the
+   +15.6 pp overshoot.** Four runs in flight at
+   `scripts/studies/_phase_D_bridge_corrected_a*.py`; resolves
+   whether the H⁺ Levich plateau is silently set by the dynamic
+   `A_DEFAULT = 0.01` clamp.
+2. **Re-fit `k_des` and `Γ_max`.** Phase D locked these as v10b
+   literature priors; Phase D non-identifiability re-opens them as
+   fit parameters.
+3. **`r_H_El` sensitivity sweep.** Cu prior (200.98 pm) may not
+   transfer cleanly to CMK-3 carbon.
+4. **Local-pH / mass-transport coupling.** Model selectivity is
+   V-flat → transport-limited; H⁺ Levich convention may need
+   re-examination.
+5. **Phase 6δ (parallel alkaline ORR kinetics)** likely needed
+   downstream — 6β fixes the local-pH *source*, not the alkaline
+   decay mechanism.
+
+**Phase E predictive screen (Cs⁺/Na⁺/Li⁺ holdout) MUST NOT launch
+on the current Δ_β** until items (1)–(4) resolve.
 
 ### Direct PDE Inverse Status — paused
 
@@ -252,27 +386,34 @@ back to the project cold:
 
 | File | Purpose |
 |---|---|
-| `CLAUDE.md` | Project-specific conventions, hard rules (E_eq, clip, C+D, IC/residual saturation match, parallel 2e/4e topology, K⁺ vs Cs⁺ deck baseline). |
-| `docs/phase6/PHASE_6B_V9_PHASES_A_B_RESULTS_2026-05-10.md` | **Current revised plan** for Phase 6β v9 after critique sessions 30 + 31. Sequenced 11-step roadmap (Phase 0 → v10a → V-sweep → V_kin → A.2 → ablations → CMK-3 lit → v10b → B.2 → D → E). |
-| `docs/phase6/PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md` | Locked acceptance bundle (primary: H₂O₂ selectivity ±10 pp; secondaries; mechanism check; data reduction protocol). |
-| `docs/papers/Ruggiero2022_JCatal_source_paper.md` | Peer-reviewed source paper for the Mangan deck physics: K₂SO₄ (not ClO₄⁻), parallel 2e (0.695 V) + 4e (1.23 V) ORR (not sequential), N=0.224, 1600 rpm, I=0.3 M. PDF at `docs/papers/Ruggiero2022_JCatal_manuscript.pdf`. |
+| `CLAUDE.md` | Project-specific conventions, hard rules (E_eq, clip, C+D vs anchor-and-grid, IC/residual saturation match, parallel 2e/4e topology, K⁺ vs Cs⁺ deck baseline, `a_nondim` discrepancy for dynamic species). |
+| `writeups/May13th/phase_6_overview.pdf` | **Short story of Phase 6α/6β:** the selectivity gap, the two hypotheses, sub-step chronology (v10a → v10a' → A.2 → step 6 → v10b → step 9/9.5 → step 10 Phase D), and the current verdict + open issues. |
+| `writeups/May13th/forward_codepath_demo_slide15.pdf` | Visual call graph of `solver_demo_slide15_no_speculative_cs.py`: anchor build → Stern bump ladder → grid walk + 9-layer defense-in-depth around the Newton/SNES core. |
+| `writeups/May13th/analytic_counterion_derivation.pdf` | Derivation of the multi-ion shared-θ Bikerman counterion closure from electrochemical-potential first principles, incl. hybrid `(1−A_dyn)` extension to Tresset 2008. |
+| `writeups/May13th/stern_robin_bc_derivation.pdf` | Bonnefont–Argoul–Bazant (2001) Stern Robin BC derivation with exact code mapping (`forms_logc_muh.py:668`). |
+| `writeups/May13th/mms_source_terms_derivation.pdf` | Algebra of the four MMS source terms (NP interior + NP electrode + Poisson interior + Stern Robin) for the production stack. |
+| `docs/phase6/v10b_calibration_summary.md` | v10b literature lock of `Γ_max = 0.047`, `k_des = 1.0`, `C_S = 0.20 F/m²`; 4-test compatibility audit. |
+| `docs/phase6/CMK3_capacitance_literature.md` | C_S = 0.20 F/m² citation chain (Bohra/Choi/Pillai/CatINT/Kilic). |
+| `docs/phase6/phase6b_step9_B2_summary.md` | Step 9 B.2 (140-rung k_hyd × λ ramp at V_kin on v10b parameters); step 9.5 `warm_start_floor` extension. |
+| `docs/phase6/phase6b_step10_phase_D_summary.md` | Phase D K-only Δ_β fit verdict `OUTCOME_C_NON_IDENTIFIABLE_flagged`; bridge diagnostics; open scope. |
+| `docs/phase6/PHASE_6B_V9_PHASES_A_B_RESULTS_2026-05-10.md` | Original 11-step roadmap for Phase 6β (Phase 0 → v10a → V-sweep → V_kin → A.2 → step 6 → CMK-3 lit → v10b → B.2 → D → E). |
+| `docs/phase6/PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md` | Locked acceptance bundle (primary: H₂O₂ selectivity ±10 pp; secondaries; mechanism check; § Status with full chronology). |
+| `docs/phase6/PHASE_6A_INVESTIGATION_SUMMARY.md` | State of Phase 6α (water self-ionization plumbed; P3 surface-pH gate fails at 10.58; retired as primary). |
+| `docs/phase6/CONJECTURE_AUDIT_2026-05-09.md` | Audit of `fast-realignment` for Claude/GPT-conjecture vs. grounded changes. Flags HIGH-risk Cs⁺ vs deck-baseline K⁺ mismatch. |
+| `docs/phase6/singh_2016_pka_formula.md` | Singh 2016 SI Section 1: Eq. (3) bulk pKa + Eq. (4) field-dependent ΔpKa + §5.2 σ-mapping convention. |
+| `docs/phase6/missing_data.md` | Missing-data ledger (M1: Tafel slope xlsx; M2: C_S CMK-3 carbon; etc.). |
+| `docs/papers/Ruggiero2022_JCatal_source_paper.md` | Peer-reviewed source paper for the Mangan deck physics: K₂SO₄, parallel 2e (0.695 V) + 4e (1.23 V) ORR, N=0.224, 1600 rpm, I=0.3 M. PDF at `docs/papers/Ruggiero2022_JCatal_manuscript.pdf`. |
 | `docs/papers/seitz_mangan_data_folder_audit_2026-05-08.md` | Deep audit of the experimental data folder. |
 | `docs/realignment/Mangan2025_experimental_alignment.md` | Gap audit between the model and the Mangan 2025 deck. |
-| `docs/phase6/CONJECTURE_AUDIT_2026-05-09.md` | Audit of `fast-realignment` for Claude/GPT-conjecture vs. grounded changes. Flags HIGH-risk Cs⁺ vs deck-baseline K⁺ mismatch. |
-| `docs/phase6/singh_2016_pka_formula.md` | Singh 2016 SI Section 1 extraction: Eq. (3) bulk pKa + Eq. (4) field-dependent ΔpKa + §5.2 σ-mapping convention. |
-| `docs/phase6/missing_data.md` | Missing-data ledger (M1: Tafel slope xlsx; M2: C_S CMK-3 carbon; etc.). |
-| `docs/phase6/PHASE_6A_INVESTIGATION_SUMMARY.md` | State of Phase 6α (water self-ionization landed; 8/8 sweep convergence; P3 surface-pH gate fails at 10.58). |
-| `docs/PHASE_6B_V9_GATES_3_4_SUMMARY.md` | Phase 6β v9 Gate 3 (Γ machinery) + Gate 4A (Singh formula) status. |
-| `docs/PHASE_6B_V9_GATE_4B_SWEEP_RESULTS.md` | 9-combination sensitivity sweep at V=−0.40 V (architecturally PASS; calibration OPEN). |
-| `docs/phase6b_v9_post_gate4_plan.md` | Original post-Gate-4 plan (superseded by `PHASE_6B_V9_PHASES_A_B_RESULTS_2026-05-10.md`). |
-| `docs/handoffs/CHATGPT_HANDOFF_30_phase6b-v9-cd-invariance/FINAL_REVISION.md` | Critique session 30 ledger (63 issues; cd-invariance finding capped at ISSUES_REMAIN). |
-| `docs/handoffs/CHATGPT_HANDOFF_31_phase6b-v9-strategic-pivot/FINAL_REVISION.md` | Critique session 31 ledger (52 issues; APPROVED on R5). |
 | `docs/solver/bv_solver_unified_api.md` | How to call the dispatcher and configure the production stack. |
 | `docs/solver/clipping_conventions.md` | Three distinct BV-related clips and the operational rule that PC is fictitious at clip=50. |
-| `docs/solver/CONTINUATION_STRATEGY_HANDOFF.md` | Why C+D over A/B for the logc+counterion stack; and why `solve_anchor_with_continuation` for the multi-ion + Stern + Phase 6α stack. |
-| `docs/solver/steric_analytic_clo4_reduction_handoff.md` | Derivation of the Bikerman analytic-counterion residual closure. |
+| `docs/solver/CONTINUATION_STRATEGY_HANDOFF.md` | Why C+D over A/B for the logc+counterion stack; and why `solve_anchor_with_continuation` for the multi-ion + Stern + Phase 6α/6β stack. |
+| `docs/solver/steric_analytic_clo4_reduction_handoff.md` | Code-side notes on the Bikerman analytic-counterion residual closure. |
+| `docs/solver/mms_pnpbv_muh_multi_ion_stern_derivation.md` | Full MMS coverage table + runtime invariants + broken-config matrix (companion to the May13th writeup). |
 | `docs/ic_studies/4sp_bikerman_ic_option_2b_results.md` | Legacy ClO₄⁻ reference sweep (3sp + Bikerman + Stern + muh + debye_boltzmann IC = 15/15 over V_RHE [−0.5, +1.0]). |
-| `docs/handoffs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md` | Phase 6α outcome + Phase 6β scoping (the document upstream of the v9 architecture). |
+| `docs/handoffs/CHATGPT_HANDOFF_30_phase6b-v9-cd-invariance/FINAL_REVISION.md` | Critique session 30 ledger (63 issues; cd-invariance finding). |
+| `docs/handoffs/CHATGPT_HANDOFF_31_phase6b-v9-strategic-pivot/FINAL_REVISION.md` | Critique session 31 ledger (52 issues; APPROVED). |
+| `docs/handoffs/CHATGPT_HANDOFF_26_phase6a_outcome_and_phase6b_scoping.md` | Phase 6α outcome + Phase 6β scoping (upstream of the v9 architecture). |
 | `writeups/ForwardSolverChangesMay26/forward_solver_changes_may2026.pdf` | May 2026 production-target writeup. |
 | `writeups/WeekOfApr27/PNP Inverse Solver Revised.pdf` | Forward-solver rebuild narrative. |
 | `.verification/REPORT.md` | Multi-agent correctness verification of the production codepath. |
@@ -290,22 +431,23 @@ the pre-Phase-6 state.
 | Path | Role |
 |---|---|
 | `Forward/` | Forward solvers, parameters, noise, plotting, and steady-state utilities. |
-| `Forward/bv_solver/` | Main PNP-BV package: log-c forms (`forms_logc.py`) and the muh variant (`forms_logc_muh.py`), log-rate BV with parallel 2e/4e reactions, ideal + Bikerman analytic counterions (`boltzmann.py`), shared scalar Picard for the `debye_boltzmann` IC (`picard_ic.py`), per-voltage diagnostics (`diagnostics.py`), observables, RRDE post-processing (`rrde_observables.py`), validation, the legacy C+D continuation orchestrator (`grid_per_voltage.py`), and the newer Phase 5γ + 6α anchor-and-grid orchestrator (`anchor_continuation.py`). Phase 6α water-ionization closure in `water_ionization.py`. Phase 6β cation-hydrolysis machinery in `cation_hydrolysis.py` (Γ_MOH outer Picard, Singh Eq. 4 pKa shift). The legacy concentration backend was removed in the May 2026 cleanup. |
+| `Forward/bv_solver/` | Main PNP-BV package: log-c forms (`forms_logc.py`) and the muh variant (`forms_logc_muh.py`), log-rate BV with parallel 2e/4e reactions, ideal + Bikerman analytic counterions (`boltzmann.py`), multi-ion shared-θ closure (`multi_ion.py`), shared scalar Picard for the `debye_boltzmann` IC (`picard_ic.py`), per-voltage diagnostics (`diagnostics.py`), observables (`observables.py`, `rrde_observables.py`), unit conversions (`units.py`), validation, the legacy C+D continuation orchestrator (`grid_per_voltage.py`), and the newer Phase 5γ+6α/6β anchor-and-grid orchestrator (`anchor_continuation.py`) with `AdaptiveLadder` and `warm_start_floor` arithmetic bisection. Phase 6α water-ionization closure in `water_ionization.py`. Phase 6β v10b cation-hydrolysis machinery in `cation_hydrolysis.py` (Γ_MOH outer Picard, Singh Eq. 4 pKa shift, Langmuir cap). The legacy concentration backend was removed in the May 2026 cleanup. |
+| `calibration/` | **Firedrake-free** literature-locked constants. `v10b.py`: `GAMMA_MAX_HAT_V10B = 0.047`, `K_DES_NONDIM_V10B = 1.0`, `C_S_F_M2_V10B = 0.20`. `singh2016.py`: per-cation Singh Table S1 + Cu r_H_El values. Deprecation alias `SMOKE = V10A_SMOKE` (never `SMOKE = V10B`). |
 | `Inverse/` | Generic Pyadjoint inverse framework and objective factories. **Inverse paused.** |
 | `FluxCurve/` | Adjoint-gradient curve-fitting framework for Robin and BV flux/current curves. **Inverse paused — reference only.** |
 | `Nondim/` | Physical constants, scaling transforms, and compatibility wrappers. |
 | `Surrogate/` | Surrogate models (RBF, NN, GP, PCE, POD-RBF, multistart, BCD, cascade, ISMO). **Paused with the inverse pipeline.** |
-| `scripts/studies/` | Forward-solver study scripts and diagnostics. **Current deck-aligned drivers:** `l_eff_transport_sweep_csplus_so4.py` (most recent Cs⁺/SO₄²⁻ + parallel 2e/4e + Phase 6α opt-in flag); `mangan_full_grid_csplus_so4.py` (deck-page-15 V_RHE band); `phase6b_v9_gate2_dynamic_k2so4_smoke.py` and `phase6b_v9_gate4_finite_hydrolysis_smoke.py` (Phase 6β v9 gates). **Legacy reference:** `peroxide_window_3sp_bikerman_muh.py` (ClO₄⁻ single-counterion + sequential R1/R2). `v*` are legacy inverse studies. |
+| `scripts/studies/` | Forward-solver study scripts and diagnostics. **Current solver-baseline driver:** `solver_demo_slide15_no_speculative_cs.py` (Cs⁺/SO₄²⁻ + parallel 2e/4e, default-off Phase 6α/6β, 4-factor `K0_R4e` sweep × 25 V_RHE; visual call graph in `writeups/May13th/forward_codepath_demo_slide15.pdf`). **Phase 6β v10b drivers:** `phase6b_step10_phase_D_orchestrate.py` + `phase6b_step10_phase_D_fit_eval.py` (Δ_β fit + identifiability gate), `phase6b_v10a_phase_A2_v_kin.py` (10-rung k_hyd ramp at V_kin), `phase6b_v10a_v_sweep_diagnostic.py` (V_kin selection), `phase6b_step6_plumbing_ablation.py` (4-path wiring verification). **Phase D bridge diagnostics:** `_phase_D_bridge_corrected_a*.py` (physical-`a` for dynamic species), `_phase_D_bridge_no_hydrolysis*.py`. **Deck reference drivers:** `l_eff_transport_sweep_csplus_so4.py` (Phase 6α validation), `mangan_full_grid_csplus_so4.py` (deck-page-15 V_RHE band). **Legacy reference:** `peroxide_window_3sp_bikerman_muh.py` (ClO₄⁻ single-counterion + sequential R1/R2). `v*` are legacy inverse studies. |
 | `scripts/derive/` | Data-derivation scripts. `extract_k_plus_tafel_slopes.py` extracts Tafel slopes from Brianna 2019 LSV (Phase F output goes to `data/derived/` which is gitignored). |
-| `scripts/verification/` | MMS and BV forward strategy verification scripts. |
+| `scripts/verification/` | MMS and BV forward strategy verification scripts. `mms_pnpbv_muh_multi_ion_stern.py` is the current production-stack MMS (~1100 LOC; muh + Cs⁺/SO₄²⁻ multi-ion + Stern Robin + parallel 2e/4e). `mms_bv_3sp_logc_boltzmann.py` covers the simpler 3sp + single-counterion stack. `WEAK_FORM_AUDIT.md` documents the weak-form structure. |
 | `scripts/profile/` | Performance-profile runners for the production sweep. |
 | `scripts/surrogate/` | Surrogate training, validation, GP/PCE/NN drivers, ISMO drivers (paused). |
 | `scripts/Inference/` | Older master inverse entry points and wrappers. Kept for reproducibility (uppercase `Inference`). |
 | `data/` | **Gitignored.** Experimental data drop from the Seitz/Mangan group (`EChem Reactor Modeling-Seitz-Mangan/` ~273 MB) + derived outputs (`derived/`). See `docs/papers/data_folder_code_inventory.md` for the per-file inventory. |
-| `docs/` | Handoffs, plans, conventions, equations, literature inputs, and current status notes. Organized into `docs/phase6/` (Phase 6α/6β), `docs/handoffs/` (CHATGPT_HANDOFF_*), `docs/papers/` (Ruggiero, Singh, data-folder audits), `docs/realignment/` (Mangan deck alignment), `docs/solver/` (API, continuation, clipping conventions), `docs/inverse/` (paused). |
-| `writeups/` | PDF/TeX reports (Apr 27 solver writeup, May 2026 forward-solver-changes writeup, May 4 IC walkthrough, V&V report). |
-| `StudyResults/` | Generated results, summaries, plots, JSON, CSV, and run logs. Working research record, not a clean build-artifact directory. Historical diagnostic results nested under `StudyResults/diagnostics/`; fast-realignment outputs under `StudyResults/fast_realignment/`; Phase 6β v9 results in `StudyResults/phase6b_v9_*/`. |
-| `tests/` | Pytest regression and verification tests. Firedrake tests are marked `slow`. Phase 6β v9 tests: `test_phase6b_v9_gate{1_roles,2_dynamic_k,3_gamma_machinery,4_finite_hydrolysis}.py`. Phase 6α tests: `test_water_ionization_phase_6a.py`. |
+| `docs/` | Handoffs, plans, conventions, equations, literature inputs, and current status notes. Organized into `docs/phase6/` (Phase 6α/6β, including v10b calibration + Phase D summary + CMK-3 capacitance lit), `docs/handoffs/` (CHATGPT_HANDOFF_*), `docs/papers/` (Ruggiero, Singh, data-folder audits), `docs/realignment/` (Mangan deck alignment), `docs/solver/` (API, continuation, clipping conventions, MMS derivation), `docs/inverse/` (paused). |
+| `writeups/` | PDF/TeX reports. **`May13th/`** (current): `phase_6_overview` (selectivity-gap story + Phase D verdict), `forward_codepath_demo_slide15` (visual call graph), `analytic_counterion_derivation` (multi-ion shared-θ Bikerman closure), `stern_robin_bc_derivation` (BAB 2001), `mms_source_terms_derivation` (production-stack MMS). Earlier writeups under `WeekOfApr27/`, `ForwardSolverChangesMay26/`, `vv_report/`. |
+| `StudyResults/` | Generated results, summaries, plots, JSON, CSV, and run logs. Working research record. Phase 6β results: `phase6b_v9_*/`, `phase6b_step6_*/`, `phase6b_v10a_*/`, `phase6b_step9_B2/`, `phase6b_step10_phase_D/`. Solver-baseline: `solver_demo_slide15_no_speculative_cs/factor_{f}/iv_curve.json`. MMS artifacts: `mms_logc_muh_multi_ion_stern/`. |
+| `tests/` | Pytest regression and verification tests. Firedrake tests are marked `slow`. MMS suite: `test_mms_logc_muh_multi_ion_stern.py` (18 cases, ~12 s; the production-stack MMS), `test_mms_steric_boltzmann_convergence.py`, `test_mms_convergence.py`. Phase 6β v9 gates: `test_phase6b_v9_gate{1_roles,2_dynamic_k,3_gamma_machinery,4_finite_hydrolysis}.py`. Phase 6β v10a/v10b: `test_phase6b_v10a_langmuir_cap.py`, `test_phase6b_v10a_phase_A2_driver.py`, `test_phase6b_v10a_v_kin_selection.py`, `test_phase6b_v10b_calibration.py`, `test_phase6b_v10b_bracket_matrix.py`. Phase D: `test_phase6b_step10_phase_D_{plumbing,fit_eval,orchestrate}.py`. Stern: `test_stern_no_stern_snapshot.py`. Multi-ion: `test_multi_ion_csplus_so4.py`. Phase 6α: `test_water_ionization_phase_6a.py`. |
 | `archive/` | Old results/code for reference, not the active implementation surface. |
 
 There is no current `scripts/bv/` directory and no lowercase
@@ -321,10 +463,12 @@ canonical call shapes today.
 
 ### Deck-aligned multi-ion stack (current production target)
 
-The deck baseline is K⁺/SO₄²⁻; the script below uses Cs⁺/SO₄²⁻
+The deck baseline is K⁺/SO₄²⁻; the snippet below uses Cs⁺/SO₄²⁻
 (one of the four cations in the slide-27 comparison study). Swap
 `DEFAULT_CSPLUS_BOLTZMANN_COUNTERION_STERIC` for a K⁺ entry for
-apples-to-apples deck baselines (see CLAUDE.md gotchas).
+apples-to-apples deck baselines (see CLAUDE.md gotchas). The
+anchor is built at `C_S = 0.10` and ramped up to the production
+`C_S = 0.20` via the Stern bump ladder (no form rebuild).
 
 ```python
 from scripts._bv_common import (
@@ -338,12 +482,14 @@ from scripts._bv_common import (
 from Forward.bv_solver.anchor_continuation import (
     solve_anchor_with_continuation,
     extract_preconverged_anchor,
+    set_stern_capacitance_model,
 )
 from Forward.bv_solver import (
     solve_grid_with_anchor, make_graded_rectangle_mesh,
 )
 
-sp = make_bv_solver_params(
+# Anchor sp at C_S=0.10 (cold-convergeable); production sp at C_S=0.20.
+common = dict(
     eta_hat=0.0, dt=0.25, t_end=80.0,
     species=THREE_SPECIES_LOGC_BOLTZMANN,
     formulation="logc_muh", log_rate=True,
@@ -353,38 +499,66 @@ sp = make_bv_solver_params(
         DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC,
     ],
     multi_ion_enabled=True,                       # required for ≥2 entries
-    stern_capacitance_f_m2=0.10,
     initializer="debye_boltzmann",
     l_eff_m=100e-6,
     enable_water_ionization=False,                # Phase 6α opt-in
 )
+sp_anchor   = make_bv_solver_params(**common, stern_capacitance_f_m2=0.10)
+sp_baseline = make_bv_solver_params(**common, stern_capacitance_f_m2=0.20)
 
 mesh = make_graded_rectangle_mesh(
     Nx=8, Ny=80, beta=3.0,
-    domain_height_hat=sp.solver_options["bv_convergence"]["domain_height_hat"],
+    domain_height_hat=sp_anchor.solver_options["bv_convergence"]["domain_height_hat"],
 )
 
+# Stage 1: cold anchor at C_S = 0.10 via k0 AdaptiveLadder
 anchor_result = solve_anchor_with_continuation(
-    sp.with_phi_applied(0.55 / V_T), mesh=mesh,
+    sp_anchor.with_phi_applied(0.55 / V_T), mesh=mesh,
     k0_targets={0: float(K0_HAT_R2E), 1: float(K0_HAT_R4E)},
     initial_scales=(1e-12, 1e-9, 1e-6, 1e-3, 1.0),
 )
+
+# Stage 2: Stern bump ladder 0.10 → 0.20 (no form rebuild, reuses solver)
+ctx = anchor_result.ctx
+for c_s in (0.20,):                               # extend rung list for >0.20
+    set_stern_capacitance_model(ctx, c_s)
+    ctx["_last_solver"].solve()
+
+# Stage 3: grid walk warm-started from the bumped anchor
 anchor = extract_preconverged_anchor(
     anchor_result, phi_applied_eta=0.55 / V_T,
     k0_targets={0: float(K0_HAT_R2E), 1: float(K0_HAT_R4E)},
     mesh_dof_count=anchor_result.ctx["U"].function_space().dim(),
 )
-grid = solve_grid_with_anchor(sp, mesh=mesh, anchor=anchor,
+grid = solve_grid_with_anchor(sp_baseline, mesh=mesh, anchor=anchor,
                               v_rhe_grid=V_RHE_GRID)
+```
+
+To enable Phase 6β v10b cation hydrolysis, set
+`enable_cation_hydrolysis=True` and use
+`FOUR_SPECIES_LOGC_DYNAMIC_K2SO4` (K⁺ as a dynamic NP species),
+plus the v10b literature constants from `calibration.v10b`:
+
+```python
+from calibration.v10b import (
+    GAMMA_MAX_HAT_V10B,    # 0.047
+    K_DES_NONDIM_V10B,     # 1.0
+    C_S_F_M2_V10B,         # 0.20
+)
+from scripts._bv_common import FOUR_SPECIES_LOGC_DYNAMIC_K2SO4, PARALLEL_2E_4E_REACTIONS_4SP
 ```
 
 Reference drivers:
 
 | Driver | Stack |
 |---|---|
-| `scripts/studies/l_eff_transport_sweep_csplus_so4.py` | Cs⁺/SO₄²⁻ multi-ion + parallel 2e/4e + `--enable-water-ionization` flag (most recent; Phase 6α validation) |
-| `scripts/studies/mangan_full_grid_csplus_so4.py` | Cs⁺/SO₄²⁻ multi-ion + parallel 2e/4e at the deck V_RHE band |
-| `scripts/studies/phase6b_v9_gate4_finite_hydrolysis_smoke.py` | Phase 6β v9 Gate 4 + post-Gate-4 plan (Phases A/B at V=−0.20 V); supports `--voltage`, `--lambda-only`, `--k-hyd-ramp`, `--k-hyd`, `--k-prot`, `--out-subdir` |
+| `scripts/studies/solver_demo_slide15_no_speculative_cs.py` | **Solver-works baseline.** Cs⁺/SO₄²⁻ + parallel 2e/4e + Stern bump, default-off Phase 6α/6β; 4-factor `K0_R4e` × 25 V_RHE. Visual call graph: `writeups/May13th/forward_codepath_demo_slide15.pdf`. |
+| `scripts/studies/phase6b_step10_phase_D_orchestrate.py` | Phase D K-only Δ_β fit + identifiability gate (`OUTCOME_C_NON_IDENTIFIABLE_flagged` on K@pH4 deck data). |
+| `scripts/studies/phase6b_v10a_phase_A2_v_kin.py` | 10-rung k_hyd ramp at V_kin = −0.10 V on v10a/v10b parameters; `--lambda-ladder` CLI per step 9.A. |
+| `scripts/studies/phase6b_v10a_v_sweep_diagnostic.py` | V_kin selection diagnostic (primary route: σ_S<0, branch active, not transport-artifact, not cap-dominated). |
+| `scripts/studies/phase6b_step6_plumbing_ablation.py` | 4-path wiring verification (form-build residual, pKa-shift context, Picard Γ update, diagnostics). |
+| `scripts/studies/l_eff_transport_sweep_csplus_so4.py` | Phase 6α validation: 8 L_eff × 13 V_RHE with `--enable-water-ionization`. |
+| `scripts/studies/mangan_full_grid_csplus_so4.py` | Cs⁺/SO₄²⁻ multi-ion + parallel 2e/4e at the deck V_RHE band. |
 
 ### Legacy single-counterion stack (ClO₄⁻ reference)
 
@@ -436,13 +610,34 @@ Gotchas (see CLAUDE.md for the full list):
   for deck-aligned work.
 - **`multi_ion_enabled=True` is required** when passing ≥2 bikerman
   counterions.
+- **Stern bump ladder for `C_S = 0.20`**: cold-start at `C_S = 0.20`
+  on the multi-ion stack is unreliable. Build the anchor at
+  `C_S = 0.10`, then ramp via verified rungs
+  `(0.10 → 0.20 → 0.50 → 1.0 → 2.0 → 5.0 → 10.0 → 100.0)` using
+  `set_stern_capacitance_model(ctx, c_s)` + `ctx["_last_solver"].solve()`
+  (no form rebuild). The bump-ladder helper truncates the rung list
+  at the first rung ≥ target.
+- **Bikerman `a_nondim` for dynamic species is unphysical**:
+  O₂/H₂O₂/H⁺ are seeded with `A_DEFAULT = 0.01` (≈ r 14.9 Å,
+  ~150× larger than physical). Only counterion entries
+  (`A_KPLUS_HAT`, `A_CSPLUS_HAT`, `A_SO4_HAT`, `A_OH_HAT`) use real
+  radii. H⁺ Bikerman cap is clamped ~150× tighter than its r=2.8 Å
+  H₃O⁺ Stokes value — treat any plateau-set-by-Levich finding as
+  suspect until the `_phase_D_bridge_corrected_a*.py` runs land.
 - **Phase 6α opt-in**: `enable_water_ionization=True` plus the
   `kw_eff_ladder` outer loop on `solve_anchor_with_continuation`.
-- **Phase 6β v9 cation hydrolysis** is **not** yet production-trusted.
-  `enable_cation_hydrolysis=True` activates the Γ machinery but
-  there is no Langmuir capacity in v9, so converged k_hyd ≥ 1e-3
-  is unphysical (>6 monolayers of MOH). v10a is the fix; track in
-  `docs/phase6/PHASE_6B_V9_PHASES_A_B_RESULTS_2026-05-10.md`.
+  Retired as primary peak mechanism (P3 fail) but plumbing remains.
+- **Phase 6β v10b cation hydrolysis** is calibrated and convergent
+  but the **Δ_β fit step (Phase D) returned non-identifiable**. All
+  hard gates (cd<0, R_4e sign preserved, R_net≥0, mass-balance
+  ≤ 5×10⁻³) pass, but model max H₂O₂% overshoots deck mean by a
+  uniform +15.6 pp. Don't claim Δ_β-derived cation-trend conclusions
+  yet; don't launch Phase E. See `phase6b_step10_phase_D_summary.md`.
+- **`AdaptiveLadder.warm_start_floor`** (step 9.5) is opt-in
+  arithmetic bisection at the first ladder rung when warming from a
+  prior state — required for λ ladders at high `k_hyd`. k0 and
+  `kw_eff` ladders keep `warm_start_floor=None` (byte-equivalent
+  to pre-9.5 behavior).
 - `set_initial_conditions(ctx, sp, blob=True)` is silently ignored
   in log-c mode (no blob IC for `u_i = ln c_i`).
 - `validate_solution_state` needs `is_logc=...` for log-c contexts;
@@ -453,8 +648,12 @@ Gotchas (see CLAUDE.md for the full list):
 - The `debye_boltzmann` IC requires either a `synthesised_4sp` ClO₄⁻
   counterion *or* a `steric_mode="bikerman"` entry; with
   `steric_mode="ideal"` it falls back to the tanh-Gouy-Chapman seed.
-- `H2O2_SEED_NONDIM = 1e-4` is the finite seed for `ln c_H2O2` at
-  the bulk Dirichlet BC, not a physics tweak.
+- `H2O2_SEED_NONDIM = 1e-4` is the production seed for `ln c_H2O2`
+  at the bulk Dirichlet BC, not a physics tweak. **MMS tests rescale
+  this to `1.0`** to keep Newton in basin without continuation; the
+  operator under test is unchanged (the seed enters only the bulk
+  Dirichlet, an `O(10⁻⁵)` `θ_b` contribution, and the anodic
+  `c_ref` reference which neither reaction enters).
 - **C+D vs anchor-and-grid**: use C+D
   (`solve_grid_per_voltage_cold_with_warm_fallback`) for the
   legacy ClO₄⁻ single-counterion stack; use anchor-and-grid
@@ -532,14 +731,14 @@ PyOP2/TSFC kernels, and friends. The supported workflow is:
    python -m pytest -m slow
    ```
 
-   and finally a smoke test of the production sweep on a few
-   voltages:
+   and finally a smoke test of the solver-works baseline (Cs⁺/SO₄²⁻
+   + parallel 2e/4e + Stern bump, default-off Phase 6α/6β):
 
    ```bash
-   python scripts/studies/peroxide_window_3sp_bikerman_muh.py
+   python scripts/studies/solver_demo_slide15_no_speculative_cs.py
    ```
 
-   The full sweep takes minutes-to-hours; see
+   The full 4-factor × 25-V sweep takes 15-30 min; see
    `scripts/profile/profile_production_sweep.py` for a profile-only
    variant.
 
@@ -554,39 +753,58 @@ Lightweight tests (no Firedrake):
 python -m pytest -m "not slow"
 ```
 
-Firedrake-dependent verification:
+Firedrake-dependent verification (MMS for the production stack):
 
 ```bash
-python -m pytest -m slow
+# Production stack: muh + Cs⁺/SO₄²⁻ multi-ion + Stern Robin + parallel 2e/4e
+python -m pytest -m slow tests/test_mms_logc_muh_multi_ion_stern.py
+
+# Legacy single-counterion stack (3sp + Bikerman)
+python -m pytest -m slow tests/test_mms_steric_boltzmann_convergence.py
 python scripts/verification/mms_bv_3sp_logc_boltzmann.py
 ```
 
-The deck-aligned multi-ion sweep (most recent; Cs⁺/SO₄²⁻ +
-parallel 2e/4e, with optional Phase 6α water-ionization):
+Solver-works baseline (current canonical demo; Cs⁺/SO₄²⁻ + parallel
+2e/4e + Stern bump, default-off Phase 6α/6β; visual call graph in
+`writeups/May13th/forward_codepath_demo_slide15.pdf`):
 
 ```bash
+python -u scripts/studies/solver_demo_slide15_no_speculative_cs.py
+# --no-stern variant ramps Stern through 0.10 → 100 F/m²
+```
+
+Phase 6β v10b drivers (cation hydrolysis on calibrated parameters):
+
+```bash
+# Step 10 Phase D K-only Δ_β fit (returns OUTCOME_C_NON_IDENTIFIABLE_flagged)
+python -u scripts/studies/phase6b_step10_phase_D_orchestrate.py
+
+# Step 9 B.2 — 14×10 = 140-rung k_hyd × λ ramp at V_kin
+python -u scripts/studies/phase6b_v10a_phase_A2_v_kin.py --lambda-ladder
+
+# Step 6 plumbing ablation (4-path wiring verification at V_kin)
+python -u scripts/studies/phase6b_step6_plumbing_ablation.py
+```
+
+Bridge diagnostics (physical-`a` for dynamic species, queued
+2026-05-12 after the Phase D `a_nondim` discrepancy surfaced):
+
+```bash
+python -u scripts/studies/_phase_D_bridge_corrected_a.py
+python -u scripts/studies/_phase_D_bridge_corrected_a_cs.py
+python -u scripts/studies/_phase_D_bridge_no_hydrolysis.py
+python -u scripts/studies/_phase_D_bridge_no_hydrolysis_cs.py
+```
+
+Deck-aligned reference sweeps:
+
+```bash
+# Phase 6α validation: 8 L_eff × 13 V_RHE, --enable-water-ionization opt-in
 python -u scripts/studies/l_eff_transport_sweep_csplus_so4.py \
     [--enable-water-ionization]
-```
 
-The deck-page-15 V_RHE band sweep (Cs⁺/SO₄²⁻ + parallel 2e/4e,
-single L_eff):
-
-```bash
+# Deck-page-15 V_RHE band (Cs⁺/SO₄²⁻ + parallel 2e/4e, single L_eff)
 python -u scripts/studies/mangan_full_grid_csplus_so4.py
-```
-
-Phase 6β v9 Gate 4 cation-hydrolysis smoke study (the driver used
-for Phases A/B in the post-Gate-4 plan):
-
-```bash
-# Phase A observability (with cached snapshot once it exists)
-python -u scripts/studies/phase6b_v9_gate4_finite_hydrolysis_smoke.py \
-    --voltage -0.20 --lambda-only
-
-# Phase B k_hyd ramp at the same voltage
-python -u scripts/studies/phase6b_v9_gate4_finite_hydrolysis_smoke.py \
-    --voltage -0.20 --k-hyd-ramp
 ```
 
 K⁺ Tafel slope extraction (Phase F, parallel-safe):
@@ -603,7 +821,7 @@ for backward-compat checking only — **not** a deck-aligned run):
 python -u scripts/studies/peroxide_window_3sp_bikerman_muh.py
 ```
 
-IC-distance diagnostic (the script that surfaced the May 2026-05-07
+IC-distance diagnostic (the script that surfaced the 2026-05-07
 Stern-η + Bikerman-γ Picard bugs):
 
 ```bash
@@ -670,17 +888,34 @@ See `docs/inverse/noise_model_conventions.md`.
   experiment. Some configs cold-fail more often at clip=100;
   recover with anchor-and-grid warm-walk or Stern, not by lowering
   the clip. `u_clamp = 100` for the same reason.
-- **Phase 6α water-ionization is opt-in.** When using
-  `enable_water_ionization=True`, also pass the `kw_eff_ladder`
-  outer-loop to `solve_anchor_with_continuation` (typical:
-  `(0.0, KW_HAT·1e-6, KW_HAT·1e-3, KW_HAT·0.1, KW_HAT)`).
-- **Phase 6β v9 cation hydrolysis is a numerical/architectural
-  diagnostic only, not a physics-trustworthy production path.**
-  v9 lacks a Langmuir capacity on Γ_MOH, so converged k_hyd ≥ 1e-3
-  produces ≥6 monolayers of MOH at the OHP — physically invalid.
-  v10a (Langmuir cap) is the production fix; until v10a lands,
-  no physics conclusion from Γ-dependent observables is defensible.
-  See `docs/phase6/PHASE_6B_V9_PHASES_A_B_RESULTS_2026-05-10.md`.
+- **Stern bump ladder for `C_S = 0.20`**: cold-start at the
+  production `C_S = 0.20` is unreliable on the multi-ion stack.
+  Build the anchor at `C_S = 0.10` and ramp via the verified rung
+  sequence `(0.10 → 0.20 → 0.50 → 1.0 → 2.0 → 5.0 → 10.0 → 100.0)`
+  using `set_stern_capacitance_model` (no form rebuild). The
+  100 F/m² rung approximates the no-Stern Dirichlet limit; a true
+  `C_S = None` Dirichlet doesn't converge on the multi-ion stack.
+- **Bikerman `a_nondim` for dynamic species is unphysical** —
+  O₂/H₂O₂/H⁺ use `A_DEFAULT = 0.01` (≈ r 14.9 Å, ~150× larger than
+  physical). Only counterion entries use real radii. Anything that
+  depends on the H⁺ Levich plateau is suspect until the
+  `_phase_D_bridge_corrected_a*.py` runs disambiguate.
+- **Phase 6α water-ionization is opt-in** but retired as primary
+  peak mechanism. When using `enable_water_ionization=True`, pass
+  the `kw_eff_ladder` outer loop to `solve_anchor_with_continuation`
+  (typical: `(0.0, KW_HAT·1e-6, KW_HAT·1e-3, KW_HAT·0.1, KW_HAT)`).
+- **Phase 6β v10b cation hydrolysis** is calibrated and convergent
+  (Γ_max=0.047, k_des=1.0, C_S=0.20 from `calibration/v10b.py`), all
+  hard gates pass, but **step 10 Phase D K-only Δ_β fit returned
+  `OUTCOME_C_NON_IDENTIFIABLE_flagged`** with a uniform +15.6 pp
+  H₂O₂% overshoot vs deck K@pH 4. Phase E predictive screen
+  (Cs/Na/Li holdout) MUST NOT launch on the current Δ_β. See
+  `docs/phase6/phase6b_step10_phase_D_summary.md`.
+- **`AdaptiveLadder.warm_start_floor`** (step 9.5) is opt-in
+  arithmetic bisection at the first ladder rung when warming from
+  a prior state — required for λ ladders at high `k_hyd`. k0 and
+  `kw_eff` ladders keep `warm_start_floor=None` (byte-equivalent
+  to pre-9.5 behavior).
 - **`l_eff_m` is read at form-build time** via
   `bv_convergence['domain_height_hat']`; the mesh y-extent must
   match. The current gate4 driver uses 16 µm (Ruggiero 2022 1600 rpm
