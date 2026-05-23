@@ -1,0 +1,407 @@
+# Round 5: Counterreply on the v4 plan
+
+All 10 issues land.  Verified against actual code; corrections folded
+into plan v5 (final round per cap=5).  Per-issue responses + final plan.
+
+## Per-issue responses
+
+**Re point 1** (`warm_walk_phi` owns the `make_run_ss` call, not
+`solve_grid_with_anchor`):
+**Accept.**  Verified `grid_per_voltage.py:259` — `warm_walk_phi`
+constructs `run_ss = make_run_ss(...)` internally.  The factory must
+be plumbed through `warm_walk_phi(..., make_run_ss_factory=make_run_ss)`
+with the existing `make_run_ss` as default (preserves byte-equivalence).
+`solve_grid_with_anchor` and `solve_anchor_with_continuation` thread
+the factory through to every `warm_walk_phi` call site.
+
+**Re point 2** (factory signature must match `make_run_ss` exactly:
+`dt_init`, `dt_growth_cap`, `dt_max_ratio`, not the names I used):
+**Accept.**  Verified `grid_per_voltage.py:140-142` —
+`make_run_ss(*, ctx, solver, of_cd, dt_init=0.25, dt_growth_cap=4.0,
+dt_max_ratio=20.0, ss_rel_tol, ss_abs_tol, ss_consec)`.  Returned
+closure is `run_ss(max_steps: int) -> bool`.  Picard factory:
+
+  `make_picard_run_ss(*, ctx, solver, of_cd,
+                      dt_init=0.25, dt_growth_cap=4.0, dt_max_ratio=20.0,
+                      ss_rel_tol=1e-4, ss_abs_tol=1e-8, ss_consec=4,
+                      # Picard-specific:
+                      xi_funcs, closure_theta_b, closure_bulk_c_hat,
+                      cathodic_species_set, cathodic_stoich,
+                      D_per_species_hat,
+                      packing_expr, theta_inner_expr, electrode_marker,
+                      Lx_hat, packing_floor,
+                      max_picard_iters=15, tol_residual=1e-3,
+                      tol_step=1e-3, tol_state=1e-4,
+                      damping_init=0.5, damping_min=0.05,
+                      max_damping_retries=3, strict_floor=True,
+                      floor_tol=1e-10, xi_floor=math.exp(-50))
+   -> Callable[[int], bool]`
+
+The returned `picard_run_ss(max_steps)` signature matches bare
+`run_ss(max_steps) -> bool` exactly.  All SS knobs forwarded
+unchanged to the inner `make_run_ss` call.
+
+**Re point 3** (`warm_walk_phi` only consumes bool; PicardResult lost):
+**Accept.**  Stash on ctx:
+
+  `ctx["_picard_run_ss_history"]: List[PicardResult]` — appended every
+  time `picard_run_ss` returns.  Latest entry is `[-1]`; full per-V
+  trajectory available by index.
+
+The per-V callback in the study script reads `ctx["_picard_run_ss_history"]`
+to capture into JSON.  History cleared at start of each new V_target
+warm-walk (by `solve_grid_with_anchor`'s loop bookkeeping).
+
+**Re point 4** (rollback must include `U_prev` for pseudo-time
+formulation):
+**Accept.**  Snapshot/restore tuple is `(U, U_prev, xi_per_species)`,
+not just `(U, xi)`.  Verified `forms_logc_muh.py:284` — `U_prev`
+participates in residual via `(c_i - c_old)/dt`.  Restoring U without
+U_prev corrupts next time-step.  Helpers in `closure_picard.py`:
+
+  ```python
+  def snapshot_state(ctx, xi_funcs) -> StateSnapshot:
+      return StateSnapshot(
+          U=np.copy(ctx["U"].dat.data_ro),
+          U_prev=np.copy(ctx["U_prev"].dat.data_ro),
+          xi=snapshot_xi(xi_funcs),
+      )
+
+  def restore_state(ctx, xi_funcs, snap: StateSnapshot) -> None:
+      ctx["U"].dat.data[:] = snap.U
+      ctx["U_prev"].dat.data[:] = snap.U_prev
+      restore_xi(xi_funcs, snap.xi)
+  ```
+
+**Re point 5** (first-iter `run_ss` failure → warm-walk bisection,
+no Picard rescue if bisection runs out):
+**Accept** as documented limitation.  Logging:
+
+  `reason="run_ss_failed_before_picard_target"` written to PicardResult.
+  Comment in plan + code: "Picard cannot rescue voltage substeps where
+  even the initial run_ss fails at the inherited ξ from prior V.  If
+  bisection depth exhausts, the point falls back to v1's failure mode.
+  Optional future enhancement: emergency ξ backoff toward c_b/θ_b
+  before declaring substep failure."
+
+Not implementing the emergency backoff in v5 — out of scope.  Keep the
+plan simple and ship.  If the failure mode is hit at deep cathodic
+during the run, we know what to add next.
+
+**Re point 6** (anchor continuation also calls `make_run_ss` in ladder
+paths; factory pattern needed everywhere):
+**Accept.**  Verified `anchor_continuation.py:1033 and :1728` import
+`make_run_ss`.  Every `run_ss = make_run_ss(...)` call site in
+`anchor_continuation.py` becomes `run_ss = make_run_ss_factory(...)`
+where `make_run_ss_factory` is the new opt-in factory arg.  Passed
+through to ladder paths (`solve_anchor_with_continuation`, Stern bump
+helpers, k₀ ladder helpers).  Default = bare `make_run_ss` for byte-equivalence.
+
+**Re point 7** (closure_picard.py writing trajectory logs is layer
+violation):
+**Accept.**  No file I/O in `closure_picard.py`.  All history stays in
+returned PicardResult dataclass + `ctx["_picard_run_ss_history"]` list.
+Study script (`_run_jithin_closure_picard.py`) reads from there and
+writes JSON.
+
+**Re point 8** (byte-equiv test should compare against pre-wrapper
+baseline, not just None vs omitted):
+**Accept.**  Two-tier test:
+  - Tier 1: `test_byte_equiv_omitted_vs_none` — call modified
+    `solve_grid_with_anchor` with `make_run_ss_factory` omitted vs
+    `=None`; assert identical.  (Existing default param test.)
+  - Tier 2: `test_byte_equiv_against_pinned_baseline` — pin a known-good
+    `iv_curve.json` from a current production run (e.g.,
+    `StudyResults/v10b_smoke/iv_curve.json`).  Re-run that script
+    through the modified `solve_grid_with_anchor` (factory omitted).
+    Assert per-V `cd_mA_cm2` matches pinned baseline to 1e-12 relative
+    (machine precision).  Catches accidental code-path changes
+    introduced by the modification.
+
+**Re point 9** ("one Picard iter" in parallel 2e/4e test is not a
+fixed point):
+**Accept.**  Test runs to Picard convergence (15 iters max, tol_residual
+1e-3), THEN asserts: (a) both reactions reference the same xi_func_O2;
+(b) at converged ξ, residual `|ξ + R_O2_total·I/D - c_b/θ_b| < 1e-3`;
+(c) `R_O2_total = R_2e_converged + R_4e_converged` matches Picard
+target formula within Picard tolerance.
+
+**Re point 10** (`enabled=False` test may skip closure path):
+**Accept.**  Adjust tests:
+  - `test_no_flux_disabled_reaction`: as before (no-flux smoke test
+    via disabled reaction).  Still useful for catching basic Picard
+    init bugs.
+  - `test_function_update_no_rebuild`: BUILD the form with `bv_picard_mode=True`
+    and `bv_jithin_closure_form=True`, an ENABLED reaction with k₀>0,
+    then:
+    - Assemble `rate_form` at `xi_func.assign(log(0.1))` → `R_a`.
+    - Assemble same `rate_form` at `xi_func.assign(log(0.01))` → `R_b`.
+    - Assert `R_b / R_a ≈ 0.1` (rate scales linearly with ξ since
+      BV is k₀·c·exp = k₀·θ·ξ·exp).
+    This exercises `log_c_cat = ln(packing) + xi_func` end-to-end and
+    proves Picard updates propagate without form rebuild.
+
+## Updated artifact (v5 — final)
+
+```markdown
+# Jithin Closure Outer-Picard Implementation Plan (v5, GPT-loop-round-5 final)
+
+## Goal
+
+Wrap `make_run_ss` with a Picard factory that interleaves ξ updates
+between steady-state solves at every warm-walk substep and every
+anchor/Stern/k₀ ladder rung.  Test whether the continuum-MPNP analog of
+Jithin's Eq 4.31 closure reproduces his Fig 4.36 cliff in our gradient-
+form solver.
+
+Scope: irreversible cathodic single-R2e Jithin emulation + parallel
+2e/4e shared-supply plumbing smoke test.  Reversible/anodic + full Fig
+4.36 deck: explicit follow-up.
+
+## Math (final)
+
+### Convention
+
+- `c_b_hat` = bulk concentration nondim
+- `θ_OHP`, `θ_b` = packing fraction
+- `R_O2_hat ≥ 0` = mean molar consumption rate of O₂ at OHP, nondim
+  = `Σ_j (−stoich[O₂, j]) · R_j_mean_hat`
+  with `R_j_mean_hat = assemble(R_j · ds(em)) / assemble(1 · ds(em))`
+- `I_hat = assemble((1/packing) · dx) / Lx_hat`
+- `D_O2_hat` = O₂ diffusivity nondim
+- `η = (V_app − E_eq) / V_T`, cathodic → η<0
+- BV cathodic rate (code): `R_j_hat = k₀_hat · c_cat_hat · exp(−α·n·η)`
+- Supply variable `ξ` = `c_OHP_hat / θ_OHP` (R-space `fd.Function`)
+- BV substitution: `log_c_cat = ln(packing) + xi_func_s` (keeps packing
+  inline, Newton-coupled; ξ Picard-controlled).
+
+### Closure equations
+
+Continuum boundary closure (Eq A'):
+  `ξ = c_b_hat/θ_b − R_O2_hat · I_hat / D_O2_hat`,   R_O2_hat ≥ 0
+
+Picard target — semi-implicit, positivity-preserving (Eq B):
+  K_old = R_O2_hat / c_eff_hat_old   (c_eff_hat_old = θ_OHP · ξ_old)
+  ξ_target = (c_b_hat/θ_b) / (1 + K_old · I_hat · θ_OHP / D_O2_hat)
+
+Damped log-space update:
+  ξ_new = exp((1−α)·log(ξ_old) + α·log(max(ξ_target, ξ_floor)))
+
+Residual (for tests and diagnostics, NO θ_OHP factor):
+  residual = ξ + R_O2_hat · I_hat / D_O2_hat − c_b_hat / θ_b
+
+### Signed-R policy
+
+`R_O2_hat < 0` in `bv_picard_mode` → `ValueError`.  Scope is
+irreversible cathodic.  Reversible/anodic signed closure is its own
+plan.
+
+### Pre-analysis prediction (unchanged)
+
+For our geometry: smooth S-curve from kinetic onset to ~Levich, NO cliff.
+Continuum correction ≈ 6% sub-Levich.
+
+## Implementation
+
+### Files modified
+
+1. **`Forward/bv_solver/config.py`** (+15 lines)
+   - `bv_picard_mode: bool = False`
+   - `bv_picard_strict_floor: bool = True`
+   - Validate: `bv_picard_mode=True` requires `bv_jithin_closure_form=True`,
+     `bv_log_rate=True`, `formulation == "logc_muh"`.
+
+2. **`Forward/bv_solver/forms_logc_muh.py`** (+60 lines)
+   - When `bv_jithin_closure_form=True` AND `bv_picard_mode=True`:
+     - Collect distinct cathodic species; validate each `z=0`
+       (ValueError otherwise).
+     - Per species: `xi_func_s = fd.Function(R_space)`, init
+       `log(c_b_hat_s / θ_b_const)`.
+     - Replace `log_c_cat = u_exprs[cat_idx]` with
+       `log_c_cat = ln(packing) + xi_func_s`.
+   - When `bv_picard_mode=True`:
+     - If `steric_active=False`: `packing = theta_inner = fd.Constant(1.0)`,
+       `theta_b_const = 1.0`.
+     - Expose in ctx:
+       - `picard_log_xi_funcs: dict[int, fd.Function]`
+       - `packing_expr`, `theta_inner_expr`
+       - `closure_theta_b: float`
+       - `closure_bulk_c_hat: dict[int, float]`
+       - `closure_cathodic_species_set: frozenset[int]`
+       - `closure_cathodic_stoich: dict[int, dict[int, int]]`
+       - `closure_packing_floor: float`
+
+3. **`Forward/bv_solver/closure_picard.py`** (NEW, ~400 lines)
+   - `@dataclass StateSnapshot`: `U`, `U_prev`, `xi` (all numpy arrays).
+   - `@dataclass PicardIterRecord`: per-iter diagnostics.
+   - `@dataclass PicardResult`: `converged`, `n_iters`, `reason`,
+     `iter_history`, summary fields.
+   - `snapshot_state(ctx, xi_funcs) → StateSnapshot`.
+   - `restore_state(ctx, xi_funcs, snap) → None`.
+   - `compute_picard_diagnostics(ctx, electrode_marker, Lx_hat) → dict`.
+   - `compute_picard_target(c_b, θ_b, θ_OHP, R_O2, I, D_O2, xi_old) → ξ_target`
+     (rejects R<0).
+   - `make_picard_run_ss(*, ctx, solver, of_cd,
+        dt_init=0.25, dt_growth_cap=4.0, dt_max_ratio=20.0,
+        ss_rel_tol=1e-4, ss_abs_tol=1e-8, ss_consec=4,
+        # Picard:
+        xi_funcs, closure_theta_b, closure_bulk_c_hat,
+        cathodic_species_set, cathodic_stoich, D_per_species_hat,
+        packing_expr, theta_inner_expr, electrode_marker, Lx_hat,
+        packing_floor,
+        max_picard_iters=15, tol_residual=1e-3, tol_step=1e-3,
+        tol_state=1e-4, damping_init=0.5, damping_min=0.05,
+        max_damping_retries=3, strict_floor=True, floor_tol=1e-10,
+        xi_floor=math.exp(-50)) → Callable[[int], bool]`:
+     - Returns `picard_run_ss(max_steps)` closure.
+     - Inside `picard_run_ss(max_steps)`:
+       - Snapshot state.
+       - Build inner `run_ss = make_run_ss(ctx, solver, of_cd, dt_init,
+         dt_growth_cap, dt_max_ratio, ss_rel_tol, ss_abs_tol, ss_consec)`.
+       - `ok = run_ss(max_steps)`.
+       - If `ok=False`: log `reason="run_ss_failed_before_picard_target"`,
+         append PicardResult to `ctx["_picard_run_ss_history"]`, return False.
+       - Picard loop (1..max_picard_iters):
+         - Compute diagnostics.
+         - If strict_floor AND floor_hit > floor_tol:
+           log `reason="packing_floored"`, append, return False.
+         - Compute ξ_target per species (reject R<0 → ValueError).
+         - Check residual + step + state-norm; if all clear AND `ok=True`:
+           append `reason="converged"`, return True.
+         - Damped log update; assign new xi.
+         - Re-snapshot state pre-solve.
+         - `ok = run_ss(max_steps)`.
+         - On False with target: restore state, halve damping, retry
+           (max_damping_retries).  Persistent fail: log
+           `reason="run_ss_failed_with_target"`, append, return False.
+       - Max iters: log `reason="max_picard_iters"`, append, return False.
+   - Append every `picard_run_ss` invocation result to
+     `ctx["_picard_run_ss_history"]` (per-V cleared by caller).
+
+4. **`Forward/bv_solver/grid_per_voltage.py`** (+15 lines)
+   - `warm_walk_phi(*, ..., make_run_ss_factory=make_run_ss)`:
+     replace `run_ss = make_run_ss(...)` with
+     `run_ss = make_run_ss_factory(ctx=ctx, solver=solver, of_cd=of_cd,
+                                    dt_init=dt_init, dt_growth_cap=dt_growth_cap,
+                                    dt_max_ratio=dt_max_ratio,
+                                    ss_rel_tol=ss_rel_tol, ss_abs_tol=ss_abs_tol,
+                                    ss_consec=ss_consec)`.
+     When factory is bare `make_run_ss`: byte-equivalent to current.
+   - `solve_grid_with_anchor(*, ..., make_run_ss_factory=make_run_ss)`:
+     pass through to all `warm_walk_phi` calls.  Clear
+     `ctx["_picard_run_ss_history"] = []` at start of each per-V solve.
+   - Source pool entries unchanged for non-Picard; for Picard mode,
+     `xi_snapshot` is captured alongside `U_snapshot` after
+     `picard_run_ss` returns True.
+
+5. **`Forward/bv_solver/anchor_continuation.py`** (+20 lines)
+   - `solve_anchor_with_continuation(*, ..., make_run_ss_factory=make_run_ss)`:
+     pass factory to every `run_ss = make_run_ss(...)` call.
+   - `PreconvergedAnchor` adds defaulted `xi_snapshots: tuple = ()`
+     field (frozen-dataclass compatible).
+
+6. **`scripts/studies/_run_jithin_closure_picard.py`** (NEW, ~500 lines)
+   - Fork `_run_jithin_closure_exact.py`.
+   - `BV_PICARD_MODE=True`, `PICARD_*` constants.
+   - Setup assertion: confirm Stern BC + bulk Dirichlet x-uniform
+     (assert keys/no x-localized source).
+   - Build `make_picard_run_ss_factory` partial that captures all
+     Picard-specific args; the result is a `make_run_ss`-compatible
+     factory passed to `solve_anchor_with_continuation` and
+     `solve_grid_with_anchor`.
+   - Stage 1: anchor — uses Picard factory; expect 1-2 Picard iters
+     (anodic V, low rate).
+   - Stage 2: Stern bump ladder — same.
+   - Stage 3: grid walk — every warm-walk substep wrapped.
+   - Per-V callback reads `ctx["_picard_run_ss_history"]` and appends
+     to JSON.
+   - `converged_overall_per_V = grid_converged AND
+        (all Picard wrap calls for that V returned True AND converged
+         not "packing_floored")`.
+
+## Tests (`tests/forward/bv/test_jithin_picard_closure.py`)
+
+1. **`test_no_flux_disabled_reaction`** — disabled reaction (R_j=0),
+   1 Picard iter, ξ = c_b/θ_b unchanged.
+
+2. **`test_function_update_no_rebuild`** — enabled reaction, build form
+   with Picard; assemble rate at `xi=log(0.1)` → R_a; assemble at
+   `xi=log(0.01)` → R_b; assert `R_b/R_a ≈ 0.1`.  Exercises
+   `log_c_cat = ln(packing) + xi` end-to-end.
+
+3. **`test_weak_cathodic_low_rate_regression`** — V=+0.60 V (slightly
+   cathodic of E_eq); cd within 1% of v1 closure-exact run.
+
+4. **`test_theta_unity_recovers_levich`** — `a_vals_hat=[0,0,0]`, no
+   counterions (`steric_active=False` path), Picard plateau within
+   1% of standard Levich.
+
+5. **`test_fixed_point_residual_at_convergence`** — Picard with
+   `tol_residual=1e-8`, assert `|ξ + R·I/D − c_b/θ_b| < 1e-6`.
+
+6. **`test_rate_to_mean_flux_conversion`** — assert `R_mean = R_total/ds_area`
+   and stoich-multiplied molar flux matches Levich at θ=1.
+
+7. **`test_parallel_2e_4e_shared_supply`** — minimal 2-rxn config, Picard
+   run to convergence; assert both rxns share xi_func_O2; assert
+   `R_O2_total = R_2e + R_4e` matches Picard target.
+
+8. **`test_z_nonzero_cathodic_species_rejected`** — z=+1 cathodic →
+   ValueError.
+
+9. **`test_negative_R_O2_rejected`** — synthetic R<0 → ValueError in
+   `compute_picard_target`.
+
+10. **`test_byte_equiv_omitted_vs_none`** — `solve_grid_with_anchor`
+    with `make_run_ss_factory` omitted vs `=None`; identical results.
+
+11. **`test_byte_equiv_against_pinned_baseline`** — re-run existing
+    v10b smoke or jithin_emulation through modified
+    `solve_grid_with_anchor` (factory omitted); cd matches pinned
+    `StudyResults/.../iv_curve.json` to 1e-12 relative.
+
+12. **`test_U_prev_restored_on_picard_rollback`** — manually inject
+    a U_prev snapshot, force run_ss failure, assert restored U_prev
+    equals snapshot.
+
+## Risk areas
+
+1. Inner `run_ss` failure BEFORE target → False (no rescue); known
+   limitation; logged.
+2. Inner `run_ss` failure AFTER target → rollback U/U_prev/xi, halve damping,
+   retry (max 3).  Persistent fail → False.
+3. Persistent ξ floor → not-converged in strict mode.
+4. Packing floor hit > floor_tol=1e-10 → not-converged in strict mode.
+5. State norm: L∞ on raw DOF arrays.
+6. Byte-equivalence: smoke test + pinned-baseline test.
+7. R<0 → ValueError (irreversible cathodic only).
+8. PicardResult propagation via `ctx["_picard_run_ss_history"]` list.
+
+## Expected outcomes
+
+Per pre-analysis: smooth S-curve from kinetic onset to ~Levich plateau,
+NO cliff.  Picard rescues v1's deep-cathodic failures via interleaved
+target updates; all 25 V points converge.
+
+If cliff appears: pre-analysis wrong, re-examine I integral and θ(y)
+profile.
+
+## Out of scope (gated follow-ups)
+
+- Reversible/anodic signed-closure (separate plan).
+- Full parallel 2e/4e Fig 4.36 deck run.
+- H+ closure-form substitute (if h_closure_rel_err diagnostic > 25%).
+- Surface-coverage / Frumkin isotherm (path 2).
+- Hard-sphere D(packing) (path 3).
+- Runtime x-invariance check (DG0 binning).
+- Custom Chebyshev spectral solver.
+- Emergency ξ backoff before substep-failure declaration.
+```
+
+## Continued critique prompt
+
+Final round (cap 5).  Review the updated plan and my responses.  Push
+back on remaining holes.  Same numbered format and verdict line:
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN

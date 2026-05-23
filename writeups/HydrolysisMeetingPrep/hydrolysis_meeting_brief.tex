@@ -1,0 +1,732 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=0.95in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage[svgnames,table]{xcolor}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=Sienna,urlcolor=SteelBlue}
+\usepackage{url}
+\DeclareUrlCommand\fname{\urlstyle{tt}}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5em}
+
+\definecolor{themeBlue}{HTML}{1F4E79}
+\definecolor{themePurple}{HTML}{6A1B9A}
+\definecolor{themeAmber}{HTML}{C77700}
+\definecolor{themeGreen}{HTML}{2E7D32}
+\definecolor{themeRed}{HTML}{B7202C}
+\definecolor{boxBg}{HTML}{F5F7FA}
+\definecolor{questionBg}{HTML}{FFF8E1}
+
+\newtcolorbox{infobox}[1][]{
+  colback=boxBg, colframe=themeBlue, boxrule=0.6pt, arc=2pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+  title={#1}, fonttitle=\bfseries\small\color{white},
+  colbacktitle=themeBlue, breakable,
+}
+\newtcolorbox{questionbox}[1][]{
+  colback=questionBg, colframe=themeAmber, boxrule=0.6pt, arc=2pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+  title={#1}, fonttitle=\bfseries\small\color{white},
+  colbacktitle=themeAmber, breakable,
+}
+\newtcolorbox{verdictbox}[1][]{
+  colback=boxBg, colframe=themeRed, boxrule=0.6pt, arc=2pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+  title={#1}, fonttitle=\bfseries\small\color{white},
+  colbacktitle=themeRed, breakable,
+}
+
+\title{\bfseries Water + cation hydrolysis at the OHP\\[2pt]
+       \large{\normalfont What the model does, what we found, what to ask}}
+\author{\normalsize Pre-meeting brief, K$_2$SO$_4$ / ORR / CMK-3 forward solver}
+\date{2026-05-21}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}\noindent
+This is a concise pre-meeting brief on the water-ionization
+(Phase~6$\alpha$) and cation-hydrolysis (Phase~6$\beta$) work that
+the PNP+BV forward solver has been chewing on for the past two
+weeks.  Section~\ref{sec:gap} states the gap.  Section~\ref{sec:chem}
+explains the physical mechanism the group's own framing points to.
+Section~\ref{sec:model} writes down the equations actually inside the
+solver.  Section~\ref{sec:tried} summarises each sub-step.
+Section~\ref{sec:findings} reports the Phase~D non-identifiability
+verdict.  Section~\ref{sec:gaps} lists the gaps we've found.
+Section~\ref{sec:ask} is the question list for the meeting.
+\end{abstract}
+
+\hrule\vspace{0.3em}
+
+%==============================================================
+\section{The gap, in one sentence}
+\label{sec:gap}
+%==============================================================
+
+At K$_2$SO$_4$, pH 4--6, $L_{\mathrm{eff}}\approx 100~\mu$m, the
+production solver matches the deck's \emph{total} disk current to
+within Levich order-of-magnitude, but its partial H$_2$O$_2$ current is
+\textbf{flat with $V_{\mathrm{RHE}}$} (a plateau set by the H$^+$
+diffusion Levich limit at $\approx -0.09$~mA/cm$^2$ at pH~4), whereas
+the deck data shows a \textbf{cathodic peak} near $V_{\mathrm{RHE}}
+\approx 0$~V that then decays.  The model max H$_2$O$_2$\% is
+$66.6$~pp uniformly; the deck K$_2$SO$_4$/pH~4 mean is
+$50.95$~pp~--- a uniform $+15.6$~pp overshoot.  The whole Phase~6
+investigation is about \textbf{what missing physics builds that
+peak}.
+
+%==============================================================
+\section{The chemistry, plain language}
+\label{sec:chem}
+%==============================================================
+
+There are two mechanisms in the picture.  Both produce H$^+$ near the
+cathode (where ORR consumes H$^+$).
+
+\paragraph{(A) Water self-ionization.}
+$\mathrm{H_2O \rightleftharpoons H^+ + OH^-}$, $K_w = 10^{-14}$ M$^2$
+in bulk.  When the cathode consumes H$^+$ faster than it can diffuse
+from the bulk, water dissociates locally to backfill.  This is
+universal aqueous chemistry --- it always happens.
+
+\paragraph{(B) Cation hydrolysis at the outer Helmholtz plane (OHP).}
+Hydrated alkali cations, when pinned at the OHP by a strong cathodic
+field, can have a water molecule in their inner hydration shell
+deprotonate:
+\[
+\mathrm{M(H_2O)_n^+}
+\quad
+\underset{k_{\mathrm{prot}}}{\overset{k_{\mathrm{hyd}}}{\rightleftharpoons}}
+\quad
+\mathrm{M(H_2O)_{n-1}(OH)^0} \;+\; \mathrm{H^+}.
+\]
+The leftover \textbf{MOH$^0$} is a neutral surface adsorbate; the
+released H$^+$ enters the diffuse layer.  The cation's effective
+$\mathrm{p}K_a$ \emph{drops sharply} near a polarized cathode because
+the local field stabilises the deprotonated form.  In bulk, K$^+$
+$\mathrm{p}K_a$ is $\sim$14.5; Singh~2016 reports it dropping to
+$\sim$8.5 near a Cu cathode at $-1$~V.  Cs$^+$ drops to $\sim$4.3.
+
+\begin{infobox}[Why (B) is the group's preferred hypothesis]
+The Seitz/Mangan group documents (Linsey 2025 ACS-CATL deck slide 27,
+Trienens 2025 report, Co-Zhang 2019 \emph{Angew.~Chem.}, Singh~2016
+\emph{JACS}) consistently propose \textbf{(B) cation hydrolysis} as
+the dominant cation-dependent buffer for K$_2$SO$_4$ ORR --- not
+sulfate buffering, not carbonate, not water self-ionization.  Phase
+6$\alpha$ (water) was a useful sub-leading correction that retired
+in favour of Phase 6$\beta$ (cation) once the deck framing was
+audited.
+\end{infobox}
+
+%==============================================================
+\section{How the model represents hydrolysis}
+\label{sec:model}
+%==============================================================
+
+Both mechanisms live inside the forward PNP+BV stack as opt-in
+``modules'' --- default-off, opt-in by a flag in the solver-params.
+Production runs since May 10 have both enabled (water on; cation
+on at $\lambda=1$).
+
+%-------------------------------------------------
+\subsection{(A) Water self-ionization (Phase~6$\alpha$)}
+%-------------------------------------------------
+
+Instead of treating H$^+$ and OH$^-$ as two independent
+Nernst--Planck species, we use a \textbf{proton-condition} variable
+\[
+  E(y) \;\equiv\; c_H(y) - c_{OH}(y),
+\]
+with the fast-equilibrium closure
+$c_H \cdot c_{OH} = K_w^{\mathrm{eff}}$.  One PDE replaces two, and
+the water source/sink term cancels by construction (forward and
+reverse produce/consume H$^+$ and OH$^-$ in 1:1 ratio, so their
+difference $E$ has no source).  At steady state:
+\[
+  -\nabla \cdot J_E = 0,
+  \qquad
+  J_E = -(D_H c_H + D_{OH} c_{OH})\,\nabla \mu_H.
+\]
+This is a textbook fast-water approximation.  $K_w^{\mathrm{eff}}$ is
+ramped from $0$ to $10^{-14}$~M$^2$ over a continuation ladder.  The
+Damk\"ohler number $\tau_{\mathrm{diff}}/\tau_{\mathrm{water}}$ is
+$\gtrsim 10^7$ everywhere, so fast equilibrium is robust as a
+zeroth-order model.  Caveat: \emph{textbook} bulk water dissociation
+rate $\sim$1.4~mol/m$^3$/s is $\sim$20$\times$ smaller than the
+cathodic H$^+$ demand at $L_{\mathrm{eff}}=16~\mu$m in the Phase 6$\alpha$
+sweep --- so the fast-water closure may over-predict H$^+$ replenishment.
+
+%-------------------------------------------------
+\subsection{(B) Cation hydrolysis (Phase~6$\beta$ v9 / v10b)}
+%-------------------------------------------------
+
+Implemented as a boundary source on the OHP, parameterised by a
+global surface coverage $\Gamma_{\mathrm{MOH}}$ (mol/m$^2$) and a
+finite-rate kinetic law:
+\begin{align}
+R_{\mathrm{net}}(\sigma_S) &\;=\;
+  \underbrace{k_{\mathrm{hyd}}\,c_{M^+}(0)\,10^{-\Delta\mathrm{p}K_a(\sigma_S)}\,
+   \Big(1-\tfrac{\Gamma}{\Gamma_{\max}}\Big)}_{\text{forward (Langmuir-capped)}}
+   \;-\;
+  \underbrace{k_{\mathrm{prot}}\,c_H(0)\,\tfrac{\Gamma}{\delta_{\mathrm{OHP}}}}_{\text{reverse}},
+\label{eq:rnet}\\
+R_{\mathrm{des}} &\;=\; k_{\mathrm{des}}\,\Gamma\quad\text{(open-reservoir desorption)}.
+\end{align}
+At steady state, $R_{\mathrm{net}}=R_{\mathrm{des}}$, which gives a
+closed-form $\Gamma_{\mathrm{ss}}(\lambda)$ that the orchestrator
+recomputes from the converged boundary values between continuation
+rungs (outer Picard).  At $\lambda=1$, the H$^+$ residual gains
+$+R_{\mathrm{net}}\,v_H\,ds$ at the electrode, and the K$^+$
+residual gains $-R_{\mathrm{net}}\,v_K\,ds$ (one proton produced per
+cation neutralised).
+
+\paragraph{The Singh~2016 field-dependent~$\mathrm{p}K_a$ (SI Eq.~4).}
+The $\Delta\mathrm{p}K_a$ term in eq.~\eqref{eq:rnet} comes
+straight from Singh et al.\ 2016 \emph{JACS} (CO$_2$RR-on-Cu/Ag):
+\[
+  \Delta\mathrm{p}K_a(\sigma_S)
+  \;=\;
+  +\,2 A\,z\,r_{\mathrm{H,El}}\,
+   \Big(1 - \tfrac{r_{M\text{-}O}^2}{r_{\mathrm{H,El}}^2}\Big)\;
+   \sigma_{\mathrm{Singh}}(\sigma_S).
+\]
+The geometric factor $1-r_{M\text{-}O}^2/r_{\mathrm{H,El}}^2$ is
+\emph{negative} when $r_{\mathrm{H,El}}<r_{M\text{-}O}$ (Singh's
+adsorbed-CO sandwich geometry), so $\Delta\mathrm{p}K_a<0$ under
+cathodic bias --- the p$K_a$ drops as advertised.
+$\sigma_{\mathrm{Singh}}$ is $|\sigma_S|$ rescaled to Singh's
+counts/pm$^2$ unit with an anodic clamp:
+$\sigma_{\mathrm{Singh}}=\max(0, -\sigma_S)\cdot N_A/F \cdot 10^{-24}$.
+$z=z_{\mathrm{eff}}$ is the \emph{effective} cation charge (Singh
+Table~S1); $A=620.32$~pm.  The per-cation Table~S1 row plus a
+\textbf{back-fitted} $r_{\mathrm{H,El}}^{\mathrm{Cu}}$ is hard-coded
+verbatim from the SI:
+
+\begin{center}\footnotesize
+\begin{tabular}{lcccccc}
+\toprule
+Cation & $r_M$ (pm) & $z_{\mathrm{eff}}$ & $n_{\mathrm{hyd}}$ & $\mathrm{p}K_a^{\mathrm{bulk}}$ & $r_{\mathrm{H,El}}^{\mathrm{Cu}}$ (pm) & $\mathrm{p}K_a$ near Cu @ $-1$~V \\
+\midrule
+Li$^+$ &  69  & 0.864 & 5.2 & 13.6 & 132.00 & 13.16 \\
+Na$^+$ & 102  & 0.900 & 3.5 & 14.2 & 164.99 & 11.44 \\
+K$^+$  & 138  & 0.919 & 2.6 & 14.5 & 200.98 &  \textbf{8.49} \\
+Rb$^+$ & 149  & 0.923 & 2.4 & 14.6 & 211.98 &  7.23 \\
+Cs$^+$ & 170  & 0.930 & 2.1 & 14.8 & 232.97 &  \textbf{4.32} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{What does \emph{not} happen in the model.}
+Several choices to be explicit about, because each is a question for
+the meeting:
+
+\begin{itemize}[leftmargin=*,nosep]
+\item \textbf{No Stern surface-charge correction from MOH.}  $\Gamma_{\mathrm{MOH}}$
+  is electrically neutral; it does not enter the Stern Gauss balance.
+  Hydrolysis couples to electrostatics \emph{purely} via the dynamic
+  K$^+$ NP profile responding to the boundary K$^+$ sink.
+\item \textbf{Open-reservoir desorption.}  MOH$^0$ that desorbs is not
+  tracked in the bulk --- no 5th NP species.
+\item \textbf{Cu prior used for ORR-on-carbon.}  $r_{\mathrm{H,El}}$
+  values are back-fitted from Singh's Cu Table~S3.  The deck's
+  electrode is CMK-3 mesoporous carbon, not Cu.  We use the Cu
+  values as a starting prior pending carbon-specific calibration.
+\item \textbf{Singh's adsorbed-CO sandwich geometry.}  Singh's
+  derivation assumes adsorbed CO sandwiched between the hydrated
+  cation and Cu.  ORR on carbon adsorbs O$_2$/OOH/OH/H$_2$O instead;
+  the geometric assumption that fixes $r_{\mathrm{H,El}}<r_{M\text{-}O}$
+  is therefore not strictly justified for our case.
+\item \textbf{Sulfate buffering is out of scope.}  HSO$_4^-$/SO$_4^{2-}$
+  treated as inert spectators; only their counterion Bikerman steric
+  appears in the Poisson source.
+\end{itemize}
+
+%-------------------------------------------------
+\subsection{Locked parameter values (production, v10b)}
+%-------------------------------------------------
+
+\begin{center}\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{2.8cm}p{4.4cm}p{6.1cm}@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Source} \\
+\midrule
+$C_S$ (Stern cap.) & $0.20$ F/m$^2$ & Bohra--Koper--Choi consensus
+  ($\varepsilon_S = 11.3$, $L_S = 5$~\AA) \\
+$\Gamma_{\max}$ & $0.047$ nondim ($\approx 5.6\times 10^{-6}$ mol/m$^2$) &
+  Hard-sphere monolayer, $r=2.3$~\AA\ for K$^+$ packing (V10A
+  derivation, 4-test-compat tightened) \\
+$k_{\mathrm{des}}$ & $1.0$ nondim ($k_{\mathrm{des}}^{\mathrm{phys}}\sim 0.2$~/s) &
+  \emph{Engineering choice}, Eyring prior $\Delta G \in [0.69, 0.94]$~eV at 298~K \\
+$\delta_{\mathrm{OHP}}$ & $0.40$~nm & Bohra 2019 EES prior \\
+$r_{\mathrm{H,El}}^{\mathrm{Cu}}$ & per-cation table above (Singh~SI back-fit) & \\
+$K_0^{R_{4e}}/K_0^{R_{2e}}$ & $10^{-14}$ (placeholder ratio) &
+  Tuned to match qualitative selectivity; calibration source missing \\
+$E_{eq}^{R_{2e}}, E_{eq}^{R_{4e}}$ & 0.695~V, 1.23~V vs RHE &
+  Ruggiero 2022 §1 (parallel 2$e^-$/4$e^-$ topology) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%==============================================================
+\section{What we tried, step by step}
+\label{sec:tried}
+%==============================================================
+
+The history below is the chronology from May~9 to May~12.  Each
+sub-step delivered a passing convergence/mass-balance test before
+moving on; the only thing that did not pass is the \emph{fit} (step
+10).
+
+\begin{center}\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{@{}p{1.7cm}p{6.8cm}p{6.0cm}@{}}
+\toprule
+\textbf{Step} & \textbf{What changed} & \textbf{Verdict} \\
+\midrule\endhead
+
+\textbf{6$\alpha$ sweep} &
+  Wired water self-ionization (proton-condition residual on $E=c_H-c_{OH}$);
+  ran 8 $L_{\mathrm{eff}}$ values $\times$ 13 $V_{\mathrm{RHE}}$
+  points to convergence in $\sim$58~min. &
+  Levich linearity \textbf{PASS}, no spurious peak \textbf{PASS},
+  surface pH $<9$ \textbf{FAIL} (pH locks at $10.58$ at the smallest
+  $L_{\mathrm{eff}}$ and is $L_{\mathrm{eff}}$-invariant) ---
+  6$\alpha$ retired as sub-leading. \\
+\addlinespace
+
+\textbf{Conjecture audit} &
+  Grepped \fname{data/EChem Reactor Modeling-Seitz-Mangan/} to find
+  which 6$\alpha$/6$\beta$ choices were Claude/GPT conjectures vs.\
+  deck-grounded. &
+  Cs$^+$ was wrong baseline; K$^+$/SO$_4^{2-}$ is the deck baseline.
+  Pivoted all 6$\beta$ work to K$^+$.  C$_S$, $r_{\mathrm{H,El}}$ priors
+  flagged as ``tunables, not Ruggiero-cited.'' \\
+\addlinespace
+
+\textbf{v9 architecture} &
+  Critique-loop with GPT (5 rounds) replaced an algebraic-shadow
+  attempt with: \emph{dynamic K$^+$ NP species}, global $\Gamma$
+  scalar at the OHP, finite-rate kinetics, no Stern surface-charge
+  correction. &
+  Architecture approved.  All four ``gate'' unit tests pass
+  (build / $\lambda{=}0$ equilibrium / $\Gamma$ source sign /
+  finite-rate $\lambda{=}1$ smoke at $-0.40$~V). \\
+\addlinespace
+
+\textbf{Singh SI extracted} &
+  User retrieved \fname{CO2RR Cation Supplementary Information.pdf}
+  via institutional access; Eq.~(3) verified to recover Table~S1 to
+  rounding, Eq.~(4) implemented per-cation. &
+  Field-dependent p$K_a$ is now a physical formula, not a placeholder
+  $\beta_M\,\mathrm{sgn}(\sigma_S)\,|\sigma_S|^p$. \\
+\addlinespace
+
+\textbf{v10a Langmuir cap} &
+  Added $(1-\Gamma/\Gamma_{\max})$ vacancy factor on the forward
+  branch; without it, $k_{\mathrm{hyd}}\geq 10^{-3}$ saturates at
+  $\Gamma\sim$ 6--64 monolayers (unphysical). &
+  Closed-form Picard converges; saturation behaves smoothly. \\
+\addlinespace
+
+\textbf{v10a$'$ V-sweep} &
+  Locked $V_{\mathrm{kin}}=-0.10$~V as the diagnostic voltage: branch
+  active ($\sigma_S{<}0$), not transport-limited, not cap-saturated. &
+  Selection clean.  K$^+$ enrichment dominates the forward forcing
+  cathodically. \\
+\addlinespace
+
+\textbf{A.2 grid} &
+  $10\times 5$ $(k_{\mathrm{hyd}},\lambda)$ grid at $V_{\mathrm{kin}}$. &
+  10/10 rungs converge; mass-balance at machine precision; selectivity
+  gap at $V_{\mathrm{kin}}$ is only $+5$~pp at $\lambda{=}1$,
+  $k_{\mathrm{hyd}}^{\mathrm{route}}=10^{-1}$. \\
+\addlinespace
+
+\textbf{Step 6 plumbing} &
+  Four-ablation audit (form-build residual, p$K_a$-shift context,
+  Picard $\Gamma$ update, diagnostics). &
+  All four pass.  Side finding: K$^+$ Boltzmann pile-up
+  $c_K\approx 291$ nondim at the OHP makes a 5\% sentinel floor
+  unreachable below $R_{\mathrm{inj}}\leq 10$ ---  K$^+$ is
+  \emph{piled up}, not depleted, at the OHP under cathodic bias. \\
+\addlinespace
+
+\textbf{v10b calibration} &
+  Literature locks: $\Gamma_{\max}{=}0.047$ (V10A chain tightened),
+  $k_{\mathrm{des}}{=}1.0$ (Eyring engineering choice $\Delta G\approx
+  0.80$~eV), $C_S{=}0.20$~F/m$^2$ (Bohra-Koper-Choi).
+  Sensitivity sweeps D7-D1 (C$_S$ bracket $\{0.05, 0.10, 0.20, 0.30\}$)
+  and D7-D4 ($\Gamma_{\max}\times k_{\mathrm{des}}\times k_{\mathrm{hyd}}$
+  $3\times 5\times 2$ matrix). &
+  All hard gates pass across sensitivity brackets. \\
+\addlinespace
+
+\textbf{Step 9 B.2} &
+  Densified $14\times 10 = 140$-rung $(k_{\mathrm{hyd}},\lambda)$
+  grid at $V_{\mathrm{kin}}$ on v10b. Step~9.5 added
+  \texttt{warm\_start\_floor} bisection so $\lambda=0\to 0.1$ at
+  high $k_{\mathrm{hyd}}$ converges. &
+  140/140 converge; mass-balance $\leq 5\times 10^{-13}$; baseline
+  reproduces v10b A.2 to $\leq 10^{-3}$ relative. \\
+\addlinespace
+
+\textbf{Step 10 Phase D fit} &
+  Single-parameter fit of $\Delta_\beta$ (carbon-vs-Cu offset added
+  to Singh's $\beta$-coefficient: $\beta^{\mathrm{carbon}}=\beta^{\mathrm{Cu}}+\Delta_\beta$)
+  against deck K$_2$SO$_4$/pH$\in[3.5,4.5]$ H$_2$O$_2$\%.  Brent on
+  loss $|H_2O_2^{\mathrm{model}}-50.95\,\mathrm{pp}|$. &
+  \textcolor{themeRed}{\textbf{OUTCOME\_C\_NON\_IDENTIFIABLE\_flagged}}
+  (see §\ref{sec:findings}). \\
+
+\bottomrule
+\end{longtable}
+\end{center}
+
+%==============================================================
+\section{Current findings (Phase~D verdict + bridge runs)}
+\label{sec:findings}
+%==============================================================
+
+\begin{verdictbox}[Phase~D verdict, 2026-05-12]
+$\Delta_\beta$ alone cannot match the deck.  Two facts force the
+verdict.
+
+\textbf{(i) Stern $\sigma$-mapping is degenerate.} Loss is flat at
+$15.629$~pp$^2$ across \emph{11 orders of magnitude} of $\Delta_\beta$
+($\Delta_\beta \in [-1.55\times 10^7,\, 0]$~pm$^2$).  Mechanism: the
+local Stern $\sigma$ at the OHP from our PNP+Stern solve is
+$\sim 10^{-7}$~counts/pm$^2$, so rescaling $\Delta_\beta$ by orders
+of magnitude barely moves $\Delta\mathrm{p}K_a$ within its domain of
+influence.
+
+\textbf{(ii) Uniform $+15.6$~pp overshoot.} Across every $\Delta_\beta$
+the optimiser tested, model max H$_2$O$_2$\% is exactly $66.58$~pp.
+Deck K$_2$SO$_4$/pH 4 mean is $50.95$~pp.  $\Delta_\beta$ can't close
+$\sim$16~pp of overshoot regardless of magnitude.
+
+Phase~E (cation-series predictive screen, Cs/Na/Li with $\Delta_\beta$
+locked) must \emph{not} launch on this fit.
+\end{verdictbox}
+
+\paragraph{Steric-coefficient discrepancy (surfaced during Phase~D bridge runs).}
+The Bikerman steric coefficient $a_{\mathrm{nondim}}$ is physical only
+for counterions in the current solver --- O$_2$, H$_2$O$_2$, and (critically) H$^+$ are
+seeded with \fname{A_DEFAULT = 0.01}, which corresponds to a
+hard-sphere radius $r \approx 14.9$~\AA, $\sim$150$\times$ larger
+than physical (H$_3$O$^+$ Stokes radius is $2.8$~\AA, giving
+$a \approx 6.6\times 10^{-5}$).  Consequence: the Bikerman cap on
+local H$^+$ concentration is $c_{\max}\approx 1/a\approx 100$ nondim
+$\approx 120$~mol/m$^3$ with the default, vs.\ $\sim 1.8\times 10^4$
+mol/m$^3$ with the physical value.  H$^+$ is therefore artificially
+\emph{clamped} 150$\times$ tighter than reality at the OHP under
+cathodic bias.
+
+\textbf{Bridge runs in flight (May 12+):} four runs at deck-baseline
+config (V10B kinetics, $C_S=0.20$, no hydrolysis, no $K_w$): two with
+legacy \fname{A_DEFAULT}, two with physical $a_{O_2}/a_{H_2O_2}/a_{H^+}$.
+\emph{Treat any plateau-set-by-Levich finding as suspect until these
+disambiguate.}
+
+\paragraph{What we do believe robustly.}
+\begin{itemize}[leftmargin=*,nosep]
+\item Architecture is sound: dynamic K$^+$ + $\Gamma_{\mathrm{MOH}}$ +
+  finite-rate kinetics + no Stern $\Gamma$-correction converges
+  cleanly across the full $(k_{\mathrm{hyd}},\lambda)$ grid at the
+  v10b production point.
+\item Mass balance / sign / gate-convergence \emph{all pass} on
+  every rung of every sweep.
+\item The $\Delta_\beta$-alone fit \emph{cannot} close the gap, which
+  is independent of the steric discrepancy --- the $\sigma$ flatness
+  alone is enough to falsify $\Delta_\beta$-only as a knob.
+\end{itemize}
+
+%==============================================================
+\section{Identified gaps}
+\label{sec:gaps}
+%==============================================================
+
+%-------------------------------------------------
+\subsection{Model gaps}
+%-------------------------------------------------
+
+\begin{enumerate}[leftmargin=*,nosep]
+\item \textbf{Dynamic-species Bikerman radii.}  H$^+$ (and to lesser
+  extent O$_2$/H$_2$O$_2$) are clamped tighter than physical at the OHP.
+  Bridge runs queued.
+\item \textbf{Singh formula's geometric assumption (sandwich) is from CO$_2$RR-on-Cu.}
+  ORR-on-carbon has different adsorbates (O$_2$/OOH/OH) so the
+  geometric chain that gives $r_{\mathrm{H,El}}<r_{M\text{-}O}$ is
+  not strictly justified.  We carry Cu values as priors; transferability
+  is a load-bearing assumption.
+\item \textbf{Open-reservoir desorption.}  MOH$^0$ that desorbs vanishes
+  from the model.  A 5th NP species (bulk MOH) would close mass
+  conservation; deferred.
+\item \textbf{No Phase 6$\delta$ (alkaline-form ORR).}  If cation
+  hydrolysis only ever produces a plateau (not a peak followed by
+  decay), parallel $R_{2e,\mathrm{alk}}$ / $R_{4e,\mathrm{alk}}$
+  reactions are likely required for the post-peak decay.
+\item \textbf{Constant Stern $\varepsilon_S$.}  Booth-equation variable
+  $\varepsilon_S(E)$ (Storey--Bazant, Bohra 2019) out of scope.
+\item \textbf{No surface-charge contribution from $\Gamma_{\mathrm{MOH}}$.}
+  We assume MOH$^0$ is truly neutral.  If MOH$^{\delta}$ carries a partial charge
+  on carbon, the Gauss balance changes.
+\end{enumerate}
+
+%-------------------------------------------------
+\subsection{Data gaps (open external asks)}
+%-------------------------------------------------
+
+\begin{enumerate}[leftmargin=*,nosep]
+\item \textbf{Tafel slope analysis cation-pH-Li-K-Cs.xlsx.}  Requested
+  2026-05-08; not delivered.  K$^+$ pH~6.39 workaround
+  (extracted from \fname{0,1M K2SO4 data 8-15-19.xlsx}) gives Tafel
+  slopes $270$--$310$~mV/decade across three cycles, $R^2=0.996$.
+  Multi-cation, multi-pH LSV data still needed to calibrate
+  $K_0^{R_{4e}}$ and $\alpha_{R_{4e}}$ ---  currently $10^{-18}$
+  placeholder ratio and $0.5$ placeholder.
+\item \textbf{IrOx ring-pH probe raw data.}  Behind Linsey 2025 deck
+  slides 5--9 (the local-pH protocol for ORR).  Without it the
+  surface-pH-side validation of the model is purely against the
+  deck's slide-27 single-point summary; we have no $V$- or
+  cation-resolved truth.
+\item \textbf{MOH adsorbate coverage measurement} on sp$^2$-carbon
+  under K$_2$SO$_4$ ORR conditions (XPS / surface-IR / impedance).
+  No peer-reviewed source currently reports this; our $\Gamma_{\max}$
+  is a hard-sphere monolayer derivation.
+\item \textbf{Carbon-specific $C_S$.}  We use the Bohra--Koper--Choi
+  metal-electrode consensus $0.20$~F/m$^2$.  Direct CMK-3 measurement
+  would lock $C_S$ rather than treat it as a sensitivity-bracket
+  parameter.
+\item \textbf{Bohra~2019 EES paper} (Ruggiero ref 71) not present in
+  \fname{Articles/}.  Methodologically closest PNP+BV+Stern reference
+  for our regime.
+\end{enumerate}
+
+%==============================================================
+\section{Questions for the chemistry team}
+\label{sec:ask}
+%==============================================================
+
+Grouped by topic.  Bold-marked items are the highest-leverage.
+
+%-------------------------------------------------
+\subsection*{Q1.\ Mechanism --- is cation hydrolysis really the right primary mechanism?}
+%-------------------------------------------------
+
+\begin{questionbox}[Q1: Mechanism]
+\textbf{Q1.1.}~In K$_2$SO$_4$ at pH 4--6 on CMK-3, do you think the
+\emph{primary} cation-dependent buffer is the hydrolysis reaction
+$\mathrm{K(H_2O)_n^+ \rightleftharpoons K(H_2O)_{n-1}OH^0 + H^+}$,
+or could something else (sulfate buffering, alkaline-form ORR,
+peroxide reduction) be load-bearing?
+
+\textbf{Q1.2.}~The deck's H$_2$O$_2$\% curve has a cathodic peak that
+\emph{decays} at more negative $V_{\mathrm{RHE}}$.  We can produce a
+plateau but not a decay.  Mechanistically, what does your group think
+causes the decay?  (Candidates: parallel alkaline-form 4$e^-$ ORR
+turning on at low pH$_{\mathrm{surf}}$, secondary peroxide reduction
+on CMK-3, mass-transport effects.)
+
+\textbf{Q1.3.}~Is Cu$\to$carbon transfer of Singh's pK$_a$-shift
+formula something the group has already independently tested or
+considered to fail?  Singh's $r_{\mathrm{H,El}}$ values depend on his
+adsorbed-CO sandwich geometry, which presumably doesn't hold on
+carbon.
+
+\textbf{Q1.4.}~Sulfate buffering: HSO$_4^-$/SO$_4^{2-}$ (p$K_a$ $\approx
+1.99$).  At pH 4 the HSO$_4^-$ fraction is small, so we've treated it
+as out of scope --- is this consistent with what you observe, or do
+your CP curves show any sulfate-buffer signature?
+\end{questionbox}
+
+%-------------------------------------------------
+\subsection*{Q2.\ Surface pH --- what does the IrOx probe actually say?}
+%-------------------------------------------------
+
+\begin{questionbox}[Q2: Local pH measurement]
+\textbf{Q2.1.}~Phase 6$\alpha$ predicts surface pH $\approx 10.6$ at
+$V_{\mathrm{RHE}}=-0.40$~V on Cs$^+$/SO$_4^{2-}$ at $L_{\mathrm{eff}}=16~\mu$m
+with water self-ionization on.  What does the IrOx ring-pH probe
+measure under matched conditions?  Is the model way off, or just
+off by a few units?
+
+\textbf{Q2.2.}~Can we get the underlying IrOx data behind Linsey 2025
+ACS-CATL deck slides 5--9 as a standalone file (raw ring currents +
+pH calibration)?  Without it we're validating against the slide 27
+single-point table.
+
+\textbf{Q2.3.}~Across the four cations (K, Cs, Na, Li) at matched
+$j_{\mathrm{disk}}$, does the \emph{shape} of pH$_{\mathrm{surf}}$
+vs.\ $V_{\mathrm{RHE}}$ differ, or just the magnitude?  Phase~6$\beta$
+predicts cation-specific magnitudes via Singh; cation-specific shape
+would be evidence of more than just hydrolysis driving the
+difference.
+\end{questionbox}
+
+%-------------------------------------------------
+\subsection*{Q3.\ Tafel + kinetic calibration data}
+%-------------------------------------------------
+
+\begin{questionbox}[Q3: Kinetic data]
+\textbf{Q3.1.~(highest leverage)}~Can we get the full
+\fname{Tafel slope analysis cation-pH-Li-K-Cs.xlsx}, including the
+non-pH-6.39 LSV cycles?  We have summary statistics for disks 2--6
+(pH 5.21, 4.21, 3.42, 2.35, 1.65) but \emph{no raw E-vs-$j$ traces}
+in the workbook we currently hold.  The full multi-pH data is the
+calibration source for $K_0^{R_{4e}}$ (currently a $10^{-18}$
+placeholder ratio against $K_0^{R_{2e}}$) and $\alpha_{R_{4e}}$
+(currently $0.5$ placeholder).
+
+\textbf{Q3.2.}~Were the RDE/RRDE rotation rates logged with the LSV
+sweeps?  We need this for the Koutecky--Levich correction --- without
+it the $\sim$280~mV/decade Tafel slope at K$^+$/pH 6.39 is
+mass-transport contaminated and can't be cleanly compared to the
+kinetic-region textbook 60--120~mV/decade.
+
+\textbf{Q3.3.}~Is the four-cation chronopotentiometry data in the
+\fname{*_10-9-20.mat} files (K, Cs, Na, Li) the canonical
+cation-series dataset, or is there a parallel LSV series elsewhere?
+For Phase~E (the predictive screen) we'd compare predicted H$_2$O$_2$\%
+to a measured cation-series curve.
+\end{questionbox}
+
+%-------------------------------------------------
+\subsection*{Q4.\ Stern / OHP / capacitance}
+%-------------------------------------------------
+
+\begin{questionbox}[Q4: Stern capacitance and OHP geometry]
+\textbf{Q4.1.}~Does anyone in your group or your collaborators
+(Bohra/Koper/Choi orbit) have a CMK-3-specific Stern capacitance
+measurement?  We are currently using the metal-electrode
+Bohra--Koper--Choi consensus $C_S=0.20$~F/m$^2$ as a prior.  Carbon
+EDLC measurements at sp$^2$ are slightly lower (the carbon-conservative
+low end is $\sim 0.05$~F/m$^2$).
+
+\textbf{Q4.2.}~For our purposes is it acceptable to treat $C_S$ as
+field-averaged (constant)?  Booth-equation variable $\varepsilon_S(E)$
+is out of scope for v10b but could land if needed.
+
+\textbf{Q4.3.}~What's the right number for $\delta_{\mathrm{OHP}}$
+(the cation-OHP--electrode distance)?  We use Bohra 2019's
+$0.40$~nm; group-specific value would be cleaner.
+
+\textbf{Q4.4.}~Could a partially-charged MOH species
+(MOH$^{\delta}$) on carbon contribute to Stern surface charge?  Our
+v9 architecture assumes MOH is electrically neutral; if not, the
+Gauss balance at the cathode changes.
+\end{questionbox}
+
+%-------------------------------------------------
+\subsection*{Q5.\ Hydrolysis kinetics --- $k_{\mathrm{des}}$, $\Gamma_{\max}$}
+%-------------------------------------------------
+
+\begin{questionbox}[Q5: Hydrolysis rates and coverage]
+\textbf{Q5.1.}~$\Gamma_{\max}$ is currently $\approx 5.6\times 10^{-6}$
+mol/m$^2$ (one hard-sphere K$^+$ monolayer at $r=2.3$~\AA).  Is there
+any direct MOH adsorbate coverage measurement on sp$^2$-carbon under
+K$_2$SO$_4$ ORR conditions (XPS, surface-IR, impedance) that we could
+use to anchor this?  We searched and could not find one.
+
+\textbf{Q5.2.}~$k_{\mathrm{des}}$ (MOH$^0$ desorption rate from the
+OHP) is currently an engineering choice corresponding to
+$\Delta G \approx 0.80$~eV (Eyring at 298~K).  Any experimental or
+DFT anchor for this?
+
+\textbf{Q5.3.}~Singh~2016 gives $K_{eq}=k_{\mathrm{hyd}}/k_{\mathrm{prot}}$
+but not $k_{\mathrm{hyd}}$ or $k_{\mathrm{prot}}$ individually.  Is
+there literature anchoring the forward hydrolysis rate?  We can run
+the model at any $k_{\mathrm{hyd}}$ on the Langmuir-cap branch
+(coverage saturates at $\Gamma_{\max}$), but the proton flux per area
+scales linearly with $k_{\mathrm{hyd}}$ up to saturation.
+\end{questionbox}
+
+%-------------------------------------------------
+\subsection*{Q6.\ The selectivity-overshoot diagnosis}
+%-------------------------------------------------
+
+\begin{questionbox}[Q6: The +15.6 pp overshoot]
+\textbf{Q6.1.~(highest leverage)}~Model max H$_2$O$_2$\% at the
+locked v10b production point is $66.58$~pp \emph{independent} of
+$\Delta_\beta$ across 11 orders of magnitude.  The deck K$_2$SO$_4$/pH~4
+mean is $50.95$~pp.  Two candidate root causes:
+
+(a)~the H$^+$ Bikerman clamp (the $\sim$150$\times$-too-tight steric
+coefficient discussed above) is artificially capping H$^+$ at the
+OHP, which makes the 4$e^-$ channel (whose rate $\propto c_H^4$)
+disproportionately suppressed and therefore selectivity towards
+2$e^-$ artificially high;
+
+(b)~a different physics gap (e.g.\ alkaline-form 4$e^-$ ORR turning
+on at low pH$_{\mathrm{surf}}$) is missing entirely from the model.
+
+Do you have a strong prior on which is the more plausible culprit?
+
+\textbf{Q6.2.}~On the deck, does the H$_2$O$_2$\% peak position
+shift with pH?  In K$^+$ between the six pH values (1.65 to 6.39),
+how much does the peak voltage / peak height change?  This is a
+mechanism falsification test that doesn't require ring-pH probes.
+
+\textbf{Q6.3.}~Have you or Yash's group done a fit with explicit
+peroxide-reduction kinetics?  Our solver currently has none ---
+H$_2$O$_2$ is treated as an inert product.  If real peroxide
+reduction is what produces the cathodic decay (H$_2$O$_2 + 2H^+ +
+2e^-\to 2H_2O$ on CMK-3), that's missing entirely.
+\end{questionbox}
+
+%-------------------------------------------------
+\subsection*{Q7.\ Process / next steps}
+%-------------------------------------------------
+
+\begin{questionbox}[Q7: Process]
+\textbf{Q7.1.}~The Phase~D fit \emph{falsified} $\Delta_\beta$ alone.
+The candidate next-scope items (Phase~D$'$ / 6$\gamma$) are:
+\emph{(a)} re-fit $k_{\mathrm{des}}$ / $\Gamma_{\max}$ (currently
+literature-locked); \emph{(b)} sweep $r_{\mathrm{H,El}}$ as a calibration
+parameter (currently Cu-prior locked); \emph{(c)} couple to local pH
+via mass-transport at the OHP; \emph{(d)} revisit the Singh formula
+structure.  Does your group have a preference about which of these we
+should chase first?
+
+\textbf{Q7.2.}~Is Phase~6$\delta$ (parallel alkaline-form ORR kinetics)
+something your group has already explored or has priors on?  If so,
+$k_0$/$\alpha$ for $R_{2e,\mathrm{alk}}$ and $R_{4e,\mathrm{alk}}$
+priors would shorten the search drastically.
+
+\textbf{Q7.3.}~What's the right falsification test for our model?
+``Predict the four-cation series with K$^+$-calibrated parameters
+and check against the four-cation CP data'' is the obvious one.  Is
+there a smaller intermediate test (e.g.\ predict the K$^+$ Tafel
+slope vs.\ pH using one set of $k_{\mathrm{hyd}}/k_{\mathrm{des}}$)
+that you'd find more diagnostic?
+\end{questionbox}
+
+%==============================================================
+\section*{Pointers}
+%==============================================================
+
+\begin{itemize}[leftmargin=*,nosep]\small
+\item Phase 6$\alpha$ outcome: \fname{docs/phase6/PHASE_6A_INVESTIGATION_SUMMARY.md}.
+\item Phase 6$\beta$ live plan: \fname{docs/phase6/phase6b_next_steps_plan.md}.
+\item Singh~2016 extraction: \fname{docs/phase6/singh_2016_pka_formula.md}.
+\item v10b calibration: \fname{docs/phase6/v10b_calibration_summary.md}.
+\item Step 9 B.2 (140-rung grid): \fname{docs/phase6/phase6b_step9_B2_summary.md}.
+\item Step 10 Phase D verdict: \fname{docs/phase6/phase6b_step10_phase_D_summary.md}.
+\item Cs$^+$ vs.\ K$^+$ audit: \fname{docs/phase6/CONJECTURE_AUDIT_2026-05-09.md}.
+\item Open data asks: \fname{docs/phase6/missing_data.md}.
+\item Source-of-truth solver code:
+  \fname{Forward/bv_solver/water_ionization.py},
+  \fname{Forward/bv_solver/cation_hydrolysis.py}.
+\item Companion long-form writeup: \fname{writeups/May13th/phase_6_overview.tex}.
+\end{itemize}
+
+\end{document}

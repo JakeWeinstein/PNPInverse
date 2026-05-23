@@ -1,0 +1,12 @@
+Two remaining blockers. The plan is otherwise coherent.
+
+1. WHAT: The Picard factory still has two incompatible interfaces. `warm_walk_phi` can only call a `make_run_ss`-compatible factory with `ctx`, `solver`, `of_cd`, and SS kwargs, but `make_picard_run_ss(...)` requires ctx-specific Picard objects like `xi_funcs`, `packing_expr`, `closure_theta_b`, and `cathodic_stoich`. WHY: Those objects are created per fresh ctx; they cannot be captured once globally by the study script. WHAT TO DO: Define an adapter with the exact `make_run_ss` factory interface:
+   `make_picard_run_ss_factory(ctx, solver, of_cd, **ss_kwargs)`, and inside it pull `xi_funcs`, `packing_expr`, `closure_theta_b`, etc. from that ctx before calling `make_picard_run_ss(...)`.
+
+2. WHAT: `state_norm` is still underdefined and can falsely prevent convergence. If it compares the current state to `entry_snap`, every voltage/substep can look like a large state change even when `run_ss` reached steady state and ξ is already fixed. WHY: The Picard state norm should measure change between Picard iterations at the same voltage, not change from the previous voltage/source state. WHAT TO DO: Define `state_norm` as `||U_after_current_run_ss - U_after_previous_picard_run_ss|| / ||U_after_current_run_ss||`, and skip or mark it satisfied on the first Picard diagnostic after the initial `run_ss` if no prior Picard-state solve exists.
+
+3. WHAT: `snapshot_state(ctx, xi_funcs)` is described as storing `U` and `U_prev` numpy arrays, but mixed Firedrake Functions are already snapshotted elsewhere as per-subfunction tuples. WHY: A flat `.dat` copy can be wrong or awkward for mixed spaces and risks diverging from existing restore semantics. WHAT TO DO: Reuse/extend the existing `snapshot_U` / `restore_U` helpers and wrap them with ξ snapshots instead of inventing a second Function serialization path.
+
+4. WHAT: The “self-generated baseline” byte-equivalence test mostly checks omitted-vs-None behavior, not equivalence against pre-change code. WHY: Both runs execute the modified implementation. It can miss a regression that affects the bare path identically. WHAT TO DO: Keep it, but also add a small deterministic assertion at the unit level that `make_run_ss_factory=None` normalizes to the exact imported `make_run_ss` callable and that no Picard keys are read/touched in non-Picard mode.
+
+VERDICT: ISSUES_REMAIN

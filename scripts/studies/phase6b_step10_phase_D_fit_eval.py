@@ -1311,18 +1311,32 @@ def _per_v_lambda_ramp(
     i_lim_4e_mA_cm2: float,
     electrode_area_nondim: float,
     domain_height_hat: float,
+    lambda_target: float = 1.0,
+    k0_r4e_factor: float = K0_R4E_FACTOR_V10B,
 ) -> Dict[str, Any]:
-    """Run the 5-rung λ ladder for a single V grid point.
+    """Run the λ ladder for a single V grid point.
 
-    Returns a dict with the λ=1 rung diagnostics PLUS aggregated
-    per-V observables (cd_mA_cm2, gross_h2o2_current_mA_cm2, etc.).
-    Wraps ``solve_lambda_ramp_from_warm_start`` with the Phase D
+    Returns a dict with the λ=``lambda_target`` rung diagnostics PLUS
+    aggregated per-V observables (cd_mA_cm2, gross_h2o2_current_mA_cm2,
+    etc.).  Wraps ``solve_lambda_ramp_from_warm_start`` with the Phase D
     parameter-overrides bundle (k_hyd baseline + Δ_β offset) and reuses
     :func:`scripts.studies.phase6b_v10a_phase_A2_v_kin.augment_rung_diagnostics`
     so the rung dict carries ``mass_balance_residual_rel``,
     ``picard_status``, ``cd_mA_cm2``, ``x_2e``, etc. (the same fields
     the A.2 V_kin baseline emits — required for the HARD reproduction
     comparison and the per-V gate evaluation).
+
+    Parameters
+    ----------
+    lambda_target
+        Endpoint of the λ ramp (default 1.0 — preserves the Phase D
+        production behavior byte-equivalently).  When set to a value in
+        ``(0.0, 1.0)``, the ladder is truncated to rungs strictly below
+        ``lambda_target`` then ``lambda_target`` is appended, and the
+        returned ``lambda1_rung`` field is replaced by the rung at
+        ``lambda_target``.  Used by the λ-sweep driver
+        (``phase6b_lambda_sweep.py``) to evaluate selectivity at
+        intermediate hydrolysis activation levels.
     """
     import firedrake as fd
     import firedrake.adjoint as adj
@@ -1340,14 +1354,22 @@ def _per_v_lambda_ramp(
         "k_hyd": float(K_HYD_BASELINE),
         "beta_offset_pm2": float(delta_beta_pm2),
     }
-    k0_r4e_target = float(K0_HAT_R4E) * float(K0_R4E_FACTOR_V10B)
+    k0_r4e_target = float(K0_HAT_R4E) * float(k0_r4e_factor)
 
     augmented_rungs: List[Dict[str, Any]] = []
     partial_rungs: List[Dict[str, Any]] = []
 
     def _rung_callback(scale, ok, ctx, rung_diag):
         snapshot = dict(rung_diag)
-        snapshot["lambda_hydrolysis"] = float(scale)
+        # The first callback argument ``scale`` is the *normalized*
+        # AdaptiveLadder scale (∈ [0, 1]); the actual λ value lives in
+        # ``rung_diag["lambda_hydrolysis"]`` already (set to ``lam_val``
+        # by ``solve_lambda_ramp_from_warm_start`` line ~1947).  At
+        # ``lambda_target == 1`` these coincide, which masked the bug
+        # for the Phase D production runs; at intermediate
+        # ``lambda_target`` they diverge and the override would clobber
+        # the actual λ used by the search loop below.  Do NOT override.
+        # (Phase 6β step-10 follow-up, 2026-05-21.)
         snapshot["snes_converged"] = bool(ok)
         # Augment with peroxide current at every converged rung so the
         # final λ=1 record carries the gross H₂O₂ disk-side current.
@@ -1390,6 +1412,18 @@ def _per_v_lambda_ramp(
         else:
             partial_rungs.append(snapshot)
 
+    # Build the effective λ ladder.  Default lambda_target = 1.0 keeps
+    # the production-byte-equivalent path; for intermediate targets we
+    # truncate LAMBDA_LADDER below the target and append it.
+    if abs(float(lambda_target) - 1.0) < 1e-12:
+        effective_ladder = LAMBDA_LADDER
+    else:
+        below = tuple(
+            float(x) for x in LAMBDA_LADDER
+            if float(x) < float(lambda_target) - 1e-12
+        )
+        effective_ladder = below + (float(lambda_target),)
+
     exception_phase: Optional[str] = None
     exception_str: Optional[str] = None
     try:
@@ -1397,7 +1431,7 @@ def _per_v_lambda_ramp(
             result = solve_lambda_ramp_from_warm_start(
                 sp_at_v, mesh=mesh, U_warmstart=U_warmstart,
                 k0_targets={0: float(K0_HAT_R2E), 1: k0_r4e_target},
-                lambda_hydrolysis_ladder=LAMBDA_LADDER,
+                lambda_hydrolysis_ladder=effective_ladder,
                 parameter_overrides=overrides,
                 rung_callback=_rung_callback,
                 max_ss_steps_per_rung=300,
@@ -1408,10 +1442,12 @@ def _per_v_lambda_ramp(
         exception_str = str(exc)
         exception_phase = "lambda_ramp_exhausted"
 
-    # Locate the converged λ=1.0 rung.
+    # Locate the converged λ=lambda_target rung.
     lam1: Optional[Dict[str, Any]] = None
     for rung in augmented_rungs:
-        if abs(float(rung.get("lambda_hydrolysis", -1)) - 1.0) < 1e-12:
+        if abs(
+            float(rung.get("lambda_hydrolysis", -1)) - float(lambda_target)
+        ) < 1e-12:
             lam1 = rung
             break
     return {
@@ -1517,6 +1553,8 @@ def evaluate_delta_beta(
     v_anchor: float = V_ANCHOR,
     mode: str = "production",
     progress: Callable[[str], None] = print,
+    lambda_target: float = 1.0,
+    k0_r4e_factor: float = K0_R4E_FACTOR_V10B,
 ) -> Dict[str, Any]:
     """Per-eval forward driver: returns the JSON-ready result dict.
 
@@ -1601,7 +1639,7 @@ def evaluate_delta_beta(
             sp=sp, mesh=mesh,
             v_rhe_grid=tuple(float(v) for v in v_grid),
             v_anchor=float(v_anchor),
-            k0_r4e_factor=float(K0_R4E_FACTOR_V10B),
+            k0_r4e_factor=float(k0_r4e_factor),
             walk_n_substeps=walk_n_substeps,
             walk_max_ss_steps=walk_max_ss_steps,
             walk_ss_rel_tol=walk_ss_rel_tol,
@@ -1675,6 +1713,8 @@ def evaluate_delta_beta(
             i_lim_4e_mA_cm2=i_lim_4e_mA_cm2,
             electrode_area_nondim=float(electrode_area),
             domain_height_hat=domain_height_hat,
+            lambda_target=float(lambda_target),
+            k0_r4e_factor=float(k0_r4e_factor),
         )
         per_v_raw_lam1.append({
             "v_rhe": float(voltage),

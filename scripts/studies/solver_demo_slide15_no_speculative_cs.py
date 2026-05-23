@@ -612,6 +612,8 @@ def _parse_factor_list(arg: str) -> tuple[float, ...]:
 def main() -> int:
     import argparse
 
+    global L_EFF_M  # noqa: PLW0603 - allow --l-eff-m override
+
     parser = argparse.ArgumentParser(
         description=(
             "Solver-works demo: 25 V_RHE points x N K0_R4e factors on "
@@ -673,7 +675,18 @@ def main() -> int:
             "straight-line IC is the friendlier choice)."
         ),
     )
+    parser.add_argument(
+        "--l-eff-m", type=float, default=None,
+        help=(
+            "Override L_eff (diffusion-layer thickness, metres).  Default "
+            f"{L_EFF_M} (production).  When changed, the mesh domain_height_hat "
+            "scales automatically as L_eff / 1e-4 so the dimensionless mesh "
+            "covers exactly the new physical domain."
+        ),
+    )
     args = parser.parse_args()
+    if args.l_eff_m is not None:
+        L_EFF_M = float(args.l_eff_m)
 
     factors_to_run: tuple[float, ...] = tuple(args.factors)
     no_stern: bool = bool(args.no_stern)

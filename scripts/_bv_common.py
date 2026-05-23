@@ -155,7 +155,38 @@ K0_HAT_R2E = K0_PHYS_R2E / K_SCALE
 K0_HAT_R4E = K0_PHYS_R4E / K_SCALE
 
 # Steric (Bikerman) parameters
+#
+# ``A_DEFAULT`` is the legacy placeholder used by the early 3sp/4sp
+# stacks before per-species hard-sphere radii were anchored to literature
+# values.  It corresponds to ``r ≈ 14.9 Å`` (NOT physical for any small
+# molecule or ion) — kept here only as the historical fallback for
+# steric-mode counterion entries (e.g. ClO₄⁻) that have not been
+# re-anchored yet.  DO NOT add new dynamic-species call sites that
+# depend on this; use the per-species physical constants below.
 A_DEFAULT = 0.01
+
+# Per-species physical hard-sphere ``a_nondim`` for the dynamic NP
+# species O₂ / H₂O₂ / H⁺ (Phase 6β step 10 follow-up, 2026-05-21).
+# Surfaced by Phase D bridge diagnostics: the legacy ``A_DEFAULT = 0.01``
+# clamps the Bikerman cap on H⁺ at the OHP ~150× tighter than the
+# physical H₃O⁺ Stokes radius would allow (``c_max ∝ 1/a``); the bridge
+# runs at hydrolysis-off showed selectivity and surface pH are invariant
+# under physical-vs-legacy, but the hydrolysis-on Phase D regime is
+# untested under physical ``a`` and should use the real values going
+# forward.  Definitions: ``a_phys = (4/3) π r³ N_A`` in m³/mol;
+# ``a_nondim = a_phys · C_SCALE``.  Radii:
+#   O₂   r = 1.70 Å  (Marcus kinetic radius)
+#   H₂O₂ r = 2.00 Å  (Marcus / van-der-Waals)
+#   H⁺   r = 2.80 Å  (H₃O⁺ Stokes radius from Atkins / CRC)
+import math as _math_aspec
+_AVOGADRO_ASPEC = 6.02214076e23
+_A_O2_PHYS = (4.0 / 3.0) * _math_aspec.pi * (1.70e-10) ** 3 * _AVOGADRO_ASPEC
+_A_H2O2_PHYS = (4.0 / 3.0) * _math_aspec.pi * (2.00e-10) ** 3 * _AVOGADRO_ASPEC
+_A_HP_PHYS = (4.0 / 3.0) * _math_aspec.pi * (2.80e-10) ** 3 * _AVOGADRO_ASPEC
+A_O2_HAT = _A_O2_PHYS * C_SCALE        # ≈ 1.487e-5
+A_H2O2_HAT = _A_H2O2_PHYS * C_SCALE    # ≈ 2.422e-5
+A_HP_HAT = _A_HP_PHYS * C_SCALE        # ≈ 6.645e-5
+del _math_aspec, _AVOGADRO_ASPEC, _A_O2_PHYS, _A_H2O2_PHYS, _A_HP_PHYS
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +405,9 @@ THREE_SPECIES_LOGC_BOLTZMANN = SpeciesConfig(
     n_species=3,
     z_vals=[0, 0, 1],
     d_vals_hat=[D_O2_HAT, D_H2O2_HAT, D_HP_HAT],
-    a_vals_hat=[A_DEFAULT] * 3,
+    # Phase 6β step-10 follow-up (2026-05-21): physical per-species
+    # hard-sphere radii replace the legacy A_DEFAULT = 0.01 placeholder.
+    a_vals_hat=[A_O2_HAT, A_H2O2_HAT, A_HP_HAT],
     c0_vals_hat=[C_O2_HAT, H2O2_SEED_NONDIM, C_HP_HAT],
     stoichiometry_r1=[-1, +1, -2],
     stoichiometry_r2=[0, -1, -2],
@@ -397,7 +430,11 @@ FOUR_SPECIES_LOGC_DYNAMIC = SpeciesConfig(
     n_species=4,
     z_vals=[0, 0, 1, -1],
     d_vals_hat=[D_O2_HAT, D_H2O2_HAT, D_HP_HAT, D_CLO4_HAT],
-    a_vals_hat=[A_DEFAULT] * 4,
+    # Phase 6β step-10 follow-up (2026-05-21): physical per-species
+    # radii for O₂ / H₂O₂ / H⁺.  ClO₄⁻ retained at the legacy
+    # A_DEFAULT placeholder pending a separate anchoring pass — this
+    # preset is the 4sp ClO₄ equivalence-test stack, not production.
+    a_vals_hat=[A_O2_HAT, A_H2O2_HAT, A_HP_HAT, A_DEFAULT],
     c0_vals_hat=[C_O2_HAT, H2O2_SEED_NONDIM, C_HP_HAT, C_CLO4_HAT],
     stoichiometry_r1=[-1, +1, -2, 0],   # ClO4- inert in R1
     stoichiometry_r2=[ 0, -1, -2, 0],   # ClO4- inert in R2
@@ -802,7 +839,10 @@ FOUR_SPECIES_LOGC_DYNAMIC_K2SO4 = SpeciesConfig(
     n_species=4,
     z_vals=[0, 0, 1, 1],            # both H+ and K+ at z=+1 (the Gate 1 case)
     d_vals_hat=[D_O2_HAT, D_H2O2_HAT, D_HP_HAT, D_KPLUS_HAT],
-    a_vals_hat=[A_DEFAULT, A_DEFAULT, A_DEFAULT, A_KPLUS_HAT],
+    # Phase 6β step-10 follow-up (2026-05-21): physical per-species
+    # radii replace A_DEFAULT for O₂ / H₂O₂ / H⁺.  K⁺ already used
+    # the Linsey deck slide 13 hydrated radius (2.3 Å).
+    a_vals_hat=[A_O2_HAT, A_H2O2_HAT, A_HP_HAT, A_KPLUS_HAT],
     c0_vals_hat=[C_O2_HAT, H2O2_SEED_NONDIM, C_HP_HAT, C_KPLUS_HAT],
     stoichiometry_r1=[-1, +1, -2, 0],   # K+ inert in R1
     stoichiometry_r2=[ 0, -1, -2, 0],   # K+ inert in R2 (legacy R2)

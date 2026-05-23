@@ -1,0 +1,862 @@
+OpenAI Codex v0.129.0 (research preview)
+--------
+workdir: /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/jakeweinstein/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e562c-a67e-72b3-ad1c-653cfcc50497
+--------
+user
+# Round 2: Counterreply on the outer-Picard plan
+
+Most of your 25 points land.  Many were genuine bugs; a handful had
+implications I had not internalized.  The plan needs a structural rewrite,
+not patching.  Below: per-issue accept/defend/clarify, then the rewritten plan.
+
+## Per-issue responses
+
+**Re point 1** (sign-flip mid-derivation, `c_eff_hat = θ_s · (c_b_hat/θ_b − R_hat·I_hat/D_hat)`):
+**Accept.**  The boxed Eq A is correct but the prose lost the sign on the
+integration step.  Restating cleanly in nondim with `R_hat > 0` as the
+positive consumption-rate of O₂ at the OHP, the closure is
+
+  `c_eff_hat(OHP) = θ_OHP · (c_bulk_hat/θ_bulk − R_O2_hat · I_hat / D_O2_hat)`
+
+where `R_O2_hat = Σ_j (−stoich[O₂, j]) · R_j_hat` (positive for net
+consumption).  Drop `R_BV/(F·n_e)` entirely; work in molar rate (issue 2).
+
+**Re point 2** (current density vs molar rate, electron weighting):
+**Accept.**  Verified `observables.py:_build_bv_observable_form` exposes
+`mode="reaction", reaction_index=j, scale=1.0` that returns the raw
+nondim `R_j` scalar.  Will use that for the Picard update and avoid the
+F·n_e/I_SCALE roundtrip.  `current_density` mode still used for the
+final cd diagnostic (separate purpose).
+
+**Re point 3** (Picard in callback runs only after warm-walk converges,
+deep-cathodic failures bypass it):
+**Accept — this is the most consequential issue.**  Looked at
+`Forward/bv_solver/grid_per_voltage.py:613,686,734,825,1112`: callback
+fires after a successful Newton convergence within warm-walk substeps.
+For a point that warm-walk gives up on, the callback never runs with a
+useful state.  The plan's callback-Picard architecture cannot rescue the
+6 failed v1 points, which is the entire target region for cliff
+investigation.  Fix: replace `solve_grid_with_anchor` with a custom
+per-V Picard wrapper that owns the outer loop.  See rewritten plan §3.
+
+**Re point 4** (grid source snapshot taken before callback):
+**Accept.**  Tied to issue 3 — custom wrapper takes the snapshot after
+Picard convergence.  No mutation issue under the rewrite.
+
+**Re point 5** (Picard coefficient not in continuation state):
+**Accept.**  Will extend `PreconvergedAnchor` (or a parallel
+`PreconvergedAnchorWithSupply` struct) to carry the supply variable
+ξ alongside `U_snapshot`.  Per-V results store `xi_converged_value` so
+next V warm-starts from previous V's ξ.
+
+**Re point 6** (anchor + Stern bump not Picard-converged):
+**Accept.**  The custom wrapper runs the Picard loop after anchor build
+and after each Stern bump rung.  Initial ξ at anchor V=+0.55 V is near-
+no-flux (η anodic, rate suppressed), so Picard converges in 1–2 iters.
+Same for Stern bumps (each rung is small perturbation; ξ from prior
+rung is a good initial guess).
+
+**Re point 7** (`ctx["_last_solver"].solve()` is pseudo-transient,
+not steady-state; `make_run_ss` is the steady-state):
+**Accept.**  Looked at `forms_logc_muh.py:284,1007` — `U_prev` is the
+time-stepping previous state.  A single `solve()` advances one
+pseudo-time step, not to steady state.  For Picard, each inner solve
+must be steady-state.  Two options:
+  (a) Call `make_run_ss(ctx, ...)` then iterate `U_prev.assign(U); solver.solve()`
+      until `|U − U_prev| < tol` per Picard iter.
+  (b) Use the existing time-march to steady state convention (currently
+      used in anchor + grid walk).  Per-V uses `t_end=80.0 · dt=0.25 = 320 substeps`,
+      which is enough for steady state.
+  Will use (b) for consistency with v1; effectively the existing Newton
+  solve already marches to steady state via the dt loop.  Within Picard,
+  each inner solve calls the steady-state-march path, not a single Newton step.
+
+**Re point 8** (replacing inline `ln(c_cat)` with a scalar freezes/loses
+`ln(packing)` Newton coupling):
+**Accept — critical design flaw caught.**  Will introduce a scalar
+supply variable `ξ` (R-space `fd.Function`) and define
+  `ln(c_cat_for_BV) = ln(packing) + ln(ξ)`
+where `ln(packing)` stays as the inline UFL expression (Newton-coupled,
+recomputed each iter as concentrations evolve) and `ln(ξ)` is the
+Picard-controlled scalar.  Picard updates ξ between Newton solves;
+within Newton, packing evolves naturally and the BV rate tracks it.
+
+**Re point 9** (initialization `log(c_cat_bulk · θ_b)` is wrong; no-flux
+limit is `c_bulk · θ_OHP/θ_b`):
+**Accept.**  With the `ln(c_cat) = ln(packing) + ln(ξ)` design from
+issue 8, the natural initial value is `ξ = c_bulk/θ_b` (which makes
+c_cat = c_bulk · θ_OHP/θ_b, the no-flux equilibrium).  Init now
+unambiguous in the supply-variable formulation.
+
+**Re point 10** (`packing` not exposed in ctx; script can't assemble it):
+**Accept.**  Will add `ctx["packing_expr"]` and `ctx["theta_inner_expr"]`
+in the form-build, both at the same point where they're constructed in
+`forms_logc_muh.py:447-452`.  Script imports and assembles directly,
+no duplicated algebra.
+
+**Re point 11** (per-reaction Picard fns wrong for shared O₂ across
+parallel 2e/4e):
+**Accept.**  Picard supply variable ξ is **per cathodic species**, not
+per reaction.  Dict keyed by species_idx with value = `(Function, list
+of (rxn_idx, stoich))`.  For Jithin single-R2e: one species, one entry.
+For parallel 2e/4e: one ξ for O₂, two reactions consume it.
+
+**Re point 12** (stoichiometry: `R/(F·n_e)` only works for single
+1-O₂-per-event reaction):
+**Accept.**  Folded into point 11: total O₂ flux at OHP is
+`J_O2_hat = Σ_j (−stoich[O₂, j]) · R_j_hat`.  Use this in the closure
+update.  Drop the F·n_e accounting entirely.
+
+**Re point 13** (2D averaging mean(θ)·mean(I) ≠ pointwise streamline
+closure):
+**Accept** with a defense layer.  Our mesh (Nx=8, Ny=80, β=3.0 graded
+in y) and BC structure (uniform x, Stern + BV on bottom, Dirichlet bulk
+on top) yield an x-invariant solution to within rounding.  Will assert
+this empirically in diagnostics: compute the x-variance of
+`assemble(1/packing * dx) / Lx` by splitting the domain into per-x
+strips, and assert `std/mean < 1e-3`.  If x-invariance fails, fall back
+to per-x-strip closure or abort with a clear message.
+
+**Re point 14** (convergence on damped residual underestimates the
+true fixed-point residual):
+**Accept.**  Check both:
+  - Damped step: `|log(ξ_damped) − log(ξ_old)| < tol_step` (progress)
+  - Undamped target: `|log(ξ_target) − log(ξ_old)| < tol_residual`
+    (true fixed-point residual)
+Only call converged when BOTH are below `tol = 1e-3`.
+
+**Re point 15** (flooring negative `c_eff` can manufacture a cliff;
+positivity-preserving update needed):
+**Accept — important.**  Will use a semi-implicit positivity-preserving
+update.  Define `K = R_O2_hat / c_eff_hat_old` (effective rate constant
+at current state).  Then the closed-form update:
+
+  `c_eff_new = θ_OHP · (c_bulk_hat/θ_b) / (1 + K · I_hat · θ_OHP / D_O2_hat)`
+
+guarantees positive `c_eff_new` and is exact at the linearized fixed
+point of `c_eff = θ_OHP · (c_bulk_hat/θ_b − R/(c_eff_old) · c_eff · I / D)`.
+Floor only on the truly degenerate case `K → ∞`, with explicit logging
+"system has no positive fixed point at this V".
+
+**Re point 16** (no rollback for failed Picard inner solves):
+**Accept.**  Snapshot `U`, `U_prev`, all ξ Functions before each Picard
+iter.  On Newton failure (`SNES_DIVERGED` or exception): restore
+snapshot, halve relaxation, retry once.  Persistent failure: abort that
+V, mark `picard_converged=False`, do not use diagnostics.
+
+**Re point 17** (max-iter Picard still reported as converged in JSON):
+**Accept.**  Reported `converged` flag becomes
+`grid_converged AND picard_converged`.  Maintain separate
+`picard_converged` array for diagnostics.  Plotter masks cd/pc on the
+combined flag.
+
+**Re point 18** (Eq B is overclaimed — full R has H+ factors, η is
+state-coupled, etc.):
+**Accept.**  Eq B will be labeled as the **single-cathodic-species
+scalar Picard update** (the only place it's used).  Real fixed point is
+the coupled (PDE + Picard) system; Eq B is the explicit Picard target
+formula for ξ.  Will rewrite that section to clarify.
+
+**Re point 19** (BV exponent sign in math vs code):
+**Accept.**  Code uses `exp(-α·n·eta_clipped)` for cathodic where
+`eta_clipped = (V_applied − E_eq)/V_T` (cathodic → eta < 0).
+Will restate the math using exactly that convention.
+
+**Re point 20** ("continuum equivalent of Jithin Eq 4.31" not proven):
+**Accept.**  Will demote the claim.  Re-titled: "Continuum-MPNP
+boundary closure derived from steady-state Bikerman transport, which
+yields a structurally analogous form to Jithin's Eq 4.31 (equilibrium
+term + flux-supply correction) without claiming term-by-term mapping."
+The plan acknowledges that without Jithin's exact spectral
+discretization of κ_5·φ·g, we are testing **the continuum-MPNP analog**,
+not the literal Jithin closure.  If the analog doesn't reproduce his
+cliff (per pre-analysis), that's evidence his cliff is either a
+non-continuum spectral artifact OR requires extra physics beyond what
+his closure encodes.
+
+**Re point 21** (single-R2e script is insufficient for Fig 4.36 claims):
+**Accept.**  Plan now has two run stages:
+  (a) **Single R2e** (this plan): structural test of the Picard
+      infrastructure + verify pre-analysis prediction (smooth S-curve
+      to ~Levich).
+  (b) **Parallel 2e/4e** (follow-up): required before any claim about
+      Jithin Fig 4.36.  Out of scope for THIS plan but explicitly noted
+      as the next step gated on (a) succeeding.
+
+**Re point 22** (no hard tests):
+**Accept.**  Will add a `tests/forward/bv/test_jithin_picard_closure.py`
+with:
+  - `test_no_flux_equivalent_to_v1`: at anodic V (R≈0), Picard converges
+    in 1 iter; cd matches v1 closure-exact run to 6 digits.
+  - `test_theta_unity_recovers_levich`: with `a_vals_hat = 0` for all
+    species (turns off Bikerman), Picard plateau == standard Levich
+    within 1%.
+  - `test_function_update_no_rebuild`: after `xi_func.assign(new_value)`,
+    rate observable assembles with new value; no form rebuild required.
+  - `test_fixed_point_residual_at_convergence`: at converged ξ,
+    residual `|c_eff/θ + R·I/D − c_bulk/θ_b| < 1e-6`.
+  - `test_raw_rate_to_molar_flux_conversion`: extract R via mode="reaction",
+    multiply by stoichiometry, check against known Levich at θ=1.
+
+**Re point 23** (packing floor not re-checked under Picard):
+**Accept.**  Per Picard iter, record `min(theta_inner)` (without floor)
+and the area-fraction where `theta_inner ≤ packing_floor`.  If
+floor-hit-area > 1% anywhere, log warning.  If > 10%, flag the Picard
+iter as unreliable.
+
+**Re point 24** (cliff diagnostic ratio uses wrong sign convention):
+**Accept.**  Fix: `cliff_ratio = abs(cd_far_cathodic) / abs(cd_mid_min)`.
+A ratio < 1 indicates a cliff (current magnitude decreases at deep
+cathodic); ratio ≈ 1 means flat plateau (no cliff).
+
+**Re point 25** (H+ closure assumption is stale under Picard states):
+**Accept.**  Per Picard iter, also compute and store:
+  - `c_H_OHP_pde` — current PDE value
+  - `c_H_closure_estimate = c_H_bulk · exp(-z_H · phi_OHP) · θ_OHP/θ_b`
+  - `h_closure_relative_error = |c_H_OHP_pde − c_H_closure_estimate| / c_H_closure_estimate`
+If h_closure_relative_error > 25% at any V, flag — substitute c_H+ too
+becomes warranted.  (For this plan iteration, still leave H+ at PDE
+value; track the diagnostic to determine if a v3 H+-also-substituted
+patch is needed.)
+
+## Updated artifact
+
+See full rewrite below.  Changes vs v1:
+
+- **Math:** Rewritten in code-convention nondim, single positive rate
+  symbol R_O2_hat for O₂ consumption, sign-checked end-to-end.
+- **Closure design:** Introduce scalar supply variable ξ (R-space
+  Function), use `ln(c_cat) = ln(packing) + ln(ξ)` (keep packing
+  inline, Newton-coupled).  Per cathodic species, not per reaction.
+- **Architecture:** Custom per-V Picard wrapper replaces
+  `solve_grid_with_anchor`.  Anchor + Stern bump also Picard-
+  converged.  Per-V state carries ξ alongside U.
+- **Updates:** Semi-implicit positivity-preserving:
+  `c_eff_new = θ·(c_b/θ_b) / (1 + K·I·θ/D)` with `K = R/c_eff_old`.
+  Damping kept as fallback.
+- **Convergence:** Both damped step + undamped target residual
+  must clear tol.
+- **Rollback:** Snapshot before each Picard iter; restore on Newton
+  fail; halve damping; retry once.
+- **Reporting:** `converged = grid_AND_picard`.  Cliff ratio uses
+  abs().  H+ closure-quality diagnostic per iter.  Floor-hit fraction
+  per iter.
+- **Validation:** 2D x-invariance assertion; demoted "Jithin literal
+  closure" claim to "continuum-MPNP analog"; scoped this plan to
+  single R2e with parallel 2e/4e as gated follow-up.
+- **Tests:** Hard tests for no-flux v1 equivalence, θ=1 Levich,
+  function-update-no-rebuild, fixed-point residual, rate-to-flux
+  conversion.
+
+```markdown
+# Jithin Closure Outer-Picard Implementation Plan (v2, post-GPT-round-1)
+
+## Goal
+
+Implement an outer-Picard wrap on top of the existing
+`bv_jithin_closure_form` patch.  Test whether the **continuum-MPNP
+analog** of Jithin's Eq 4.31 closure (equilibrium ceiling +
+steady-state flux-supply correction derived from continuum Bikerman
+transport) reproduces his Fig 4.36 cliff in our gradient-form solver.
+
+**Scope:** single-reaction R2e (Jithin emulation) only.  Parallel 2e/4e
+validation is a gated follow-up.  Validates the Picard infrastructure
+and tests pre-analysis prediction that continuum-Bikerman correction
+is too small to produce the cliff.
+
+## Math (rewritten in code convention)
+
+### Symbols and conventions
+
+- `c_b_hat` = bulk O₂ concentration (nondim, = `c_O2_bulk_mol_m3 / C_SCALE`)
+- `c_eff_hat` = effective c_O₂ at OHP (nondim) used in BV rate
+- `θ_OHP`, `θ_b` = Bikerman packing fraction at OHP / bulk (dimensionless)
+- `R_O2_hat` = molar rate of O₂ consumption at OHP (nondim, positive)
+  = `Σ_j (−stoich[O₂, j]) · R_j_hat`
+- `I_hat` = `∫₀^L_hat dy_hat / packing(y_hat)` (nondim length)
+- `D_O2_hat` = O₂ diffusivity (nondim)
+- `η = (V_applied − E_eq) / V_T` (cathodic → η < 0)
+- BV cathodic rate: `R_j_hat = k₀_hat · c_cat_hat · exp(−α·n·η)`
+  (cathodic V → η < 0, exp positive, rate grows)
+- `ξ` = scalar supply variable, R-space `fd.Function`,
+  related to c_eff by `c_eff_hat = θ_OHP · ξ`
+
+### Continuum-MPNP boundary closure for neutral cathodic species
+
+Steady-state Bikerman 1D for z=0 species:
+
+  J_hat = −D_hat · θ · ∇(c/θ)
+
+Integrate from OHP (y=0) to bulk (y=L_hat) with constant flux:
+
+  c_OHP_hat / θ_OHP − c_bulk_hat / θ_b = −(J_hat / D_hat) · I_hat
+
+For cathodic O₂ consumption, J_hat at OHP is the net molar flux INTO
+the OHP from bulk = R_O2_hat (positive).  So:
+
+  **c_OHP_hat = θ_OHP · (c_b_hat / θ_b − R_O2_hat · I_hat / D_O2_hat)**  (Eq A)
+
+Equivalently using ξ = c_OHP_hat / θ_OHP:
+
+  **ξ = c_b_hat / θ_b − R_O2_hat · I_hat / D_O2_hat**                    (Eq A')
+
+This is the continuum-MPNP closure for the boundary supply variable.
+Structurally analogous to Jithin's Eq 4.31 (equilibrium term + flux-
+supply correction) but derived from continuum transport, not from his
+spectral integro-diff closure.  We are NOT claiming term-by-term
+identity with his κ_5·φ·g.
+
+### Picard fixed-point structure
+
+The BV rate uses `c_eff_hat = θ_OHP · ξ` where ξ is Picard-controlled.
+Within Newton, θ_OHP evolves with the concentration profile (coupled
+through the residual).  Between Picard iters, ξ is held fixed, then
+updated.
+
+Picard update (semi-implicit, positivity-preserving):
+
+Define `K_old = R_O2_hat_old / c_eff_hat_old = R_O2_hat_old / (θ_OHP_old · ξ_old)`.
+Then the fixed-point of Eq A':
+
+  ξ = c_b_hat/θ_b − K_old · θ_OHP · ξ · I_hat / D_O2_hat
+
+solved for ξ:
+
+  **ξ_new = (c_b_hat / θ_b) / (1 + K_old · I_hat · θ_OHP_avg / D_O2_hat)**  (Eq B)
+
+where `θ_OHP_avg` is the surface-mean of packing from the just-converged
+state.  This guarantees `ξ_new > 0` always (no floor needed in the
+typical regime).  Limits:
+
+- Kinetic regime (K · I · θ / D << 1): ξ → c_b_hat/θ_b (no-flux equilibrium)
+- Transport regime (K · I · θ / D >> 1): ξ → D_O2_hat / (K · I · θ_OHP_avg)
+  → R = K · c_eff = K · θ · ξ = D_O2_hat / I_hat = continuum Levich
+
+Note: this is the **explicit-Picard update target**; the **actual coupled
+fixed point** of (PDE + Picard) includes all the other terms in R_j
+(H+ factor, η-dependence on phi, etc.) and is solved by iterating Eq B
+to fixed point.  Eq B is NOT the full coupled fixed point of the system —
+it is the Picard target formula for ξ given the current PDE state.
+
+### Pre-analysis prediction
+
+For our geometry (L=10 µm, λ_D ≈ 0.5 nm, sat layer ~few nm,
+θ_OHP ≈ 0.034, θ_b ≈ 0.94):
+- I_hat ≈ L_hat / θ_b (dominant bulk contribution, tiny sat correction)
+- Continuum Levich ≈ standard Levich (correction ~6%)
+- Predicted curve: smooth S-curve from kinetic onset (V≈0) to ~Levich
+  plateau (~-0.7 mA/cm²), NO cliff
+
+If true → rules out continuum-Bikerman as cliff mechanism; pivot to
+surface-coverage / non-covalent cation effect (Strmcnik) as path 2.
+If unexpected (sub-Levich plateau or cliff): re-examine I integral
+and saturation profile assumptions.
+
+## Implementation
+
+### Files modified
+
+1. **`Forward/bv_solver/config.py`** (~10 lines)
+   - Add `bv_picard_mode: bool` to `_get_bv_convergence_cfg` (default False).
+   - Validate: `bv_picard_mode=True` requires `bv_jithin_closure_form=True`
+     AND `bv_log_rate=True`.
+
+2. **`Forward/bv_solver/forms_logc_muh.py`** (~50 lines)
+   - In the BV builder, when `bv_jithin_closure_form=True` AND
+     `bv_picard_mode=True`:
+     - Per cathodic species index `s` (collected from
+       `rxn["cathodic_species"]` across all reactions, deduped):
+       - Allocate `xi_func_s = fd.Function(R_space, name=f"picard_log_xi_sp{s}")`
+       - Initialize: `log(c_bulk_hat_s / θ_b_const)` (no-flux equilibrium)
+     - Store dict: `ctx["picard_log_xi_funcs"][s] = xi_func_s`
+     - In log_cathodic construction, replace
+         `log_c_cat = u_exprs[cat_idx]`
+       with
+         `log_c_cat = ln(packing) + ctx["picard_log_xi_funcs"][cat_idx]`
+       (keeps packing inline, ξ Picard-controlled).
+   - Expose `ctx["packing_expr"] = packing` and `ctx["theta_inner_expr"] = theta_inner`
+     (uncapped version) at line ~452.
+
+3. **New `Forward/bv_solver/closure_picard.py`** (~250 lines)
+   - `class PicardState`: holds ξ values per species + Newton snapshot.
+   - `solve_with_picard_closure(ctx, sp, *, max_iters=15, tol=1e-3,
+        damping=0.5, max_damping_retries=3)`:
+     - Snapshot U, U_prev, all xi_funcs.
+     - Inner steady-state Newton solve via existing dt-march to t_end.
+       (Verify "single ctx['_last_solver'].solve()" gives steady state;
+       if not, wrap with steady-state convergence loop.)
+     - Extract diagnostics via UFL assemble:
+       - `theta_OHP_avg = assemble(packing_expr * ds(electrode))
+                          / assemble(Constant(1) * ds(electrode))`
+       - `I_hat = assemble((1/packing_expr) * dx) / Lx_hat`
+       - x-invariance check: split domain, compute per-strip I, assert
+         `std/mean < 1e-3`; abort with diagnostic if fails.
+       - `R_j_hat = assemble(_build_bv_observable_form(ctx, mode="reaction",
+                                reaction_index=j, scale=1.0))`
+         for each j with `bv_jithin_closure_form` cathodic species.
+     - Compute total molar consumption: `R_O2_hat = Σ_j (−stoich[O₂, j]) · R_j_hat`
+     - For each cathodic species s (typically one, O₂):
+       - `c_eff_old_hat = θ_OHP_avg · exp(xi_func_s)` (current state)
+       - `K_old = R_s_hat / c_eff_old_hat`
+       - `xi_target = (c_bulk_hat_s / θ_b_const) / (1 + K_old · I_hat · θ_OHP_avg / D_s_hat)`
+       - Damped update: `xi_damped = (1−α)·ξ_old + α·xi_target`
+       - Convergence: BOTH `|log(xi_damped) − log(xi_old)| < tol_step`
+         AND `|log(xi_target) − log(xi_old)| < tol_residual`
+     - If Newton failed: restore snapshot, halve damping, retry.
+       Persistent failure after `max_damping_retries`: mark
+       `picard_converged=False`, return.
+     - Diagnostic capture per iter:
+       `(iter, xi_per_species, c_eff_per_species, R_per_rxn, R_O2_total,
+         theta_OHP_avg, I_hat, min_theta_inner, floor_hit_area_frac,
+         c_H_OHP_pde, c_H_closure_est, h_closure_rel_err, damping_used)`
+
+4. **`PreconvergedAnchorWithPicard` dataclass** (extends `PreconvergedAnchor`):
+   - Adds `xi_snapshots: tuple[(int, np.ndarray), ...]` per species.
+
+5. **New script `scripts/studies/_run_jithin_closure_picard.py`** (~500 lines)
+   - Fork `_run_jithin_closure_exact.py`.
+   - `BV_PICARD_MODE = True`, `PICARD_MAX_ITERS = 15`,
+     `PICARD_TOL_STEP = 1e-3`, `PICARD_TOL_RESIDUAL = 1e-3`,
+     `PICARD_DAMPING_INIT = 0.5`.
+   - Custom three-stage:
+     - Stage 1: anchor build + Picard converge at V=+0.55 V (1-2 iters
+       expected since η anodic).
+     - Stage 2: Stern bump ladder, each rung followed by Picard converge.
+     - Stage 3: custom per-V loop replacing `solve_grid_with_anchor`:
+       - For each V_RHE in grid:
+         - Cold or warm Newton init from previous V's converged state.
+         - Picard converge via `solve_with_picard_closure(...)`.
+         - Capture diagnostics + ξ for warm-start.
+         - On failure: report partial result, do NOT use as warm-start.
+   - JSON output: full per-V Picard trajectory + final state.
+   - `converged = grid_converged_per_V AND picard_converged_per_V`.
+
+### Diagnostics captured per V_RHE
+
+- `cd_mA_cm2`, `pc_mA_cm2` (from final converged state)
+- `c_O2_OHP_nondim`, `c_H2O2_OHP_nondim`, `c_H_OHP_nondim`, `phi_OHP_nondim`
+- `picard_iters`: list of per-iter dicts (see above)
+- `picard_n_iters`, `picard_converged`, `picard_final_residual_step`,
+  `picard_final_residual_target`
+- `min_theta_inner_per_iter` array
+- `h_closure_quality_per_iter` array
+- `grid_converged` AND `picard_converged` → `converged` (single mask)
+
+## Tests (new `tests/forward/bv/test_jithin_picard_closure.py`)
+
+- `test_no_flux_equivalent_to_v1`: at anodic V where R≈0,
+  Picard converges in 1-2 iters; cd matches v1 to 6 digits.
+- `test_theta_unity_recovers_levich`: `a_vals_hat = [0,0,0]` and
+  no counterions → standard Fick, plateau at standard Levich within 1%.
+- `test_function_update_no_rebuild`: `xi_func.assign(np.log(0.5))`
+  then `assemble(rate_form)` changes; no `solve()` invocation.
+- `test_fixed_point_residual_at_convergence`: at converged ξ at one
+  test V, residual `|ξ + R·I·θ/D − c_b/θ_b| < 1e-6`.
+- `test_raw_rate_to_molar_flux_conversion`: extract R via
+  `mode="reaction", scale=1.0`, multiply by stoich; check matches
+  expected Levich molar rate at θ=1.
+
+## Risk areas
+
+1. **Picard divergence at deep cathodic.**  Semi-implicit positivity-
+   preserving update minimizes this; damping is fallback.
+2. **x-invariance check fires.**  If x-variance > 1e-3, the scalar
+   closure is invalid.  Fallback: per-x-strip ξ (one ξ per Nx cell,
+   plumbed through Function on a Lagrange P0 in x); for v2 just abort.
+3. **Pseudo-transient vs steady state.**  Need to verify the existing
+   dt-march path actually reaches steady state at every V.  Will add
+   `dU_norm` diagnostic per outer Newton solve; if not converging,
+   either extend t_end or switch to `make_run_ss`.
+4. **Newton failure in Picard inner.**  Snapshot/restore/halve-damping
+   protocol covers transient failures.  Persistent failure → abort V.
+5. **ξ becomes very small at deep cathodic.**  Numerical issue if
+   `log(ξ)` underflows.  Add floor at `ξ_min = exp(-50)` ≈ 2e-22 with
+   warning.
+
+## Expected outcomes (unchanged from v1)
+
+Per pre-analysis: smooth S-curve to ~Levich, NO cliff.  Valuable as
+solver correctness validation via independent code path.  If cliff
+DOES appear: pre-analysis was wrong, I integral is larger than
+estimated; investigate θ(y) profile.
+
+## Out-of-scope for this plan (explicit follow-ups)
+
+- Parallel 2e/4e validation (gated on this plan completing).
+- Surface-coverage / Frumkin isotherm patch (path 2).
+- Hard-sphere mixture D(packing) (path 3).
+- H+ closure-form substitute (if h_closure_rel_err diagnostic shows > 25%).
+- Per-x-strip ξ (if x-invariance assertion fails).
+- Custom from-scratch Chebyshev spectral solver (separate effort).
+```
+
+## Continued critique prompt
+
+Review the updated plan and my responses to your earlier issues.
+Push back on responses where I defended poorly — name which point.
+Raise any new issues the updated plan creates. Re-issue any earlier
+issue you don't think I addressed. Same numbered format and same
+verdict line at the end:
+
+  VERDICT: APPROVED
+  VERDICT: ISSUES_REMAIN
+
+codex
+I’m reviewing the rewrite as a design, not editing code. The main thing I’m re-checking is whether the new “custom wrapper” actually matches the existing pseudo-time/steady-state machinery instead of inventing a parallel convention.
+exec
+/bin/zsh -lc "sed -n '1100,1175p' Forward/bv_solver/anchor_continuation.py" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+exec
+/bin/zsh -lc "sed -n '430,545p' Forward/bv_solver/grid_per_voltage.py" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+    solve_opts.setdefault("snes_error_if_not_converged", True)
+    problem = fd.NonlinearVariationalProblem(
+        ctx["F_res"], ctx["U"], bcs=ctx["bcs"], J=ctx["J_form"]
+    )
+    solver = fd.NonlinearVariationalSolver(
+        problem, solver_parameters=solve_opts
+    )
+    ctx["_last_solver"] = solver
+    of_cd = _build_bv_observable_form(
+        ctx, mode="current_density", reaction_index=None, scale=1.0
+    )
+
+    run_ss = make_run_ss(
+        ctx=ctx,
+        solver=solver,
+        of_cd=of_cd,
+        dt_init=dt_init,
+        dt_growth_cap=dt_growth_cap,
+        dt_max_ratio=dt_max_ratio,
+        ss_rel_tol=ss_rel_tol,
+        ss_abs_tol=ss_abs_tol,
+        ss_consec=ss_consec,
+    )
+
+    # ----- 5. Initial baseline snapshot for first-rung rollback.
+    last_success_snap = snapshot_U(ctx["U"])
+
+    rungs: List[Dict[str, Any]] = []
+
+    def _run_gamma_picard(label: str) -> None:
+        """Outer Picard for ``Γ_MOH`` after a successful inner solve.
+
+        Phase 6β v9 Gate 3: Γ is an external R-space coefficient
+        updated by ``update_gamma_from_solution`` between continuation
+        rungs.  The closed-form formula has Γ depending on
+        boundary-averaged c_M, c_H — so once Γ changes, the FE
+        solution must be re-solved.  We iterate until either Γ
+        stabilises (relative tolerance ``1e-4``) or the cap of
+        ``8`` Picard iterations is hit.
+
+        At λ=0 (the disabled-feature pin) the formula returns Γ=0
+        immediately and the loop is a no-op.
+        """
+        if ctx.get("cation_hydrolysis") is None:
+            return
+        from .cation_hydrolysis import update_gamma_from_solution
+        picard_max_iters = 8
+        picard_rel_tol = 1e-4
+        gamma_history = []
+        for _it in range(picard_max_iters):
+            gamma_old = float(ctx["cation_hydrolysis"].gamma_func)
+            gamma_new = update_gamma_from_solution(ctx)
+            gamma_history.append(float(gamma_new))
+            lam_active = float(
+                ctx["cation_hydrolysis"].lambda_hydrolysis_func
+            )
+            if lam_active == 0.0:
+                break
+            rel = abs(gamma_new - gamma_old) / max(
+                abs(gamma_new), abs(gamma_old), 1e-30
+            )
+            if rel < picard_rel_tol:
+                break
+            ok = run_ss(max_ss_steps_per_rung)
+            if not ok:
+                # Picard step de-stabilised; stop and accept the
+                # previous Γ.  Continuation orchestrator will surface
+                # this as a non-converged outcome.
+                break
+        ctx[f"gamma_picard_history_{label}"] = gamma_history
+
+    def _run_k0_ladder(
+        rung_label: str,
+    ) -> Tuple[bool, AdaptiveLadder, Optional[tuple]]:
+        """Run a fresh k0 ladder under the *current* Kw_eff.
+
+
+ succeeded in 0ms:
+        problem = fd.NonlinearVariationalProblem(
+            ctx["F_res"], ctx["U"], bcs=ctx["bcs"], J=ctx["J_form"]
+        )
+        # Filter out non-PETSc sub-dicts (bv_bc, bv_convergence, nondim,
+        # robin_bc) so they don't pollute the PETSc options database with
+        # flattened "unknown option" warnings.
+        _NON_PETSC_KEYS = {"bv_bc", "bv_convergence", "nondim", "robin_bc"}
+        _items = params.items() if isinstance(params, dict) else []
+        solve_opts = {k: v for k, v in _items if k not in _NON_PETSC_KEYS}
+        # Force SNES to raise on non-convergence so run_ss's try/except
+        # actually catches divergent Newton iterates (Firedrake's default
+        # silently accepts them, which would let a non-converged state
+        # be declared "steady" by the plateau detector).
+        solve_opts.setdefault("snes_error_if_not_converged", True)
+        solver = fd.NonlinearVariationalSolver(
+            problem, solver_parameters=solve_opts,
+        )
+        ctx["_last_solver"] = solver
+        of_cd = _build_bv_observable_form(
+            ctx, mode="current_density", reaction_index=None, scale=1.0,
+        )
+        return ctx, solver, of_cd
+
+    # ------------------------------------------------------------------
+    # SS time-stepping loop with SER adaptive dt
+    #
+    # Delegates to the public ``make_run_ss`` factory so external callers
+    # (anchor_continuation.py) and the orchestrator share a single
+    # implementation. The closure here captures the orchestrator's
+    # outer kwargs to preserve byte-equivalence with the pre-Phase-5γ
+    # version.
+    # ------------------------------------------------------------------
+    def _make_run_ss(ctx, solver, of_cd):
+        return make_run_ss(
+            ctx=ctx,
+            solver=solver,
+            of_cd=of_cd,
+            dt_init=dt_init,
+            dt_growth_cap=dt_growth_cap,
+            dt_max_ratio=dt_max_ratio,
+            ss_rel_tol=ss_rel_tol,
+            ss_abs_tol=ss_abs_tol,
+            ss_consec=ss_consec,
+        )
+
+    # ------------------------------------------------------------------
+    # Helper: scale all charges (dynamic species + Boltzmann ion)
+    # ------------------------------------------------------------------
+    def _set_z_factor(ctx: dict, z_val: float) -> None:
+        for i in range(n_s):
+            ctx["z_consts"][i].assign(z_nominal[i] * z_val)
+        boltz = ctx.get("boltzmann_z_scale")
+        if boltz is not None:
+            boltz.assign(float(z_val))
+
+    # ------------------------------------------------------------------
+    # Initializer flag (read once for orchestrator-level dispatch).
+    # ------------------------------------------------------------------
+    if isinstance(params, dict):
+        _bv_conv_for_init = params.get("bv_convergence", {})
+        _initializer_flag = (
+            str(_bv_conv_for_init.get("initializer", "linear_phi")).strip().lower()
+            if isinstance(_bv_conv_for_init, dict) else "linear_phi"
+        )
+    else:
+        _initializer_flag = "linear_phi"
+
+    # ------------------------------------------------------------------
+    # Phase 1 (C): per-voltage cold-start with internal z-ramp
+    # ------------------------------------------------------------------
+    def _solve_cold(orig_idx: int, V_target_eta: float):
+        ctx, solver, of_cd = _build_for_voltage(V_target_eta)
+        run_ss = _make_run_ss(ctx, solver, of_cd)
+        U = ctx["U"]
+        U_prev = ctx["U_prev"]
+        # IC already at V_target_eta from set_initial_conditions (linear-phi
+        # or debye_boltzmann depending on params).  Belt-and-suspenders:
+        # set phi_applied_func explicitly too.
+        ctx["phi_applied_func"].assign(float(V_target_eta))
+
+        # Path B: analytical IC -> try direct z=1 SS; the IC already encodes
+        # the depleted-H+/enriched-counterion state, so the z=0 stage that
+        # the linear-phi path needs (to discover charge balance from a
+        # bulk-flat guess) would *erase* the analytical state and is skipped.
+        # Fall back to linear-phi z-ramp on Newton failure.
+        if _initializer_flag != "linear_phi" and not ctx.get(
+            "initializer_fallback", False
+        ):
+            _set_z_factor(ctx, 1.0)
+            if run_ss(max_ss_steps_z):
+                return _snapshot_U(U), 1.0, ctx
+            # Direct z=1 failed -- reset to linear-phi IC and use the
+            # standard z-ramp path below (bypass dispatcher to avoid
+            # routing back to the analytical IC).
+            ctx["initializer_fallback"] = True
+            ctx["initializer_fallback_reason"] = (
+                ctx.get("initializer_fallback_reason", "")
+                + ";cold_z1_diverged"
+            )
+            set_initial_conditions_logc(ctx, _params_with_phi(V_target_eta))
+
+        # Path A: linear-phi (or fallback).  Step 0: zero all charges,
+        # run SS at z=0 to find the neutral-electrolyte fixed point.
+        _set_z_factor(ctx, 0.0)
+        if not run_ss(max_ss_steps_cold):
+            return None, 0.0, ctx
+
+        # Step 1..max_z_steps: linearly ramp z to 1 with checkpoint+rollback
+        achieved_z = 0.0
+        for z_val in np.linspace(0.0, 1.0, max_z_steps + 1)[1:]:
+            ckpt = _snapshot_U(U)
+            _set_z_factor(ctx, float(z_val))
+            if run_ss(max_ss_steps_z):
+                achieved_z = float(z_val)
+            else:
+                _restore_U(ckpt, U, U_prev)
+
+exec
+/bin/zsh -lc "rg -n \"t_end_model|dt_model|t_end|num_steps|make_run_ss|run_ss|max_ss_steps|U_prev.assign\\(U\\)\" Forward/bv_solver scripts/studies/_run_jithin_closure_exact.py -S" in /Users/jakeweinstein/Desktop/ResearchForwardSolverClone/FireDrakeEnvCG/PNPInverse
+ succeeded in 0ms:
+scripts/studies/_run_jithin_closure_exact.py:219:        eta_hat=0.0, dt=0.25, t_end=80.0,
+Forward/bv_solver/forms_logc_muh.py:180:        n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0, phi0, params = solver_params
+Forward/bv_solver/forms_logc_muh.py:210:        t_end=t_end,
+Forward/bv_solver/forms_logc_muh.py:314:    dt_const = fd.Constant(float(scaling["dt_model"]))
+Forward/bv_solver/forms_logc_muh.py:1002:        n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0, phi0, params = solver_params
+Forward/bv_solver/forms_logc_muh.py:1116:        n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0, phi0, params = solver_params
+Forward/bv_solver/anchor_continuation.py:912:    max_ss_steps_per_rung: int = 200,
+Forward/bv_solver/anchor_continuation.py:952:    max_ss_steps_per_rung
+Forward/bv_solver/anchor_continuation.py:1033:    from .grid_per_voltage import snapshot_U, restore_U, make_run_ss
+Forward/bv_solver/anchor_continuation.py:1112:    run_ss = make_run_ss(
+Forward/bv_solver/anchor_continuation.py:1163:            ok = run_ss(max_ss_steps_per_rung)
+Forward/bv_solver/anchor_continuation.py:1196:                ok = run_ss(max_ss_steps_per_rung)
+Forward/bv_solver/anchor_continuation.py:1413:                    ok = run_ss(max_ss_steps_per_rung)
+Forward/bv_solver/anchor_continuation.py:1561:                ok = run_ss(max_ss_steps_per_rung)
+Forward/bv_solver/anchor_continuation.py:1642:    max_ss_steps_per_rung: int = 200,
+Forward/bv_solver/anchor_continuation.py:1700:        When True (default), runs ``run_ss(max_ss_steps_per_rung)``
+Forward/bv_solver/anchor_continuation.py:1728:    from .grid_per_voltage import snapshot_U, restore_U, make_run_ss
+Forward/bv_solver/anchor_continuation.py:1845:    run_ss = make_run_ss(
+Forward/bv_solver/anchor_continuation.py:1860:            ok = run_ss(max_ss_steps_per_rung)
+Forward/bv_solver/anchor_continuation.py:1880:            ok = run_ss(max_ss_steps_per_rung)
+Forward/bv_solver/anchor_continuation.py:1927:                ok = run_ss(max_ss_steps_per_rung)
+Forward/bv_solver/grid_per_voltage.py:41:    max_ss_steps_cold=200,
+Forward/bv_solver/grid_per_voltage.py:42:    max_ss_steps_z=120,
+Forward/bv_solver/grid_per_voltage.py:43:    max_ss_steps_warm=150,
+Forward/bv_solver/grid_per_voltage.py:44:    max_ss_steps_warm_final=200,
+Forward/bv_solver/grid_per_voltage.py:109:    U_prev.assign(U)
+Forward/bv_solver/grid_per_voltage.py:135:def make_run_ss(
+Forward/bv_solver/grid_per_voltage.py:149:    Returns a callable ``run_ss(max_steps: int) -> bool`` that drives
+Forward/bv_solver/grid_per_voltage.py:181:    def run_ss(max_steps: int) -> bool:
+Forward/bv_solver/grid_per_voltage.py:192:            U_prev.assign(U)
+Forward/bv_solver/grid_per_voltage.py:215:    return run_ss
+Forward/bv_solver/grid_per_voltage.py:227:    max_ss_steps_per_substep: int = 150,
+Forward/bv_solver/grid_per_voltage.py:228:    max_ss_steps_final: int = 200,
+Forward/bv_solver/grid_per_voltage.py:259:    run_ss = make_run_ss(
+Forward/bv_solver/grid_per_voltage.py:284:            if run_ss(max_ss_steps_per_substep):
+Forward/bv_solver/grid_per_voltage.py:309:    if not run_ss(max_ss_steps_final):
+Forward/bv_solver/grid_per_voltage.py:325:    max_ss_steps_cold: int = 200,
+Forward/bv_solver/grid_per_voltage.py:326:    max_ss_steps_z: int = 120,
+Forward/bv_solver/grid_per_voltage.py:327:    max_ss_steps_warm: int = 150,
+Forward/bv_solver/grid_per_voltage.py:328:    max_ss_steps_warm_final: int = 200,
+Forward/bv_solver/grid_per_voltage.py:375:    ss_rel_tol, ss_abs_tol, ss_consec, max_ss_steps_*, dt_*
+Forward/bv_solver/grid_per_voltage.py:398:        n_s, order, dt, t_end, z_v, D_v, a_v, _, c0, phi0, params = solver_params
+Forward/bv_solver/grid_per_voltage.py:439:        # Force SNES to raise on non-convergence so run_ss's try/except
+Forward/bv_solver/grid_per_voltage.py:456:    # Delegates to the public ``make_run_ss`` factory so external callers
+Forward/bv_solver/grid_per_voltage.py:462:    def _make_run_ss(ctx, solver, of_cd):
+Forward/bv_solver/grid_per_voltage.py:463:        return make_run_ss(
+Forward/bv_solver/grid_per_voltage.py:502:        run_ss = _make_run_ss(ctx, solver, of_cd)
+Forward/bv_solver/grid_per_voltage.py:519:            if run_ss(max_ss_steps_z):
+Forward/bv_solver/grid_per_voltage.py:534:        if not run_ss(max_ss_steps_cold):
+Forward/bv_solver/grid_per_voltage.py:542:            if run_ss(max_ss_steps_z):
+Forward/bv_solver/grid_per_voltage.py:579:            max_ss_steps_per_substep=max_ss_steps_warm,
+Forward/bv_solver/grid_per_voltage.py:580:            max_ss_steps_final=max_ss_steps_warm_final,
+Forward/bv_solver/grid_per_voltage.py:886:    max_ss_steps_warm: int = 150,
+Forward/bv_solver/grid_per_voltage.py:887:    max_ss_steps_warm_final: int = 200,
+Forward/bv_solver/grid_per_voltage.py:984:        n_s, order, dt, t_end, z_v, D_v, a_v, _, c0, phi0, params = solver_params
+Forward/bv_solver/grid_per_voltage.py:1097:                max_ss_steps_per_substep=max_ss_steps_warm,
+Forward/bv_solver/grid_per_voltage.py:1098:                max_ss_steps_final=max_ss_steps_warm_final,
+Forward/bv_solver/__init__.py:102:    make_run_ss,
+Forward/bv_solver/__init__.py:151:    "make_run_ss",
+Forward/bv_solver/forms_logc.py:85:        n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0, phi0, params = solver_params
+Forward/bv_solver/forms_logc.py:135:        n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0, phi0, params = solver_params
+Forward/bv_solver/forms_logc.py:165:        t_end=t_end,
+Forward/bv_solver/forms_logc.py:281:    dt_const = fd.Constant(float(scaling["dt_model"]))
+Forward/bv_solver/forms_logc.py:843:        n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0, phi0, params = solver_params
+Forward/bv_solver/forms_logc.py:947:        n_species, order, dt, t_end, z_vals, D_vals, a_vals, phi_applied, c0, phi0, params = solver_params
+
+codex
+Most of the rewrite is materially better. I still would not approve it as written.
+
+1. WHAT: Re point 7 is still wrong. The code does not run a fixed `t_end/dt = 320` march in the grid/anchor paths; it uses `make_run_ss(...)` with adaptive `dt`, plateau detection, and `max_ss_steps` caps. WHY: A new “dt-march to t_end” path will not be byte-equivalent to v1 and may change convergence/steady-state behavior. WHAT TO DO: Make the Picard inner solve call the existing `make_run_ss` directly. Do not invent a second steady-state convention.
+
+2. WHAT: The custom per-V loop is underspecified relative to `solve_grid_with_anchor`. WHY: Existing code visits voltages by distance from anchor and uses a source pool; your grid is ordered from `-0.40` to `+0.55`, so a literal “for each V” sweep starts at the hardest point. WHAT TO DO: Preserve nearest-source ordering and store `(U_snapshot, xi_snapshot, phi)` in the source pool.
+
+3. WHAT: The robust warm-walk/bisection/z-ramp machinery is being hand-waved away. WHY: “Cold or warm Newton init from previous V” is not equivalent to the existing C+D continuation. You risk debugging the new driver instead of the closure. WHAT TO DO: Either fork `solve_grid_with_anchor` minimally and insert Picard at the right places, or expose a Picard-aware `warm_walk_phi` that still uses `make_run_ss`.
+
+4. WHAT: You still do not divide raw reaction rates by electrode measure. `_build_bv_observable_form(..., mode="reaction", scale=1.0)` assembles `∫ R_j ds`, not necessarily a surface mean. WHY: Your `θ` and `I` diagnostics are averaged, but `R` is integrated. This only works accidentally because current electrode length is 1. WHAT TO DO: Use `R_j_mean = assemble(R_j ds) / assemble(1 ds)` before forming `R_O2_hat`.
+
+5. WHAT: Your fixed-point residual test has an extra `θ`. You wrote `|ξ + R·I·θ/D − c_b/θ_b|`. WHY: Eq A' is `ξ = c_b/θ_b − R·I/D`; the residual is `ξ + R·I/D − c_b/θ_b`. WHAT TO DO: Fix the test and every diagnostic using that residual.
+
+6. WHAT: `test_fixed_point_residual_at_convergence < 1e-6` conflicts with Picard tolerances of `1e-3`. WHY: The test can fail while the algorithm correctly declares convergence under its own tolerance. WHAT TO DO: Either tighten Picard tolerance for that test case or set the residual assertion consistently.
+
+7. WHAT: Ideal `θ=1` support is not actually specified. Current closure code only defines `packing` inside the steric-active path. WHY: Your `theta_unity_recovers_levich` test needs `packing_expr = 1`, `theta_inner_expr = 1`, and `θ_b = 1` even when sterics/counterions are disabled. WHAT TO DO: Define and expose these unconditionally in Picard mode.
+
+8. WHAT: `θ_b_const` is used by the new module but not exposed. WHY: `closure_picard.py` should not rediscover bulk packing through metadata heuristics. WHAT TO DO: Store `ctx["closure_theta_b"]` and `ctx["closure_bulk_c_hat"][species]` during form build.
+
+9. WHAT: `bv_picard_mode` is only planned for `forms_logc_muh.py`, but config does not restrict formulation. WHY: A user can set `formulation="logc"` and get ignored or half-wired behavior. WHAT TO DO: Either implement both `forms_logc.py` and `forms_logc_muh.py`, or validate `formulation == "logc_muh"` when `bv_picard_mode=True`.
+
+10. WHAT: Re point 15 overstates “no positive fixed point” when `K → ∞`. WHY: For irreversible linear-in-O2 BV, the semi-implicit update always has a positive target; it may underflow numerically, but that is not proof of no physical fixed point. WHAT TO DO: Log “numerical underflow / target below floor,” not “no positive fixed point,” unless a scalar solve proves nonexistence.
+
+11. WHAT: The semi-implicit update assumes `R_O2_hat > 0`. WHY: Reversible or net anodic cases give `R <= 0`, making `K` negative and the denominator invalid. WHAT TO DO: For `R_s_hat <= 0`, set `ξ_target = c_b/θ_b` or explicitly restrict this implementation to irreversible cathodic reactions.
+
+12. WHAT: “Per cathodic species” is too broad. WHY: The closure derivation is for neutral O2; applying it to any `rxn["cathodic_species"]` could silently patch charged species or products in future decks. WHAT TO DO: Gate by configured species list or require `z_species == 0` unless explicitly overridden.
+
+13. WHAT: The x-invariance check is not implementable as stated. Firedrake does not automatically provide per-x strip markers for `assemble` on an existing mesh. WHY: This can become a time sink or a fake diagnostic. WHAT TO DO: Either skip it for v2 and assert homogeneous setup, or define a concrete DG/binning implementation.
+
+14. WHAT: The x-invariance diagnostic is incomplete anyway. WHY: Checking only `I_hat` does not prove `θ_s`, `R_j`, `η`, and `c_H` are x-invariant. WHAT TO DO: If you keep the check, include boundary variance for `packing`, `R_j`, `phi`, and `c_H`.
+
+15. WHAT: The no-flux equivalence test at “anodic V where R≈0” is not a clean equivalence test. WHY: “≈0” still produces a Picard correction, so 6-digit equality to v1 can fail for legitimate reasons. WHAT TO DO: Use `k0=0`/disabled reaction for exact no-flux algebra, and a separate small-rate regression for practical anodic behavior.
+
+16. WHAT: `log_c_cat = ln(packing) + logξ` changes behavior when `packing` is floored. WHY: If `theta_inner` crosses the floor, the BV rate depends on artificial `packing_floor`, while diagnostics may interpret it physically. WHAT TO DO: Make floor-hit a hard failure for validation runs, not just a warning, unless the run is explicitly a floor-sensitivity experiment.
+
+17. WHAT: Picard convergence uses only scalar ξ residuals. WHY: The PDE state can still be drifting if `run_ss` plateau detection is loose or the observable is insensitive. WHAT TO DO: Record and gate on `run_ss` success plus a state-change norm or current-change norm per Picard iteration.
+
+18. WHAT: Parallel 2e/4e is labeled follow-up, but the form changes are already generalizing to shared species. WHY: Half-general infrastructure without a parallel smoke test is where shared-supply bugs hide. WHAT TO DO: Add at least a tiny two-reaction unit/smoke test now, even if the full Fig 4.36 run is out of scope.
+
+VERDICT: ISSUES_REMAIN
+tokens used
+141,538
+Most of the rewrite is materially better. I still would not approve it as written.
+
+1. WHAT: Re point 7 is still wrong. The code does not run a fixed `t_end/dt = 320` march in the grid/anchor paths; it uses `make_run_ss(...)` with adaptive `dt`, plateau detection, and `max_ss_steps` caps. WHY: A new “dt-march to t_end” path will not be byte-equivalent to v1 and may change convergence/steady-state behavior. WHAT TO DO: Make the Picard inner solve call the existing `make_run_ss` directly. Do not invent a second steady-state convention.
+
+2. WHAT: The custom per-V loop is underspecified relative to `solve_grid_with_anchor`. WHY: Existing code visits voltages by distance from anchor and uses a source pool; your grid is ordered from `-0.40` to `+0.55`, so a literal “for each V” sweep starts at the hardest point. WHAT TO DO: Preserve nearest-source ordering and store `(U_snapshot, xi_snapshot, phi)` in the source pool.
+
+3. WHAT: The robust warm-walk/bisection/z-ramp machinery is being hand-waved away. WHY: “Cold or warm Newton init from previous V” is not equivalent to the existing C+D continuation. You risk debugging the new driver instead of the closure. WHAT TO DO: Either fork `solve_grid_with_anchor` minimally and insert Picard at the right places, or expose a Picard-aware `warm_walk_phi` that still uses `make_run_ss`.
+
+4. WHAT: You still do not divide raw reaction rates by electrode measure. `_build_bv_observable_form(..., mode="reaction", scale=1.0)` assembles `∫ R_j ds`, not necessarily a surface mean. WHY: Your `θ` and `I` diagnostics are averaged, but `R` is integrated. This only works accidentally because current electrode length is 1. WHAT TO DO: Use `R_j_mean = assemble(R_j ds) / assemble(1 ds)` before forming `R_O2_hat`.
+
+5. WHAT: Your fixed-point residual test has an extra `θ`. You wrote `|ξ + R·I·θ/D − c_b/θ_b|`. WHY: Eq A' is `ξ = c_b/θ_b − R·I/D`; the residual is `ξ + R·I/D − c_b/θ_b`. WHAT TO DO: Fix the test and every diagnostic using that residual.
+
+6. WHAT: `test_fixed_point_residual_at_convergence < 1e-6` conflicts with Picard tolerances of `1e-3`. WHY: The test can fail while the algorithm correctly declares convergence under its own tolerance. WHAT TO DO: Either tighten Picard tolerance for that test case or set the residual assertion consistently.
+
+7. WHAT: Ideal `θ=1` support is not actually specified. Current closure code only defines `packing` inside the steric-active path. WHY: Your `theta_unity_recovers_levich` test needs `packing_expr = 1`, `theta_inner_expr = 1`, and `θ_b = 1` even when sterics/counterions are disabled. WHAT TO DO: Define and expose these unconditionally in Picard mode.
+
+8. WHAT: `θ_b_const` is used by the new module but not exposed. WHY: `closure_picard.py` should not rediscover bulk packing through metadata heuristics. WHAT TO DO: Store `ctx["closure_theta_b"]` and `ctx["closure_bulk_c_hat"][species]` during form build.
+
+9. WHAT: `bv_picard_mode` is only planned for `forms_logc_muh.py`, but config does not restrict formulation. WHY: A user can set `formulation="logc"` and get ignored or half-wired behavior. WHAT TO DO: Either implement both `forms_logc.py` and `forms_logc_muh.py`, or validate `formulation == "logc_muh"` when `bv_picard_mode=True`.
+
+10. WHAT: Re point 15 overstates “no positive fixed point” when `K → ∞`. WHY: For irreversible linear-in-O2 BV, the semi-implicit update always has a positive target; it may underflow numerically, but that is not proof of no physical fixed point. WHAT TO DO: Log “numerical underflow / target below floor,” not “no positive fixed point,” unless a scalar solve proves nonexistence.
+
+11. WHAT: The semi-implicit update assumes `R_O2_hat > 0`. WHY: Reversible or net anodic cases give `R <= 0`, making `K` negative and the denominator invalid. WHAT TO DO: For `R_s_hat <= 0`, set `ξ_target = c_b/θ_b` or explicitly restrict this implementation to irreversible cathodic reactions.
+
+12. WHAT: “Per cathodic species” is too broad. WHY: The closure derivation is for neutral O2; applying it to any `rxn["cathodic_species"]` could silently patch charged species or products in future decks. WHAT TO DO: Gate by configured species list or require `z_species == 0` unless explicitly overridden.
+
+13. WHAT: The x-invariance check is not implementable as stated. Firedrake does not automatically provide per-x strip markers for `assemble` on an existing mesh. WHY: This can become a time sink or a fake diagnostic. WHAT TO DO: Either skip it for v2 and assert homogeneous setup, or define a concrete DG/binning implementation.
+
+14. WHAT: The x-invariance diagnostic is incomplete anyway. WHY: Checking only `I_hat` does not prove `θ_s`, `R_j`, `η`, and `c_H` are x-invariant. WHAT TO DO: If you keep the check, include boundary variance for `packing`, `R_j`, `phi`, and `c_H`.
+
+15. WHAT: The no-flux equivalence test at “anodic V where R≈0” is not a clean equivalence test. WHY: “≈0” still produces a Picard correction, so 6-digit equality to v1 can fail for legitimate reasons. WHAT TO DO: Use `k0=0`/disabled reaction for exact no-flux algebra, and a separate small-rate regression for practical anodic behavior.
+
+16. WHAT: `log_c_cat = ln(packing) + logξ` changes behavior when `packing` is floored. WHY: If `theta_inner` crosses the floor, the BV rate depends on artificial `packing_floor`, while diagnostics may interpret it physically. WHAT TO DO: Make floor-hit a hard failure for validation runs, not just a warning, unless the run is explicitly a floor-sensitivity experiment.
+
+17. WHAT: Picard convergence uses only scalar ξ residuals. WHY: The PDE state can still be drifting if `run_ss` plateau detection is loose or the observable is insensitive. WHAT TO DO: Record and gate on `run_ss` success plus a state-change norm or current-change norm per Picard iteration.
+
+18. WHAT: Parallel 2e/4e is labeled follow-up, but the form changes are already generalizing to shared species. WHY: Half-general infrastructure without a parallel smoke test is where shared-supply bugs hide. WHAT TO DO: Add at least a tiny two-reaction unit/smoke test now, even if the full Fig 4.36 run is out of scope.
+
+VERDICT: ISSUES_REMAIN
