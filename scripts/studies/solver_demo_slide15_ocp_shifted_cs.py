@@ -146,11 +146,17 @@ def _make_sp(
     stern_capacitance_f_m2,
     k0_r4e_factor: float,
     initializer: str = INITIALIZER,
+    enable_water_ionization: bool = False,
 ):
     """Build SolverParams + k0_targets for one (Stern, K0_R4e_factor) pair.
 
     Reaction E_eq values are shifted by −V_OCP_RHE so η_BV is preserved
     when V_RHE_solver = V_RHE_deck − V_OCP_RHE.
+
+    Phase 7 step 0b: ``enable_water_ionization=True`` switches to the
+    proton-condition residual E = c_H − c_OH with fast-equilibrium
+    closure c_OH = Kw_eff/c_H (Phase 6α machinery); the anchor build
+    must then ramp Kw via ``kw_eff_ladder`` (see ``_run_one_factor``).
     """
     from scripts._bv_common import (
         ALPHA_R1, ALPHA_R2E, ALPHA_R4E,
@@ -248,6 +254,7 @@ def _make_sp(
         multi_ion_enabled=True,
         initializer=str(initializer),
         l_eff_m=float(L_EFF_M),
+        enable_water_ionization=bool(enable_water_ionization),
         **stern_kw,
     )
     new_opts = dict(sp.solver_options)
@@ -345,6 +352,7 @@ def _run_one_factor(
     anchor_v_rhe: float = ANCHOR_V_RHE,
     initializer: str = INITIALIZER,
     stern_final: float = STERN_BASELINE,
+    enable_water_ionization: bool = False,
 ) -> dict:
     """Anchor + Stern bump-ladder + grid-walk for a single K0_R4e factor."""
     from scripts._bv_common import C_SCALE, I_SCALE, V_T
@@ -368,13 +376,27 @@ def _run_one_factor(
         stern_capacitance_f_m2=stern_final_v,
         k0_r4e_factor=factor,
         initializer=initializer,
+        enable_water_ionization=enable_water_ionization,
     )
     sp_anchor_cs, _ = _make_sp(
         stern_capacitance_f_m2=STERN_ANCHOR,
         k0_r4e_factor=factor,
         initializer=initializer,
+        enable_water_ionization=enable_water_ionization,
     )
     sp_anchor = sp_anchor_cs.with_phi_applied(float(anchor_v_rhe) / V_T)
+
+    # Phase 6α pattern (l_eff_transport_sweep_csplus_so4.py): Kw must be
+    # ramped from 0 inside the anchor build, jointly with the k0 ladder.
+    if enable_water_ionization:
+        from scripts._bv_common import KW_HAT
+        kw_eff_ladder_arg = (
+            0.0, KW_HAT * 1e-6, KW_HAT * 1e-3, KW_HAT * 0.1, KW_HAT,
+        )
+        print(f"  enable_water_ionization=True "
+              f"(Kw_eff target = {KW_HAT:.3e}, 5-rung ladder)", flush=True)
+    else:
+        kw_eff_ladder_arg = None
 
     print(f"\n===== factor = {factor:g} =====", flush=True)
     print(f"  k0_R2e target = {k0_targets[0]:.3e}", flush=True)
@@ -394,6 +416,7 @@ def _run_one_factor(
                 initial_scales=INITIAL_SCALES,
                 max_inserts_per_step=MAX_INSERTS_PER_STEP,
                 ic_at_target=IC_AT_TARGET,
+                kw_eff_ladder=kw_eff_ladder_arg,
             )
         anchor_converged = bool(anchor_result.converged)
     except LadderExhausted as exc:
@@ -609,6 +632,8 @@ def _parse_factor_list(arg: str) -> tuple[float, ...]:
 def main() -> int:
     import argparse
 
+    global L_EFF_M
+
     parser = argparse.ArgumentParser(
         description=(
             "Solver-works demo with deck OCP shift applied "
@@ -627,7 +652,24 @@ def main() -> int:
         "--out-name", default="solver_demo_slide15_ocp_shifted_cs",
         help="Subdirectory name under StudyResults/.",
     )
+    parser.add_argument(
+        "--l-eff-um", type=float, default=L_EFF_M * 1e6,
+        help=(
+            "Diffusion-film thickness in microns (default 100). "
+            "Phase 7: 15.4 = O2 Levich-equivalent at 1600 rpm. Feeds both "
+            "l_eff_m and domain_height_hat so mesh y-extent stays consistent."
+        ),
+    )
+    parser.add_argument(
+        "--enable-water-ionization", action="store_true",
+        help=(
+            "Phase 6α proton condition E = c_H - c_OH with Kw fast "
+            "equilibrium; anchor ramps Kw via a 5-rung kw_eff_ladder."
+        ),
+    )
     args = parser.parse_args()
+
+    L_EFF_M = float(args.l_eff_um) * 1e-6
 
     factors_to_run: tuple[float, ...] = tuple(args.factors)
     out_dir = Path(_ROOT) / "StudyResults" / args.out_name
@@ -671,7 +713,10 @@ def main() -> int:
     sweep_t0 = time.time()
     summary_per_factor: list[dict] = []
     for factor in factors_to_run:
-        report = _run_one_factor(factor, mesh=mesh)
+        report = _run_one_factor(
+            factor, mesh=mesh,
+            enable_water_ionization=bool(args.enable_water_ionization),
+        )
         out_subdir = out_dir / _factor_label(factor)
         out_subdir.mkdir(parents=True, exist_ok=True)
         with open(out_subdir / "iv_curve.json", "w") as f:
@@ -698,6 +743,8 @@ def main() -> int:
             "pH": PH_DECK,
             "V_OCP_RHE": V_OCP_RHE,
         },
+        "l_eff_um": float(L_EFF_M * 1e6),
+        "enable_water_ionization": bool(args.enable_water_ionization),
         "per_factor": summary_per_factor,
         "wall_seconds": float(sweep_wall),
         "config": _config_dict(0.0),
