@@ -1,0 +1,867 @@
+{
+  "v_rhe": [
+    -1.303,
+    -1.2238,
+    -1.1447,
+    -1.0655,
+    -0.9863,
+    -0.9072,
+    -0.828,
+    -0.7488,
+    -0.6697,
+    -0.5905,
+    -0.5113,
+    -0.4322,
+    -0.353
+  ],
+  "v_rhe_deck": [
+    -0.4,
+    -0.3208,
+    -0.2417,
+    -0.1625,
+    -0.0833,
+    -0.0042,
+    0.075,
+    0.1542,
+    0.2333,
+    0.3125,
+    0.3917,
+    0.4708,
+    0.55
+  ],
+  "cd_mA_cm2": [
+    -5.713735296134223,
+    -5.70998028922327,
+    -5.644074569921554,
+    -5.060408545584878,
+    -3.8540336223740392,
+    -2.2442623671729343,
+    -0.978202556533244,
+    -0.6650393221805692,
+    -0.5986903925949507,
+    -0.5859613133524656,
+    -0.5835156626297946,
+    -0.5814117820465227,
+    -0.5719563784253956
+  ],
+  "pc_mA_cm2": [
+    -0.000212969478177254,
+    -0.00396862470250003,
+    -0.06986268780184884,
+    -0.6525859882837063,
+    -1.7668117390340146,
+    -1.2331115458192587,
+    -0.13266768999700773,
+    -0.0321951256719907,
+    -0.014448081600679284,
+    -0.007076413020348641,
+    -0.003509857416298363,
+    -0.0017509117132716218,
+    -0.0008735426898626533
+  ],
+  "surface_pH": [
+    9.060706605889605,
+    9.14403210616742,
+    9.223791671029964,
+    9.258369445311086,
+    9.212541274527833,
+    9.012160281917996,
+    8.4867939924786,
+    7.907572810804828,
+    7.3023429623382405,
+    6.691523506875843,
+    6.0843583257303,
+    5.484429464561474,
+    4.892847479325177
+  ],
+  "surface_pOH": [
+    4.939293394110396,
+    4.85596789383258,
+    4.7762083289700366,
+    4.741630554688915,
+    4.787458725472167,
+    4.987839718082004,
+    5.5132060075214016,
+    6.092427189195172,
+    6.6976570376617595,
+    7.308476493124157,
+    7.9156416742697,
+    8.515570535438526,
+    9.107152520674823
+  ],
+  "ph_poh_minus_pkw": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "per_reaction": [
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -1.4528891708471087e-05,
+        "current_mA_cm2": -1.4528891708471087e-05,
+        "cathodic_mA_cm2": -1.4528891708471116e-05,
+        "anodic_mA_cm2": -3.2616406802744175e-20
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.00019844058646878207,
+        "current_mA_cm2": -0.00019844058646878207,
+        "cathodic_mA_cm2": -0.00019844058646878207,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -2.8567611633280228,
+        "current_mA_cm2": -5.7135223266560455,
+        "cathodic_mA_cm2": -2.8567611633280228,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ],
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.00018925297430180717,
+        "current_mA_cm2": -0.00018925297430180717,
+        "cathodic_mA_cm2": -0.00018925297430181002,
+        "anodic_mA_cm2": -2.8214114869391135e-18
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.0037793717281982167,
+        "current_mA_cm2": -0.0037793717281982167,
+        "cathodic_mA_cm2": -0.0037793717281982167,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -2.8530058322603993,
+        "current_mA_cm2": -5.7060116645207986,
+        "cathodic_mA_cm2": -2.8530058322603993,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ],
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.0023528007102187904,
+        "current_mA_cm2": -0.0023528007102187904,
+        "cathodic_mA_cm2": -0.0023528007102192245,
+        "anodic_mA_cm2": -4.340084228822848e-16
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.06750988709162975,
+        "current_mA_cm2": -0.06750988709162975,
+        "cathodic_mA_cm2": -0.06750988709162975,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -2.787105941059855,
+        "current_mA_cm2": -5.57421188211971,
+        "cathodic_mA_cm2": -2.787105941059855,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ],
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.019107168892877398,
+        "current_mA_cm2": -0.019107168892877398,
+        "cathodic_mA_cm2": -0.01910716889291455,
+        "anodic_mA_cm2": -3.714950728836732e-14
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.633478819390829,
+        "current_mA_cm2": -0.633478819390829,
+        "cathodic_mA_cm2": -0.633478819390829,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -2.2039112786505863,
+        "current_mA_cm2": -4.407822557301173,
+        "cathodic_mA_cm2": -2.2039112786505863,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ],
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.06390289582151633,
+        "current_mA_cm2": -0.06390289582151633,
+        "cathodic_mA_cm2": -0.06390289582243176,
+        "anodic_mA_cm2": -9.1543274044471e-13
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -1.7029088432124937,
+        "current_mA_cm2": -1.7029088432124937,
+        "cathodic_mA_cm2": -1.7029088432124937,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -1.0436109416700108,
+        "current_mA_cm2": -2.0872218833400216,
+        "cathodic_mA_cm2": -1.0436109416700108,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ],
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.10643081569176431,
+        "current_mA_cm2": -0.10643081569176431,
+        "cathodic_mA_cm2": -0.10643081569749879,
+        "anodic_mA_cm2": -5.734469742341248e-12
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -1.126680730127494,
+        "current_mA_cm2": -1.126680730127494,
+        "cathodic_mA_cm2": -1.126680730127494,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -0.5055754106768384,
+        "current_mA_cm2": -1.0111508213536768,
+        "cathodic_mA_cm2": -0.5055754106768384,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ],
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.06830219916851205,
+        "current_mA_cm2": -0.06830219916851205,
+        "cathodic_mA_cm2": -0.06830219917400643,
+        "anodic_mA_cm2": -5.494389741834248e-12
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.06436549082849566,
+        "current_mA_cm2": -0.06436549082849566,
+        "cathodic_mA_cm2": -0.06436549082849566,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -0.4227674332681186,
+        "current_mA_cm2": -0.8455348665362372,
+        "cathodic_mA_cm2": -0.4227674332681186,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ],
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.0302186131565178,
+        "current_mA_cm2": -0.0302186131565178,
+        "cathodic_mA_cm2": -0.030218613168272988,
+        "anodic_mA_cm2": -1.175518679784642e-11
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.0019765125154728898,
+        "current_mA_cm2": -0.0019765125154728898,
+        "cathodic_mA_cm2": -0.0019765125154728898,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -0.3164220982542899,
+        "current_mA_cm2": -0.6328441965085798,
+        "cathodic_mA_cm2": -0.3164220982542899,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ],
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.01439011498229547,
+        "current_mA_cm2": -0.01439011498229547,
+        "cathodic_mA_cm2": -0.01439011502808367,
+        "anodic_mA_cm2": -4.5788203303579964e-11
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -5.796661838381417e-05,
+        "current_mA_cm2": -5.796661838381417e-05,
+        "cathodic_mA_cm2": -5.796661838381417e-05,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -0.292121155497136,
+        "current_mA_cm2": -0.584242310994272,
+        "cathodic_mA_cm2": -0.292121155497136,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ],
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.007074702543606938,
+        "current_mA_cm2": -0.007074702543606938,
+        "cathodic_mA_cm2": -0.007074702736643806,
+        "anodic_mA_cm2": -1.9303686812637002e-10
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -1.7104767417084317e-06,
+        "current_mA_cm2": -1.7104767417084317e-06,
+        "cathodic_mA_cm2": -1.7104767417084317e-06,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -0.28944245016605946,
+        "current_mA_cm2": -0.5788849003321189,
+        "cathodic_mA_cm2": -0.28944245016605946,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ],
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.0035098056188975425,
+        "current_mA_cm2": -0.0035098056188975425,
+        "cathodic_mA_cm2": -0.003509806437905642,
+        "anodic_mA_cm2": -8.190080995786988e-10
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -5.179740081938214e-08,
+        "current_mA_cm2": -5.179740081938214e-08,
+        "cathodic_mA_cm2": -5.179740081938214e-08,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -0.29000290260674866,
+        "current_mA_cm2": -0.5800058052134973,
+        "cathodic_mA_cm2": -0.29000290260674866,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ],
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.0017509100825361778,
+        "current_mA_cm2": -0.0017509100825361778,
+        "cathodic_mA_cm2": -0.001750913581904909,
+        "anodic_mA_cm2": -3.499368731190452e-09
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -1.6307354436596996e-09,
+        "current_mA_cm2": -1.6307354436596996e-09,
+        "cathodic_mA_cm2": -1.6307354436596996e-09,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -0.2898304351666263,
+        "current_mA_cm2": -0.5796608703332526,
+        "cathodic_mA_cm2": -0.2898304351666263,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ],
+    [
+      {
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -0.0008735426365048158,
+        "current_mA_cm2": -0.0008735426365048158,
+        "cathodic_mA_cm2": -0.0008735579689237619,
+        "anodic_mA_cm2": -1.533241894608342e-08
+      },
+      {
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "n_electrons": 2,
+        "rate_2e_units_mA_cm2": -5.335783740706894e-11,
+        "current_mA_cm2": -5.335783740706894e-11,
+        "cathodic_mA_cm2": -5.335783740706894e-11,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": -0.28554141786776677,
+        "current_mA_cm2": -0.5710828357355335,
+        "cathodic_mA_cm2": -0.28554141786776677,
+        "anodic_mA_cm2": 0.0
+      },
+      {
+        "label": "R4e_water",
+        "proton_donor": "water",
+        "n_electrons": 4,
+        "rate_2e_units_mA_cm2": 0.0,
+        "current_mA_cm2": 0.0,
+        "cathodic_mA_cm2": 0.0,
+        "anodic_mA_cm2": 0.0
+      }
+    ]
+  ],
+  "ledger": [
+    {
+      "electron_consistency_residual_mA_cm2": 0.0,
+      "e_sink_acid_mA_cm2": -5.713536855547754,
+      "e_sink_water_mA_cm2": -0.00019844058646878207,
+      "o2_consumption_2e_units_mA_cm2": -2.8569741328062,
+      "anodic_share_2e": 5.708421043728025e-21
+    },
+    {
+      "electron_consistency_residual_mA_cm2": 2.842170943040401e-14,
+      "e_sink_acid_mA_cm2": -5.7062009174951,
+      "e_sink_water_mA_cm2": -0.0037793717281982167,
+      "o2_consumption_2e_units_mA_cm2": -2.856974456962899,
+      "anodic_share_2e": 4.941193041005945e-19
+    },
+    {
+      "electron_consistency_residual_mA_cm2": 4.440892098500626e-15,
+      "e_sink_acid_mA_cm2": -5.576564682829929,
+      "e_sink_water_mA_cm2": -0.06750988709162975,
+      "o2_consumption_2e_units_mA_cm2": -2.8569686288617033,
+      "anodic_share_2e": 7.689629495598903e-17
+    },
+    {
+      "electron_consistency_residual_mA_cm2": 8.881784197001252e-16,
+      "e_sink_acid_mA_cm2": -4.42692972619405,
+      "e_sink_water_mA_cm2": -0.633478819390829,
+      "o2_consumption_2e_units_mA_cm2": -2.8564972669342925,
+      "anodic_share_2e": 7.34120712857851e-15
+    },
+    {
+      "electron_consistency_residual_mA_cm2": -7.549516567451064e-15,
+      "e_sink_acid_mA_cm2": -2.1511247791615378,
+      "e_sink_water_mA_cm2": -1.7029088432124937,
+      "o2_consumption_2e_units_mA_cm2": -2.8104226807040207,
+      "anodic_share_2e": 2.3752588330581665e-13
+    },
+    {
+      "electron_consistency_residual_mA_cm2": 8.881784197001252e-16,
+      "e_sink_acid_mA_cm2": -1.1175816370454412,
+      "e_sink_water_mA_cm2": -1.126680730127494,
+      "o2_consumption_2e_units_mA_cm2": -1.7386869564960967,
+      "anodic_share_2e": 2.555169050740212e-12
+    },
+    {
+      "electron_consistency_residual_mA_cm2": 9.992007221626409e-16,
+      "e_sink_acid_mA_cm2": -0.9138370657047492,
+      "e_sink_water_mA_cm2": -0.06436549082849566,
+      "o2_consumption_2e_units_mA_cm2": -0.5554351232651263,
+      "anodic_share_2e": 5.616822104111443e-12
+    },
+    {
+      "electron_consistency_residual_mA_cm2": 1.3322676295501878e-15,
+      "e_sink_acid_mA_cm2": -0.6630628096650976,
+      "e_sink_water_mA_cm2": -0.0019765125154728898,
+      "o2_consumption_2e_units_mA_cm2": -0.3486172239262806,
+      "anodic_share_2e": 1.767592743133269e-11
+    },
+    {
+      "electron_consistency_residual_mA_cm2": 5.551115123125783e-16,
+      "e_sink_acid_mA_cm2": -0.5986324259765675,
+      "e_sink_water_mA_cm2": -5.796661838381417e-05,
+      "o2_consumption_2e_units_mA_cm2": -0.3065692370978153,
+      "anodic_share_2e": 7.648060478324458e-11
+    },
+    {
+      "electron_consistency_residual_mA_cm2": 1.9984014443252818e-15,
+      "e_sink_acid_mA_cm2": -0.5859596028757259,
+      "e_sink_water_mA_cm2": -1.7104767417084317e-06,
+      "o2_consumption_2e_units_mA_cm2": -0.29651886318640813,
+      "anodic_share_2e": 3.294361995025687e-10
+    },
+    {
+      "electron_consistency_residual_mA_cm2": 1.1102230246251565e-15,
+      "e_sink_acid_mA_cm2": -0.5835156108323949,
+      "e_sink_water_mA_cm2": -5.179740081938214e-08,
+      "o2_consumption_2e_units_mA_cm2": -0.293512760023047,
+      "anodic_share_2e": 1.4035751772070425e-09
+    },
+    {
+      "electron_consistency_residual_mA_cm2": 1.5543122344752192e-15,
+      "e_sink_acid_mA_cm2": -0.5814117804157888,
+      "e_sink_water_mA_cm2": -1.6307354436596996e-09,
+      "o2_consumption_2e_units_mA_cm2": -0.29158134687989795,
+      "anodic_share_2e": 6.0187440971233085e-09
+    },
+    {
+      "electron_consistency_residual_mA_cm2": 5.551115123125783e-16,
+      "e_sink_acid_mA_cm2": -0.5719563783720384,
+      "e_sink_water_mA_cm2": -5.335783740706894e-11,
+      "o2_consumption_2e_units_mA_cm2": -0.28641496055762944,
+      "anodic_share_2e": 2.6806972567197866e-08
+    }
+  ],
+  "converged": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "n_converged": 13,
+  "n_total": 13,
+  "anchor_converged": true,
+  "anchor_wall_seconds": 24.649168729782104,
+  "anchor_ladder_history": [
+    [
+      1e-12,
+      "ok"
+    ],
+    [
+      1e-09,
+      "ok"
+    ],
+    [
+      1e-06,
+      "ok"
+    ],
+    [
+      0.001,
+      "ok"
+    ],
+    [
+      1.0,
+      "ok"
+    ]
+  ],
+  "grid_wall_seconds": 416.4727919101715,
+  "config": {
+    "driver": "solver_demo_slide15_dual_pathway_cs",
+    "routes": "acid,water",
+    "k0_water_2e_factor": 1e-09,
+    "k0_water_4e_factor": 0.0,
+    "k0_acid_4e_factor": 1e-15,
+    "alpha_water_2e": null,
+    "alpha_water_4e": null,
+    "l_eff_um": 15.4,
+    "bulk_h_mol_m3": 0.1,
+    "enable_water_ionization": true,
+    "coarse_grid": true,
+    "ocp_shift": {
+      "pH": 4.0,
+      "V_OCP_RHE": 0.903,
+      "applied_to": [
+        "V_RHE",
+        "all reaction E_eq_v"
+      ]
+    },
+    "anchor": {
+      "v_rhe_solver": 0.0,
+      "initializer": "linear_phi",
+      "kw_eff_ladder": null,
+      "max_inserts_per_step": 6
+    },
+    "stern": {
+      "anchor_f_m2": 0.1,
+      "final_f_m2": 0.2
+    },
+    "mesh": {
+      "Nx": 8,
+      "Ny": 80,
+      "beta": 3.0
+    },
+    "exponent_clip": 100.0,
+    "u_clamp": 100.0,
+    "formulation": "logc_muh",
+    "reactions": [
+      {
+        "k0": 0.0012631578947368421,
+        "alpha": 0.627,
+        "cathodic_species": 0,
+        "anodic_species": 1,
+        "c_ref": 1.0,
+        "stoichiometry": [
+          -1,
+          1,
+          -2
+        ],
+        "n_electrons": 2,
+        "reversible": true,
+        "E_eq_v": -0.20800000000000007,
+        "cathodic_conc_factors": [
+          {
+            "species": 2,
+            "power": 2,
+            "c_ref_nondim": 0.08333333333333334
+          }
+        ],
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "produces_h2o2": true
+      },
+      {
+        "k0": 1.2631578947368423e-12,
+        "alpha": 0.627,
+        "cathodic_species": 0,
+        "anodic_species": null,
+        "c_ref": 0.0,
+        "stoichiometry": [
+          -1,
+          1,
+          -2
+        ],
+        "n_electrons": 2,
+        "reversible": false,
+        "E_eq_v": -0.20800000000000007,
+        "cathodic_conc_factors": [],
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "produces_h2o2": true
+      },
+      {
+        "k0": 1.2631578947368422e-18,
+        "alpha": 0.5,
+        "cathodic_species": 0,
+        "anodic_species": null,
+        "c_ref": 0.0,
+        "stoichiometry": [
+          -1,
+          0,
+          -4
+        ],
+        "n_electrons": 4,
+        "reversible": false,
+        "E_eq_v": 0.32699999999999996,
+        "cathodic_conc_factors": [
+          {
+            "species": 2,
+            "power": 4,
+            "c_ref_nondim": 0.08333333333333334
+          }
+        ],
+        "label": "R4e_acid",
+        "proton_donor": "hydronium"
+      },
+      {
+        "k0": 0.0,
+        "alpha": 0.5,
+        "cathodic_species": 0,
+        "anodic_species": null,
+        "c_ref": 0.0,
+        "stoichiometry": [
+          -1,
+          0,
+          -4
+        ],
+        "n_electrons": 4,
+        "reversible": false,
+        "E_eq_v": 0.32699999999999996,
+        "cathodic_conc_factors": [],
+        "label": "R4e_water",
+        "proton_donor": "water"
+      }
+    ],
+    "v_grid_n": 13
+  },
+  "wall_seconds": 442.06002283096313
+}
