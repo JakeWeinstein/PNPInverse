@@ -521,6 +521,66 @@ def _get_bv_reactions_cfg(params: Any, n_species: int) -> list[dict] | None:
         n_e = int(rxn.get("n_electrons", 2))
         if n_e <= 0:
             raise ValueError(f"Reaction {j}: n_electrons must be positive; got {n_e}")
+
+        reversible = _bool(rxn.get("reversible", True))
+
+        # Phase 7 (v11): water-as-proton-donor route marker.  "water"
+        # selects the alkaline-route rate law shape: no H+ concentration
+        # factor (water activity == 1) and cathodic-only (the anodic
+        # branch has no product-activity support, so a reversible water
+        # route would be thermodynamically inconsistent).  The
+        # stoichiometry is unchanged: with the proton-condition variable
+        # E = c_H - c_OH, producing m OH- is algebraically identical to
+        # consuming m H+ (both lower E by m per event).
+        proton_donor = str(rxn.get("proton_donor", "hydronium")).strip().lower()
+        if proton_donor not in ("hydronium", "water"):
+            raise ValueError(
+                f"Reaction {j}: proton_donor must be 'hydronium' or "
+                f"'water'; got {rxn.get('proton_donor')!r}"
+            )
+        if proton_donor == "water":
+            if cat_conc_factors:
+                raise ValueError(
+                    f"Reaction {j}: proton_donor='water' forbids "
+                    "cathodic_conc_factors (water activity == 1 in v11)"
+                )
+            if reversible:
+                raise ValueError(
+                    f"Reaction {j}: proton_donor='water' requires "
+                    "reversible=False (no product-activity support in the "
+                    "anodic branch)"
+                )
+
+        # Role flags for index-stable observable resolution.  Validated
+        # against the stoichiometry so a mislabeled flag cannot silently
+        # corrupt the peroxide observable.  h2o2_species defaults to 1
+        # (production-stack convention: species = [O2, H2O2, H+]).
+        label = str(rxn.get("label", f"reaction_{j}"))
+        produces_h2o2 = _bool(rxn.get("produces_h2o2", False))
+        consumes_h2o2 = _bool(rxn.get("consumes_h2o2", False))
+        if produces_h2o2 and consumes_h2o2:
+            raise ValueError(
+                f"Reaction {j} ('{label}'): produces_h2o2 and "
+                "consumes_h2o2 cannot both be True"
+            )
+        h2o2_idx = int(rxn.get("h2o2_species", 1))
+        if produces_h2o2 or consumes_h2o2:
+            if h2o2_idx < 0 or h2o2_idx >= n_species:
+                raise ValueError(
+                    f"Reaction {j} ('{label}'): h2o2_species {h2o2_idx} "
+                    f"out of range [0, {n_species})"
+                )
+            if produces_h2o2 and int(stoi[h2o2_idx]) <= 0:
+                raise ValueError(
+                    f"Reaction {j} ('{label}'): produces_h2o2=True but "
+                    f"stoichiometry[{h2o2_idx}] = {stoi[h2o2_idx]} is not > 0"
+                )
+            if consumes_h2o2 and int(stoi[h2o2_idx]) >= 0:
+                raise ValueError(
+                    f"Reaction {j} ('{label}'): consumes_h2o2=True but "
+                    f"stoichiometry[{h2o2_idx}] = {stoi[h2o2_idx]} is not < 0"
+                )
+
         reactions.append({
             "k0": float(rxn.get("k0", 1e-5)),
             "alpha": alpha_val,
@@ -529,8 +589,47 @@ def _get_bv_reactions_cfg(params: Any, n_species: int) -> list[dict] | None:
             "c_ref": float(rxn.get("c_ref", 1.0)),
             "stoichiometry": [int(s) for s in stoi],
             "n_electrons": n_e,
-            "reversible": _bool(rxn.get("reversible", True)),
+            "reversible": reversible,
             "cathodic_conc_factors": cat_conc_factors,
             "E_eq_v": float(rxn.get("E_eq_v", 0.0)),
+            "proton_donor": proton_donor,
+            "label": label,
+            "produces_h2o2": produces_h2o2,
+            "consumes_h2o2": consumes_h2o2,
         })
     return reactions
+
+
+def _validate_reactions_vs_convergence(
+    reactions_cfg: list[dict] | None, conv_cfg: dict | None
+) -> None:
+    """Cross-config validation shared by BOTH form backends.
+
+    Lives here (NOT only in dispatch) because ``anchor_continuation``
+    and several tests call ``build_forms_logc`` /
+    ``build_forms_logc_muh`` directly — every entry path must hit this
+    check.
+
+    Rule: an ACTIVE water route (``proton_donor='water'`` and k0 > 0)
+    requires ``enable_water_ionization=True``.  Its stoichiometry sinks
+    proton-equivalents that only the proton-condition variable
+    E = c_H − c_OH can source from water; without it the same
+    stoichiometry would wrongly drain the finite c_H pool.  Inactive
+    (k0 == 0) water entries are allowed so ablation/provenance configs
+    do not force the Kw closure on.
+    """
+    if not reactions_cfg:
+        return
+    water_on = bool((conv_cfg or {}).get("enable_water_ionization", False))
+    for j, rxn in enumerate(reactions_cfg):
+        if (
+            rxn.get("proton_donor", "hydronium") == "water"
+            and float(rxn.get("k0", 0.0)) > 0.0
+            and not water_on
+        ):
+            raise ValueError(
+                f"Reaction {j} ('{rxn.get('label', f'reaction_{j}')}'): "
+                "active water-route reaction (proton_donor='water', k0>0) "
+                "requires enable_water_ionization=True in bv_convergence; "
+                "enable it or disable the reaction (k0=0)."
+            )

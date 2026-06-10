@@ -911,6 +911,78 @@ PARALLEL_2E_4E_REACTIONS: List[Dict[str, Any]] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Phase 7 (v11): dual-pathway preset — acid + water-as-proton-donor routes
+# ---------------------------------------------------------------------------
+#
+# At bulk pH 4 the deck currents (~3 mA/cm²) exceed the bulk-H⁺ Levich
+# supply by >30×; the reaction must proceed with WATER as the proton
+# donor (alkaline-route ORR), producing OH⁻ and driving the local-pH
+# excursion Ruggiero 2022 measures (pH 4 → ~8-9 under load).  The water
+# routes are EMPIRICAL cathodic Tafel branches: rate = k0·c_O₂·exp(−αnη)
+# with NO c_H factor (water activity ≡ 1) and reversible=False (the
+# anodic branch carries no product-activity support, so a reversible
+# water route would be thermodynamically inconsistent).  E_eq on the
+# water entries is a FORMAL onset/reference parameter (kept at the acid
+# values for η-bookkeeping continuity) — do NOT read thermodynamic
+# claims into it.  Stoichiometry is identical to the acid routes: with
+# the proton-condition variable E = c_H − c_OH (requires
+# enable_water_ionization=True; validated at form build), producing m
+# OH⁻ ≡ consuming m H⁺.
+#
+# k0/alpha water constants initialize at the acid values — they are the
+# free parameters of the Phase 7 slide-15 fit (scripts/studies/
+# solver_demo_slide15_dual_pathway_cs.py applies CLI factors on top).
+
+K0_HAT_R2E_WATER: float = float(K0_HAT_R2E)
+K0_HAT_R4E_WATER: float = float(K0_HAT_R4E)
+ALPHA_R2E_WATER: float = float(ALPHA_R2E)
+ALPHA_R4E_WATER: float = float(ALPHA_R4E)
+
+PARALLEL_2E_4E_DUAL_PATHWAY: List[Dict[str, Any]] = [
+    {
+        **PARALLEL_2E_4E_REACTIONS[0],
+        "label": "R2e_acid",
+        "proton_donor": "hydronium",
+        "produces_h2o2": True,
+    },
+    {
+        "k0": K0_HAT_R2E_WATER,
+        "alpha": ALPHA_R2E_WATER,
+        "cathodic_species": 0,           # O₂
+        "anodic_species": None,
+        "c_ref": 0.0,
+        "stoichiometry": [-1, +1, -2],   # OH⁻ production ≡ H⁺ consumption on E
+        "n_electrons": 2,
+        "reversible": False,
+        "E_eq_v": E_EQ_R2E_V,            # formal onset parameter (see above)
+        "cathodic_conc_factors": [],     # water activity ≡ 1
+        "label": "R2e_water",
+        "proton_donor": "water",
+        "produces_h2o2": True,
+    },
+    {
+        **PARALLEL_2E_4E_REACTIONS[1],
+        "label": "R4e_acid",
+        "proton_donor": "hydronium",
+    },
+    {
+        "k0": K0_HAT_R4E_WATER,
+        "alpha": ALPHA_R4E_WATER,
+        "cathodic_species": 0,           # O₂
+        "anodic_species": None,
+        "c_ref": 0.0,
+        "stoichiometry": [-1,  0, -4],
+        "n_electrons": 4,
+        "reversible": False,
+        "E_eq_v": E_EQ_R4E_V,            # formal onset parameter (see above)
+        "cathodic_conc_factors": [],
+        "label": "R4e_water",
+        "proton_donor": "water",
+    },
+]
+
+
 # 4-species variant of PARALLEL_2E_4E_REACTIONS for the K2SO4 stack
 # (FOUR_SPECIES_LOGC_DYNAMIC_K2SO4 = O₂, H₂O₂, H⁺, K⁺).  K⁺ is inert
 # in both R_2e and R_4e — same stoichiometry padding pattern as the

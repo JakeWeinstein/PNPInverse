@@ -64,12 +64,34 @@ def _get_reaction_n_electrons(ctx: Dict[str, Any]) -> Optional[List[float]]:
     return out
 
 
+def _get_reaction_role_indices(ctx: Dict[str, Any], role_key: str) -> Optional[List[int]]:
+    """Indices of reactions whose parsed dict sets ``role_key`` True.
+
+    Reads ``ctx["nondim"]["bv_reactions"]`` (same source as
+    :func:`_get_reaction_n_electrons`).  Returns None when the scaled
+    reactions list is unavailable; returns [] when the list exists but
+    no reaction carries the role (caller decides how to handle).
+
+    Phase 7 (v11): role-based resolution makes peroxide observables
+    stable under reaction-list edits (R3 insertion, ablation by
+    omission) — raw indices silently re-meaning is exactly the bug
+    class this avoids.
+    """
+    nondim = ctx.get("nondim", {})
+    reactions = nondim.get("bv_reactions") if isinstance(nondim, dict) else None
+    if not reactions:
+        return None
+    return [j for j, rxn in enumerate(reactions) if bool(rxn.get(role_key, False))]
+
+
 def _build_bv_observable_form(
     ctx: Dict[str, object],
     *,
     mode: str,
     reaction_index: Optional[int],
     scale: float,
+    reaction_indices: Optional[List[int]] = None,
+    electron_weighted: bool = False,
 ) -> object:
     """Build scalar UFL observable from BV reaction rate expressions.
 
@@ -154,12 +176,63 @@ def _build_bv_observable_form(
             raise ValueError(
                 f"reaction_index {idx} out of bounds for {len(bv_rate_exprs)} reactions."
             )
-        return scale_const * bv_rate_exprs[idx] * ds(electrode_marker)
+        expr = bv_rate_exprs[idx]
+        if electron_weighted:
+            n_e_list = _get_reaction_n_electrons(ctx)
+            if n_e_list is None or len(n_e_list) != len(bv_rate_exprs):
+                raise ValueError(
+                    "electron_weighted=True requires per-reaction n_electrons "
+                    "in ctx['nondim']['bv_reactions']."
+                )
+            expr = fd.Constant(float(n_e_list[idx]) / float(N_ELECTRONS_REF)) * expr
+        return scale_const * expr * ds(electrode_marker)
+
+    elif mode_norm == "reaction_sum":
+        # Phase 7 (v11): sum over an explicit index list, or — default —
+        # over reactions flagged ``produces_h2o2`` (role-based, stable
+        # under reaction-list edits).  With ``electron_weighted=True``
+        # each term carries n_e_j/N_ELECTRONS_REF so summing ALL
+        # reactions reproduces ``current_density``.
+        if reaction_indices is None:
+            reaction_indices = _get_reaction_role_indices(ctx, "produces_h2o2")
+            if reaction_indices is None:
+                raise ValueError(
+                    "reaction_sum role resolution needs "
+                    "ctx['nondim']['bv_reactions']; pass reaction_indices "
+                    "explicitly for legacy contexts."
+                )
+            if not reaction_indices:
+                raise ValueError(
+                    "reaction_sum: no reaction carries produces_h2o2=True "
+                    "and no explicit reaction_indices given."
+                )
+        idxs = [int(i) for i in reaction_indices]
+        for idx in idxs:
+            if idx < 0 or idx >= len(bv_rate_exprs):
+                raise ValueError(
+                    f"reaction_sum index {idx} out of bounds for "
+                    f"{len(bv_rate_exprs)} reactions."
+                )
+        if electron_weighted:
+            n_e_list = _get_reaction_n_electrons(ctx)
+            if n_e_list is None or len(n_e_list) != len(bv_rate_exprs):
+                raise ValueError(
+                    "electron_weighted=True requires per-reaction n_electrons "
+                    "in ctx['nondim']['bv_reactions']."
+                )
+            weights = [float(n_e_list[i]) / float(N_ELECTRONS_REF) for i in idxs]
+        else:
+            weights = [1.0] * len(idxs)
+        rate_sum = 0
+        for w, idx in zip(weights, idxs):
+            rate_sum = rate_sum + fd.Constant(w) * bv_rate_exprs[idx]
+        return scale_const * rate_sum * ds(electrode_marker)
 
     else:
         raise ValueError(
             f"Unknown BV observable mode '{mode}'. "
-            "Use 'current_density', 'gross_h2o2_current', 'peroxide_current', or 'reaction'."
+            "Use 'current_density', 'gross_h2o2_current', 'peroxide_current', "
+            "'reaction', or 'reaction_sum'."
         )
 
 

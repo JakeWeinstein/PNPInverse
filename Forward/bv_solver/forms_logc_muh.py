@@ -66,6 +66,7 @@ from .config import (
     _get_bv_reactions_cfg,
     _get_bv_boltzmann_counterions_cfg,
     _get_species_roles,
+    _validate_reactions_vs_convergence,
 )
 from .nondim import _add_bv_scaling_to_transform, _add_bv_reactions_scaling_to_transform
 from .boltzmann import (
@@ -193,6 +194,7 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
     bv_cfg = _get_bv_cfg(params, n)
     conv_cfg = _get_bv_convergence_cfg(params)
     reactions_cfg = _get_bv_reactions_cfg(params, n)
+    _validate_reactions_vs_convergence(reactions_cfg, conv_cfg)
     use_reactions = reactions_cfg is not None
 
     # Nondimensionalization (same as forms_logc.py).
