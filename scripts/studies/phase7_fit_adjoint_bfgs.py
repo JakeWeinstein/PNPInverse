@@ -307,20 +307,28 @@ def main() -> int:
               flush=True)
         steps = {0: 0.02, 1: 0.02, 2: 0.005, 3: 0.005}
         results = {"x0": list(x0), "J0": J0, "grad_adjoint": list(map(float, g))}
-        comps = [int(c) for c in args.fd_components.split(",")]
-        for k in comps:
-            h = steps[k]
+        # entries: "k" (default step) or "k=h" (explicit step); a
+        # component may repeat with shrinking h for convergence checks.
+        comps = []
+        for tok in args.fd_components.split(","):
+            if "=" in tok:
+                kk, hh = tok.split("=")
+                comps.append((int(kk), float(hh)))
+            else:
+                comps.append((int(tok), None))
+        for k, h_override in comps:
+            h = h_override if h_override is not None else steps[k]
             xp, xm = x0.copy(), x0.copy()
             xp[k] += h; xm[k] -= h
             Jp, _, _ = fp.evaluate(xp, want_grad=False)
             Jm, _, _ = fp.evaluate(xm, want_grad=False)
             g_fd = (Jp - Jm) / (2 * h)
             rel = abs(g_fd - g[k]) / max(abs(g_fd), 1e-12)
-            print(f"  theta[{k}]: adjoint={g[k]:+.6e}  fd={g_fd:+.6e}  "
+            print(f"  theta[{k}] h={h:g}: adjoint={g[k]:+.6e}  fd={g_fd:+.6e}  "
                   f"rel_err={rel:.3e}", flush=True)
-            results[f"fd_{k}"] = {"h": h, "J_plus": Jp, "J_minus": Jm,
-                                  "g_fd": g_fd, "g_adjoint": float(g[k]),
-                                  "rel_err": rel}
+            results[f"fd_{k}_h{h:g}"] = {"h": h, "J_plus": Jp, "J_minus": Jm,
+                                         "g_fd": g_fd, "g_adjoint": float(g[k]),
+                                         "rel_err": rel}
         with open(out_dir / "fd_check.json", "w") as fh:
             json.dump(results, fh, indent=2)
         print(f"wrote {out_dir / 'fd_check.json'}", flush=True)
