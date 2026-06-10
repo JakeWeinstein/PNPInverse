@@ -315,27 +315,33 @@ def _capture_point(ctx, reactions) -> dict:
             rates_raw[j] for j, r in enumerate(reactions)
             if r["stoichiometry"][O2_SPECIES_INDEX] != 0
         ),
-        # 2e-channel anodic share (topology check: must stay < 1%).
-        "anodic_share_2e": _anodic_share(branches, reactions),
+        # 2e-channel anodic share vs |cd| (topology check: < 1%).
+        "anodic_share_2e": _anodic_share(branches, reactions, out["cd_mA_cm2"]),
     }
     out.update(surface_ph(ctx, h_species_index=H_SPECIES_INDEX,
                           c_scale_mol_m3=_C_SCALE))
     return out
 
 
-def _anodic_share(branches, reactions) -> float | None:
-    cat_tot, anod_tot = 0.0, 0.0
+def _anodic_share(branches, reactions, cd_mA_cm2: float) -> float | None:
+    """2e-channel anodic (H2O2 re-oxidation) magnitude relative to |cd|.
+
+    Denominator is the TOTAL current, not the 2e cathodic sum — when the
+    2e cathodic branch is kinetically dead the old ratio explodes to
+    meaningless values while the absolute anodic flux is negligible.
+    Topology gate: must stay < 1% of |cd|."""
+    anod_tot = 0.0
     for j, rxn in enumerate(reactions):
         if not rxn.get("produces_h2o2"):
             continue
         b = branches[j]
         if b["cathodic"] is None:
             return None
-        cat_tot += abs(b["cathodic"])
         anod_tot += abs(b["anodic"])
-    if cat_tot <= 0.0:
+    denom = abs(cd_mA_cm2)
+    if denom <= 1e-12:
         return None
-    return anod_tot / cat_tot
+    return anod_tot / denom
 
 
 # ---------------------------------------------------------------------------

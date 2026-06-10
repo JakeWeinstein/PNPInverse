@@ -218,7 +218,10 @@ def main() -> None:
         # robust scatter: MAD -> sigma, then floor
         mad = float(np.median(np.abs(j[sel] - jb)))
         sigma = max(1.4826 * mad, SIGMA_FLOOR_MA_CM2)
-        thresholded = bool(np.all(j[sel] == 0.0))
+        # SVG path values in the zeroed tail are -2e-5-ish (sub-pixel
+        # wiggle), not exact 0.0; flag bins entirely within half a line
+        # width of zero.
+        thresholded = bool(np.all(np.abs(j[sel]) < 0.003))
         rows.append((vb, jb, sigma, int(sel.sum()), int(thresholded)))
     with OUT_FIT.open("w") as fh:
         fh.write(header_common + "\n")
