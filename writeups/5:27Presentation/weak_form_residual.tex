@@ -1,0 +1,59 @@
+% Weak-form residual actually assembled by the production solver.
+% Source: Forward/bv_solver/forms_logc_muh.py  (build_forms_logc_muh, lines ~455-668)
+% Production stack: 3 dynamic species (O2, H2O2, H+) as logc_muh, analytic
+% Bikerman-Boltzmann counterions (K+/SO4^2-), parallel 2e/4e Butler-Volmer, Stern Robin.
+\documentclass[border=14pt,varwidth=18cm]{standalone}
+\usepackage{amsmath,amssymb}
+\newcommand{\dvol}{\,\mathrm{d}x}
+\newcommand{\dsurf}{\,\mathrm{d}s}
+\newcommand{\Gel}{\Gamma_{\mathrm{el}}}
+\begin{document}
+\small
+
+\noindent\textbf{Weak form.}\;
+Find $U=(u_{\mathrm{O_2}},\,u_{\mathrm{H_2O_2}},\,\mu_{\mathrm H},\,\phi)$ such that
+\[
+F(U;W)\;=\;\sum_{i}\mathcal{R}_i(U;v_i)\;+\;\mathcal{R}_\phi(U;w)\;=\;0
+\qquad\text{for all }W=(v_{\mathrm{O_2}},v_{\mathrm{H_2O_2}},v_{\mathrm H},w).
+\]
+
+\noindent\textbf{Species $i$ residual (Nernst--Planck):}
+\[
+\mathcal{R}_i=
+\underbrace{\int_\Omega \frac{c_i-c_i^{\,n-1}}{\Delta t}\,v_i\dvol}_{\text{transient}}
+\;+\;
+\underbrace{\int_\Omega D_i\,c_i\,\nabla\!\big(\mu_i+\mu_i^{\mathrm{st}}\big)\!\cdot\!\nabla v_i\dvol}_{\text{diffusion }+\text{ electromigration }+\text{ steric}}
+\;-\;
+\underbrace{\int_{\Gel}\sum_j s_{ij}\,R_j\,v_i\dsurf}_{\text{Butler--Volmer surface reaction}}
+\]
+
+\noindent\textbf{Potential residual (Poisson):}
+\[
+\mathcal{R}_\phi=
+\underbrace{\int_\Omega \varepsilon\,\nabla\phi\!\cdot\!\nabla w\dvol}_{\text{electrostatic field}}
+\;-\;
+\underbrace{\int_\Omega \rho(\mathbf{c},\phi)\,w\dvol}_{\text{space charge}}
+\;-\;
+\underbrace{\int_{\Gel} C_S\,(V_{\mathrm{app}}-\phi)\,w\dsurf}_{\text{Stern double layer (Robin)}}
+\]
+
+\noindent\textbf{Closures (the labeled pieces):}
+\begin{align*}
+\mu_i &= \underbrace{\ln c_i}_{\text{ideal}}+\underbrace{\tfrac{z_i F}{RT}\,\phi}_{\text{migration}}
+   && \text{proton carried as primary } \mu_{\mathrm H}=u_{\mathrm H}+\tfrac{z_{\mathrm H}F}{RT}\phi\\[2pt]
+\mu_i^{\mathrm{st}} &= -\ln\theta, &&
+   \theta=1-\sum_j a_j c_j-\!\!\sum_{\text{counterions}}\!\! a_b\,c_b(\phi)
+   \quad\text{(Bikerman finite size)}\\[2pt]
+R_j &= k^0_j\!\left[c_{\mathrm{cat}}\,e^{-\alpha_j n_j \eta_j}\!\!\prod_k\!\Big(\tfrac{c_k}{c_k^{\mathrm{ref}}}\Big)^{p_{jk}}
+   \!-c_{\mathrm{an}}\,e^{(1-\alpha_j) n_j \eta_j}\right]
+   && \eta_j=\dfrac{V_{\mathrm{app}}-\phi-E_j^{\circ}}{V_T},\quad |\eta_j|\le 100\\[2pt]
+\rho &= F\!\left[\sum_i z_i c_i+\!\!\sum_{\text{counterions}}\!\! z_b\,c_b(\phi)\right]
+   && c_i=e^{u_i},\quad c_{\mathrm H}=e^{\,\mu_{\mathrm H}-\frac{z_{\mathrm H}F}{RT}\phi}
+\end{align*}
+
+\noindent\textbf{Bulk Dirichlet:} $c_i=c_i^{\infty}$, $\phi=0$ on $\Gamma_{\mathrm{bulk}}$ (imposed strongly).
+
+\smallskip
+\footnotesize
+Assembled nondimensionally; $c_b(\phi)$ is the analytic Bikerman--Boltzmann counterion closure (enters the charge density and the packing fraction $\theta$ with no extra degrees of freedom). Optional water self-ionization and cation hydrolysis enter as additional volume / surface residual terms (off in the baseline).
+\end{document}

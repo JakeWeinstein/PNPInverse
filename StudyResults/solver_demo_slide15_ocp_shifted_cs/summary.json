@@ -1,0 +1,138 @@
+{
+  "factors": [
+    1e-18
+  ],
+  "anchor_v_rhe_solver": 0.0,
+  "anchor_v_rhe_deck": 0.903,
+  "v_rhe_grid_solver": [
+    -1.303,
+    -1.2634,
+    -1.2238,
+    -1.1842,
+    -1.1447,
+    -1.1051,
+    -1.0655,
+    -1.0259,
+    -0.9863,
+    -0.9467,
+    -0.9072,
+    -0.8676,
+    -0.828,
+    -0.7884,
+    -0.7488,
+    -0.7092,
+    -0.6697,
+    -0.6301,
+    -0.5905,
+    -0.5509,
+    -0.5113,
+    -0.4717,
+    -0.4322,
+    -0.3926,
+    -0.353
+  ],
+  "v_rhe_grid_deck": [
+    -0.4,
+    -0.3604,
+    -0.3208,
+    -0.2812,
+    -0.2417,
+    -0.2021,
+    -0.1625,
+    -0.1229,
+    -0.0833,
+    -0.0437,
+    -0.0042,
+    0.0354,
+    0.075,
+    0.1146,
+    0.1542,
+    0.1938,
+    0.2333,
+    0.2729,
+    0.3125,
+    0.3521,
+    0.3917,
+    0.4313,
+    0.4708,
+    0.5104,
+    0.55
+  ],
+  "stern_anchor_f_m2": 0.1,
+  "stern_final_f_m2": 0.2,
+  "stern_bump_ladder": [
+    0.2
+  ],
+  "ocp_shift": {
+    "pH": 4.0,
+    "V_OCP_RHE": 0.903
+  },
+  "per_factor": [
+    {
+      "factor": 1e-18,
+      "label": "factor_1e-18",
+      "anchor_converged": true,
+      "n_converged": 25,
+      "n_total": 25
+    }
+  ],
+  "wall_seconds": 556.9093477725983,
+  "config": {
+    "K0_R4e_factor": 0.0,
+    "K0_R2e_basis_m_s": 2.4e-08,
+    "alpha_R2e": 0.627,
+    "alpha_R4e": 0.5,
+    "E_eq_R2e_V_solver": -0.20800000000000007,
+    "E_eq_R4e_V_solver": 0.32699999999999996,
+    "E_eq_R2e_V_real_RHE": 0.695,
+    "E_eq_R4e_V_real_RHE": 1.23,
+    "n_electrons_R2e": 2,
+    "n_electrons_R4e": 4,
+    "stern_mode": "bump_ladder",
+    "stern_anchor_f_m2": 0.1,
+    "stern_final_f_m2": 0.2,
+    "l_eff_m": 0.0001,
+    "mesh_Nx": 8,
+    "mesh_Ny": 80,
+    "mesh_beta": 3.0,
+    "exponent_clip": 100.0,
+    "u_clamp": 100.0,
+    "n_substeps_warm": 8,
+    "bisect_depth_warm": 5,
+    "initializer": "debye_boltzmann",
+    "formulation": "logc_muh",
+    "v_rhe_grid_n": 25,
+    "v_rhe_grid_min_solver": -1.303,
+    "v_rhe_grid_max_solver": -0.353,
+    "v_rhe_grid_min_deck": -0.4,
+    "v_rhe_grid_max_deck": 0.55,
+    "anchor_v_rhe_solver": 0.0,
+    "anchor_v_rhe_deck": 0.903,
+    "counterions": [
+      "Cs+",
+      "SO4(2-)"
+    ],
+    "a_vals_hat_dynamic": {
+      "O2_r_A": 1.7,
+      "H2O2_r_A": 2.0,
+      "Hp_r_A_H3Op_Stokes": 2.8,
+      "O2_a_nondim": 1.487193648106637e-05,
+      "H2O2_a_nondim": 2.4216464858239555e-05,
+      "Hp_a_nondim": 6.644997957100934e-05
+    },
+    "enable_water_ionization": false,
+    "enable_cation_hydrolysis": false,
+    "lambda_hydrolysis": 0.0,
+    "ocp_shift": {
+      "pH": 4.0,
+      "V_OCP_RHE": 0.903,
+      "formula": "0.47 + 0.197 + 0.059*pH",
+      "applied_to": [
+        "V_RHE",
+        "E_eq_R2e",
+        "E_eq_R4e"
+      ],
+      "source": "project_deck_ocp_convention.md / Yash-Trends/Data and Plotting.zip cell 4"
+    }
+  }
+}

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pnpbv — API</title>
+<style>
+  :root{
+    --bg1:#0c1f44;       /* deep navy            */
+    --bg2:#081226;       /* darker navy          */
+    --card:rgba(11,26,56,.55);
+    --edge:rgba(120,160,255,.14);
+    --txt:#cdd9f0;       /* default code text    */
+    --com:#5f7299;       /* comments             */
+    --kw:#ff7b9c;        /* keywords  import/from*/
+    --cls:#ffd479;       /* class / constructor  */
+    --fn:#7aa2ff;        /* function / method    */
+    --str:#a9e08a;       /* strings              */
+    --num:#ffab70;       /* numbers              */
+    --arg:#5ad4d0;       /* keyword-arg names    */
+    --const:#c792ea;     /* True / None / consts */
+    --mod:#9bb0e0;       /* module / namespace   */
+    --op:#8595bf;        /* operators / punct.   */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:radial-gradient(1200px 700px at 20% -10%,#13306a 0%,transparent 60%),
+               linear-gradient(160deg,var(--bg1) 0%,var(--bg2) 100%);
+    color:var(--txt);
+    font-family:"JetBrains Mono","Fira Code",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    -webkit-font-smoothing:antialiased;
+    padding:48px clamp(20px,4vw,64px);
+    min-height:100%;
+  }
+  header{
+    max-width:1500px;margin:0 auto 30px;
+    font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  header h1{
+    margin:0;font-size:clamp(22px,2.6vw,34px);font-weight:700;letter-spacing:.5px;
+    color:#eaf1ff;
+  }
+  header h1 .accent{color:var(--cls)}
+  header p{margin:8px 0 0;color:#9fb2dd;font-size:clamp(13px,1.3vw,16px);font-weight:400}
+
+  .grid{
+    max-width:1500px;margin:0 auto;
+    display:grid;gap:26px;
+    grid-template-columns:repeat(auto-fit,minmax(440px,1fr));
+    align-items:start;
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--edge);
+    border-radius:16px;
+    box-shadow:0 24px 60px -24px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.04);
+    backdrop-filter:blur(6px);
+    overflow:hidden;
+  }
+  .card .bar{
+    display:flex;align-items:center;gap:10px;
+    padding:13px 18px;
+    border-bottom:1px solid var(--edge);
+    background:linear-gradient(180deg,rgba(255,255,255,.04),transparent);
+  }
+  .dot{width:12px;height:12px;border-radius:50%}
+  .dot.r{background:#ff6159}.dot.y{background:#ffbd2e}.dot.g{background:#28c93f}
+  .card .bar .tag{
+    margin-left:auto;font-family:ui-sans-serif,system-ui,sans-serif;
+    font-size:12.5px;font-weight:600;letter-spacing:.4px;color:#9fb2dd;
+  }
+  .card .bar .tag b{color:var(--cls);font-weight:700}
+  pre{
+    margin:0;padding:22px 24px 26px;
+    font-size:clamp(13px,1.15vw,15.5px);line-height:1.62;
+    overflow-x:auto;tab-size:2;
+  }
+  /* token colors */
+  .kw{color:var(--kw)} .cls{color:var(--cls);font-weight:600}
+  .fn{color:var(--fn)} .str{color:var(--str)} .num{color:var(--num)}
+  .arg{color:var(--arg)} .const{color:var(--const);font-style:italic}
+  .com{color:var(--com);font-style:italic} .mod{color:var(--mod)}
+  .op{color:var(--op)} .var{color:#e3e9f8}
+
+  .legend{
+    max-width:1500px;margin:30px auto 0;
+    display:flex;flex-wrap:wrap;gap:8px 20px;
+    font-family:ui-sans-serif,system-ui,sans-serif;font-size:12.5px;color:#9fb2dd;
+  }
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+
+  <header>
+    <h1>The <span class="accent">pnpbv</span> menu — and the escape hatch</h1>
+    <p>Declare the physics in a few objects; when the menu runs out, drop straight to the weak form.</p>
+  </header>
+
+  <div class="grid">
+
+    <!-- ============ CARD 1 : declarative API ============ -->
+    <section class="card">
+      <div class="bar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="tag">① <b>Declarative</b> &nbsp;build &amp; solve</span>
+      </div>
+<pre><span class="kw">import</span> <span class="mod">pnpbv</span> <span class="kw">as</span> <span class="mod">pb</span>
+
+<span class="var">O2</span> <span class="op">=</span> <span class="mod">pb</span><span class="op">.</span><span class="cls">Species</span>(<span class="str">"O2"</span>, <span class="arg">z</span><span class="op">=</span><span class="num">0</span>,  <span class="arg">D</span><span class="op">=</span><span class="num">2.1e-9</span>, <span class="arg">c_bulk</span><span class="op">=</span><span class="num">1.2e-3</span>)
+<span class="var">H</span>  <span class="op">=</span> <span class="mod">pb</span><span class="op">.</span><span class="cls">Species</span>(<span class="str">"H+"</span>, <span class="arg">z</span><span class="op">=</span><span class="num">+1</span>, <span class="arg">D</span><span class="op">=</span><span class="num">9.3e-9</span>, <span class="arg">c_bulk</span><span class="op">=</span><span class="num">1e-4</span>)
+<span class="var">K</span>  <span class="op">=</span> <span class="mod">pb</span><span class="op">.</span><span class="cls">Species</span>(<span class="str">"K+"</span>, <span class="arg">z</span><span class="op">=</span><span class="num">+1</span>, <span class="arg">c_bulk</span><span class="op">=</span><span class="num">0.2</span>,
+                <span class="arg">analytic</span><span class="op">=</span><span class="const">True</span>)        <span class="com"># Boltzmann</span>
+
+<span class="var">r2e</span> <span class="op">=</span> <span class="mod">pb</span><span class="op">.</span><span class="cls">BVReaction</span>(<span class="str">"ORR_2e"</span>,
+         <span class="arg">reactants</span><span class="op">=</span>{<span class="var">O2</span><span class="op">:</span><span class="num">1</span>, <span class="var">H</span><span class="op">:</span><span class="num">2</span>}, <span class="arg">products</span><span class="op">=</span>{<span class="var">H2O2</span><span class="op">:</span><span class="num">1</span>},
+         <span class="arg">n_e</span><span class="op">=</span><span class="num">2</span>, <span class="arg">E_eq</span><span class="op">=</span><span class="num">0.695</span>)
+
+<span class="var">prob</span> <span class="op">=</span> <span class="mod">pb</span><span class="op">.</span><span class="cls">Problem</span>(
+    <span class="arg">species</span><span class="op">=</span>[<span class="var">O2</span>, <span class="var">H2O2</span>, <span class="var">H</span>, <span class="var">K</span>, <span class="var">SO4</span>],
+    <span class="arg">reactions</span><span class="op">=</span>[<span class="var">r2e</span>, <span class="var">r4e</span>],
+    <span class="arg">electrode</span><span class="op">=</span><span class="mod">pb</span><span class="op">.</span><span class="cls">SternElectrode</span>(<span class="arg">C_stern</span><span class="op">=</span><span class="num">0.20</span>))
+
+<span class="var">sol</span> <span class="op">=</span> <span class="mod">pb</span><span class="op">.</span><span class="cls">Solver</span>(<span class="var">prob</span>)<span class="op">.</span><span class="fn">solve_grid</span>(<span class="arg">v_rhe</span><span class="op">=</span>(<span class="num">-0.4</span>, <span class="num">0.8</span>))</pre>
+    </section>
+
+    <!-- ============ CARD 2 : weak-form escape hatch ============ -->
+    <section class="card">
+      <div class="bar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="tag">② <b>Escape hatch</b> &nbsp;drop to the weak form</span>
+      </div>
+<pre><span class="kw">from</span> <span class="mod">pnpbv.formulations</span> <span class="kw">import</span> <span class="fn">pnp_steric</span>
+<span class="kw">from</span> <span class="mod">ufl</span> <span class="kw">import</span> <span class="fn">grad</span>, <span class="fn">inner</span>
+
+<span class="com"># default PNP + migration + Bikerman steric:</span>
+<span class="var">res</span>  <span class="op">=</span> <span class="fn">pnp_steric</span>(<span class="var">prob</span>)
+<span class="var">c</span>, <span class="var">w</span> <span class="op">=</span> <span class="var">res</span><span class="op">.</span>fields, <span class="var">res</span><span class="op">.</span>tests   <span class="com"># conc + tests</span>
+<span class="var">dx</span>   <span class="op">=</span> <span class="var">res</span><span class="op">.</span>dx                  <span class="com"># 2D bulk measure</span>
+
+<span class="com"># add terms the menu doesn't cover (F = 0):</span>
+<span class="com"># peroxide decomposition:  H2O2 -> 1/2 O2 + H2O</span>
+<span class="var">res</span><span class="op">.</span><span class="fn">add</span>( <span class="op">-</span><span class="var">k_d</span>     <span class="op">*</span> <span class="var">c</span>[<span class="str">"H2O2"</span>] <span class="op">*</span> <span class="var">w</span>[<span class="str">"H2O2"</span>] <span class="op">*</span> <span class="var">dx</span> )
+<span class="var">res</span><span class="op">.</span><span class="fn">add</span>( <span class="op">+</span><span class="num">0.5</span><span class="op">*</span><span class="var">k_d</span> <span class="op">*</span> <span class="var">c</span>[<span class="str">"H2O2"</span>] <span class="op">*</span> <span class="var">w</span>[<span class="str">"O2"</span>]   <span class="op">*</span> <span class="var">dx</span> )
+<span class="com"># forced convection (RDE):</span>
+<span class="var">res</span><span class="op">.</span><span class="fn">add</span>( <span class="fn">inner</span>(<span class="var">u</span>, <span class="fn">grad</span>(<span class="var">c</span>[<span class="str">"O2"</span>])) <span class="op">*</span> <span class="var">w</span>[<span class="str">"O2"</span>] <span class="op">*</span> <span class="var">dx</span> )
+
+<span class="com"># same continuation + failed-step recovery:</span>
+<span class="var">sol</span> <span class="op">=</span> <span class="mod">pb</span><span class="op">.</span><span class="cls">Solver</span><span class="op">.</span><span class="fn">from_weak_form</span>(<span class="var">res</span>)<span class="op">.</span><span class="fn">solve_grid</span>(<span class="op">...</span>)</pre>
+    </section>
+
+  </div>
+
+  <div class="legend">
+    <span><i style="background:var(--kw)"></i>keyword</span>
+    <span><i style="background:var(--cls)"></i>class / constructor</span>
+    <span><i style="background:var(--fn)"></i>function / method</span>
+    <span><i style="background:var(--str)"></i>string</span>
+    <span><i style="background:var(--num)"></i>number</span>
+    <span><i style="background:var(--arg)"></i>keyword arg</span>
+    <span><i style="background:var(--const)"></i>constant</span>
+    <span><i style="background:var(--com)"></i>comment</span>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,179 @@
+\documentclass[11pt]{article}
+
+\usepackage[top=0.8in,bottom=0.8in,left=1in,right=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{mathtools}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue}
+
+\DeclareMathOperator{\divg}{div}
+\newcommand{\elec}{\mathrm{elec}}
+\newcommand{\ster}{\mathrm{ster}}
+\newcommand{\dyn}{\mathrm{dyn}}
+\newcommand{\app}{\mathrm{app}}
+\newcommand{\modl}{\mathrm{model}}
+\newcommand{\ex}{\mathrm{ex}}
+
+\title{MMS source terms for the production PNP--BV stack\\
+\large \texttt{logc\_muh} + Cs$^+$/SO$_4^{2-}$ multi-ion + Stern Robin}
+\author{PNPInverse / Forward solver verification}
+\date{\today}
+
+\begin{document}
+\sloppy
+\maketitle
+
+\noindent
+This is the one-page version. Full algebra, clip-safety bounds, runtime
+asserts, and convergence results live in:
+\begin{itemize}\setlength{\itemsep}{0pt}
+  \item derivation --- \verb|docs/solver/mms_pnpbv_muh_multi_ion_stern_derivation.md|
+  \item full writeup --- \verb|writeups/May13th/mms_source_terms_derivation.tex|
+  \item source builder --- \verb|scripts/verification/mms_pnpbv_muh_multi_ion_stern.py|
+  \item test --- \verb|tests/test_mms_logc_muh_multi_ion_stern.py|
+\end{itemize}
+
+\section{The stack under test}
+
+The production ``no-speculative-physics'' stack is the one exercised by the
+demo \verb|solver_demo_slide15_no_speculative_cs.py|. The mixed space is
+$W = V_{O_2}\times V_{H_2O_2}\times V_{\mu_H}\times V_\varphi$ with
+\[
+  U = (u_{O_2},\, u_{H_2O_2},\, \mu_H,\, \varphi),\qquad
+  z = (0,0,+1,\cdot),\qquad e_m z_H = +1 .
+\]
+The proton primary is its electrochemical potential $\mu_H$, so
+concentrations are reconstructed as
+$c_H = \exp(\mu_H - e_m z_H\varphi)$ and $c_i = \exp(u_i)$ for
+$i\in\{O_2,H_2O_2\}$ (\textbf{muh transform}). Domain $\Omega=(0,1)^2$,
+electrode at $y=0$, bulk at $y=1$. Two analytic Bikerman counterions
+$\{Cs^+,SO_4^{2-}\}$ enter through the shared-$\theta$ closure, giving the
+steric potential $\mu_\ster=-\ln\theta_\mathrm{inner}$ and per-ion charges
+$c_k^\ster(\varphi;c_\dyn)$; parallel R2e/R4e Butler--Volmer in log-rate
+form gives the surface rates $R_j$. A Stern Robin BC replaces the
+$\varphi$-Dirichlet at the electrode.
+
+\section{Manufactured solution}
+
+Smooth fields that meet all bulk Dirichlets exactly
+($\delta_i=0.30$, $\alpha_0=\alpha_1=\gamma=0.5$):
+\begin{align*}
+  c_i^\ex(x,y) &= c_{0,i}\bigl[1 + \delta_i\cos(\pi x)\,(1-y)^2\bigr],
+    \qquad i\in\{O_2,H_2O_2,H\},\\
+  \varphi^\ex(x,y) &= (1-y)\bigl[\alpha_0+\alpha_1\cos(\pi x)\bigr]
+    + \gamma\,y(1-y)\cos(\pi x),\\
+  \mu_H^\ex &= \ln c_H^\ex + e_m z_H\,\varphi^\ex .
+\end{align*}
+At $y=1$: $c_i^\ex=c_{0,i}$, $\varphi^\ex=0$ (bulk Dirichlets met). At
+$y=0$: $\varphi^\ex(x,0)=\alpha_0+\alpha_1\cos(\pi x)\in[0,1]\neq
+\varphi_\app^\modl\approx21.4$, so the Stern Robin is non-trivially driven.
+At $x\in\{0,1\}$: $\partial_x(\cdot)=0$ for every field, so the side walls
+are auto zero-flux and need no source. All closure quantities
+($A_\dyn^\ex$, $D^\ex$, $c_k^{\ster,\ex}$, $\mu_\ster^\ex$, $R_j^\ex$) and the
+mobility-convention fluxes
+$J_i^\ex = D_i c_i^\ex(\nabla u_i^\ex + \nabla\mu_\ster^\ex)$,
+$J_H^\ex = D_H c_H^\ex(\nabla\mu_H^\ex + \nabla\mu_\ster^\ex)$ are then exact
+UFL expressions in $(x,y)$.
+
+\section{The four source terms and how they plug in}
+
+\paragraph{Mechanism.} The residual is assembled byte-faithfully by
+production. For each weak-form contribution $+\int X\,v\,\mathrm{d}\mu$ we
+\emph{subtract} the strong-form residual evaluated at the manufactured
+field,
+\[
+  F_\mathrm{res} \;\leftarrow\; F_\mathrm{res} \;-\;\int X\big|_{u_\ex}\,v\,\mathrm{d}\mu ,
+\]
+which makes $u_\ex$ the exact solution of the forced problem; $U_h$ then
+converges to it at the CG1 FE rate ($L^2\!\sim\!h^2$, $H^1\!\sim\!h$). The
+sources are composed \emph{independently} (not via \verb|ufl.replace| on
+$F_\mathrm{res}$), so any wiring bug in the residual surfaces as a
+convergence-rate failure instead of canceling symmetrically. Interior
+weak-flux terms are converted by IBP, leaving $-\divg(\cdot)$ on $\Omega$;
+the $\partial\Omega$ trace vanishes on the bulk (Dirichlet) and side walls
+($\partial_x=0$), so only the electrode trace remains and becomes a boundary
+source.
+
+\medskip\noindent
+With outward normal $n$, $\varepsilon_c=$ Poisson coefficient,
+$\rho_c=$ charge prefactor, $C_S^\modl=$ Stern coefficient, $s_{ij}=$
+stoichiometry, the four sources (and the term each is subtracted from) are:
+\begin{enumerate}\setlength{\itemsep}{3pt}
+  \item \textbf{NP interior} (per species $i$):
+    $S_{c_i} = -\divg J_i^\ex$;\quad
+    subtract $\int_\Omega S_{c_i}\,v_i\,\mathrm{d}x_q$.
+  \item \textbf{BV electrode} (per species $i$):
+    $g_i^\elec = J_i^\ex\!\cdot n - \sum_j s_{ij}\,R_j^\ex$;\quad
+    subtract $\int_{\Gamma_\elec} g_i^\elec\,v_i\,\mathrm{d}s_q$.
+  \item \textbf{Poisson interior}:
+    $S_\varphi = -\varepsilon_c\,\Delta\varphi^\ex
+      - \rho_c\bigl(z_H c_H^\ex + \sum_k z_k c_k^{\ster,\ex}\bigr)$;\quad
+    subtract $\int_\Omega S_\varphi\,w\,\mathrm{d}x_q$.
+  \item \textbf{Stern Robin electrode}:
+    $g_S = \varepsilon_c(\nabla\varphi^\ex\!\cdot n)
+      - C_S^\modl(\varphi_\app^\modl - \varphi^\ex)$;\quad
+    subtract $\int_{\Gamma_\elec} g_S\,w\,\mathrm{d}s_q$.
+\end{enumerate}
+The proton's $S_{c_H}$ uses $J_H^\ex$ (the $\nabla\mu_H$ form), and
+$R_j^\ex$ in (2) carries the muh substitution
+$u_H\!\to\!\mu_H - e_m z_H\varphi$ inside the BV cathodic factors. Because
+the Stern-on branch sets $\eta_j^\ex = \texttt{bv\_exp\_scale}\,(
+\varphi_\app^\modl - \varphi^\ex - E_{eq,j}^\modl)$, $R_j^\ex|_{y=0}$ is
+genuinely $x$-dependent --- this is the only path that couples $\varphi$
+into BV, and it fires only when $C_S>0$.
+
+\paragraph{Code path.}
+\verb|_build_source_terms| composes (1)--(4) as UFL; \verb|_inject_source_terms|
+performs the subtractions on \verb|ctx['F_res']| and rederives the Jacobian via
+\verb|fd.derivative(F, U)|:
+
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+Term & Production residual (\verb|forms_logc_muh.py|) & Injection \\
+\midrule
+(1) $S_{c_i}$ & $\int J_i\!\cdot\!\nabla v_i\,\mathrm{d}x$ \,(\,:499\,) &
+  \verb|F -= S_c_i * v_i * dx_q| \\
+(2) $g_i^\elec$ & $-\sum_{ij} s_{ij}R_j\,v_i\,\mathrm{d}s$ \,(\,:615\,) &
+  \verb|F -= g_elec_i * v_i * ds_q| \\
+(3) $S_\varphi$ & $\varepsilon_c\nabla\varphi\!\cdot\!\nabla w - \rho_c(\cdots)$ \,(\,:644,656\,) &
+  \verb|F -= S_phi * w * dx_q| \\
+(4) $g_S$ & $-C_S^\modl(\varphi_\app-\varphi)\,w\,\mathrm{d}s$ \,(\,:668\,) &
+  \verb|F -= g_S * w * ds_q| \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Quadrature is elevated to \verb|SRC_QUAD_DEGREE = 8| on both
+$\mathrm{d}x_q$ and $\mathrm{d}s_q$. Newton is initialised at
+$U = U_\mathrm{prev} = U_\mathrm{manuf}$ with $\Delta t = 10^{15}$, so the
+time term $(c-c_\mathrm{old})/\Delta t$ is negligible and the test isolates
+the steady spatial operator. The convergence sweep runs at
+$V_\mathrm{RHE}=+0.55\,\mathrm{V}$ with $K_{0,R_{4e}}^\mathrm{factor}=10^{-18}$
+(keeping $10 < \lVert R_{4e}^\ex\rVert/\lVert R_{2e}^\ex\rVert < 10^5$ so both
+reaction branches stay active). At $u_\ex$ all clamps/floors
+(\texttt{exponent\_clip}, \texttt{u\_clamp}, per-ion \texttt{phi\_clamp},
+\texttt{free\_dyn\_floor}, \texttt{packing\_floor}) are identity, so the
+sources above are the unclamped/unfloored expressions.
+
+\paragraph{Meshes.} Rates use a uniform \verb|UnitSquareMesh| sweep
+$N\in\{8,16,32,64\}$; a single-solve recovery also runs on the demo's
+graded rectangle ($N_x=8$, $N_y=80$, $\beta=3$, from
+\verb|make_graded_rectangle_mesh|), which clusters nodes at the electrode by
+a power-law stretch of the unit-cube $y$-coordinate ($x$ stays uniform):
+\begin{equation}
+  y = \eta^{\beta}\,\hat H,
+  \qquad \eta\in[0,1]\ \text{uniform},
+  \qquad \hat H = L_\mathrm{eff}/L_\mathrm{ref}\;(=1\ \text{here}).
+  \tag{5}
+\end{equation}
+Local spacing $\mathrm{d}y/\mathrm{d}\eta = \beta\,\eta^{\beta-1}\hat H\to 0$
+as $\eta\to 0$ for $\beta>1$ (refinement ratio $\beta N_y^{\beta-1}\approx
+1.9\times10^{4}$), so this confirms recovery of $u_\ex$ on the demo's actual
+anisotropic mesh, not just the uniform sweep.
+
+\end{document}

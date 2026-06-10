@@ -1,0 +1,360 @@
+% may27_equations.tex
+% Clean, screenshot-friendly typeset of every equation used in the
+% "Research Presentation May 27" deck. Each card maps to a slide; the
+% intent is to screenshot a card directly onto its slide.
+%
+% Compile:  pdflatex may27_equations.tex   (run twice for tcolorbox)
+%
+% Reflects the CURRENT production stack (NOT the May-4 math cards):
+%   * counterions K+/SO4^2-  (analytic Bikerman, not ClO4-)
+%   * parallel 2e-/4e- ORR:  R2e E0=0.695 V, R4e E0=1.23 V vs RHE
+%   * Stern Robin BC, C_S = 0.20 F/m^2
+%   * log-c primary unknowns, proton electrochemical potential mu_H
+%   * log-rate Butler-Volmer
+% Sources: scripts/studies/talk_figs/fig_*.py (the figures on the slides),
+%   docs/legacy/PNP Equation Formulations.tex, docs/phase6/singh_2016_pka_formula.md,
+%   CLAUDE.md hard rules, writeups/WeekOfMay4/group_meeting_math_cards.tex (style).
+
+\documentclass[11pt]{article}
+\usepackage[margin=0.75in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{xcolor}
+\usepackage[most]{tcolorbox}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{siunitx}
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=*,topsep=2pt,itemsep=2pt}
+
+% Plain black-on-white card: title on a thin rule above the body.
+\tcbset{
+  cardstyle/.style={
+    enhanced,
+    colback=white, colframe=white, coltitle=black,
+    fonttitle=\bfseries\large, title={#1},
+    boxrule=0pt, frame hidden, arc=0pt,
+    left=4pt, right=4pt, top=4pt, bottom=4pt,
+    attach boxed title to top left={xshift=0pt, yshift=0pt},
+    boxed title style={colback=white, colframe=white, boxrule=0pt, arc=0pt,
+      left=0pt, right=0pt, top=0pt, bottom=2pt},
+    after title={\par\vspace{2pt}\noindent\rule{\linewidth}{0.4pt}\par\vspace{4pt}},
+    breakable=false
+  }
+}
+
+\newcommand{\VT}{V_{T}}
+\newcommand{\Eeq}{E^{\circ}}
+\newcommand{\VRHE}{V_{\mathrm{RHE}}}
+\newcommand{\CS}{C_{S}}
+\newcommand{\dd}{\,\mathrm{d}}
+\newcommand{\Jbf}{\mathbf{J}}
+\newcommand{\nbf}{\mathbf{n}}
+
+\begin{document}
+
+\begin{center}
+  {\Large\bfseries Equation Reference --- Research Presentation (May 27)}\\[3pt]
+  {\small Each card maps to a slide; screenshot it directly onto that slide.
+  Forms reflect the current production stack: K$^+$/SO$_4^{2-}$ analytic
+  Bikerman counterions, parallel 2e$^-$/4e$^-$ ORR, Stern Robin BC
+  ($\CS = 0.20$\,F/m$^2$), log-$c$ unknowns with proton electrochemical
+  potential $\mu_H$, log-rate Butler--Volmer.}\\[2pt]
+  {\footnotesize Symbols: $F$ Faraday constant, $R$ gas constant, $T$
+  temperature, $\VT = RT/F$ thermal voltage; $D_i,z_i,c_i$ diffusivity,
+  charge, concentration of species $i$; $\varphi$ electrostatic potential;
+  $\varepsilon$ permittivity. Dynamic species $\{\mathrm{O_2},
+  \mathrm{H_2O_2}, \mathrm{H^+}\}$ ($z=0,0,+1$); counterions
+  $\{\mathrm{K^+}, \mathrm{SO_4^{2-}}\}$ carried analytically.}
+\end{center}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Slide 5 --- ORR selectivity: two competing pathways}]
+We want the 2e$^-$ product (H$_2$O$_2$), not the 4e$^-$ loss to water.
+\[
+  \text{(2e$^-$, wanted)}\quad
+  \mathrm{O_2} + 2\mathrm{H^+} + 2e^- \;\longrightarrow\; \mathrm{H_2O_2},
+  \qquad \Eeq = 0.695~\text{V vs RHE}
+\]
+\[
+  \text{(4e$^-$, loss)}\quad
+  \mathrm{O_2} + 4\mathrm{H^+} + 4e^- \;\longrightarrow\; 2\,\mathrm{H_2O},
+  \qquad \Eeq = 1.23~\text{V vs RHE}
+\]
+\textbf{Selectivity} = keeping O$_2$ on the 2e$^-$ branch. The two
+reactions run \emph{in parallel} at the electrode (Ruggiero 2022 topology).
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Slide 6 --- RRDE measurement \& transport}]
+Rotating ring--disk electrode: the disk makes H$_2$O$_2$, the ring
+downstream detects it.
+\[
+  \text{collection efficiency}\quad N = 0.224 \quad\text{(Ruggiero 2022)}
+\]
+Rotation sets the diffusion-layer thickness via the Levich relation
+(the physical meaning of the domain length $L_{\mathrm{eff}}$):
+\[
+  L_{\mathrm{eff}} \;\approx\; 1.61\,D_i^{1/3}\,\nu^{1/6}\,\omega^{-1/2},
+  \qquad \omega = \frac{2\pi\,\Omega}{60},
+\]
+with $\nu$ the kinematic viscosity and $\Omega$ the rotation rate (rpm).
+For O$_2$ in water this gives $L_{\mathrm{eff}}\approx 86,\,43,\,35~\mu$m
+at $\Omega = 400,\,1600,\,2500$ rpm; the model uses $L_{\mathrm{eff}}
+\approx 100~\mu$m.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Slide 12 --- The PNP--BV model (governing equations + every BC)}]
+\textbf{Nernst--Planck} in the diffuse layer, one equation per dynamic
+species $i$:
+\[
+  \frac{\partial c_i}{\partial t}
+   = \nabla\!\cdot\!\left(D_i\!\left[\nabla c_i
+      + \frac{z_i F}{RT}\,c_i\,\nabla\varphi\right]\right)
+   = -\nabla\!\cdot\Jbf_i,
+  \qquad
+  \Jbf_i = -D_i\!\left(\nabla c_i + \frac{z_i F}{RT}\,c_i\,\nabla\varphi\right).
+\]
+
+\textbf{Poisson} for the potential (counterions enter as an analytic
+source --- next card):
+\[
+  -\nabla\!\cdot(\varepsilon\,\nabla\varphi) \;=\; \sum_i z_i F\,c_i .
+\]
+
+\textbf{Boundary conditions.}
+\begin{itemize}
+  \item \emph{Electrode / OHP --- Butler--Volmer flux} (species $i$,
+        reactions $r$):
+  \[
+    -D_i\!\left(\nabla c_i + \frac{z_i F}{RT}\,c_i\,\nabla\varphi\right)\!\cdot\nbf
+    \;=\; \sum_r \nu_{i,r}\,R_r,
+  \]
+  \[
+    R_r = k_{0,r}\!\left[\,c_O\,e^{-\alpha_r F\eta_r/RT}
+                       \;-\; c_R\,e^{(1-\alpha_r)F\eta_r/RT}\right],
+    \qquad
+    \eta_r = \varphi_m - \varphi_s - \Eeq_{,r}.
+  \]
+  Here $c_O,c_R$ are the oxidized / reduced surface concentrations for
+  reaction $r$ and $\nu_{i,r}$ the stoichiometric coefficient
+  ($\Eeq_{,r}\in\{0.695,\,1.23\}$ V). The log-rate construction of this
+  same rate law is on the Slide-14 card.
+  \item \emph{Stern compact layer --- Robin BC on $\varphi$:}
+  \[
+    \varepsilon\,\partial_n\varphi \;=\; \CS\,(V_{\mathrm{app}} - \varphi_{\mathrm{OHP}}),
+    \qquad \CS = 0.20~\text{F/m}^2 .
+  \]
+  \item \emph{Bulk --- Dirichlet:}\quad
+  $c_i = c_i^{\mathrm{bulk}}, \quad \varphi = 0.$
+\end{itemize}
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Slide 12 (cont.) --- Analytic Bikerman counterions \& steric crowding}]
+Non-reactive ions $b\in\{\mathrm{K^+},\mathrm{SO_4^{2-}}\}$ are \emph{not}
+discretized; in local equilibrium with $\varphi$ they enter Poisson
+analytically.
+
+\textbf{Ideal (point-ion) Boltzmann limit:}
+\[
+  c_b(x) \;=\; c_b^{\mathrm{bulk}}\,\exp\!\big(-z_b F\varphi/RT\big).
+\]
+
+\textbf{Steric-aware Bikerman closure} (caps packing at $c_b\le 1/a_b$):
+\[
+  c_b(x) \;=\; c_b^{\mathrm{bulk}}\,
+  \frac{\big(1 - \sum_{j\in\mathrm{dyn}} a_j c_j(x)\big)\,
+        e^{-z_b F\varphi/RT}}
+       {\theta_b + a_b\,c_b^{\mathrm{bulk}}\,e^{-z_b F\varphi/RT}},
+  \qquad
+  \theta_b = 1 - \!\sum_j a_j c_j^{\mathrm{bulk}} - a_b c_b^{\mathrm{bulk}}.
+\]
+
+\textbf{Finite ion size} ($a_i$ = ion volume) adds a steric chemical
+potential to every species' driving force:
+\[
+  \mu_i^{\mathrm{steric}} = -\ln\theta,\quad
+  \theta = 1 - \sum_i a_i c_i,\quad
+  c_{\max}\approx \tfrac{1}{a}
+  \;\;\Rightarrow\;\;
+  \Jbf_i = -D_i c_i\big(\nabla u_i + \tfrac{z_iF}{RT}\nabla\varphi
+                        + \nabla\mu_i^{\mathrm{steric}}\big).
+\]
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Slide 13 --- Why it is numerically hard}]
+In equilibrium each ion piles up (or depletes) Boltzmann-exponentially
+at the interface:
+\[
+  c_i \;\approx\; c_i^{\mathrm{bulk}}\,\exp\!\big(-z_i F\varphi/RT\big)
+  \quad\Longrightarrow\quad
+  \text{concentrations span} \sim 10\ \text{orders of magnitude.}
+\]
+The drop occurs across a Debye length that is tiny next to $L_{\mathrm{eff}}$:
+\[
+  \lambda_D \;=\; \sqrt{\dfrac{\varepsilon RT}{2F^2 I}}\;\ll\; L_{\mathrm{eff}},
+  \qquad I = \tfrac12\textstyle\sum_i z_i^2 c_i\ \text{(ionic strength).}
+\]
+The exponential BV nonlinearity at the boundary feeds this buildup, and
+electromigration vs.\ diffusion run on very different timescales ---
+together a stiff, ill-conditioned system.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Slide 14 --- How we solve it (I): log-$c$ and proton $\mu_H$}]
+\textbf{Log-concentration unknowns.} Solve for $u_i=\ln c_i$, not $c_i$;
+reconstruct $c_i=e^{u_i}>0$ (positive by construction, tames the buildup):
+\[
+  u_i = \ln c_i,\qquad
+  \Jbf_i = -D_i\,e^{u_i}\!\left(\nabla u_i + \frac{z_i F}{RT}\nabla\varphi\right).
+\]
+
+\textbf{Proton electrochemical potential.} For H$^+$ use
+\[
+  \boxed{\;\mu_H \;=\; u_H + \frac{z_H F}{RT}\,\varphi\;}\quad (z_H=+1),
+  \qquad
+  c_H = \exp\!\Big(\mu_H - \frac{z_H F}{RT}\varphi\Big),
+  \qquad
+  \Jbf_H = -D_H\,c_H\,\nabla\mu_H .
+\]
+In local Boltzmann equilibrium $\nabla\mu_H\approx 0$, so the primary
+unknown $\mu_H$ stays \emph{smooth across the double layer} even though
+$u_H$ and $\varphi$ each swing by tens of log-units.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Slide 14 --- Butler--Volmer: general form vs.\ log-rate construction}]
+\textbf{General Butler--Volmer boundary equation} (per reaction $r$; the
+Slide-12 form), with $c_O,c_R$ the oxidized / reduced surface
+concentrations:
+\[
+  R_r = k_{0,r}\!\left[\,c_O\,e^{-\alpha_r F\eta_r/RT}
+                     \;-\; c_R\,e^{(1-\alpha_r)F\eta_r/RT}\right],
+  \qquad \eta_r = \varphi_m - \varphi_s - \Eeq_{,r},
+\]
+imposed through the flux BC
+$-D_i\big(\nabla c_i + \tfrac{z_iF}{RT}c_i\nabla\varphi\big)\!\cdot\nbf
+= \sum_r \nu_{i,r} R_r$.
+
+\textbf{Log-rate construction.} With log-concentration unknowns
+$c_O = e^{u_O}$, $c_R = e^{u_R}$, fold each concentration \emph{inside}
+its exponent, build each branch in log-space, and exponentiate once:
+\[
+  \log r_r^{(\mathrm{cat})} = \ln k_{0,r} + u_O - \alpha_r\,\tfrac{F\eta_r}{RT},
+  \qquad r_r^{(\mathrm{cat})} = \exp\!\big(\log r_r^{(\mathrm{cat})}\big),
+\]
+\[
+  \log r_r^{(\mathrm{anod})} = \ln k_{0,r} + u_R + (1-\alpha_r)\,\tfrac{F\eta_r}{RT},
+  \qquad r_r^{(\mathrm{anod})} = \exp\!\big(\log r_r^{(\mathrm{anod})}\big),
+\]
+\[
+  R_r = r_r^{(\mathrm{cat})} - r_r^{(\mathrm{anod})}.
+\]
+
+\textbf{The contrast.} Both give an \emph{identical} $R_r$ in exact
+arithmetic. The general form evaluates $c_O = \exp(\mathrm{clamp}\,u_O)$
+\emph{then} multiplies by the BV exponential, so when $u_O$ is very
+negative the clamp pins a finite floor and the rate cannot vanish (a
+phantom current). The log-rate form keeps $u_O$ inside the exponent, so
+$\log r_r\to-\infty$ smoothly and the branch dies off correctly --- same
+equation, numerically robust.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Slide 15 --- Continuation: deform easy $\to$ hard along three knobs}]
+Never solve the hard problem cold. Ramp three parameters from an easy
+regime to the physical target, warm-starting Newton at every step:
+\begin{center}
+\begin{tabular}{lccl}
+\hline
+\textbf{knob} & \textbf{start} & \textbf{target} & \textbf{effect}\\
+\hline
+reaction rate $k_0$        & $10^{-12}$ & $1$ (physical)        & turn the reaction on gradually\\
+Stern capacitance $\CS$    & $0.10$     & $0.20$ F/m$^2$        & stiffen the compact layer\\
+voltage $\VRHE$            & $-0.5$     & $+1.0$ V              & walk the operating window\\
+\hline
+\end{tabular}
+\end{center}
+\[
+  \text{solution at step } k+1:\quad
+  \mathbf{U}_{k+1} = \text{Newton}\big(\,\mathbf{U}_{k}\ \text{as initial guess}\,\big).
+\]
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Slide 16 --- When a step fails: recover, don't restart}]
+If a continuation rung fails between a converged value $a$ and a failed
+target $b$, insert the \textbf{geometric ($\sqrt{\ }$) midpoint} and
+retry from the last good solution:
+\[
+  k_{\mathrm{mid}} = \sqrt{a\,b}\,.
+\]
+Recurse this bisection to walk across the Frumkin cliff (up to depth~5;
+8 warm-walk substeps), rebuilding nothing --- only the parameter moves.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Slide 17 --- Verification: method of manufactured solutions}]
+Pick a smooth exact solution $u^\ast$, insert it into the operator
+$\mathcal{L}$ to get a source $f=\mathcal{L}u^\ast$, solve
+$\mathcal{L}u_h=f$, and measure the error as the mesh refines ($h\to0$):
+\[
+  \|u^\ast - u_h\|_{L^2} = \mathcal{O}(h^{p+1}),
+  \qquad
+  \|u^\ast - u_h\|_{H^1} = \mathcal{O}(h^{p}).
+\]
+For CG1 elements ($p=1$) the expected slopes are $L^2\approx 2$,
+$H^1\approx 1$, and the observed rates match for every field
+($u_{\mathrm{O_2}}$, $u_{\mathrm{H_2O_2}}$, $\mu_H$, $\varphi$) on the
+production logc\_muh + Cs$^+$/SO$_4^{2-}$ + Stern stack.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Slide 18 --- Agreement with prior work (closure reproduction)}]
+To compare against the single-reaction closure model we (i) run one
+2e$^-$ reaction and (ii) align the open-circuit-potential convention by
+shifting the \emph{whole} voltage axis and \emph{both} equilibrium
+potentials by the same $\Delta V$:
+\[
+  \VRHE \to \VRHE - \Delta V,\qquad \Eeq_{,r}\to \Eeq_{,r} - \Delta V,
+  \qquad \Delta V = V_{\mathrm{OCP}} = 0.785~\text{V (pH 2)}.
+\]
+The overpotential is invariant, so kinetics are unchanged:
+\[
+  \eta_r = (\VRHE-\Delta V) - (\Eeq_{,r}-\Delta V) = \VRHE - \Eeq_{,r},
+  \qquad
+  V_{\mathrm{OCP}} = 0.47 + 0.197 + 0.059\,\mathrm{pH}.
+\]
+Profiles are reconstructed from the muh unknown:
+$c_H = \exp\!\big(\mu_H - \tfrac{z_H F}{RT}\varphi\big)$.
+\textbf{Result:} 25/25 converge; O$_2$-ratio and profiles within $\sim5\%$.
+\end{tcolorbox}
+
+%% =====================================================================
+\begin{tcolorbox}[cardstyle={Slide 20 --- Tentative: cation hydrolysis (field-shifted p$K_a$)}]
+A polarized interface turns the hydrated cation into a \emph{local proton
+source} --- reachable by the general solver, not the closure:
+\[
+  \mathrm{M^+(H_2O)}_n + \mathrm{H_2O}
+  \;\rightleftharpoons\;
+  \mathrm{MOH^0(H_2O)}_{n-1} + \mathrm{H_3O^+}.
+\]
+The acidity shifts with the interfacial field (Singh 2016, Eq.~3--4):
+\[
+  \mathrm{p}K_a(\sigma) = \mathrm{p}K_a^{\mathrm{bulk}} + \Delta \mathrm{p}K_a(\sigma),
+  \qquad
+  \mathrm{p}K_a^{\mathrm{bulk}} = B - \frac{A\,z^2}{r_{M\text{-}O}},
+\]
+\[
+  \Delta \mathrm{p}K_a(\sigma)
+   = 2A\,z\,\sigma\,r_{H\text{-}El}\!\left(1 - \frac{r_{M\text{-}O}^2}{r_{H\text{-}El}^2}\right),
+  \qquad
+  \sigma = \CS\,(\varphi_m - \varphi_s)\ \text{(local Stern charge)}.
+\]
+Constants $A=620.32$ pm, $B=17.154$, $r_O=63$ pm; the new surface proton
+flux is gated by a Langmuir-capped cation coverage $\Gamma$.
+\end{tcolorbox}
+
+\end{document}

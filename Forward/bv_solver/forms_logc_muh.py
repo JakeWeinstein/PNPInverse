@@ -1288,8 +1288,11 @@ def _try_debye_boltzmann_ic_muh(
     if not ok:
         return False, reason, picard_iters
 
-    R1 = picard_state["R1"]
-    R2 = picard_state["R2"]
+    # R1/R2 historically read here but never used downstream; tolerate
+    # single-reaction picard_state (no "R2" key) so single-Tafel setups
+    # (Jithin §4.8 emulation) can use this IC path.
+    R1 = picard_state.get("R1", 0.0)
+    R2 = picard_state.get("R2", 0.0)
     O_s = picard_state["O_s"]
     P_s = picard_state["P_s"]
     H_o = picard_state["H_o"]

@@ -1,0 +1,687 @@
+% anticipated_qa.tex
+% Q&A preparation / reference sheet for the May 27 group meeting talk
+% "PNP-BV, revisited" (writeups/5:27Presentation/researchpres_slides 2.pdf).
+% Audience: PhD-level applied mathematicians.
+%
+% Compile:  pdflatex anticipated_qa.tex   (run twice for the ToC)
+%
+% Equation forms reuse writeups/5:27Presentation/may27_equations.tex so they
+% match the slides verbatim. Code citations are to the production stack
+% (Forward/bv_solver/, scripts/_bv_common.py) as of 2026-05-27.
+
+\documentclass[11pt]{article}
+\usepackage[margin=0.9in]{geometry}
+\usepackage{amsmath,amssymb,bm,mathtools}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{parskip}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
+
+\setlist[itemize]{leftmargin=1.4em,topsep=2pt,itemsep=2pt}
+
+% Shared macros (matching may27_equations.tex)
+\newcommand{\VT}{V_{T}}
+\newcommand{\Eeq}{E^{\circ}}
+\newcommand{\VRHE}{V_{\mathrm{RHE}}}
+\newcommand{\CS}{C_{S}}
+\newcommand{\dd}{\,\mathrm{d}}
+\newcommand{\Jbf}{\mathbf{J}}
+\newcommand{\nbf}{\mathbf{n}}
+\newcommand{\Leff}{L_{\mathrm{eff}}}
+\newcommand{\dyn}{\mathrm{dyn}}
+\newcommand{\bulk}{\mathrm{bulk}}
+
+% Q&A formatting
+\definecolor{qcol}{RGB}{20,40,120}
+\newcommand{\Q}[1]{\medskip\par\noindent\textcolor{qcol}{\textbf{Q.}}\ \textbf{#1}\par\nopagebreak\smallskip}
+\newcommand{\A}{\noindent\textbf{A.}\ \ignorespaces}
+\newenvironment{followups}{\par\smallskip\noindent\emph{Likely follow-ups:}\begin{itemize}[leftmargin=1.6em,topsep=1pt]}{\end{itemize}}
+\newcommand{\fu}[1]{\item \textbf{``#1''}\ }
+
+\title{\vspace{-2.2em}\textbf{Anticipated Q\&A --- ``PNP--BV, revisited''}\\[2pt]
+\large Reference sheet: governing equations, numerics, verification, identifiability}
+\author{Group meeting, May 27 \quad$\cdot$\quad prepared for a PhD applied-math audience}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-2.5em}
+
+\begin{quote}\small
+\textbf{How to use this.} \S1 is the model on one screen --- every equation
+and number, so you can flip to a formula mid-question. \S2 is the
+anticipated-questions bank, grouped (A) modeling/reduction, (B) numerics,
+(C) verification, (D) inverse/identifiability, (E) physics sanity,
+(F) methodology. \S3 is a candid list of the model's current weak points
+(so nothing lands as a surprise). \S4 is a one-page numbers cheat-sheet.
+Boxed equations are the ones most worth having memorized.
+\end{quote}
+
+\tableofcontents
+\medskip\hrule
+
+%====================================================================
+\section{The model on one screen}\label{sec:model}
+
+\subsection{Domain and the dimensional reduction}
+The experiment is a rotating ring--disk electrode (RRDE): O$_2$ is reduced
+at a carbon disk, H$_2$O$_2$ is swept radially out and quantified at a Pt
+ring (collection efficiency $N=0.224$, Ruggiero 2022). We solve a
+\textbf{quasi-1D} problem in the electrode-normal coordinate only: a 2D
+strip $\Omega=(0,1)\times(0,\,\Leff/L_{\mathrm{ref}})$ with no-flux side
+walls, so all variation is in the normal direction $y$. Electrode/OHP at
+$y=0$, bulk at $y=\Leff$.
+
+\textbf{Where the convection went.} The RRDE is physically a steady
+axisymmetric \emph{convection}--diffusion problem. We do not solve a
+velocity field. Under the standard rotating-disk (Levich) reduction,
+normal transport dominates inside the Nernst diffusion layer of thickness
+$\delta_N$; outside it convection holds concentrations at bulk. We model
+only the normal coordinate and put a Dirichlet bulk condition at
+$y=\Leff\approx\delta_N$. Convection therefore enters \emph{only} through
+(i) the truncation length $\Leff$ and (ii) the fixed bulk values there.
+\[
+  \boxed{\;\delta_N \;\approx\; 1.61\,D^{1/3}\nu^{1/6}\omega^{-1/2}\;}
+  \qquad \omega = 2\pi\,\Omega/60 .
+\]
+For O$_2$ ($D=1.9\times10^{-9}\,\mathrm{m^2/s}$, $\nu\approx10^{-6}\,
+\mathrm{m^2/s}$) at $\Omega=1600$ rpm this is $\delta_N\approx15\,\mu$m;
+production uses $\Leff=100\,\mu$m (a transport-calibration knob, see Q\,A2).
+
+\subsection{Governing equations (strong form)}
+One Nernst--Planck equation per \emph{dynamic} species $i\in\{\mathrm{O_2},
+\mathrm{H_2O_2},\mathrm{H^+}\}$ (charges $z=0,0,+1$), coupled to Poisson:
+\[
+  \boxed{\;\frac{\partial c_i}{\partial t}
+   = -\nabla\!\cdot\Jbf_i,\qquad
+   \Jbf_i = -D_i\!\left(\nabla c_i + \tfrac{z_i F}{RT}\,c_i\nabla\varphi
+            + c_i\nabla\mu_i^{\mathrm{steric}}\right)\;}
+\]
+\[
+  \boxed{\;-\nabla\!\cdot(\varepsilon\nabla\varphi)
+   = \sum_{i\in\dyn} z_i F c_i \;+\; \sum_{b\in\{\mathrm{K^+,SO_4^{2-}}\}}
+     z_b F\,c_b(\varphi)\;}
+\]
+The non-reactive support ions $b$ are \emph{not} discretized; they enter
+the Poisson source analytically (\S\ref{sub:closure}). In production we run
+each voltage to \textbf{steady state} ($\partial_t c_i\to0$; the time term
+is kept but solved with $\Delta t\to\infty$, see Q\,A3).
+
+\subsection{Boundary conditions}
+\begin{itemize}
+\item \textbf{Electrode ($y=0$) --- Butler--Volmer flux} for each reactive
+species, summed over the parallel reactions $r$ with stoichiometry
+$\nu_{i,r}$:
+\[
+  -\Jbf_i\!\cdot\nbf = \sum_r \nu_{i,r}\,R_r .
+\]
+\item \textbf{Stern compact layer --- Robin BC on $\varphi$} (Bazant 2001):
+\[
+  \boxed{\;\varepsilon\,\partial_n\varphi = \CS\,(V_{\mathrm{app}}
+   - \varphi_{\mathrm{OHP}}),\qquad \CS = 0.20~\mathrm{F/m^2}\;}
+\]
+the compact layer (0 to OHP) is not meshed; it is a constant-capacitance
+dielectric gap.
+\item \textbf{Bulk ($y=\Leff$) --- Dirichlet:} $c_i=c_i^{\bulk}$,
+$\varphi=0$ (pins the drop across the domain).
+\item \textbf{Side walls --- no flux} ($\partial_x(\cdot)=0$), which is what
+makes the 2D strip behave as 1D.
+\end{itemize}
+
+\subsection{Butler--Volmer: parallel 2e$^-$/4e$^-$, log-rate form}
+Two reactions run \emph{in parallel} (Ruggiero 2022 topology):
+\[
+  \text{(2e$^-$)}\ \mathrm{O_2+2H^+ +2e^-\!\to H_2O_2},\ \Eeq=0.695\,\mathrm{V};
+  \quad
+  \text{(4e$^-$)}\ \mathrm{O_2+4H^+ +4e^-\!\to 2H_2O},\ \Eeq=1.23\,\mathrm{V}.
+\]
+The rate law and its numerically robust log-rate construction (identical in
+exact arithmetic):
+\[
+  R_r = k_{0,r}\!\left[c_O\,e^{-\alpha_r F\eta_r/RT}
+        - c_R\,e^{(1-\alpha_r)F\eta_r/RT}\right],
+  \qquad \eta_r = \varphi_m-\varphi_s-\Eeq_{,r},
+\]
+\[
+  \boxed{\;\log r_r^{(\mathrm{cat})} = \ln k_{0,r} + u_O
+     - \alpha_r n_{e,r}\tfrac{F\eta_r}{RT},\quad
+   R_r = e^{\log r_r^{(\mathrm{cat})}} - e^{\log r_r^{(\mathrm{anod})}}\;}
+\]
+with $u_O=\ln c_O$ folded \emph{inside} the exponent so the branch dies off
+smoothly ($\log r\to-\infty$) instead of being pinned by a clamp floor.
+\textbf{Clips} (\texttt{forms\_logc\_muh.py}, \texttt{config.py}):
+$\eta$ is clipped to $\pm\,\texttt{exponent\_clip}=100$ \emph{on
+$\eta_{\mathrm{scaled}}=F\eta/RT$ before} the $\alpha n_e$ multiply (so the
+largest pre-multiply exponent is $\sim100$, $e^{100}\!\approx\!3\times10^{43}$,
+far below double-precision overflow). At clip $=100$ the dominant 2e$^-$
+branch is \emph{unclipped} across the production window (clip $=50$
+historically produced a fictitious peroxide current). Also
+$\texttt{u\_clamp}=100$ on $\ln c$, per-ion $\texttt{phi\_clamp}=50$ inside
+the Bikerman exponent, and small positivity floors
+(\texttt{free\_dyn\_floor}$=10^{-10}$, \texttt{packing\_floor}$=10^{-8}$).
+
+\subsection{Steric (Bikerman) crowding and the analytic counterion closure}\label{sub:closure}
+Finite ion size enters every species' driving force through a steric
+chemical potential (lattice-gas / Bikerman MPB, Kilic--Bazant--Ajdari 2007):
+\[
+  \mu_i^{\mathrm{steric}}=-\ln\theta,\qquad
+  \theta = 1-\sum_i a_i c_i,\qquad c_{\max}\approx 1/a ,
+\]
+$a_i$ the effective ion volume. This caps the unphysical
+$c\!\to\!\infty$ pile-up that point-ion Poisson--Boltzmann predicts.
+
+\textbf{Counterions are carried exactly, not approximated.} For a
+\emph{non-reactive} ion $b$, steady state gives $\nabla\!\cdot\Jbf_b=0$;
+in 1D with a blocking (no-reaction) electrode the only admissible constant
+flux is $\Jbf_b\equiv0$, hence $\nabla\mu_b=0$, i.e.\ $\mu_b=\mu_b^{\bulk}$.
+Writing $\mu_b=\ln c_b + \tfrac{z_b F}{RT}\varphi-\ln\theta$ and solving the
+(linear in $c_b$) relation gives the closure that feeds Poisson:
+\[
+  \boxed{\;c_b(x) = c_b^{\bulk}\,
+   \frac{\bigl(1-\sum_{j\in\dyn}a_j c_j(x)\bigr)\,e^{-z_b F\varphi/RT}}
+        {\theta_b + a_b c_b^{\bulk}e^{-z_b F\varphi/RT}},
+   \quad \theta_b = 1-\sum_j a_j c_j^{\bulk}-a_b c_b^{\bulk}\;}
+\]
+For $\geq2$ counterions we use a \emph{shared-$\theta$} closure (one common
+denominator) to avoid a coupled local nonlinear solve. This is the central
+correction over prior work, which applied the same closure to \emph{all}
+ions including the reactive ones --- invalid, because reactive species carry
+$\Jbf_i=-\sum_r\nu_{i,r}R_r\neq0$ and so are \emph{not} in $\mu$-equilibrium.
+
+\subsection{Change of variables: log-$c$ and the proton $\mu_H$ (Slotboom)}
+Solve for $u_i=\ln c_i$ (positivity $c_i=e^{u_i}>0$ for free; the
+$O(10^{10})$ concentration range becomes an $O(10)$ range in $u$). The
+proton primary unknown is its \emph{electrochemical potential}
+\[
+  \boxed{\;\mu_H = u_H + \tfrac{z_H F}{RT}\varphi,\qquad
+   c_H = \exp\!\bigl(\mu_H-\tfrac{z_H F}{RT}\varphi\bigr),\qquad
+   \Jbf_H=-D_H c_H\nabla\mu_H\;}
+\]
+In local equilibrium $\nabla\mu_H\approx0$, so $\mu_H$ stays smooth across
+the double layer even though $u_H$ and $\varphi$ each swing by tens of
+log-units. (This is exactly the \emph{Slotboom variable} from
+semiconductor drift--diffusion --- PNP and drift--diffusion are the same
+operator; the mobility-form flux $\Jbf=-Dc\,\nabla\mu$ is the
+Scharfetter--Gummel-friendly form.)
+
+\subsection{Discretization and nondimensionalization}
+Firedrake, continuous Galerkin \textbf{P1 (CG1)} on a mesh graded toward
+$y=0$. Exact Jacobian by UFL automatic differentiation
+(\texttt{fd.derivative(F,U)}); Newton with continuation warm-starts
+(\S\ref{sub:cont}); direct linear solves (1D). Scales: $L_{\mathrm{ref}}=
+100\,\mu$m, $D_{\mathrm{ref}}=D_{\mathrm{O_2}}=1.9\times10^{-9}\,
+\mathrm{m^2/s}$, $c_{\mathrm{ref}}=c_{\mathrm{O_2}}=1.2\,\mathrm{mol/m^3}$,
+thermal voltage $\VT=RT/F\approx25.7\,$mV. In nondim units the migration
+prefactor $e_m=(F/RT)\VT=1$ and the Poisson coefficient is
+$(\lambda_D/L)^2$.
+
+\subsection{Continuation (deform easy $\to$ hard)}\label{sub:cont}
+Never solve the stiff problem cold. Ramp three monotone knobs, warm-starting
+Newton at each step; on failure roll back to the last good solution and
+bisect:
+\begin{center}\small
+\begin{tabular}{llll}
+\toprule
+knob & start $\to$ target & step rule & on failure\\
+\midrule
+$k_0$ (rate) & $10^{-12}\to1\times$ physical & rungs $\{10^{-12},10^{-9},10^{-6},10^{-3},1\}$ & geom.\ midpoint $\sqrt{ab}$ ($\leq4$)\\
+$\CS$ (Stern) & $\sim$ build $0.10\to0.20$ & decreasing ladder & caller densifies\\
+$\VRHE$ (volt.) & equilibrium $\to$ window & walk by $\mathrm{argsort}|\eta|$ & halve step (8 substeps, depth 5)\\
+\bottomrule
+\end{tabular}
+\end{center}
+This is \textbf{natural/parameter continuation}, not pseudo-arclength: it
+cannot traverse a fold/turning point (it would exhaust the bisection budget
+and raise \texttt{LadderExhausted}). See Q\,B5.
+
+\subsection{Parameter reference}
+\begin{center}\small
+\begin{tabular}{lllll}
+\toprule
+species & role & $D$ ($\mathrm{m^2/s}$) & $z$ & ionic radius / $a$\\
+\midrule
+O$_2$    & reactant (PDE)        & $1.9\times10^{-9}$  & $0$  & $r=1.70$\,\AA\\
+H$_2$O$_2$ & 2e$^-$ product (PDE) & $1.6\times10^{-9}$  & $0$  & $r=2.00$\,\AA\\
+H$^+$    & co-reactant (PDE, $\mu_H$) & $9.31\times10^{-9}$ & $+1$ & $r=2.80$\,\AA\ (H$_3$O$^+$)\\
+K$^+$    & support (analytic)    & ($1.96\times10^{-9}$) & $+1$ & $r=2.3$\,\AA\\
+SO$_4^{2-}$ & support (analytic) & ---                 & $-2$ & $r=2.4$\,\AA\\
+\bottomrule
+\end{tabular}
+\end{center}
+Bulk: $[\mathrm{K^+}]=0.2$\,M, $[\mathrm{SO_4^{2-}}]=0.1$\,M (so
+$\sum z_b c_b^{\bulk}=0$), ionic strength $I=\tfrac12\sum z_i^2 c_i=0.3$\,M;
+$[\mathrm{O_2}]\approx1.2\,\mathrm{mol/m^3}$, $[\mathrm{H^+}]$ set by pH.
+$\Eeq=\{0.695,1.23\}$\,V; $\CS=0.20\,\mathrm{F/m^2}$; $N=0.224$;
+$\Leff=100\,\mu$m; physical Debye length $\lambda_D=\sqrt{\varepsilon
+RT/(2F^2I)}\approx0.55$\,nm at $I=0.3$\,M, so
+$\lambda_D/\Leff\approx5\times10^{-6}$.
+
+\medskip\hrule
+%====================================================================
+\section{Anticipated questions \& answers}\label{sec:qa}
+
+\subsection*{A. Modeling and the dimensional reduction}
+
+\Q{Your domain is 1D but the RRDE is a rotating-disk convection--diffusion
+problem. Where did the convection go?}
+\A We don't solve a velocity field. We use the classical rotating-disk
+(Levich) reduction: inside the Nernst diffusion layer normal transport
+dominates, and convection's role is to hold the outer edge at bulk
+composition. So we solve the normal coordinate on $[0,\Leff]$ with a bulk
+Dirichlet condition at $y=\Leff\approx\delta_N$. Convection is encoded
+entirely in the truncation length and the bulk values --- no convective
+operator appears. The diagnostic that this is doing the right thing is that
+the diffusion-limited plateau obeys the Levich scaling
+$|i_{\mathrm{plateau}}|\propto1/\Leff$.
+\begin{followups}
+\fu{Isn't that just a Nernst stagnant-layer approximation?} Yes, exactly ---
+and it's the standard one for steady RDE/RRDE modeling. It's accurate when
+$\delta_N$ is thin relative to radial gradients, which holds at these
+rotation rates.
+\fu{Could radial (ring) collection matter?} For the disk I-V it doesn't ---
+collection efficiency $N=0.224$ is a downstream geometric factor relating
+ring to disk current; it doesn't enter the disk transport problem.
+\end{followups}
+
+\Q{So $\Leff=100\,\mu$m is a fit parameter?}
+\A Effectively yes, and we're upfront about it (CLAUDE.md: ``changing it
+changes the results''). The physically-principled value is the Nernst-layer
+thickness $\delta_N=1.61\,D^{1/3}\nu^{1/6}\omega^{-1/2}$, which is
+$\approx15\,\mu$m for O$_2$ at 1600 rpm (note: somewhat smaller than the
+slide's per-rpm figures --- those use a higher viscosity/prefactor
+convention; trust the formula and the \emph{scaling}, not the exact number).
+We run $\Leff=100\,\mu$m as a transport-calibration knob, and the
+defensible, falsifiable content is that $|i_{\mathrm{plateau}}|\propto
+1/\Leff$ over a sweep $\Leff\in\{16,21,66,100\}\,\mu$m.
+\begin{followups}
+\fu{Then your absolute plateau current isn't predictive?} Correct --- the
+plateau \emph{magnitude} is set by $\Leff$; the \emph{shape} (onset, Tafel
+slope, selectivity vs.\ potential) is what the physics predicts. We treat
+$\Leff$ as the one transport degree of freedom.
+\end{followups}
+
+\Q{Steady or transient? You wrote $\partial_t c$.}
+\A We solve steady states, one per voltage. The voltammetric sweep is
+quasi-static, so each operating point is a steady solution. We keep the time
+term in the residual but run it with $\Delta t=10^{15}$ (MMS) / large, which
+isolates the steady spatial operator; the per-voltage solves are steady. We
+could turn transient on for fast-scan voltammetry or EIS later.
+
+\Q{Why is the Boltzmann/Bikerman closure legitimate for the counterions but
+not for O$_2$, H$_2$O$_2$, H$^+$? Isn't that inconsistent?}
+\A It's the opposite of inconsistent --- it's \emph{exact} for the
+counterions and \emph{invalid} for the reactive species, for the same
+reason. A non-reactive ion has zero flux at the blocking electrode, so in 1D
+steady state $\Jbf_b\equiv0$, hence its electrochemical potential is flat
+($\nabla\mu_b=0$) and $c_b$ is exactly the Bikerman--Boltzmann distribution
+--- no approximation. The reactive species carry the Butler--Volmer flux
+$\Jbf_i=-\sum_r\nu_{i,r}R_r\neq0$, so their $\mu$ is \emph{not} flat and they
+must be solved as PDEs. Prior work's error was imposing the closure on the
+reactive species too.
+\begin{followups}
+\fu{What about transients --- then $\Jbf_b\neq0$.} True; the closure is a
+steady-state statement. In a transient run the counterions would need to be
+discretized (or a relaxation closure used). Our production runs are steady,
+so it's exact.
+\fu{Does the shared-$\theta$ form for two counterions break exactness?} It's
+exact for one counterion; for two it's a mild approximation (a single shared
+packing denominator instead of a coupled local solve), which we accept to
+keep Poisson's source algebraic.
+\end{followups}
+
+\Q{Is the diffuse layer electroneutral? How do you set the bulk?}
+\A The \emph{bulk} is electroneutral by construction ($\mathrm{K^+}$ $+0.2$,
+$\mathrm{SO_4^{2-}}$ $-0.2$, trace H$^+$/OH$^-$), which is required for a
+well-posed Dirichlet bulk. The \emph{diffuse layer is deliberately not}
+electroneutral --- it's the space-charge region, which is the whole point of
+solving Poisson rather than assuming local electroneutrality. The net charge
+there is screened over $\lambda_D\approx0.55$\,nm.
+
+\Q{Why a constant Stern capacitance? Real compact-layer capacitance is
+potential- and concentration-dependent.}
+\A $\CS$ constant is the standard linear compact-layer (Bazant 2001 / Stern)
+model: the 0--OHP gap is treated as a fixed-capacitance dielectric, giving
+the Robin condition $\varepsilon\partial_n\varphi=\CS(V_{\mathrm{app}}-
+\varphi_{\mathrm{OHP}})$. We acknowledge it's a simplification and treat
+$\CS$ as a fit parameter with a literature-anchored target
+$0.20\,\mathrm{F/m^2}$ (Bohra--Koper--Choi consensus) and a sensitivity
+bracket $\{0.05,0.10,0.20,0.30\}$. A voltage-dependent $\CS(\varphi)$ is a
+drop-in generalization of the Robin coefficient.
+
+\Q{What potential reference are you using --- where's the OCP?}
+\A We use $\psi_{\bulk}=0$ and $V_M=\VRHE$ directly. The experimental deck
+references $\psi_{\bulk}=V_{\mathrm{OCP}}\approx0.90$\,V at pH 4
+($V_{\mathrm{OCP}}=0.47+0.197+0.059\,\mathrm{pH}$). Because BV
+overpotentials use \emph{absolute} potentials, $\eta_r=\VRHE-\Eeq_{,r}$ is
+unaffected by a uniform shift, so kinetics are invariant; but
+\emph{double-layer} parameters ($\CS$, $\Gamma_{\max}$, $\Delta_\beta$) could
+absorb the $\sim0.9$\,V offset as fit bias. For the prior-work reproduction
+we \emph{did} apply the shift, moving both $\VRHE$ and \emph{both} $\Eeq$ by
+$-0.785$\,V (pH 2) so $\eta$ is preserved.
+
+\subsection*{B. Numerics and discretization}
+
+\Q{Why CG1? For advection-dominated electromigration won't Galerkin
+oscillate --- shouldn't you use SUPG or DG?}
+\A The $\mu$/log-$c$ change of variables is what buys stability: in
+equilibrium the drift term vanishes ($\nabla\mu=0$), so the operator is not
+advection-dominated in the variable we actually discretize, and we see no
+Galerkin wiggles. Out of equilibrium the steep structure is a thin boundary
+layer that we resolve by $h$-grading the mesh toward the electrode rather
+than by adding artificial diffusion. CG1 keeps the Jacobian assembly and
+adjoint simple. We have not done a formal cell-Peclet stability analysis ---
+the evidence is clean MMS rates plus oscillation-free profiles; SUPG/DG is
+the fallback if we ever push into a regime where Galerkin breaks.
+
+\Q{How can P1 resolve a 0.55\,nm Debye layer inside a 100\,$\mu$m domain ---
+five-plus orders of magnitude of scale separation?}
+\A A geometric/graded mesh: the first cell near $y=0$ is sub-nm and cells
+grow geometrically out to the bulk. The interesting structure lives in the
+first $\sim$few nm (a few $\lambda_D$); the remaining 100\,$\mu$m is a nearly
+linear diffusion ramp that needs few cells. The verification profiles
+(Fig.\ 4.27/4.28 reproduction) show O$_2$ and H$^+$ structure fully resolved
+over the first $\sim2$--14\,nm.
+\begin{followups}
+\fu{Have you done a spatial mesh-refinement study on the real
+(non-MMS) solution?} This is the honest gap --- see Q\,C2. ``25/25
+converged'' on the slide refers to the 25 \emph{voltage} points, not a
+spatial convergence study. A self-convergence sweep in $N_y$ on the stiff
+solution is the right thing to add.
+\end{followups}
+
+\Q{Concentrations span $10^{10}$. How is the Jacobian not hopelessly
+ill-conditioned, and how do you keep $c>0$?}
+\A By not solving for $c$. We solve for $u=\ln c$ (so $c=e^u>0$
+automatically and the unknown is $O(10)$) and use the electrochemical
+potential $\mu$ as the proton primary, which is smooth across the layer
+(\S1.6). The stiff exponential lives \emph{inside} one well-behaved
+nonlinearity ($\Jbf=-De^{u}\nabla\mu$) rather than spreading across the
+spectrum of a $c$-Jacobian. This is the Slotboom-variable trick from device
+physics. The log-rate BV (\S1.4) is the boundary analogue: build rates in
+log-space, exponentiate once.
+
+\Q{What nonlinear solver, and how robust is Newton here?}
+\A Newton with the exact UFL Jacobian, globalized by continuation rather than
+by line search alone: every solve is warm-started from a nearby converged
+state, so Newton sees a good initial guess. Hard rungs can fall back to
+Picard relaxation. The 1D linear systems are solved directly.
+
+\Q{Your continuation is natural/parameter continuation --- can it cross a
+fold? Is the ``cliff'' a turning-point bifurcation?}
+\A It is natural continuation (monotone ramps in $k_0$, $\CS$, $V$ with
+geometric/arithmetic bisection on failure), \emph{not} pseudo-arclength, so
+it cannot traverse a genuine fold --- it would exhaust the bisection depth
+and raise an error, which is at least a loud failure mode. On the ``cliff'':
+we investigated whether the steep near-$V\!\approx\!0$ transition is a real
+fold. A Picard-wrapped study of the closure form showed \emph{no} cliff ---
+the cliff in some prior closure-model figures was a closed-form / Chebyshev
+numerical artifact, not a bifurcation of the transport problem. So in the
+regimes we run we don't believe we're crossing a fold; if we needed to,
+arclength continuation is the standard fix.
+\begin{followups}
+\fu{How would you know if you hit a real fold?} The bisection budget
+exhausts and the step is reported missing --- it doesn't silently converge to
+a wrong branch. That's a deliberate property of the homotopy.
+\fu{Path dependence / hysteresis?} If the steady state is unique (our
+working assumption, supported by the Bikerman free-energy structure), the
+warm-start path doesn't change the answer. Multiple steady states would show
+as path-dependent results; we haven't observed that.
+\end{followups}
+
+\subsection*{C. Verification and validation}
+
+\Q{What does the MMS actually certify --- and what does it not?}
+\A MMS certifies that the weak forms, assembly, boundary terms (BV flux and
+Stern Robin), and Jacobian are implemented \emph{correctly} and at
+\emph{design order}. We insert a smooth exact solution for all four fields
+($u_{\mathrm{O_2}},u_{\mathrm{H_2O_2}},\mu_H,\varphi$), derive the implied
+source for each weak-form term \emph{independently} (not via
+\texttt{ufl.replace} on the assembled residual --- so a wiring bug surfaces
+as a rate failure instead of cancelling symmetrically), and recover the
+textbook CG1 rates $L^2\approx2$, $H^1\approx1$ for every field, with both
+reaction branches and the Stern coupling active. What it does \emph{not}
+certify: that the production mesh resolves the real sub-nm boundary layer ---
+the manufactured solution is smooth and $O(1)$, so it exercises the
+asymptotic regime, not the stiff one.
+\[
+  \|u^\ast-u_h\|_{L^2}=\mathcal O(h^{p+1}),\quad
+  \|u^\ast-u_h\|_{H^1}=\mathcal O(h^{p}),\quad p=1 .
+\]
+
+\Q{So how do you know the production runs are resolved?}
+\A This is the gap I'd flag myself: MMS gives order-of-accuracy, not a
+resolution certificate for the stiff solution. The right addition is a
+spatial self-convergence study --- refine $N_y$ on the actual problem and show
+the I-V curve and surface fluxes converge. Right now the evidence is
+indirect (graded mesh sized to several $\lambda_D$, resolved-looking
+profiles, code-to-code agreement). I wouldn't claim more than that.
+
+\Q{The ``$\sim5\%$ agreement'' --- with what, and is that validation?}
+\A That's \emph{verification against prior work} (code-to-code), not
+validation against experiment. We matched a prior thesis's single-2e$^-$
+setup (same diffusivities, steric coefficients, OCP shift) and reproduced
+its O$_2$-ratio and concentration profiles to $\sim5\%$ (25/25 voltages
+converged). Worth stating plainly: the prior model itself has known
+numerical artifacts (a half-Levich plateau and a ``cliff'' that trace to its
+closed-form/Chebyshev closure), so reproducing it validates \emph{our
+implementation of that model}, not the chemistry.
+
+\Q{Does the full model match the experimental data yet?}
+\A No --- and the talk says so (``what's next: refine until we get a good
+fit''). The most important quantitative gap is the cathodic plateau (Q\,E1):
+the present model, with no interfacial proton source, starves for H$^+$ at
+pH 4 and plateaus $\sim40\times$ below the measured disk current. Closing
+that gap (water self-ionization and/or field-shifted cation hydrolysis) is
+the next physics, not a numerics issue.
+
+\subsection*{D. Inverse problem and identifiability}
+
+\Q{The opening Lotka--Volterra demo --- what is it showing, and why lead with
+it?}
+\A It's a deliberately transparent instance of \emph{structural
+unidentifiability}: three different predator--prey parameter sets that
+produce the \emph{identical observed prey} trajectory. The standard
+construction: for $\dot x=x(a-by)$, $\dot y=y(-c+dx)$ with only prey $x$
+observed, the rescaling $y\to\lambda y$, $b\to b/\lambda$, $y(0)\to\lambda
+y(0)$ leaves $x(t)$ \emph{exactly} invariant (the prey only feels the product
+$by$). So $b$ and the predator scale are confounded --- no amount of clean
+prey data can separate them. Three systems with $\lambda\in\{1,2,4\}$ give
+the same prey, different (unobserved) predator. The point: this is the
+\emph{same pathology} we hit in the real inverse problem --- fitting a single
+observable can leave whole parameter directions undetermined --- shown on a
+problem everyone can check by hand. (The live demo was generated ad hoc; it
+isn't committed in the repo, so these are the canonical RHS, not necessarily
+the exact three shown.)
+
+\Q{Structural vs.\ practical identifiability --- which is your problem?}
+\A Both, and we can now point to a concrete case. \emph{Structural} = even
+noise-free data can't pin the parameter; \emph{practical} = finite/noisy data
+can't. Our ``Phase D'' study of one parameter found a structural failure
+(see next Q). In general the I-V/selectivity curve constrains parameter
+\emph{combinations} (onset, Tafel slope, plateau), not individual rate
+constants.
+
+\Q{How do you compute sensitivities and diagnose identifiability?}
+\A Adjoint gradients via pyadjoint/\texttt{firedrake.adjoint}
+(\texttt{Control} + \texttt{ReducedFunctional.derivative()}); the
+continuation/homotopy work is wrapped in \texttt{stop\_annotating()} so it
+stays off the tape. For identifiability we form the Fisher information
+$F=S^\top_{\!\mathrm{white}}S_{\mathrm{white}}$ from the noise-whitened
+sensitivity matrix, then read $\mathrm{cond}(F)$ and its weak eigenvector
+(the unidentifiable direction). Noise model is $\sigma=\sqrt{(c_{\mathrm{rel}}
+|y|)^2+\sigma_{\mathrm{abs}}^2}$ with $c_{\mathrm{rel}}=0.02$ --- a local
+relative model with an absolute floor, chosen because a global-max whitening
+produced artifact ``flips'' when $|y|$ spans many decades.
+\begin{followups}
+\fu{Why adjoint and not finite differences?} Cost: gradient in $O(1)$
+solves regardless of parameter count, and it's exact to solver tolerance. We
+verify adjoint gradients against cold-ramp finite differences near the
+clipped voltages.
+\end{followups}
+
+\Q{What was the Phase D non-identifiability result, concretely?}
+\A We tried to fit a single scalar, $\Delta_\beta$ (the carbon-vs-Cu offset
+in Singh 2016's field-dependent p$K_a$ coefficient), to the deck. Verdict:
+\textbf{non-identifiable}. The loss was \emph{flat} ---
+$15.6288\,\mathrm{pp^2}$ to six figures --- across $\Delta_\beta$ spanning
+about \emph{eleven orders of magnitude}, because the Singh selectivity
+contribution is invariant in the relevant surface-charge coordinate (OHP
+$\sigma\approx10^{-7}$ counts/pm$^2$). On top of that structural flatness, the
+model overshoots the deck uniformly: max H$_2$O$_2$ selectivity $66.58$\,pp
+vs.\ deck K@pH4 mean $50.95$\,pp, a $+15.6$\,pp gap at \emph{every}
+$\Delta_\beta$. So the parameter has no leverage on the residual --- fitting
+it is meaningless and the downstream phase was blocked. The Lotka--Volterra
+demo is the toy mirror of this exact finding.
+
+\Q{Then what \emph{is} identifiable from the data?}
+\A Combinations tied to features of the curve: the half-wave/onset potential
+constrains the grouping $k_0\,e^{-\alpha F\Eeq/RT}$ (rate $\times$
+thermodynamics), the Tafel slope constrains $\alpha n_e$, and the plateau
+constrains transport ($\Leff$, or $D_ic_i$). Individual $k_0$, $\alpha$,
+$\Gamma_{\max}$, $\CS$, $\Delta_\beta$ are generally not separately
+recoverable from disk I-V alone --- which is why the ring channel
+(selectivity) and pH/concentration sweeps add the independent constraints
+that break degeneracies.
+
+\subsection*{E. Physics sanity checks}
+
+\Q{What sets the cathodic plateau in your model, and does it match the
+deck?}
+\A In the present model (no interfacial proton source), the pH-4 plateau is
+the \textbf{H$^+$ diffusion (Levich) limit}, not O$_2$:
+\[
+  i_{\mathrm{lim,H^+}}=\frac{F D_{H}c_{H}^{\bulk}}{\Leff}
+  =\frac{96485\cdot9.31\times10^{-9}\cdot0.1}{10^{-4}}
+  \approx0.090~\mathrm{mA/cm^2}\ \ (\text{pH 4}).
+\]
+That's because $[\mathrm{H^+}]=0.1\,\mathrm{mol/m^3}$ is $\sim12\times$
+scarcer than O$_2$ and each O$_2$ needs 2--4 protons --- H$^+$ runs out
+first. But the \emph{measured} pH-4 disk current is $\sim4\,\mathrm{mA/cm^2}$,
+which is the O$_2$ 4e$^-$ Levich scale ($0.62\,nFD^{2/3}\nu^{-1/6}\omega^{1/2}
+c\approx5.7\,\mathrm{mA/cm^2}$). So the model is $\sim40\times$ low \emph{at
+pH 4} --- a clear sign that reality is \emph{not} H$^+$-transport-limited,
+i.e.\ protons are being replenished at the interface (water self-ionization,
+buffering, and the field-shifted cation hydrolysis we're pursuing). This
+mismatch \emph{is} the motivation for the next physics.
+\begin{followups}
+\fu{Then why did the prior thesis reproduction look fine?} Different regime:
+at pH 2, $[\mathrm{H^+}]=10\,\mathrm{mol/m^3}\!>\![\mathrm{O_2}]$, so the
+plateau there is the O$_2$ Levich limit and protons aren't scarce. Which
+species limits is just whichever $FD_ic_i/\Leff$ is smallest.
+\fu{Is the $40\times$ a numerics bug?} No --- it's a faithful consequence of
+the species set. Add a proton source and the plateau rises toward the O$_2$
+limit.
+\end{followups}
+
+\Q{How does selectivity (2e$^-$ vs 4e$^-$) emerge in the model?}
+\A From the competition of the two parallel BV rates as a function of
+overpotential: each reaction has its own $\Eeq$ ($0.695$ vs $1.23$\,V),
+$k_0$, and $\alpha n_e$, so their relative magnitude --- hence the H$_2$O$_2$
+fraction --- shifts with potential and with the local H$^+$/O$_2$
+availability. Selectivity is impossible to model with one reaction (the prior
+closure model's central limitation); two parallel reactions are the minimum.
+A ratio sweep $k_{0,4e}/k_{0,2e}$ shows a regime
+($\sim10^{-18}$) where Mangan-like $\sim35$--$50\%$ peroxide selectivity
+emerges, which is partly why we suspect $\alpha_{4e}$ is also miscalibrated.
+
+\Q{Are your ion sizes / steric coefficients physical?}
+\A For the production K$_2$SO$_4$/Cs presets, yes --- as of the 2026-05-21
+fix the dynamic species use physical radii (O$_2$ 1.70\,\AA, H$_2$O$_2$
+2.00\,\AA, H$^+$ 2.80\,\AA\ for H$_3$O$^+$ Stokes) and the counterions use
+Marcus/Stokes radii (K$^+$ 2.3, SO$_4^{2-}$ 2.4\,\AA). \emph{Caveat for
+honesty}: a non-physical placeholder $a=0.01$ (an $\approx14.9$\,\AA\ sphere)
+historically applied to the dynamic species and still applies to ClO$_4^-$
+in a non-production equivalence stack. The H$^+$ size matters because H$^+$
+Boltzmann-piles at the OHP under cathodic bias; with the physical radius its
+packing cap is $\sim1.8\times10^4\,\mathrm{mol/m^3}$ rather than $\sim120$.
+The Bikerman model is thermodynamically consistent (it derives from a
+lattice-gas free energy), so $\mu^{\mathrm{steric}}=-\ln\theta$ isn't ad hoc.
+
+\Q{Why does selectivity depend so strongly on pH in the data?}
+\A Because both reactions consume H$^+$ and the interfacial proton
+availability is pH-dependent, and because the cation-hydrolysis proton
+source (our working hypothesis) is itself field- and pH-sensitive. The deck
+shows the H$_2$O$_2$ selectivity peak marching with pH; reproducing that pH
+trend is the validation target. The group's documented hypothesis is cation
+hydrolysis at the polarized OHP (Singh 2016 field-dependent p$K_a$), not
+sulfate/carbonate/water-self-ionization as the primary driver.
+
+\subsection*{F. Methodology (AI-assisted scientific computing)}
+
+\Q{Much of this was built/derived with an AI agent --- how do you trust the
+derivations and code?}
+\A The trust layer is exactly the verification stack, and it's designed to
+catch the failure modes AI introduces. MMS with \emph{independent} per-term
+source injection means a mis-wired weak form shows up as a broken convergence
+rate rather than cancelling; adjoint gradients are cross-checked against
+finite differences; results are reproduced code-to-code against prior work;
+and every physics claim is gated behind a falsifiable numerical test (e.g.\
+the Levich $1/\Leff$ scaling, the flat-loss identifiability check). The human
+owns the specification and the checks; the agent accelerates implementation
+and algebra. The Lotka--Volterra demo is itself a meta-check: the agent
+re-derives a \emph{known} unidentifiability result autonomously, which
+exercises the workflow on a problem with a known answer.
+
+\medskip\hrule
+%====================================================================
+\section{Candid weak points (so nothing surprises you)}\label{sec:weak}
+\begin{itemize}
+\item \textbf{$\Leff$ is a transport knob}, not first-principles; it sets the
+plateau magnitude. Principled content is the $1/\Leff$ Levich scaling.
+\item \textbf{No convection solved} --- stagnant Nernst-layer reduction; fine
+for steady RDE, would need revisiting for transient or non-uniform-access
+geometries.
+\item \textbf{No spatial mesh-convergence study on the stiff solution yet} ---
+MMS covers order-of-accuracy on a smooth solution only.
+\item \textbf{Constant $\CS$} --- linear compact-layer model; real capacitance
+is field/concentration dependent.
+\item \textbf{$\psi_{\bulk}=0$ (no OCP shift)} in production --- kinetics
+invariant, but double-layer params may absorb a $\sim0.9$\,V offset as fit
+bias; a plausible (untested) contributor to the $\Delta_\beta$
+non-identifiability.
+\item \textbf{Model $\neq$ experiment yet} --- the pH-4 cathodic plateau is
+$\sim40\times$ low without an interfacial proton source (the next physics).
+\item \textbf{Natural continuation only} --- cannot cross a fold (fails
+loudly; would need arclength).
+\item \textbf{Identifiability is genuinely limited} --- disk I-V constrains
+combinations; single kinetic/double-layer parameters are often not
+recoverable (Phase D: $\Delta_\beta$ flat over $\sim$11 orders).
+\item \textbf{Steric-$a$ history} --- physical radii now in production presets;
+a non-physical placeholder lingers for ClO$_4^-$/legacy stacks.
+\end{itemize}
+
+\medskip\hrule
+%====================================================================
+\section{Numbers cheat-sheet}\label{sec:numbers}
+\begin{center}\small
+\begin{tabular}{ll}
+\toprule
+quantity & value\\
+\midrule
+Reactions & 2e$^-$: $\Eeq=0.695$\,V; 4e$^-$: $\Eeq=1.23$\,V (parallel)\\
+Collection efficiency & $N=0.224$ (Ruggiero 2022)\\
+Stern capacitance & $\CS=0.20\,\mathrm{F/m^2}$ (bracket $0.05$--$0.30$)\\
+Domain length & $\Leff=100\,\mu$m (Nernst-layer knob)\\
+Nernst layer (physical, 1600 rpm) & $\delta_N\approx15\,\mu$m\\
+Debye length ($I=0.3$\,M) & $\lambda_D\approx0.55$\,nm; $\lambda_D/\Leff\approx5\times10^{-6}$\\
+Ionic strength & $I=0.3$\,M ($\mathrm{K^+}\,0.2$, $\mathrm{SO_4^{2-}}\,0.1$\,M)\\
+Thermal voltage & $\VT=RT/F\approx25.7$\,mV\\
+$D$ (O$_2$, H$_2$O$_2$, H$^+$) & $1.9,\ 1.6,\ 9.31\ (\times10^{-9}\,\mathrm{m^2/s})$\\
+$[\mathrm{O_2}]_{\bulk}$ & $\approx1.2\,\mathrm{mol/m^3}$\\
+O$_2$ 4e$^-$ Levich limit & $\approx5.7\,\mathrm{mA/cm^2}$ ($\approx$ deck disk scale)\\
+H$^+$ Levich limit (pH 4, $100\,\mu$m) & $\approx0.090\,\mathrm{mA/cm^2}$ (model plateau)\\
+Clips & $\texttt{exponent\_clip}=100$ (on $F\eta/RT$, pre-$\alpha n_e$), $\texttt{u\_clamp}=100$\\
+Continuation $k_0$ & $\{10^{-12},10^{-9},10^{-6},10^{-3},1\}$, geom.\ bisect\\
+Voltage bisection & 8 substeps, depth 5 ($\le32\times$ refine)\\
+Discretization & Firedrake CG1, graded mesh, UFL-AD Jacobian, Newton+continuation\\
+MMS rates & $L^2\approx2$, $H^1\approx1$ (all of $u_{\mathrm{O_2}},u_{\mathrm{H_2O_2}},\mu_H,\varphi$)\\
+Prior-work agreement & $\sim5\%$ (O$_2$-ratio + profiles), 25/25 voltages\\
+Identifiability (Phase D) & $\Delta_\beta$ flat: loss $15.6288\,\mathrm{pp^2}$ over $\sim$11 orders; $66.58$ vs $50.95$\,pp\\
+Inverse machinery & adjoint (pyadjoint); FIM $=S^\top_{\mathrm{white}}S_{\mathrm{white}}$; noise $\sqrt{(0.02|y|)^2+\sigma_{\mathrm{abs}}^2}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\end{document}

@@ -35,12 +35,14 @@ deck: Stern σ-mapping flat across 11 orders of magnitude of Δ_β
 gives same flat loss.  Model max_H₂O₂ = 66.58 pp vs deck K@pH4 mean
 50.95 pp = uniform +15.6 pp overshoot.  Phase E **must NOT launch**.
 Open scope: `k_des`/`Γ_max` re-fit, r_H_El sweep, local-pH coupling.
-**Known discrepancy** surfaced during diagnostic: dynamic species
-(O₂, H₂O₂, H⁺) use `A_DEFAULT = 0.01` (≈ r 14.9 Å, NOT physical) for
-Bikerman steric `a_nondim` — only counterions (K⁺/Cs⁺/SO₄²⁻/OH⁻) use
-real radii.  H⁺ in particular is clamped ~150× tighter than its
-physical r=2.8 Å (H₃O⁺ Stokes) cap.  See `phase6b_step10_phase_D_summary.md` §7
-and Hard Rule #7 below.  Four bridge runs in flight to disentangle.
+The `A_DEFAULT` Bikerman discrepancy surfaced during this diagnostic
+was RESOLVED 2026-05-21 (physical radii in production presets — Hard
+Rule #7).  **2026-06: Phase D failure root-caused** — total current
+was pinned at the H⁺ Levich cap (−0.0898 mA/cm² at pH 4, L=100 µm),
+so every fit knob tuned a transport-capped current.  **Phase 7 / v11
+(active)**: dual-pathway water-as-proton-donor kinetics + RRDE-correct
+L_eff + slide-15 volcano fit.  Plan (GPT-hardened, session 41):
+`~/.claude/plans/ancient-squishing-pond.md`.
 Writeup: `docs/phase6/phase6b_step10_phase_D_summary.md`.  Plan:
 `~/.claude/plans/phase6b-step10-phase-D-deltaBeta-fit.md` (v7-FINAL,
 GPT critique session 37).  V10B locked from earlier:
@@ -128,20 +130,39 @@ non-operational. When resumed, start from
    v10b: `C_S ∈ {0.05, 0.10, 0.20, 0.30}` F/m². Citation chain +
    caveats: `docs/phase6/CMK3_capacitance_literature.md`.
 
-7. **Bikerman `a_nondim` is physical only for counterions, NOT for
-   dynamic species.** `THREE_SPECIES_LOGC_BOLTZMANN` and
-   `FOUR_SPECIES_LOGC_DYNAMIC_K2SO4` both seed O₂/H₂O₂/H⁺ with
-   `A_DEFAULT = 0.01` — corresponds to r ≈ 14.9 Å hard sphere, NOT
-   physical for any of them. Counterion entries (`A_KPLUS_HAT`,
-   `A_CSPLUS_HAT`, `A_SO4_HAT`, `A_OH_HAT`) use real Marcus/Stokes
-   radii. The H⁺ entry matters most because H⁺ Boltzmann-piles up at
-   the OHP under cathodic polarization: `c_max ≈ 1/a` is clamped at
-   ~120 mol/m³ with `A_DEFAULT`, but would be ~1.8×10⁴ mol/m³ with
-   physical r=2.8 Å (H₃O⁺ Stokes). Discrepancy surfaced 2026-05-12
-   during Phase D bridge diagnostics; physical-a variants in
-   `scripts/studies/_phase_D_bridge_corrected_a*.py`. Treat any
-   plateau-set-by-Levich finding as suspect until physical-a bridge
-   runs disambiguate.
+7. **Bikerman `a_nondim`: RESOLVED 2026-05-21 — production presets
+   now carry physical radii for dynamic species.**
+   `THREE_SPECIES_LOGC_BOLTZMANN` and `FOUR_SPECIES_LOGC_DYNAMIC_K2SO4`
+   use `A_O2_HAT` (r=1.70 Å), `A_H2O2_HAT` (r=2.00 Å), `A_HP_HAT`
+   (r=2.80 Å H₃O⁺ Stokes) — see `scripts/_bv_common.py:169-189`.
+   Historical context: before 2026-05-21 they seeded `A_DEFAULT=0.01`
+   (≈ r 14.9 Å, unphysical; H⁺ cap ~150× too tight), which tainted
+   pre-resolution Levich-plateau findings. `A_DEFAULT` lingers only in
+   the non-production ClO₄⁻ stack. Corrected-a Cs⁺ bridge gave
+   byte-equivalent IV at no-hydrolysis config (H⁺ depletes
+   cathodically, cap never binds there); hydrolysis-on conclusions
+   from pre-fix runs remain suspect.
+
+8. **Deck OCP convention: we do NOT currently apply it.** Both the
+   Seitz/Mangan deck (via Yash's `plotting.ipynb` cell 4) and
+   Jithin's thesis reference `ψ_bulk = V_OCP_measured`, with a
+   shared calibration `V_OCP_RHE = 0.47 + 0.197 + 0.059·pH` (0.47 V
+   = GC disk OCP vs Ag/AgCl in O₂-saturated K₂SO₄/Cs₂SO₄). Yields
+   0.785 V at pH 2 (Jithin's exact value) and **0.903 V at pH 4**
+   (deck baseline). Our solver uses `ψ_bulk = 0` and `V_M = V_RHE`
+   directly — implicitly putting "no diffuse-layer driving" at
+   V_RHE = 0 V, ~0.9 V offset from deck reality at pH 4. BV
+   kinetics are unaffected (η = V_RHE − E° uses absolute potentials)
+   but **diffuse-layer parameters (Γ_max, C_S, Δ_β, k₀) may absorb
+   the offset** as fit bias. Plausible (untested) contributor to
+   the Phase D Δ_β non-identifiability. If aligning becomes
+   warranted, apply uniform `-V_OCP_RHE` shift to V_RHE grid AND
+   both E° (R2e + R4e) — preserves η for both reactions. Same
+   trick used for the Jithin reproduction (shift = -0.785 V) in
+   `scripts/studies/_run_jithin_fig_4_26_28.py`. Caveat: 0.47 V is
+   only documented in Yash's notebook — confirm with Linsey/Niall
+   before a production recalibration. Memory note:
+   `project_deck_ocp_convention.md`.
 
 ## Calling the production solver
 

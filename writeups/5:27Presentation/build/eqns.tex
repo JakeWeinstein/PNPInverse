@@ -1,0 +1,37 @@
+% Equation images for the restored strong-form / hard / solve slides.
+% Each equation on its own page; pdftoppm + PIL-trim -> tight PNGs.
+\documentclass[12pt]{article}
+\usepackage[margin=0.4in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\pagestyle{empty}
+\newcommand{\Jbf}{\mathbf{J}}
+\newcommand{\Eeq}{E^{\circ}}
+\begin{document}
+\Large
+% 1 — PNP + Poisson (strong form)
+\[ \frac{\partial c_i}{\partial t} = \nabla\!\cdot\!\left(D_i\!\left[\nabla c_i + \frac{z_i F}{RT}\,c_i\,\nabla\varphi\right]\right) \qquad\qquad -\nabla\!\cdot(\varepsilon\,\nabla\varphi) = \sum_i z_i F\,c_i \]
+\clearpage
+% 2 — Butler-Volmer
+\[ R_r = k_{0,r}\!\left[\,c_O\,e^{-\alpha_r F\eta_r/RT} - c_R\,e^{(1-\alpha_r)F\eta_r/RT}\right], \qquad \eta_r = \varphi_m - \varphi_s - \Eeq_{,r} \]
+\clearpage
+% 3 — Steric
+\[ \mu_i^{\mathrm{steric}} = -\ln\theta, \qquad \theta = 1 - \sum_i a_i c_i \]
+\clearpage
+% 4 — Stern Robin
+\[ \varepsilon\,\partial_n\varphi = C_S\,(V_{\mathrm{app}} - \varphi_{\mathrm{OHP}}), \qquad C_S = 0.20~\mathrm{F/m^2} \]
+\clearpage
+% 5 — hard: Boltzmann buildup (compact; the "~10 orders" is in the bullet text)
+\[ c_i \;\approx\; c_i^{\mathrm{bulk}}\,\exp\!\big(-z_i F\varphi/RT\big) \]
+\clearpage
+% 6 — hard: Debye length
+\[ \lambda_D = \sqrt{\frac{\varepsilon RT}{2F^2 I}} \;\ll\; L_{\mathrm{eff}}, \qquad I = \tfrac12\sum_i z_i^2 c_i \]
+\clearpage
+% 7 — solve: log-c + proton mu_H
+\[ \mu_H = u_H + \frac{z_H F}{RT}\,\varphi, \qquad c_H = \exp\!\Big(\mu_H - \frac{z_H F}{RT}\varphi\Big), \qquad \Jbf_H = -D_H\,c_H\,\nabla\mu_H \]
+\clearpage
+% 8 — solve: log-rate BV
+\[ \log r_r^{(\mathrm{cat})} = \ln k_{0,r} + u_O - \alpha_r\tfrac{F\eta_r}{RT}, \quad \log r_r^{(\mathrm{anod})} = \ln k_{0,r} + u_R + (1-\alpha_r)\tfrac{F\eta_r}{RT}, \quad R_r = r_r^{(\mathrm{cat})} - r_r^{(\mathrm{anod})} \]
+\clearpage
+% 9 — solve: analytic Bikerman closure
+\[ c_b(x) = c_b^{\mathrm{bulk}}\,\frac{\big(1 - \sum_{j\in\mathrm{dyn}} a_j c_j\big)\,e^{-z_b F\varphi/RT}}{\theta_b + a_b\,c_b^{\mathrm{bulk}}\,e^{-z_b F\varphi/RT}}, \qquad \theta_b = 1 - \sum_j a_j c_j^{\mathrm{bulk}} - a_b c_b^{\mathrm{bulk}} \]
+\end{document}
