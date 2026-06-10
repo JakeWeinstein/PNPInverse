@@ -517,6 +517,7 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
 
     bv_k0_funcs = []
     bv_alpha_funcs = []
+    bv_rate_branch_exprs = []   # Phase 7 diagnostic: (cathodic, anodic) per rxn
     if use_reactions:
         bv_rate_exprs = []
         rxns_scaled = scaling["bv_reactions"]
@@ -534,6 +535,7 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
             if float(rxn["k0_model"]) <= 0.0 or bool(rxn.get("enabled", True)) is False:
                 R_j = fd.Constant(0.0)
                 bv_rate_exprs.append(R_j)
+                bv_rate_branch_exprs.append((fd.Constant(0.0), fd.Constant(0.0)))
                 continue
 
             n_e_j = fd.Constant(float(rxn["n_electrons"]))
@@ -610,6 +612,7 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
 
             R_j = cathodic - anodic
             bv_rate_exprs.append(R_j)
+            bv_rate_branch_exprs.append((cathodic, anodic))
 
             stoi = rxn["stoichiometry"]
             for i in range(n):
@@ -853,6 +856,7 @@ def build_forms_logc_muh(ctx: dict[str, Any], solver_params: Any) -> dict[str, A
         "bv_settings": bv_cfg,
         "bv_convergence": conv_cfg,
         "bv_rate_exprs": bv_rate_exprs,
+        "bv_rate_branch_exprs": bv_rate_branch_exprs,
         "bv_k0_funcs": bv_k0_funcs,
         "bv_alpha_funcs": bv_alpha_funcs,
         "steric_a_funcs": steric_a_funcs,

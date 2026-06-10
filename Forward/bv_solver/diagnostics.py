@@ -80,6 +80,53 @@ def surface_field_means(ctx: dict[str, Any]) -> dict[str, float]:
     return out
 
 
+def surface_ph(
+    ctx: dict[str, Any],
+    *,
+    h_species_index: int = 2,
+    c_scale_mol_m3: float = 1.2,
+) -> dict[str, float]:
+    """Surface pH (and pOH when the Kw closure is active) at the electrode.
+
+    Phase 7 first-class local-pH diagnostic.  ``surface_pH`` is computed
+    from the muh-aware surface mean of ``log(c_H)`` via
+    :func:`surface_field_means`:
+
+        pH(0) = -log10( c_H_surface_mean * c_scale_mol_m3 / 1000 )
+
+    When ``ctx['water_ionization']`` carries the fast-equilibrium OH
+    closure, ``surface_pOH`` is reported from c_OH = Kw_eff / c_H at the
+    surface mean, plus the consistency residual
+    ``ph_poh_minus_pkw = pH + pOH - pKw_eff`` (== 0 exactly under the
+    closure, by construction; deviations flag a broken Kw wiring).
+    """
+    fields = surface_field_means(ctx)
+    out: dict[str, float] = {}
+    c_h_hat = fields.get(f"c{h_species_index}_surface_mean")
+    if c_h_hat is None or not np.isfinite(c_h_hat) or c_h_hat <= 0.0:
+        out["surface_pH"] = float("nan")
+        return out
+    c_h_molar = c_h_hat * c_scale_mol_m3 / 1000.0
+    out["surface_pH"] = float(-np.log10(c_h_molar))
+
+    wi = ctx.get("water_ionization")
+    if wi is not None:
+        kw_func = getattr(wi, "kw_eff_func", None)
+        try:
+            kw_hat = float(kw_func.dat.data_ro[0]) if kw_func is not None else None
+        except Exception:
+            kw_hat = None
+        if kw_hat is not None and kw_hat > 0.0:
+            c_oh_hat = kw_hat / c_h_hat
+            c_oh_molar = c_oh_hat * c_scale_mol_m3 / 1000.0
+            out["surface_pOH"] = float(-np.log10(c_oh_molar))
+            kw_molar_sq = kw_hat * (c_scale_mol_m3 / 1000.0) ** 2
+            out["ph_poh_minus_pkw"] = float(
+                out["surface_pH"] + out["surface_pOH"] + np.log10(kw_molar_sq)
+            )
+    return out
+
+
 def collect_diagnostics(
     ctx: dict[str, Any],
     *,
