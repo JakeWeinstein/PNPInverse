@@ -1,0 +1,33 @@
+{
+  "features_model_vs_data": {
+    "disk_onset": [
+      0.496088103196961,
+      0.5175730967485521
+    ],
+    "ring_onset": [
+      0.4904133408656584,
+      0.4899348645459856
+    ],
+    "ring_peak": [
+      [
+        0.30853366,
+        0.3674080448033382
+      ],
+      [
+        0.3380065,
+        0.38003133
+      ]
+    ],
+    "plateau_cd": [
+      -3.320839968748222,
+      -3.5002938
+    ]
+  },
+  "gates": {
+    "disk_onset_50mV": true,
+    "ring_onset_50mV": true,
+    "ring_peak_pos_50mV": true,
+    "ring_peak_height_30pct": true,
+    "plateau_30pct": true
+  }
+}
