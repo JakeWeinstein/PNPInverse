@@ -1,0 +1,13 @@
+{
+  "stage": "bins",
+  "x_star": [
+    0.7815715771871152,
+    -8.0,
+    0.19781913905122958,
+    0.0500959481497804
+  ],
+  "J_star": 1474.3558273853384,
+  "nit": 21,
+  "restarts": 0,
+  "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+}
