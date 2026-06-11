@@ -1,0 +1,29 @@
+{
+  "stage": "iter",
+  "x_star": [
+    -0.2840183967528399,
+    -8.0,
+    0.4225789748202017,
+    0.21646583124391897
+  ],
+  "J_star": 257.80554597880837,
+  "nit": 30,
+  "restarts": 0,
+  "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT",
+  "polish": {
+    "x_star": [
+      -0.2941462081135165,
+      -9.000674572072759,
+      0.43872326693239144,
+      0.2360572021395656
+    ],
+    "J_star": 293.3648264010258,
+    "nit": 30,
+    "restarts": 0,
+    "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT"
+  },
+  "grid_convergence": {
+    "J_iter_at_final": 241.58971975611985,
+    "J_bins_at_final": 293.3648264010258
+  }
+}
