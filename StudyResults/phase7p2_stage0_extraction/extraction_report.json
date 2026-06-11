@@ -1,0 +1,141 @@
+{
+ "source": "data/EChem Reactor Modeling-Seitz-Mangan/Brianna/0,1M K2SO4 data 8-15-19.xlsx",
+ "tolerances": {
+  "rederive": "max(1e-08 abs, 1e-06 rel)",
+  "main_sheet": "0.0001 abs (5-dp rounded copy)"
+ },
+ "constants": {
+  "cycle 1": {
+   "a_disk_cm2": 0.19634954084936207,
+   "a_ring_cm2": 0.10995574287564275,
+   "rs_ohm": 125.0,
+   "n_coll": 0.224,
+   "ref_cal_v": -0.549
+  },
+  "cycle 2": {
+   "a_disk_cm2": 0.19634954084936207,
+   "a_ring_cm2": 0.10995574287564275,
+   "rs_ohm": 125.0,
+   "n_coll": 0.224,
+   "ref_cal_v": -0.549
+  },
+  "cycle 3": {
+   "a_disk_cm2": 0.19634954084936207,
+   "a_ring_cm2": 0.10995574287564275,
+   "rs_ohm": 125.0,
+   "n_coll": 0.224,
+   "ref_cal_v": -0.549
+  }
+ },
+ "n_raw_rows": {
+  "cycle 1": 2103,
+  "cycle 2": 2105,
+  "cycle 3": 2105
+ },
+ "main_sheet_rows_checked": 1050,
+ "crosscheck_failures": [],
+ "ring_baseline": {
+  "cycle 2": {
+   "median_mA_cm2_ring": 0.003525906230763881,
+   "spread": 0.00020155506291744859,
+   "n_pts": 402,
+   "region_v_phys": [
+    0.6,
+    1.0
+   ]
+  },
+  "cycle 3": {
+   "median_mA_cm2_ring": 0.004424718448473818,
+   "spread": 0.00018449477596647594,
+   "n_pts": 402,
+   "region_v_phys": [
+    0.6,
+    1.0
+   ]
+  }
+ },
+ "disk_background": {
+  "cycle 2": {
+   "model": "linear, anchored V_phys [0.65, 1.00], subtracted; capacitive LSV background (ring-silent shelf), NOT ORR",
+   "slope_mA_cm2_per_V": 0.1411211643050659,
+   "intercept_mA_cm2": -0.39249188951691905,
+   "anchor_mad_mA_cm2": 0.0009937684414884351,
+   "bg_at_window_ends_mA_cm2": [
+    -0.3739067127945894,
+    -0.24031879488699576
+   ],
+   "upsweep_crosscheck_median_abs_resid": 0.03420002274166953,
+   "upsweep_crosscheck_p90_abs_resid": 0.1895823792781103
+  },
+  "cycle 3": {
+   "model": "linear, anchored V_phys [0.65, 1.00], subtracted; capacitive LSV background (ring-silent shelf), NOT ORR",
+   "slope_mA_cm2_per_V": 0.1366287099345667,
+   "intercept_mA_cm2": -0.39063616925039846,
+   "anchor_mad_mA_cm2": 0.0010336057057199477,
+   "bg_at_window_ends_mA_cm2": [
+    -0.3727041255726441,
+    -0.24331038718818673
+   ],
+   "upsweep_crosscheck_median_abs_resid": 0.03117565871371633,
+   "upsweep_crosscheck_p90_abs_resid": 0.19283033370977093
+  }
+ },
+ "sweep_segment": {
+  "cycle 2": [
+   0,
+   1053,
+   2105
+  ],
+  "cycle 3": [
+   0,
+   1053,
+   2105
+  ]
+ },
+ "ir_audit": {
+  "convention": "raw I anodic-positive (verified: +I at V_RHE~1.09 pre-ORR, -I on ORR plateau)",
+  "sheet_formula": "V_cal + (I_mA/1000)*Rs  (NONSTANDARD sign)",
+  "physical_formula": "V_cal - (I_mA/1000)*Rs",
+  "rs_ohm": 125.0,
+  "max_axis_discrepancy_V": 0.1911428570747375,
+  "at_j_disk": -3.5201863994282423
+ },
+ "sigma_floors": {
+  "disk_mA_cm2": 0.004074366543152521,
+  "ring_mA_cm2_ring": 0.00020155506291744859,
+  "cap_band_assumed_units": "mA (raw current) -> /A_d; demoted (background shelf 60x larger)",
+  "f_model": 0.02
+ },
+ "fit_window": {
+  "v_lo_phys": 0.13169659429788644,
+  "v_up_phys": 0.5590528313778337,
+  "threshold_mA_cm2": 0.01742115613538431,
+  "sustain_pts": 5
+ },
+ "ne_diagnostic": {
+  "band_min": 2.8478919042475033,
+  "band_max": 3.524094853684309,
+  "alarm": false,
+  "n_eval_bins": 27
+ },
+ "air_saturation_check": {
+  "measured_plateau_mA_cm2": 3.500293787136723,
+  "L_12.0um": {
+   "ceiling_air_mA_cm2": 1.5266319444444447,
+   "excluded": true
+  },
+  "L_15.4um": {
+   "ceiling_air_mA_cm2": 1.1895833333333334,
+   "excluded": true
+  },
+  "L_21.7um": {
+   "ceiling_air_mA_cm2": 0.844220430107527,
+   "excluded": true
+  }
+ },
+ "selectivity_reconciliation": {
+  "note": "sheet formula mixes densities on different areas; overweights ring term by A_d/A_r = 1.7857",
+  "peak_sel_canonical_pct": 63.388394920371695,
+  "exp_info_sheet_value_pct": 73.2
+ }
+}
