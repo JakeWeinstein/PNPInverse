@@ -50,7 +50,15 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 PH_DECK = 4.0
-V_OCP_RHE = 0.47 + 0.197 + 0.059 * PH_DECK   # 0.903 V at pH 4
+V_OCP_RHE = 0.47 + 0.197 + 0.059 * PH_DECK   # 0.903 V at pH 4 (default)
+# Phase 7.2 (K2SO4 pH 6.39 dual-series): pass --v-ocp-rhe 1.019
+# (= 0.47 + the file's MEASURED Ag/AgCl->RHE cal 0.549; session-43
+# convention) and --cation k.
+
+
+def _v_ocp(opts) -> float:
+    return float(opts.v_ocp_rhe) if opts.v_ocp_rhe is not None \
+        else V_OCP_RHE
 
 V_RHE_DECK_GRID_FINE = tuple(np.linspace(-0.40, +0.55, 25).round(4).tolist())
 V_RHE_DECK_GRID_COARSE = tuple(np.linspace(-0.40, +0.55, 13).round(4).tolist())
@@ -114,7 +122,7 @@ def _build_reactions(opts) -> list[dict]:
     rxns = []
     for rxn in PARALLEL_2E_4E_DUAL_PATHWAY:
         r = dict(rxn)
-        r["E_eq_v"] = float(r["E_eq_v"]) - V_OCP_RHE
+        r["E_eq_v"] = float(r["E_eq_v"]) - _v_ocp(opts)
         is_water = r["proton_donor"] == "water"
         if is_water:
             if "water" not in routes:
@@ -141,6 +149,7 @@ def _make_sp(opts, reactions, *, stern_capacitance_f_m2, initializer):
         C_HP_HAT, C_O2_HAT, H2O2_SEED_NONDIM,
         D_H2O2_HAT, D_HP_HAT, D_O2_HAT,
         DEFAULT_CSPLUS_BOLTZMANN_COUNTERION_STERIC,
+        DEFAULT_KPLUS_BOLTZMANN_COUNTERION_STERIC,
         DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC,
         K0_HAT_R1, ALPHA_R1,
         SNES_OPTS_CHARGED,
@@ -149,6 +158,11 @@ def _make_sp(opts, reactions, *, stern_capacitance_f_m2, initializer):
         setup_firedrake_env,
     )
     setup_firedrake_env()
+
+    cation_counterion = {
+        "cs": DEFAULT_CSPLUS_BOLTZMANN_COUNTERION_STERIC,
+        "k": DEFAULT_KPLUS_BOLTZMANN_COUNTERION_STERIC,
+    }[opts.cation]
 
     c_hp_hat = float(opts.bulk_h_mol_m3) / _C_SCALE
 
@@ -190,7 +204,7 @@ def _make_sp(opts, reactions, *, stern_capacitance_f_m2, initializer):
         u_clamp=U_CLAMP,
         bv_reactions=reactions,
         boltzmann_counterions=[
-            DEFAULT_CSPLUS_BOLTZMANN_COUNTERION_STERIC,
+            cation_counterion,
             DEFAULT_SULFATE_BOLTZMANN_COUNTERION_STERIC,
         ],
         multi_ion_enabled=True,
@@ -365,9 +379,18 @@ def _run(opts) -> dict:
     )
 
     reactions = _build_reactions(opts)
-    v_deck_grid = (V_RHE_DECK_GRID_COARSE if opts.coarse_grid
-                   else V_RHE_DECK_GRID_FINE)
-    v_grid = tuple(round(v - V_OCP_RHE, 6) for v in v_deck_grid)
+    if opts.v_grid_lo is not None or opts.v_grid_hi is not None:
+        if opts.v_grid_lo is None or opts.v_grid_hi is None:
+            raise SystemExit("--v-grid-lo and --v-grid-hi must be "
+                             "given together")
+        npts = 13 if opts.coarse_grid else 25
+        v_deck_grid = tuple(np.linspace(
+            float(opts.v_grid_lo), float(opts.v_grid_hi),
+            npts).round(6).tolist())
+    else:
+        v_deck_grid = (V_RHE_DECK_GRID_COARSE if opts.coarse_grid
+                       else V_RHE_DECK_GRID_FINE)
+    v_grid = tuple(round(v - _v_ocp(opts), 6) for v in v_deck_grid)
     NV = len(v_grid)
 
     sp_baseline, k0_targets = _make_sp(
@@ -508,7 +531,8 @@ def _config_dict(opts, reactions, v_grid, v_deck_grid) -> dict:
         "bulk_h_mol_m3": float(opts.bulk_h_mol_m3),
         "enable_water_ionization": bool(opts.enable_water_ionization),
         "coarse_grid": bool(opts.coarse_grid),
-        "ocp_shift": {"pH": PH_DECK, "V_OCP_RHE": V_OCP_RHE,
+        "cation": opts.cation,
+        "ocp_shift": {"V_OCP_RHE": _v_ocp(opts),
                       "applied_to": ["V_RHE", "all reaction E_eq_v"]},
         "anchor": {"v_rhe_solver": ANCHOR_V_RHE,
                    "initializer": ANCHOR_INITIALIZER,
@@ -541,8 +565,20 @@ def main() -> int:
     parser.add_argument("--alpha-water-4e", type=float, default=None)
     parser.add_argument("--l-eff-um", type=float, default=L_EFF_UM_DEFAULT)
     parser.add_argument("--bulk-h-mol-m3", type=float, default=0.1,
-                        help="Bulk H+ (mol/m3). 0.1 = pH 4; 1.1 = bisulfate"
+                        help="Bulk H+ (mol/m3). 0.1 = pH 4; 4.07e-4 ="
+                             " pH 6.39 (phase 7.2); 1.1 = bisulfate"
                              " stress-test upper bracket.")
+    parser.add_argument("--cation", choices=("cs", "k"), default="cs",
+                        help="Bikerman counterion cation (default cs;"
+                             " phase 7.2 K2SO4 runs use k).")
+    parser.add_argument("--v-ocp-rhe", type=float, default=None,
+                        help="OCP shift V_OCP_RHE (default 0.903 ="
+                             " pH 4 deck; phase 7.2 central 1.019).")
+    parser.add_argument("--v-grid-lo", type=float, default=None,
+                        help="V grid lower edge on the V_RHE axis"
+                             " (with --v-grid-hi; else slide-15"
+                             " grids).")
+    parser.add_argument("--v-grid-hi", type=float, default=None)
     parser.add_argument("--coarse-grid", action="store_true",
                         help="13-pt deck grid (fit iterations) vs 25-pt.")
     parser.add_argument("--no-water-ionization", dest="enable_water_ionization",
@@ -558,8 +594,8 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 78, flush=True)
-    print("  Phase 7 dual-pathway driver — slide-15 (Cs+/SO4, pH 4, OCP-shifted)",
-          flush=True)
+    print(f"  Phase 7 dual-pathway driver — {opts.cation.upper()}+/SO4, "
+          f"V_OCP={_v_ocp(opts):.4f} V, OCP-shifted", flush=True)
     print("=" * 78, flush=True)
 
     t0 = time.time()

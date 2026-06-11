@@ -218,3 +218,175 @@ def score_iv_json(report: dict, target: Slide15Target) -> WLSResult:
         cd_mA_cm2=report.get("cd_mA_cm2"),
         surface_ph=report.get("surface_pH"),
     )
+
+
+# ===========================================================================
+# Phase 7.2 — dual-series (disk + raw ring) objective, K2SO4 pH 6.39
+# ===========================================================================
+#
+# Session-43 conventions:
+# * Disk series: cd model vs binned j_disk (mA/cm2_disk,
+#   cathodic-negative, LSV background subtracted in Stage 0).
+# * Ring series: RAW baseline-corrected j_ring (mA/cm2_ring,
+#   anodic-positive); the collection model lives on the MODEL side:
+#       j_ring_model = -pc_model * N * A_d / A_r
+#   so N variants are pure model-side refits (R2#4).
+# * sigma is a conservative single-observation predictive scale;
+#   "standardized residual score" per series — NOT reduced chi2.
+# * Convergence discipline: a non-finite model value at any masked-in
+#   bin raises SolveFailureError — the optimizer never sees penalty
+#   values (R2#1).  Raw chi2 on the FIXED masked vector is logged at
+#   every call.
+
+A_DISK_CM2 = 0.19635
+A_RING_CM2 = 0.109956
+N_COLL_DEFAULT = 0.224
+
+
+class SolveFailureError(RuntimeError):
+    """A masked-in objective voltage has no converged model value."""
+
+
+@dataclass(frozen=True)
+class DualSeriesTarget:
+    v: tuple                 # V_RHE (physical iR axis), bin centers
+    j_disk: tuple            # mA/cm2_disk, cathodic-negative
+    sigma_disk: tuple
+    j_ring: tuple            # mA/cm2_ring, anodic-positive
+    sigma_ring: tuple
+
+    @property
+    def n(self) -> int:
+        return len(self.v)
+
+
+def load_dual_target(csv_path: str | Path,
+                     mask: Optional[Sequence[bool]] = None
+                     ) -> DualSeriesTarget:
+    """Load the Stage-0 binned target; optional FROZEN bin mask."""
+    rows = []
+    with open(csv_path) as fh:
+        reader = csv.reader(
+            line for line in fh
+            if line.strip() and not line.startswith("#"))
+        header = next(reader)
+        idx = {name: k for k, name in enumerate(header)}
+        for rec in reader:
+            rows.append(tuple(float(rec[idx[c]]) for c in (
+                "v_phys", "j_disk", "sigma_j_disk",
+                "j_ring", "sigma_j_ring")))
+    if not rows:
+        raise ValueError(f"no data rows in {csv_path}")
+    rows.sort(key=lambda r: r[0])
+    if mask is not None:
+        if len(mask) != len(rows):
+            raise ValueError("mask length != bin count")
+        rows = [r for r, m in zip(rows, mask) if m]
+    if any(r[2] <= 0 or r[4] <= 0 for r in rows):
+        raise ValueError("non-positive sigma in target")
+    return DualSeriesTarget(
+        v=tuple(r[0] for r in rows),
+        j_disk=tuple(r[1] for r in rows),
+        sigma_disk=tuple(r[2] for r in rows),
+        j_ring=tuple(r[3] for r in rows),
+        sigma_ring=tuple(r[4] for r in rows),
+    )
+
+
+@dataclass
+class DualSeriesResult:
+    j_opt: float                 # optimization objective (normalized)
+    chi2_raw: float              # raw chi2 on the fixed masked vector
+    n_disk: int
+    n_ring: int
+    score_disk: float            # per-series standardized residual score
+    score_ring: float            # (mean squared standardized residual)
+    residuals_disk: list = field(default_factory=list)
+    residuals_ring: list = field(default_factory=list)
+    validity_failures: list = field(default_factory=list)
+
+
+def score_dual_series(
+    v_rhe: Sequence[float],
+    cd_mA_cm2: Sequence[Optional[float]],
+    pc_mA_cm2: Sequence[Optional[float]],
+    target: DualSeriesTarget,
+    *,
+    n_coll: float = N_COLL_DEFAULT,
+    w_ring_scale: float = 1.0,
+    interp: bool = True,
+    o2_4e_ceiling: float = O2_4E_CEILING_MA_CM2,
+) -> DualSeriesResult:
+    """Dual-series objective.
+
+    interp=True: model on its own (iteration) grid, PCHIP onto bin
+    centers — model must COVER the target range.  interp=False: model
+    solved AT bin centers (final scoring); V alignment asserted to
+    1e-9.  Any non-finite model value inside the mask raises
+    SolveFailureError (never a penalty value).
+    """
+    def _series(vals):
+        out = []
+        for v in vals:
+            out.append(float(v) if v is not None
+                       and math.isfinite(float(v)) else math.nan)
+        return out
+
+    cd = _series(cd_mA_cm2)
+    pc = _series(pc_mA_cm2)
+    vm = [float(v) for v in v_rhe]
+
+    if interp:
+        ok = [k for k in range(len(vm))
+              if math.isfinite(cd[k]) and math.isfinite(pc[k])]
+        if len(ok) != len(vm):
+            raise SolveFailureError(
+                f"{len(vm) - len(ok)} non-converged model points")
+        order = sorted(ok, key=lambda k: vm[k])
+        vs = [vm[k] for k in order]
+        if vs[0] > target.v[0] + 1e-9 or vs[-1] < target.v[-1] - 1e-9:
+            raise SolveFailureError(
+                "model grid does not cover the target window")
+        cd_t = _pchip(vs, [cd[k] for k in order])(target.v)
+        pc_t = _pchip(vs, [pc[k] for k in order])(target.v)
+        cd_t, pc_t = list(map(float, cd_t)), list(map(float, pc_t))
+    else:
+        if len(vm) != target.n or any(
+                abs(a - b) > 1e-9 for a, b in zip(sorted(vm), target.v)):
+            raise ValueError("interp=False requires model solved AT "
+                             "the target bin centers")
+        order = sorted(range(len(vm)), key=lambda k: vm[k])
+        cd_t = [cd[k] for k in order]
+        pc_t = [pc[k] for k in order]
+        bad = [k for k in range(target.n)
+               if not (math.isfinite(cd_t[k]) and math.isfinite(pc_t[k]))]
+        if bad:
+            raise SolveFailureError(
+                f"non-converged at bin centers {bad}")
+
+    res = DualSeriesResult(0.0, 0.0, target.n, target.n, 0.0, 0.0)
+    chi_d = chi_r = 0.0
+    for k in range(target.n):
+        rd = (cd_t[k] - target.j_disk[k]) / target.sigma_disk[k]
+        jr_model = -pc_t[k] * n_coll * A_DISK_CM2 / A_RING_CM2
+        rr = (jr_model - target.j_ring[k]) / target.sigma_ring[k]
+        chi_d += rd * rd
+        chi_r += rr * rr
+        res.residuals_disk.append((target.v[k], rd))
+        res.residuals_ring.append((target.v[k], rr))
+    res.score_disk = chi_d / target.n
+    res.score_ring = chi_r / target.n
+    res.chi2_raw = chi_d + chi_r
+    res.j_opt = res.score_disk + w_ring_scale * res.score_ring
+
+    max_abs_cd = max(abs(c) for c in cd_t)
+    if max_abs_cd > I_LIM_TOLERANCE * o2_4e_ceiling:
+        res.validity_failures.append(
+            f"cd {max_abs_cd:.3f} exceeds O2-4e ceiling "
+            f"{o2_4e_ceiling}")
+    max_abs_pc = max(abs(p) for p in pc_t)
+    if max_abs_pc > I_LIM_TOLERANCE * o2_4e_ceiling / 2.0:
+        res.validity_failures.append(
+            f"pc {max_abs_pc:.3f} exceeds O2-2e ceiling "
+            f"{o2_4e_ceiling / 2.0}")
+    return res
