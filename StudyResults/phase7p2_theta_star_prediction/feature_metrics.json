@@ -1,0 +1,16 @@
+{
+  "disk_onset_model_V": 0.3652491843389689,
+  "disk_onset_data_V": 0.5175730967485521,
+  "ring_onset_model_V": 0.32273721831049695,
+  "ring_onset_data_V": 0.4899348645459856,
+  "ring_peak_model": [
+    0.16116944,
+    0.15750694912645719
+  ],
+  "ring_peak_data": [
+    0.3380065,
+    0.38003133
+  ],
+  "plateau_cd_model": -5.282561308392816,
+  "plateau_cd_data": -3.5002938
+}
