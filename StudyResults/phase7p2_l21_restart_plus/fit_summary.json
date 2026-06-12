@@ -1,0 +1,13 @@
+{
+  "stage": "bins",
+  "x_star": [
+    -1.0096722664605133,
+    -12.313940351987902,
+    0.5771486292600287,
+    0.30494652521844173
+  ],
+  "J_star": 12.195174922364602,
+  "nit": 25,
+  "restarts": 0,
+  "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT"
+}
