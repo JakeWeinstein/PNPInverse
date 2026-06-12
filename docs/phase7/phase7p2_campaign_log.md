@@ -137,17 +137,21 @@ later made (+3.4 dec). Locked as the Δχ² baseline.
 | Variant | J | θ shift | verdict |
 |---|---|---|---|
 | OCP 1.044 V (+25 mV, theoretical cal) | 12.184 | ≤0.09 in log k0, <0.001 in α | NOT load-bearing |
-| OCP 0.994 V (−25 mV) | running | — | — |
+| OCP 0.994 V (−25 mV) | 12.207 | ≤0.09 dec | OCP triple {0.994, 1.019, 1.044} spans J 12.18–12.21: FLAT (|dJ/dOCP| ≈ 0.0006/mV); ±50 mV pair predictably immaterial, deprioritized |
 | N = 0.20 | 9.846 | log f_4w −0.26 dec; rest stable | data mildly prefers lower N; N absorbs into the 4e prefactor — N band (0.26 dec) > profile width (0.11 dec) ⇒ partition's ABSOLUTE scale is ring-calibration-limited, its identifiability (fixed N) is tight |
 | N = 0.25 | running | — | — |
 | bulk c_H ×{0.7, 1.4}, weights, window edge, bg-scale, sheet-axis | queued | — | — |
 
 ### Identifiability (in progress)
-log f_4w profile (fix + reoptimize 3): ±0.1 dec → Δχ²_raw ≈ +3.1
-both sides ⇒ Δχ²=4 half-width ≈ 0.11 decades (PRAGMATIC width, not
-a CI — σ is a conservative predictive scale). α_4w ladder + the
-ring-only-objective mirror (the actual partition-identified
-comparison) + derived 4e-fraction constrained profiles: queued.
+log f_4w TRUE profile (fix + reoptimize other 3): ±0.1 dec →
+Δχ²_raw ≈ 0.77/side after reoptimization (compensation through the
+free parameters roughly quadruples the fixed-rest width — exactly
+why GPT demanded true profiles, R1#9). Quadratic extrapolation:
+Δχ²=4 half-width ≈ ±0.23 decades (×1.7 on k0_4e) — vs UNBOUNDED
+over ~14 decades on peroxide-only data. ±0.25-dec crossing-bracket
+points + α_4w ladder running; ring-only mirror + derived
+4e-fraction constrained profiles queued. (PRAGMATIC widths, never
+CIs — σ is a conservative predictive scale.)
 
 ---
 
