@@ -36,11 +36,13 @@ Two findings with paper weight:
    slope-competition mechanism survives). The k0's shift by 2.7 /
    1.2 decades — pre-registered outcome (ii): site-density /
    catalyst-history difference (catalyst ask gates interpretation).
-2. **The disk series identifies the partition.** First profile
-   points put the Δχ²=4 half-width of log f_4w at ≈ 0.11 decades
-   (±25% on k0_4e) under the dual objective — a parameter that was
-   structurally non-identified on peroxide-only data. (Ring-only
-   comparison profiles pending to complete the claim.)
+2. **The disk series identifies the partition.** True profiles
+   (reoptimizing the other three parameters) put the Δχ²=4
+   half-width of log f_4w at ≈ ±0.23 decades (×1.7 on k0_4e) under
+   the dual objective — a parameter that was structurally
+   non-identified (~14 free decades) on peroxide-only data.
+   (Crossing-bracket points + ring-only comparison profiles in
+   flight to finalize the quoted widths.)
 
 ---
 
