@@ -138,8 +138,8 @@ later made (+3.4 dec). Locked as the Δχ² baseline.
 |---|---|---|---|
 | OCP 1.044 V (+25 mV, theoretical cal) | 12.184 | ≤0.09 in log k0, <0.001 in α | NOT load-bearing |
 | OCP 0.994 V (−25 mV) | running | — | — |
-| N = 0.20 | ≈9.86 (converging) | mild | data slightly prefers lower N; partition carries the band |
-| N = 0.25 | queued | — | — |
+| N = 0.20 | 9.846 | log f_4w −0.26 dec; rest stable | data mildly prefers lower N; N absorbs into the 4e prefactor — N band (0.26 dec) > profile width (0.11 dec) ⇒ partition's ABSOLUTE scale is ring-calibration-limited, its identifiability (fixed N) is tight |
+| N = 0.25 | running | — | — |
 | bulk c_H ×{0.7, 1.4}, weights, window edge, bg-scale, sheet-axis | queued | — | — |
 
 ### Identifiability (in progress)
