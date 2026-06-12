@@ -141,7 +141,7 @@ later made (+3.4 dec). Locked as the Δχ² baseline.
 | OCP 1.044 V (+25 mV, theoretical cal) | 12.184 | ≤0.09 in log k0, <0.001 in α | NOT load-bearing |
 | OCP 0.994 V (−25 mV) | 12.207 | ≤0.09 dec | OCP triple {0.994, 1.019, 1.044} spans J 12.18–12.21: FLAT (|dJ/dOCP| ≈ 0.0006/mV); ±50 mV pair predictably immaterial, deprioritized |
 | N = 0.20 | 9.846 | log f_4w −0.26 dec; rest stable | data mildly prefers lower N; N absorbs into the 4e prefactor — N band (0.26 dec) > profile width (0.11 dec) ⇒ partition's ABSOLUTE scale is ring-calibration-limited, its identifiability (fixed N) is tight |
-| N = 0.25 | running | — | — |
+| N = 0.25 | 15.977 | log f_4w +0.23 dec; rest stable | symmetric mirror of N=0.20: the N band {0.20, 0.224, 0.25} maps to log f_4w {−12.57, −12.31, −12.08} (±0.25 dec), J {9.85, 12.20, 15.98} — clean monotone absorption into the 4e prefactor |
 | bulk c_H ×{0.7, 1.4}, weights, window edge, bg-scale, sheet-axis | queued | — | — |
 
 ### Identifiability (in progress)
