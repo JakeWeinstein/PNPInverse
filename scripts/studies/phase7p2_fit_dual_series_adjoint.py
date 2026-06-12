@@ -97,8 +97,9 @@ class DualForwardProblem:
 
     def __init__(self, opts_base, *, grid="iter",
                  n_coll=N_COLL_DEFAULT, w_ring_scale=1.0,
-                 target_csv=BINNED_CSV):
+                 w_disk_scale=1.0, target_csv=BINNED_CSV):
         self.opts_base = opts_base
+        self.w_disk_scale = float(w_disk_scale)
         import scripts.studies.solver_demo_slide15_dual_pathway_cs as dp
         self.dp = dp
         self.target = load_dual_target(target_csv)
@@ -281,7 +282,8 @@ class DualForwardProblem:
                 cd_vals[i] = float(cd_i)
                 pc_vals[i] = float(pc_i)
                 jr_i = -pc_i * ring_map          # collection model on tape
-                J = J + (self.wd_i[i] * (cd_i - self.d_i[i]) ** 2
+                J = J + (self.w_disk_scale * self.wd_i[i]
+                         * (cd_i - self.d_i[i]) ** 2
                          + self.w_ring_scale * self.wr_i[i]
                          * (jr_i - self.r_i[i]) ** 2)
         except EvalFailure:
@@ -331,20 +333,39 @@ class DualForwardProblem:
         return J_val, grad, info
 
 
-def run_lbfgsb(fp, x0, out_dir, maxiter):
-    """L-BFGS-B with the raise-and-restart failed-eval policy."""
+def run_lbfgsb(fp, x0, out_dir, maxiter, fixed=None):
+    """L-BFGS-B with the raise-and-restart failed-eval policy.
+
+    fixed: optional {component_index: value} — those components are
+    pinned (profile protocol R1#9); scipy optimizes the free subset.
+    """
     from scipy.optimize import minimize
+
+    fixed = dict(fixed or {})
+    free = [k for k in range(4) if k not in fixed]
+    if not free:
+        raise ValueError("all components fixed")
+
+    def full_x(xf):
+        x = np.empty(4)
+        for j, k in enumerate(free):
+            x[k] = xf[j]
+        for k, v in fixed.items():
+            x[k] = v
+        return x
 
     state = {"k": 0, "last_valid_x": None, "last_valid_J": None}
     log_path = Path(out_dir) / "eval_log.jsonl"
 
-    def fun(x):
+    def fun(xf):
+        x = full_x(xf)
         J, g, info = fp.evaluate(x, want_grad=True)   # may raise
         state["k"] += 1
-        state["last_valid_x"] = np.array(x, dtype=float)
+        state["last_valid_x"] = np.array(xf, dtype=float)
         state["last_valid_J"] = J
         rec = {"eval": state["k"], "theta": list(map(float, x)),
                "J": J, "grad": list(map(float, g)),
+               "fixed": {str(k): float(v) for k, v in fixed.items()},
                **{k: v for k, v in info.items()
                   if k in ("chi2_raw", "score_disk", "score_ring",
                            "retried_walk")}}
@@ -354,10 +375,10 @@ def run_lbfgsb(fp, x0, out_dir, maxiter):
               f"chi2_raw={info['chi2_raw']:.1f}  "
               f"(disk {info['score_disk']:.2f} / ring "
               f"{info['score_ring']:.2f})", flush=True)
-        return J, np.asarray(g, dtype=float)
+        return J, np.asarray(g, dtype=float)[free]
 
-    bounds = [list(b) for b in BOUNDS]
-    x_start = np.array(x0, dtype=float)
+    bounds = [list(BOUNDS[k]) for k in free]
+    x_start = np.array([np.array(x0, dtype=float)[k] for k in free])
     restarts = 0
     while True:
         try:
@@ -365,6 +386,7 @@ def run_lbfgsb(fp, x0, out_dir, maxiter):
                            bounds=[tuple(b) for b in bounds],
                            options={"maxiter": maxiter,
                                     "ftol": 1e-10, "gtol": 1e-8})
+            res.x = full_x(res.x)
             return res, restarts
         except EvalFailure as exc:
             restarts += 1
@@ -372,14 +394,14 @@ def run_lbfgsb(fp, x0, out_dir, maxiter):
                   f"{MAX_RESTARTS})", flush=True)
             if state["last_valid_x"] is None or restarts > MAX_RESTARTS:
                 raise
-            x_fail = np.array(exc.theta if exc.theta is not None
-                              else x_start, dtype=float)
+            x_fail_full = np.array(exc.theta if exc.theta is not None
+                                   else full_x(x_start), dtype=float)
             x_start = state["last_valid_x"]
-            for d in range(len(bounds)):
-                half = max(abs(x_fail[d] - x_start[d]) / 2.0,
-                           0.05 * (BOUNDS[d][1] - BOUNDS[d][0]) / 10.0)
-                bounds[d][0] = max(BOUNDS[d][0], x_start[d] - half)
-                bounds[d][1] = min(BOUNDS[d][1], x_start[d] + half)
+            for j, k in enumerate(free):
+                half = max(abs(x_fail_full[k] - x_start[j]) / 2.0,
+                           0.05 * (BOUNDS[k][1] - BOUNDS[k][0]) / 10.0)
+                bounds[j][0] = max(BOUNDS[k][0], x_start[j] - half)
+                bounds[j][1] = min(BOUNDS[k][1], x_start[j] + half)
 
 
 def main() -> int:
@@ -405,6 +427,14 @@ def main() -> int:
                         help="comma 4-tuple start (default theta*)")
     parser.add_argument("--n-coll", type=float, default=N_COLL_DEFAULT)
     parser.add_argument("--w-ring-scale", type=float, default=1.0)
+    parser.add_argument("--w-disk-scale", type=float, default=1.0,
+                        help="0 -> ring-only (pc-only) objective for "
+                             "the profile comparison (R1#9 iii)")
+    parser.add_argument("--fix", default=None,
+                        help="profile protocol: 'k=v[,k=v]' pins "
+                             "theta components; the rest reoptimize")
+    parser.add_argument("--bulk-h-mol-m3", type=float,
+                        default=BULK_H_PH639)
     parser.add_argument("--l-eff-um", type=float, default=15.4)
     parser.add_argument("--v-ocp-rhe", type=float, default=V_OCP_PH639)
     parser.add_argument("--out-name", default="phase7p2_fit_dual")
@@ -423,18 +453,25 @@ def main() -> int:
         k0_water_2e_factor=1.0, k0_water_4e_factor=1.0,
         k0_acid_4e_factor=1e-15,
         alpha_water_2e=None, alpha_water_4e=None,
-        l_eff_um=float(args.l_eff_um), bulk_h_mol_m3=BULK_H_PH639,
+        l_eff_um=float(args.l_eff_um),
+        bulk_h_mol_m3=float(args.bulk_h_mol_m3),
         enable_water_ionization=True, coarse_grid=True,
         cation="k", v_ocp_rhe=float(args.v_ocp_rhe),
         v_grid_lo=None, v_grid_hi=None,
     )
+    fixed = {}
+    if args.fix:
+        for tok in args.fix.split(","):
+            kk, vv = tok.split("=")
+            fixed[int(kk)] = float(vv)
     x0 = (np.array([float(t) for t in args.x0.split(",")])
           if args.x0 else np.array(X0, dtype=float))
 
     if args.fd_check:
         fp = DualForwardProblem(opts_base, grid="bins",
                                 n_coll=args.n_coll,
-                                w_ring_scale=args.w_ring_scale)
+                                w_ring_scale=args.w_ring_scale,
+                                w_disk_scale=args.w_disk_scale)
         print("== FD verification (dual objective, bins grid, "
               "theta*) ==", flush=True)
         t0 = time.time()
@@ -483,7 +520,8 @@ def main() -> int:
     if args.predict:
         fp = DualForwardProblem(opts_base, grid="bins",
                                 n_coll=args.n_coll,
-                                w_ring_scale=args.w_ring_scale)
+                                w_ring_scale=args.w_ring_scale,
+                                w_disk_scale=args.w_disk_scale)
         print("== Stage 2 prediction at x0 (NO tuning) ==", flush=True)
         t0 = time.time()
         J0, _, info = fp.evaluate(x0, want_grad=False)
@@ -502,19 +540,30 @@ def main() -> int:
 
     fp = DualForwardProblem(opts_base, grid=args.grid,
                             n_coll=args.n_coll,
-                            w_ring_scale=args.w_ring_scale)
+                            w_ring_scale=args.w_ring_scale,
+                            w_disk_scale=args.w_disk_scale)
     print(f"== L-BFGS-B dual-series fit (grid={args.grid}) ==",
           flush=True)
-    res, restarts = run_lbfgsb(fp, x0, out_dir, args.maxiter)
+    res, restarts = run_lbfgsb(fp, x0, out_dir, args.maxiter,
+                               fixed=fixed)
     summary = {"stage": args.grid, "x_star": list(map(float, res.x)),
                "J_star": float(res.fun), "nit": int(res.nit),
-               "restarts": restarts, "message": str(res.message)}
+               "restarts": restarts, "message": str(res.message),
+               "fixed": {str(k): v for k, v in fixed.items()},
+               "w_disk_scale": float(args.w_disk_scale),
+               "w_ring_scale": float(args.w_ring_scale),
+               "l_eff_um": float(args.l_eff_um),
+               "v_ocp_rhe": float(args.v_ocp_rhe),
+               "n_coll": float(args.n_coll),
+               "bulk_h_mol_m3": float(args.bulk_h_mol_m3)}
     if args.polish and args.grid == "iter":
         print("== bin-center polish (R2#2) ==", flush=True)
         fp2 = DualForwardProblem(opts_base, grid="bins",
                                  n_coll=args.n_coll,
-                                 w_ring_scale=args.w_ring_scale)
-        res2, restarts2 = run_lbfgsb(fp2, res.x, out_dir, args.maxiter)
+                                 w_ring_scale=args.w_ring_scale,
+                                 w_disk_scale=args.w_disk_scale)
+        res2, restarts2 = run_lbfgsb(fp2, res.x, out_dir,
+                                     args.maxiter, fixed=fixed)
         summary["polish"] = {
             "x_star": list(map(float, res2.x)),
             "J_star": float(res2.fun), "nit": int(res2.nit),
