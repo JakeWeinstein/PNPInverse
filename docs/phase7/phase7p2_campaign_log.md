@@ -156,7 +156,9 @@ later made (+3.4 dec). Locked as the Δχ² baseline.
 | OCP 0.994 V (−25 mV) | 12.207 | ≤0.09 dec | OCP triple {0.994, 1.019, 1.044} spans J 12.18–12.21: FLAT (|dJ/dOCP| ≈ 0.0006/mV); ±50 mV pair predictably immaterial, deprioritized |
 | N = 0.20 | 9.846 | log f_4w −0.26 dec; rest stable | data mildly prefers lower N; N absorbs into the 4e prefactor — N band (0.26 dec) > profile width (0.11 dec) ⇒ partition's ABSOLUTE scale is ring-calibration-limited, its identifiability (fixed N) is tight |
 | N = 0.25 | 15.977 | log f_4w +0.23 dec; rest stable | symmetric mirror of N=0.20: the N band {0.20, 0.224, 0.25} maps to log f_4w {−12.57, −12.31, −12.08} (±0.25 dec), J {9.85, 12.20, 15.98} — clean monotone absorption into the 4e prefactor |
-| bulk c_H ×{0.7, 1.4}, weights, window edge, bg-scale, sheet-axis | queued | — | — |
+| weights w_r ×2 | 14.76 | (−1.031, −12.356, 0.581, 0.306) ≈ θ_L | up-weighting ring barely moves the optimum |
+| weights w_r ×0.5 | — | (−0.924, −11.919, 0.564, 0.297) | down-weighting ring → 4e prefactor +0.39 dec toward disk; α stable (Δ≤0.013). Neither series dominates; α weight-invariant |
+| bulk c_H ×{0.7,1.4}, window edge, bg-scale, sheet-axis | deferred (confirmatory) | — | low priority — see summary |
 
 ### Identifiability — dual-objective profiles COMPLETE
 TRUE profiles (fix one param, reoptimize the other three). Δχ²_raw

@@ -1,0 +1,20 @@
+{
+  "stage": "bins",
+  "x_star": [
+    -1.0309743364216124,
+    -12.355902282283116,
+    0.5809851333820408,
+    0.3061691933660217
+  ],
+  "J_star": 14.762767706683046,
+  "nit": 25,
+  "restarts": 0,
+  "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT",
+  "fixed": {},
+  "w_disk_scale": 1.0,
+  "w_ring_scale": 2.0,
+  "l_eff_um": 21.7,
+  "v_ocp_rhe": 1.019,
+  "n_coll": 0.224,
+  "bulk_h_mol_m3": 0.000407
+}
