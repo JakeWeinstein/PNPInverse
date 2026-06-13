@@ -84,7 +84,9 @@ height −3.3%, plateau −5.1% (gates: 50 mV / 30%).
 - **N {0.20, 0.224, 0.25}:** absorbs monotonically into log f_4w
   (±0.25 dec); partition absolute scale is ring-calibration-limited,
   identifiability at fixed N is tight.
-- **Weight swap w_r ×{0.5, 2}:** [pending — confirmatory].
+- **Weight swap w_r ×{0.5, 2}:** ×2 → ≈θ_L; ×0.5 → 4e prefactor
+  +0.39 dec toward disk; α weight-invariant (Δ≤0.013). Neither
+  series dominates the objective.
 
 ## Conditional labels on θ_L (lock tiers)
 
