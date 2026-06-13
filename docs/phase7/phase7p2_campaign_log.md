@@ -5,7 +5,8 @@
 APPROVED, 40 issues). Data provenance:
 `docs/phase7/k2so4_ph6p39_provenance.md`.
 
-Last updated: 2026-06-12 (profiles in flight).
+Last updated: 2026-06-13 (Stage 5 cross-condition verdict landed;
+ring-only partition profiles + lock docs remaining).
 
 ---
 
@@ -29,13 +30,15 @@ tiers (OCP empirically near-immaterial, see § Sensitivities).
 
 Two findings with paper weight:
 
-1. **Tafel structure transfers; prefactors don't.** The fitted α's
-   (0.577, 0.305) sit within 0.03 of the slide-15 Cs⁺/pH-4 values
-   (0.550, 0.285) across a 2.4-pH-unit, cation-swapped, different-
-   electrode condition; Δ(αn) = +0.066 vs +0.042 (the volcano
-   slope-competition mechanism survives). The k0's shift by 2.7 /
-   1.2 decades — pre-registered outcome (ii): site-density /
-   catalyst-history difference (catalyst ask gates interpretation).
+1. **The water-route kinetics are essentially transferable across
+   pH 4↔6.4, Cs⁺↔K⁺, two electrodes — clean outcome (ii).** The α's
+   transfer (forcing K₂SO₄'s α onto slide-15 and refitting only k0
+   gives χ²/pt 35.6 vs the native 29.8 — a 19% penalty, vs 5464 for
+   no-refit); and at MATCHED L_eff the genuine k0 shift is only
+   ~0.26 dec on the dominant 2e route. The large raw k0 gap
+   (2.67 dec) was MOSTLY the transport-film difference (21.7 vs
+   15.4 µm), not site density. Δ(αn) = +0.066 vs +0.042 — the
+   volcano slope-competition mechanism is shared.
 2. **The disk series identifies the partition.** Dual-objective
    true profiles pin the 4e prefactor to ±0.23 dec and the 4e
    transfer coefficient to ±0.0046 (both clean quadratics) —
