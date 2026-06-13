@@ -120,3 +120,36 @@ background-scale ×{0.5,1.5}, sheet-iR-axis variants (need extractor
 re-parametrization); BFGS-Hessian cross-check at θ_L (FD diagonal
 already verified at θ*). All expected confirmatory given the OCP/N/
 L_eff sensitivities already mapped.
+
+## pH-series generalization (frozen θ_L, water-only)
+
+Frozen θ_L applied across bulk pH (only c_H + per-pH OCP changed;
+water routes only). 9/11 conditions converged (pH 1.65–6.39, all
+13/13 points); **alkaline pH 10 & 12 failed the acidic-tuned anchor**
+(LadderExhausted at c_H=1e-7 — needs a bulk-H continuation ramp;
+follow-up). Compared to Brianna's `Exp Info` metrics (same
+electrode/cation/run) and the ACS 3-panel range.
+
+**Key result — the model does NOT generalize across pH:**
+- The water-route onset is **pH-independent on the RHE axis** (η =
+  V_RHE − E°_RHE; the OCP shift cancels). Model onset is flat at
+  ~0.52 V (0.514→0.531 over pH 6.39→1.65); the DATA onset moves
+  −0.221 V (0.472→0.251), ≈ −0.047 V/pH.
+- Model peak selectivity is flat ~55%; data swings 73%→20% (and a
+  91% spike at pH 4.21).
+- Model max-ring is flat ~0.36; data varies 0.08–0.50.
+
+The frozen water-only model reproduces the volcano MAGNITUDE in the
+right ballpark everywhere but carries **no pH-dependence** — because
+water-route BV is c_H-independent. The strong measured pH-trends in
+onset and selectivity therefore live in physics the frozen model
+omits: the **c_H-dependent acid routes** (active at genuinely low
+bulk pH, NOT Kw-laundering there) and **local-pH / cation coupling**.
+This is the quantitative motivation for a pH-coupled extension —
+and it means the single-condition pH-6.39 fit, while excellent, is
+NOT yet a transferable pH-resolved model.
+
+Figures:
+`StudyResults/phase7p2_ph_series_generalization/model_vs_expinfo_metrics.png`
+(metric trends), `.../model_3panel_acidic.png` +
+`.../ACS_experimental_3panel_reference.png` (3-panel layout).
