@@ -1,0 +1,23 @@
+{
+  "x0": [
+    -3.0,
+    -14.397940008672037,
+    0.627,
+    0.325
+  ],
+  "x_star": [
+    -3.943592672187639,
+    -14.747250502195902,
+    0.5770144526758703,
+    0.304853786169721
+  ],
+  "J_star_coarse": 35.61890459660106,
+  "nit": 20,
+  "nfev": 34,
+  "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT",
+  "wall_seconds": 24824.124864816666,
+  "fine_chi2_per_point": 35.583779132016936,
+  "fine_hinge": 0.0,
+  "fine_validity": [],
+  "fine_n_converged": 25
+}

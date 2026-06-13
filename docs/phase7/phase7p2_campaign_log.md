@@ -186,17 +186,20 @@ flight to quote the width ratio.
   condition-specific (θ_L is tuned to the higher-current K₂SO₄
   state and overshoots slide-15 peroxide by OOM).
 - **α-transfer confirmatory refit** (slide-15, α FROZEN at θ_L,
-  k0 free): running — distinguishes (ii) "k0-only shift, α stable"
-  from (iii) "structural misfit". The α's already agree to
-  0.020–0.027; the α_4w dual profile width is ±0.0046, so the
-  0.020 gap is ~4× that width — α's are CLOSE but not identical,
-  consistent with (ii) plus genuine condition dependence.
-- **CONFOUND (load-bearing):** the k0 Δ is entangled with the
-  L_eff Δ (21.7 vs 15.4). A higher transport ceiling needs lower
-  k0 to hit the same current, so part of the +1.2–2.7 dec k0 shift
-  is transport, not site density. Clean separation needs the rpm
-  ask. The rigorous joint shared-α / per-condition-(k0, L_eff) fit
-  is the immediate post-rpm step.
+  k0 free, at slide-15's own L 15.4): **χ²/pt = 35.58**, barely
+  above θ*'s free-α native **29.8** (vs the no-refit disaster of
+  5464). ⇒ **α TRANSFERS**: forcing K₂SO₄'s Tafel slopes onto
+  slide-15 and moving only k0 recovers essentially the native fit.
+  The refit k0 sits at log f_2w −3.94 (vs θ* −3.68, **Δ0.26 dec**)
+  / log f_4w −14.75. **Verdict: clean outcome (ii)** — shared
+  water-route mechanism, α stable to ~0.03, k0 condition-specific.
+- **The L_eff confound, resolved.** At MATCHED L_eff (15.4) the
+  genuine k0 shift is only ~0.26 dec on the dominant 2e route — so
+  the large raw θ_L↔θ* gap (+2.67 dec) was MOSTLY the transport-
+  film difference (21.7 vs 15.4 µm), NOT site density. The residual
+  0.26 dec is the real condition/catalyst piece. The rpm ask still
+  sets which film is physical (hence θ_L's absolute k0), but the
+  TRANSFERABILITY conclusion no longer hinges on it.
 
 ---
 
