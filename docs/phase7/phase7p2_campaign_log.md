@@ -162,6 +162,42 @@ mirror profiles in flight to quantify exactly how much the disk
 series bought. (PRAGMATIC widths, never CIs — σ is a conservative
 predictive scale.)
 
+**Ring-only optimum** (w_disk_scale=0 = peroxide-only objective =
+the slide-15 information content): (−1.21, −12.99, 0.613, 0.320),
+J(ring)=1.33 — it fits the RING better than the dual fit (1.33 vs
+~2.2) by moving the 4e prefactor −0.68 dec while ABANDONING the
+disk (disk score 8→11.4). That is the peroxide-only degeneracy made
+concrete: the disk series is precisely the information that pins the
+4e prefactor in the dual fit. Ring-only f_4w profiles (±1.0 dec) in
+flight to quote the width ratio.
+
+### Stage 5 — cross-condition (in progress)
+θ_L (K₂SO₄ pH 6.39, L 21.7) vs θ* (slide-15 Cs⁺ pH 4, L 15.4):
+
+| | log f_2w | log f_4w | α_2w | α_4w |
+|---|---|---|---|---|
+| θ_L | −1.009 | −12.309 | 0.577 | 0.305 |
+| θ* | −3.683 | −13.537 | 0.550 | 0.285 |
+| Δ | +2.67 dec | +1.23 dec | +0.027 | +0.020 |
+
+- **No-refit transfer (frozen θ_L → slide-15): REJECTED.** χ²/pt
+  5464 (L 15.4) / 2183 (L 21.7) vs θ*'s native 29.8. Outcome (i)
+  "one transferable vector" is out — prefactors are
+  condition-specific (θ_L is tuned to the higher-current K₂SO₄
+  state and overshoots slide-15 peroxide by OOM).
+- **α-transfer confirmatory refit** (slide-15, α FROZEN at θ_L,
+  k0 free): running — distinguishes (ii) "k0-only shift, α stable"
+  from (iii) "structural misfit". The α's already agree to
+  0.020–0.027; the α_4w dual profile width is ±0.0046, so the
+  0.020 gap is ~4× that width — α's are CLOSE but not identical,
+  consistent with (ii) plus genuine condition dependence.
+- **CONFOUND (load-bearing):** the k0 Δ is entangled with the
+  L_eff Δ (21.7 vs 15.4). A higher transport ceiling needs lower
+  k0 to hit the same current, so part of the +1.2–2.7 dec k0 shift
+  is transport, not site density. Clean separation needs the rpm
+  ask. The rigorous joint shared-α / per-condition-(k0, L_eff) fit
+  is the immediate post-rpm step.
+
 ---
 
 ## Conditional labels currently attached to θ_L
