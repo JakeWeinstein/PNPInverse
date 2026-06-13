@@ -49,6 +49,8 @@ height −3.3%, plateau −5.1% (gates: 50 mV / 30%).
      transport-film difference (21.7 vs 15.4 µm).
    Δ(αn) = +0.066 (here) vs +0.042 (slide-15): the slope-competition
    that makes the volcano is shared.
+   Figure: `StudyResults/phase7p2_xcond_slide15_alphafrozen/slide15_generalization.png`
+   (slide-15 data vs θ_L cold-fail vs α-frozen k0-refit recovery).
 
 3. **What two series buy vs one (identifiability).** True
    re-optimized profiles (Δχ² = 4, pragmatic widths):
