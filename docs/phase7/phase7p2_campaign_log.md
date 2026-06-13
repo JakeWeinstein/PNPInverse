@@ -39,12 +39,19 @@ Two findings with paper weight:
    (2.67 dec) was MOSTLY the transport-film difference (21.7 vs
    15.4 µm), not site density. Δ(αn) = +0.066 vs +0.042 — the
    volcano slope-competition mechanism is shared.
-2. **The disk series identifies the partition.** Dual-objective
-   true profiles pin the 4e prefactor to ±0.23 dec and the 4e
-   transfer coefficient to ±0.0046 (both clean quadratics) —
-   parameters that were effectively unbounded on peroxide-only
-   (slide-15) data. Ring-only mirror profiles in flight to quote
-   the exact width ratio.
+2. **What the disk series buys (corrected by derived-quantity
+   check).** Dual-objective true profiles pin the 4e prefactor to
+   ±0.23 dec and the 4e transfer coefficient to ±0.0046 (clean
+   quadratics). BUT the physically meaningful PARTITION (4e current
+   fraction ≈ 0.72) comes out nearly identical from the ring-only
+   fit (0.729) and the dual fit (0.719) — the volcano PEAK SHAPE
+   already encodes the 2e/4e competition, so the FRACTION is
+   largely ring-determined at this well-developed-volcano condition.
+   The disk's genuine contributions: (a) the absolute total-current
+   scale (definitional), (b) tightening the individual prefactors
+   (ring-only vs dual f_4w width ratio: profiles in flight). The
+   earlier "disk identifies the partition" framing was an overclaim
+   the derived-quantity profile caught.
 
 ---
 
