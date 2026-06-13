@@ -36,13 +36,12 @@ Two findings with paper weight:
    slope-competition mechanism survives). The k0's shift by 2.7 /
    1.2 decades — pre-registered outcome (ii): site-density /
    catalyst-history difference (catalyst ask gates interpretation).
-2. **The disk series identifies the partition.** True profiles
-   (reoptimizing the other three parameters) put the Δχ²=4
-   half-width of log f_4w at ≈ ±0.23 decades (×1.7 on k0_4e) under
-   the dual objective — a parameter that was structurally
-   non-identified (~14 free decades) on peroxide-only data.
-   (Crossing-bracket points + ring-only comparison profiles in
-   flight to finalize the quoted widths.)
+2. **The disk series identifies the partition.** Dual-objective
+   true profiles pin the 4e prefactor to ±0.23 dec and the 4e
+   transfer coefficient to ±0.0046 (both clean quadratics) —
+   parameters that were effectively unbounded on peroxide-only
+   (slide-15) data. Ring-only mirror profiles in flight to quote
+   the exact width ratio.
 
 ---
 
@@ -144,16 +143,24 @@ later made (+3.4 dec). Locked as the Δχ² baseline.
 | N = 0.25 | 15.977 | log f_4w +0.23 dec; rest stable | symmetric mirror of N=0.20: the N band {0.20, 0.224, 0.25} maps to log f_4w {−12.57, −12.31, −12.08} (±0.25 dec), J {9.85, 12.20, 15.98} — clean monotone absorption into the 4e prefactor |
 | bulk c_H ×{0.7, 1.4}, weights, window edge, bg-scale, sheet-axis | queued | — | — |
 
-### Identifiability (in progress)
-log f_4w TRUE profile (fix + reoptimize other 3): ±0.1 dec →
-Δχ²_raw ≈ 0.77/side after reoptimization (compensation through the
-free parameters roughly quadruples the fixed-rest width — exactly
-why GPT demanded true profiles, R1#9). Quadratic extrapolation:
-Δχ²=4 half-width ≈ ±0.23 decades (×1.7 on k0_4e) — vs UNBOUNDED
-over ~14 decades on peroxide-only data. ±0.25-dec crossing-bracket
-points + α_4w ladder running; ring-only mirror + derived
-4e-fraction constrained profiles queued. (PRAGMATIC widths, never
-CIs — σ is a conservative predictive scale.)
+### Identifiability — dual-objective profiles COMPLETE
+TRUE profiles (fix one param, reoptimize the other three). Δχ²_raw
+= (J − J_opt)·30; J_opt = 12.195.
+
+| Param | ladder pts (Δχ²) | curvature | Δχ²=4 half-width |
+|---|---|---|---|
+| log f_4w | +0.1 (0.77), +0.25 (4.86), −0.1 (0.76), −0.25 (4.72) | ~77/dec² | **±0.23 dec** (×1.7 on k0_4e) |
+| α_4w | +0.005 (4.8), +0.02 (72.9), −0.005 (4.95) | ~1.9e5/α² | **±0.0046** |
+
+Both clean and symmetric quadratics. The two 4e knobs separate by
+~50×: the **prefactor** floats ±0.23 dec (a scale), the **transfer
+coefficient** is pinned to ±0.005 (the Tafel TILT, which no
+prefactor compensation can mimic across the window). On
+peroxide-only (slide-15) data both were effectively unbounded
+(~14 free decades / non-identified). Ring-only (w_disk_scale=0)
+mirror profiles in flight to quantify exactly how much the disk
+series bought. (PRAGMATIC widths, never CIs — σ is a conservative
+predictive scale.)
 
 ---
 
