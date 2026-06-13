@@ -14,3 +14,11 @@ parsed as a flag); two background runs were lost silently as
 `--flag=value`; (2) after launching a background run, verify it
 actually STARTED (check the log for the first expected line) before
 trusting the completion notification.
+
+## 2026-06-11 — don't shell-loop background launches with unquoted flag vars
+A `for tag in "name:--flag val"` loop with `python ... $flag ...`
+under nohup mangled the args ("unrecognized arguments: --w-ring-scale
+2.0") and the runs died instantly while ps still showed siblings.
+Rule: launch each background run with the dedicated background tool and
+EXPLICIT args (negatives as --flag=value); never build flag strings in
+a shell loop.
