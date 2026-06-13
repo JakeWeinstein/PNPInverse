@@ -279,6 +279,12 @@ def main() -> int:
     parser.add_argument("--fd-components", default="1,3",
                         help="comma indices of theta for the FD check")
     parser.add_argument("--out-name", default="phase7_fit_adjoint")
+    parser.add_argument("--x0", default=None,
+                        help="comma 4-tuple start (default X0)")
+    parser.add_argument("--fix", default=None,
+                        help="'k=v[,k=v]' pins theta components; the "
+                             "rest reoptimize (cross-condition "
+                             "alpha-transfer test)")
     args = parser.parse_args()
 
     out_dir = Path(_ROOT) / "StudyResults" / args.out_name
@@ -294,9 +300,18 @@ def main() -> int:
         alpha_water_2e=None, alpha_water_4e=None,
         l_eff_um=15.4, bulk_h_mol_m3=0.1,
         enable_water_ionization=True, coarse_grid=True,
+        # slide-15 defaults for driver attrs added post-Phase-7.2:
+        cation="cs", v_ocp_rhe=None, v_grid_lo=None, v_grid_hi=None,
     )
     fp = ForwardProblem(opts_base)
-    x0 = np.array(X0, dtype=float)
+    x0 = (np.array([float(t) for t in args.x0.split(",")])
+          if args.x0 else np.array(X0, dtype=float))
+    fixed = {}
+    if args.fix:
+        for tok in args.fix.split(","):
+            kk, vv = tok.split("=")
+            fixed[int(kk)] = float(vv)
+            x0[int(kk)] = float(vv)
 
     if args.fd_check:
         print("== FD verification of adjoint gradient at x0 ==", flush=True)
@@ -362,8 +377,15 @@ def main() -> int:
         return float(J), np.asarray(g, dtype=float)
 
     from scipy.optimize import minimize
+    # Pin fixed components via degenerate bounds (L-BFGS-B holds a
+    # variable whose lower==upper); the gradient slot is harmless.
+    bounds = [(_fv := fixed[_k], _fv) if _k in fixed else BOUNDS[_k]
+              for _k in range(4)]
+    if fixed:
+        print(f"FIXED components {fixed} (cross-condition "
+              f"alpha-transfer test)", flush=True)
     t0 = time.time()
-    res = minimize(fun, x0, jac=True, method="L-BFGS-B", bounds=BOUNDS,
+    res = minimize(fun, x0, jac=True, method="L-BFGS-B", bounds=bounds,
                    options={"maxiter": args.maxiter, "ftol": 1e-8,
                             "gtol": 1e-7})
     print(f"\nL-BFGS-B: {res.message}  nit={res.nit} nfev={res.nfev}  "
