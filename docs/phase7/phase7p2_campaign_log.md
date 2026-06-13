@@ -48,10 +48,15 @@ Two findings with paper weight:
    already encodes the 2e/4e competition, so the FRACTION is
    largely ring-determined at this well-developed-volcano condition.
    The disk's genuine contributions: (a) the absolute total-current
-   scale (definitional), (b) tightening the individual prefactors
-   (ring-only vs dual f_4w width ratio: profiles in flight). The
-   earlier "disk identifies the partition" framing was an overclaim
-   the derived-quantity profile caught.
+   scale (definitional), (b) a modest 1.2× tightening of the 4e
+   prefactor (ring-only f_4w half-width ±0.28 dec vs dual ±0.23),
+   (c) a 0.68-dec shift of the prefactor OPTIMUM (absolute-scale
+   correction) at fixed 2e/4e fraction. The original "disk breaks
+   the partition non-identifiability" motivation held for the
+   DIGITIZED pH-4 slide-15 case but NOT for clean numeric pH-6.39
+   ring data — at a well-developed volcano the ring peak shape
+   already carries the partition. The derived-quantity profile
+   caught this overclaim.
 
 ---
 
