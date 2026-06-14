@@ -166,5 +166,25 @@ non-faradaic loss without new experiments. C2 (homogeneous decomposition, a
 volumetric H₂O₂-sink/O₂-source) is the natural non-faradaic alternative but
 requires a forms-level dx source/sink and is not yet wired.
 
+**Exploratory C1 fit (NOT a prediction — k0 tuned to the held-out pH-2 ring).**
+`scripts/studies/phase7p3_m3_c1_exploratory_fit.py` →
+`StudyResults/phase7p3_m3_c1_exploratory_fit/` (exploratory_fit.json,
+exploratory_3panel.png). Answers "can C1 hit the numbers, and what does the
+disk do at the matched point?" The pH-2 ring peak is cleanly tunable (a smooth
+sigmoid in log k0): k0*_factor=1.22e-21 lands ring=0.069 (data 0.069, exact).
+
+**Disk at the matched point — leans faradaic.** With C1 tuned so the pH-2 ring
+hits 0.069, the pH-2 deep-cathodic disk is **−4.06** (fit) vs **−3.94** (data)
+vs **−3.57** (C1-off N0). The disk was NOT tuned, so this is an independent
+check: the data sits ~3× closer to C1-ON than C1-OFF (|data−fit|=0.12 vs
+|data−N0|=0.37), i.e. the ring collapse IS accompanied by the extra cathodic
+current faradaic C1 predicts — modest support for a faradaic contribution,
+with a small (~3%) over-shoot leaving room for a non-faradaic part / absolute-
+scale slack. This sharpens (does not overturn) the "conditional" verdict:
+faradaic C1 is now *favored but not proven* at pH 2; an N₂ H₂O₂-reduction scan
+would settle it. At pH 4/6 the ring is untouched (C1 off, fit≡N0), but the
+model under-predicts the absolute disk magnitude (~−3.8 vs data −4.1/−4.7) —
+the rpm-conditional L_eff/transport gap, present with or without C1.
+
 Pending: M5 (apply the frozen family to the slide-15 Cs⁺ pH-4 cross-condition
 + honest write-up).

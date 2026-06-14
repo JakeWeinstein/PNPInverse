@@ -50,15 +50,16 @@ SUFFICIENCY, not identification.**
 - **The onset/first-ET frame (A) is a gauge question** — SHE-anchored E_eq
   and an OCP/relabel frame are equivalent on the full disk+ring shape (M1a).
   No SHE-anchoring physics claim is made.
-- **Disk-side attribution of the collapse is CONDITIONAL.** At the pH-2 deep
-  plateau the data disk (−3.89) sits between the ring-only null (N0 −3.57)
-  and full faradaic C1 (−4.06): the collapse is accompanied by *some* extra
-  cathodic current (favoring a faradaic contribution) but full C1
-  over-predicts it, and the ~0.3 mA/cm² gap is within absolute-current
-  (L_eff/rpm/partition) uncertainty. **Faradaic C1 vs a non-faradaic loss
-  (C2 homogeneous decomposition / peroxide escape / ring-detection artifact)
-  cannot be separated** without N₂ H₂O₂-reduction scans, an rpm series, or
-  per-pH ring calibration (the top data-asks; unavailable here).
+- **Disk-side attribution of the collapse is CONDITIONAL (faradaic favored,
+  not proven).** When C1 is tuned so the pH-2 ring hits the data (0.069), the
+  pH-2 deep-cathodic disk is −4.06 (C1) vs −3.94 (data) vs −3.57 (C1-off) —
+  the data is ~3× closer to C1-ON, i.e. the ring collapse IS accompanied by
+  the extra cathodic current faradaic C1 predicts (the disk was not tuned, so
+  this is an independent check). But C1 over-shoots ~3% and the absolute scale
+  is rpm-conditional, so **faradaic C1 vs a non-faradaic loss (C2 homogeneous
+  decomposition / peroxide escape / ring-detection artifact) is favored but
+  not cleanly separated** — an N₂ H₂O₂-reduction scan / rpm series / per-pH
+  ring calibration would settle it (the top data-asks; unavailable here).
 - **C's rate magnitude and proton order p are not pinned** — C is OFF at the
   pH-4 TRAIN condition (alkaline surface), so it is a lock-derived BRACKET,
   not a pH-4 fit; the bracket is wide and p is unidentifiable (β is a step,
