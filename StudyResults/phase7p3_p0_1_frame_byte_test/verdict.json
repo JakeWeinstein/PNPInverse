@@ -1,0 +1,15 @@
+{
+  "test": "phase7p3_P0.1_frame_byte_test",
+  "anchor_pH": 6.39040559077478,
+  "she_eeq_shift_v_at_anchor": 0.0,
+  "nernst_slope_v_per_ph": 0.059159349207469625,
+  "grid_match": true,
+  "converged_match": true,
+  "n_compared_cd": 13,
+  "n_compared_pc": 13,
+  "max_abs_diff_cd_mA_cm2": 0.0,
+  "max_abs_diff_pc_mA_cm2": 0.0,
+  "byte_exact": true,
+  "within_tol_1e-12": true,
+  "PASS": true
+}

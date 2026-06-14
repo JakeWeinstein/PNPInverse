@@ -60,6 +60,61 @@ def _v_ocp(opts) -> float:
     return float(opts.v_ocp_rhe) if opts.v_ocp_rhe is not None \
         else V_OCP_RHE
 
+
+# ---------------------------------------------------------------------------
+# Proton frame (Phase 7.3 P0.1) — RHE-referenced (default) XOR SHE-anchored
+# ---------------------------------------------------------------------------
+#
+# The production model is RHE-referenced: ``_build_reactions`` shifts every
+# E_eq by −V_OCP and the V-grid by the same −V_OCP, so V_OCP cancels in the
+# overpotential η = phi_applied − phi − E_eq.  Per-reaction E_eq enters the
+# residual once, at ``forms_logc_muh.py`` (``E_eq_model = E_eq_v / V_T``,
+# affine ⇒ a pre-shift on E_eq_v composes cleanly).
+#
+# The SHE-anchored frame makes the formal potential a fixed number on the SHE
+# scale, E0_SHE,j, so on the RHE axis the solver uses:
+#     E_eq_RHE,j(pH) = E0_SHE,j + S·pH = E_eq_locked,j + S·(pH − pH_anchor)
+# with the Nernstian slope S = V_T·ln10 (≈ 0.05916 V/pH; the plan's "0.0592")
+# and E0_SHE,j := E_eq_locked,j − S·pH_anchor.  This is the SINGLE place
+# proton dependence may enter (formal-potential shift) — XOR a kinetic c_H
+# factor (``cathodic_conc_factors``); never both (enforced below).
+#
+# P0.1 byte-test guarantee: the shift is anchored on the bulk c_H (not a
+# rounded pH), so at the anchor condition (bulk_h == bulk_h_anchor) the two
+# pH values flow through the SAME helper and the delta is EXACTLY 0.0 ⇒ the
+# SHE frame reproduces the RHE-referenced lock byte-for-byte.
+
+BULK_H_ANCHOR_DEFAULT = 4.07e-4   # mol/m³ — pH-6.39 lock (BULK_H_PH639)
+
+
+def _ph_from_bulk_h(c_h_mol_m3: float) -> float:
+    """Bulk pH from bulk H⁺ concentration (c_H[mol/m³] = 10^(3−pH))."""
+    return 3.0 - math.log10(float(c_h_mol_m3))
+
+
+def _nernst_slope_v_per_ph() -> float:
+    """Nernstian RHE↔SHE slope S = V_T·ln10 (repo thermal voltage), so the
+    model E_eq shift and the data-side RHE↔SHE conversion share one
+    constant.  ≈ 0.05916 V/pH (the plan/brainstorm's rounded 0.0592)."""
+    from scripts._bv_common import V_T
+    return float(V_T) * math.log(10.0)
+
+
+def _she_eeq_shift_v(opts) -> float:
+    """SHE-anchored formal-potential shift (V) added to EVERY reaction E_eq.
+
+    Returns 0.0 for the default RHE frame, and exactly 0.0 at the anchor
+    condition for the SHE frame (P0.1 byte-exactness)."""
+    frame = str(getattr(opts, "proton_frame", "rhe"))
+    if frame == "rhe":
+        return 0.0
+    if frame != "she":
+        raise SystemExit(f"--proton-frame must be rhe|she; got {frame!r}")
+    c_anchor = float(getattr(opts, "bulk_h_anchor_mol_m3",
+                             BULK_H_ANCHOR_DEFAULT))
+    d_ph = _ph_from_bulk_h(opts.bulk_h_mol_m3) - _ph_from_bulk_h(c_anchor)
+    return _nernst_slope_v_per_ph() * d_ph
+
 V_RHE_DECK_GRID_FINE = tuple(np.linspace(-0.40, +0.55, 25).round(4).tolist())
 V_RHE_DECK_GRID_COARSE = tuple(np.linspace(-0.40, +0.55, 13).round(4).tolist())
 
@@ -109,7 +164,9 @@ def _build_reactions(opts) -> list[dict]:
     """OCP-shifted dual-pathway reaction list with CLI overrides.
 
     E° values come UNSHIFTED from the preset (repo invariant) and are
-    shifted by −V_OCP_RHE here — the single shift point.  Route
+    shifted by ``she_shift − V_OCP_RHE`` here — the single shift point.
+    ``she_shift`` is the optional SHE-anchored formal-potential offset
+    (0.0 in the default RHE frame; see ``_she_eeq_shift_v``).  Route
     disabling is via k0=0 (the parser drops nothing; ablation
     convention — ``"enabled"`` does not survive the parser).
     """
@@ -119,10 +176,12 @@ def _build_reactions(opts) -> list[dict]:
     if not routes <= {"acid", "water"}:
         raise SystemExit(f"--routes must be subset of acid,water; got {opts.routes!r}")
 
+    she_shift = _she_eeq_shift_v(opts)
+
     rxns = []
     for rxn in PARALLEL_2E_4E_DUAL_PATHWAY:
         r = dict(rxn)
-        r["E_eq_v"] = float(r["E_eq_v"]) - _v_ocp(opts)
+        r["E_eq_v"] = float(r["E_eq_v"]) + she_shift - _v_ocp(opts)
         is_water = r["proton_donor"] == "water"
         if is_water:
             if "water" not in routes:
@@ -141,6 +200,19 @@ def _build_reactions(opts) -> list[dict]:
             elif r["n_electrons"] == 4:
                 r["k0"] = float(r["k0"]) * float(opts.k0_acid_4e_factor)
         rxns.append(r)
+
+    # XOR guard (P0.1): in the SHE frame, proton dependence lives in the
+    # formal-potential shift — an ENABLED reaction must NOT also carry a
+    # kinetic c_H factor, or proton dependence is double-counted.
+    if she_shift != 0.0 or str(getattr(opts, "proton_frame", "rhe")) == "she":
+        for j, r in enumerate(rxns):
+            if float(r["k0"]) > 0.0 and r.get("cathodic_conc_factors"):
+                raise SystemExit(
+                    f"--proton-frame=she double-counts proton dependence: "
+                    f"reaction {j} ({r.get('label', '?')}) is enabled AND "
+                    f"carries cathodic_conc_factors={r['cathodic_conc_factors']!r}. "
+                    f"SHE-anchoring is for c_H-FREE routes (water); use the "
+                    f"RHE frame for c_H-kinetic (acid) routes.")
     return rxns
 
 
@@ -534,6 +606,15 @@ def _config_dict(opts, reactions, v_grid, v_deck_grid) -> dict:
         "cation": opts.cation,
         "ocp_shift": {"V_OCP_RHE": _v_ocp(opts),
                       "applied_to": ["V_RHE", "all reaction E_eq_v"]},
+        "proton_frame": {
+            "frame": str(getattr(opts, "proton_frame", "rhe")),
+            "bulk_h_anchor_mol_m3": float(getattr(
+                opts, "bulk_h_anchor_mol_m3", BULK_H_ANCHOR_DEFAULT)),
+            "ph_anchor": _ph_from_bulk_h(getattr(
+                opts, "bulk_h_anchor_mol_m3", BULK_H_ANCHOR_DEFAULT)),
+            "nernst_slope_v_per_ph": _nernst_slope_v_per_ph(),
+            "she_eeq_shift_v": _she_eeq_shift_v(opts),
+        },
         "anchor": {"v_rhe_solver": ANCHOR_V_RHE,
                    "initializer": ANCHOR_INITIALIZER,
                    "kw_eff_ladder": None,
@@ -579,6 +660,16 @@ def main() -> int:
                              " (with --v-grid-hi; else slide-15"
                              " grids).")
     parser.add_argument("--v-grid-hi", type=float, default=None)
+    parser.add_argument("--proton-frame", choices=("rhe", "she"),
+                        default="rhe",
+                        help="Formal-potential frame (Phase 7.3 P0.1): "
+                             "rhe (default, production) vs she "
+                             "(SHE-anchored E_eq, +S·(pH−pH_anchor)).")
+    parser.add_argument("--bulk-h-anchor-mol-m3", type=float,
+                        default=BULK_H_ANCHOR_DEFAULT,
+                        help="SHE-frame anchor c_H (default 4.07e-4 ="
+                             " pH-6.39 lock); the E_eq shift is exactly"
+                             " 0 when --bulk-h-mol-m3 matches this.")
     parser.add_argument("--coarse-grid", action="store_true",
                         help="13-pt deck grid (fit iterations) vs 25-pt.")
     parser.add_argument("--no-water-ionization", dest="enable_water_ionization",
