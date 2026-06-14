@@ -170,20 +170,33 @@ def _build_reactions(opts) -> list[dict]:
     disabling is via k0=0 (the parser drops nothing; ablation
     convention — ``"enabled"`` does not survive the parser).
     """
-    from scripts._bv_common import PARALLEL_2E_4E_DUAL_PATHWAY
+    from scripts._bv_common import (
+        ALPHA_C1_DEFAULT, PARALLEL_2E_4E_DUAL_PATHWAY, make_c1_reaction,
+    )
 
     routes = {tok.strip() for tok in opts.routes.split(",") if tok.strip()}
-    if not routes <= {"acid", "water"}:
-        raise SystemExit(f"--routes must be subset of acid,water; got {opts.routes!r}")
+    if not routes <= {"acid", "water", "c1"}:
+        raise SystemExit(f"--routes must be subset of acid,water,c1; "
+                         f"got {opts.routes!r}")
 
     she_shift = _she_eeq_shift_v(opts)
 
+    # Base ladder (+ optional C1 peroxide consumer; Phase 7.3 M3).
+    base = list(PARALLEL_2E_4E_DUAL_PATHWAY)
+    if "c1" in routes:
+        base = base + [make_c1_reaction(
+            k0_factor=float(getattr(opts, "k0_c1_factor", 1.0)),
+            alpha=float(getattr(opts, "alpha_c1", None) or ALPHA_C1_DEFAULT),
+            h_order=float(getattr(opts, "c1_h_order", 1.0)),
+        )]
+
     rxns = []
-    for rxn in PARALLEL_2E_4E_DUAL_PATHWAY:
+    for rxn in base:
         r = dict(rxn)
         r["E_eq_v"] = float(r["E_eq_v"]) + she_shift - _v_ocp(opts)
-        is_water = r["proton_donor"] == "water"
-        if is_water:
+        if r.get("consumes_h2o2"):        # C1 — k0 already set via its factor
+            pass
+        elif r["proton_donor"] == "water":
             if "water" not in routes:
                 r["k0"] = 0.0
             else:
@@ -194,7 +207,7 @@ def _build_reactions(opts) -> list[dict]:
                          else opts.alpha_water_4e)
                 if alpha is not None:
                     r["alpha"] = float(alpha)
-        else:
+        else:                              # acid (hydronium) routes
             if "acid" not in routes:
                 r["k0"] = 0.0
             elif r["n_electrons"] == 4:
@@ -636,7 +649,15 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--routes", default="acid,water",
-                        help="Comma subset of acid,water (default acid,water).")
+                        help="Comma subset of acid,water,c1 (default "
+                             "acid,water; 'c1' adds Phase 7.3 M3 "
+                             "electrochemical H2O2 reduction).")
+    parser.add_argument("--k0-c1-factor", type=float, default=1.0,
+                        help="C1 (H2O2 reduction) k0 multiplier on K0_HAT_C1.")
+    parser.add_argument("--alpha-c1", type=float, default=None,
+                        help="C1 transfer coefficient (default 0.5).")
+    parser.add_argument("--c1-h-order", type=float, default=1.0,
+                        help="C1 kinetic proton order p (c_H,surf^p).")
     parser.add_argument("--k0-water-2e-factor", type=float, default=1.0)
     parser.add_argument("--k0-water-4e-factor", type=float, default=1.0)
     parser.add_argument("--k0-acid-4e-factor", type=float, default=1e-15,

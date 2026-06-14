@@ -1,0 +1,145 @@
+{
+  "S_v_per_ph": 0.059159349207469625,
+  "anchor_pH": 6.39,
+  "score_window_v": [
+    0.2,
+    0.75
+  ],
+  "by_pH": {
+    "2.0": {
+      "N0": {
+        "disk_rms": 1.2844842137398478,
+        "ring_rms": 0.32285065352351633,
+        "combined_rms": 1.607334867263364,
+        "n_disk": 510,
+        "n_ring": 215,
+        "model_ring_peak": 0.3574363644202471,
+        "data_ring_peak": 0.025238095238095237,
+        "ring_peak_resid": 0.3321982691821519
+      },
+      "N1b": {
+        "disk_rms": 1.144998574853503,
+        "ring_rms": 0.30682931038323125,
+        "combined_rms": 1.4518278852367343,
+        "n_disk": 510,
+        "n_ring": 215,
+        "model_ring_peak": 0.3650565069146239,
+        "data_ring_peak": 0.025238095238095237,
+        "ring_peak_resid": 0.33981841167652865
+      },
+      "A": {
+        "disk_rms": 0.703585787125005,
+        "ring_rms": 0.006603549930420877,
+        "combined_rms": 0.7101893370554259,
+        "n_disk": 510,
+        "n_ring": 215,
+        "model_ring_peak": 0.01570050510361956,
+        "data_ring_peak": 0.025238095238095237,
+        "ring_peak_resid": -0.009537590134475676
+      },
+      "N1a": {
+        "disk_rms": 0.7178770348072768,
+        "ring_rms": 0.02420287527476735,
+        "combined_rms": 0.7420799100820442,
+        "n_disk": 377,
+        "n_ring": 214,
+        "model_ring_peak": 0.0062516098816533345,
+        "data_ring_peak": 0.025238095238095237,
+        "ring_peak_resid": -0.0189864853564419
+      }
+    },
+    "4.0": {
+      "N0": {
+        "disk_rms": 1.0261559481686497,
+        "ring_rms": 0.21056467637438334,
+        "combined_rms": 1.236720624543033,
+        "n_disk": 415,
+        "n_ring": 368,
+        "model_ring_peak": 0.3620206089392079,
+        "data_ring_peak": 0.22238095238095237,
+        "ring_peak_resid": 0.13963965655825553
+      },
+      "N1b": {
+        "disk_rms": 0.8984278769546592,
+        "ring_rms": 0.20071134206506977,
+        "combined_rms": 1.0991392190197289,
+        "n_disk": 415,
+        "n_ring": 368,
+        "model_ring_peak": 0.3653350007528937,
+        "data_ring_peak": 0.22238095238095237,
+        "ring_peak_resid": 0.14295404837194134
+      },
+      "A": {
+        "disk_rms": 0.6655810756927636,
+        "ring_rms": 0.0573941148958918,
+        "combined_rms": 0.7229751905886554,
+        "n_disk": 415,
+        "n_ring": 368,
+        "model_ring_peak": 0.33266097436395775,
+        "data_ring_peak": 0.22238095238095237,
+        "ring_peak_resid": 0.11028002198300538
+      },
+      "N1a": {
+        "disk_rms": 0.5041656402803673,
+        "ring_rms": 0.0780221006693161,
+        "combined_rms": 0.5821877409496834,
+        "n_disk": 415,
+        "n_ring": 364,
+        "model_ring_peak": 0.3274042978762954,
+        "data_ring_peak": 0.22238095238095237,
+        "ring_peak_resid": 0.105023345495343
+      }
+    },
+    "6.0": {
+      "N0": {
+        "disk_rms": 0.2667233327529474,
+        "ring_rms": 0.16729051379324944,
+        "combined_rms": 0.43401384654619685,
+        "n_disk": 502,
+        "n_ring": 331,
+        "model_ring_peak": 0.3649125883054548,
+        "data_ring_peak": 0.18571428571428572,
+        "ring_peak_resid": 0.1791983025911691
+      },
+      "N1b": {
+        "disk_rms": 0.258350672538273,
+        "ring_rms": 0.16517876413014748,
+        "combined_rms": 0.42352943666842047,
+        "n_disk": 502,
+        "n_ring": 331,
+        "model_ring_peak": 0.36532731184570283,
+        "data_ring_peak": 0.18571428571428572,
+        "ring_peak_resid": 0.1796130261314171
+      },
+      "A": {
+        "disk_rms": 0.30966354217084435,
+        "ring_rms": 0.14263430515976194,
+        "combined_rms": 0.4522978473306063,
+        "n_disk": 502,
+        "n_ring": 331,
+        "model_ring_peak": 0.3674088016046351,
+        "data_ring_peak": 0.18571428571428572,
+        "ring_peak_resid": 0.1816945158903494
+      },
+      "N1a": {
+        "disk_rms": 0.24089244775522442,
+        "ring_rms": 0.14753294564411437,
+        "combined_rms": 0.3884253933993388,
+        "n_disk": 502,
+        "n_ring": 331,
+        "model_ring_peak": 0.3649125883054548,
+        "data_ring_peak": 0.18571428571428572,
+        "ring_peak_resid": 0.1791983025911691
+      }
+    }
+  },
+  "verdict": {
+    "A_beats_frame_nulls_all_pH": false,
+    "ring_peak_unmatched_pH": [
+      "2.0",
+      "4.0",
+      "6.0"
+    ],
+    "interpretation": "A is gauge-equivalent to the frame nulls (onset is a frame question); the frame-invariant ring MAGNITUDE is unmatched by all frozen-\u03b8_L frame variants -> mechanism C (M3) is the load-bearing new physics."
+  }
+}

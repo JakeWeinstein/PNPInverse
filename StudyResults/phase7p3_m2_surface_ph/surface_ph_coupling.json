@@ -1,0 +1,159 @@
+{
+  "test": "phase7p3_M2_surface_pH_coupling",
+  "ufl_provenance": "BV rate is integrated on ds(electrode_marker); a cathodic_conc_factor on the proton reads u_exprs[2] = muh-reconstructed log c_H = mu_H - em*z_H*phi -> the ELECTRODE-FACET BOUNDARY TRACE of c_H (forms_logc_muh.py ~L567/L620). Water routes carry no c_H factor (byte-equiv off-path).",
+  "v_samples": [
+    0.3,
+    0.4,
+    0.5
+  ],
+  "by_V": {
+    "0.30": {
+      "bulk_pH": [
+        1.65,
+        2.0,
+        2.35,
+        3.42,
+        4.0,
+        4.21,
+        5.21,
+        6.0,
+        6.39
+      ],
+      "surface_pH": [
+        0.7026036736724449,
+        1.0185318226528586,
+        1.3734995100061258,
+        9.585571861608294,
+        9.777542070218061,
+        9.78299669060064,
+        9.726216248981787,
+        9.660371034997045,
+        9.627530934635582
+      ],
+      "surface_cH_mol_m3": [
+        198.33361433687824,
+        95.82265002945081,
+        42.31559871431857,
+        2.5967380301844216e-07,
+        1.6690061223280075e-07,
+        1.6481749508569573e-07,
+        1.8783812783564163e-07,
+        2.1858933306346886e-07,
+        2.3575942594117464e-07
+      ],
+      "acid_plateau_surface_pH_mean": 1.0315450021104764,
+      "alk_plateau_surface_pH_mean": 9.693371473506902,
+      "beta_local_fd": [
+        0.9026518542297531,
+        0.9584226233338295,
+        2.6559005779010914,
+        2.9124579643515,
+        0.10705265424113009,
+        0.011611975234896876,
+        -0.07162286090026804,
+        -0.08392213534750326,
+        -0.08420538554221377
+      ],
+      "beta_max_local": 2.9124579643515
+    },
+    "0.40": {
+      "bulk_pH": [
+        1.65,
+        2.0,
+        2.35,
+        3.42,
+        4.0,
+        4.21,
+        5.21,
+        6.0,
+        6.39
+      ],
+      "surface_pH": [
+        0.8690203148806966,
+        1.1742983795146775,
+        1.5072883087183029,
+        7.356103417486169,
+        8.924055979567148,
+        9.461820107558733,
+        9.471916864914864,
+        9.370466094427439,
+        9.316837412017488
+      ],
+      "surface_cH_mol_m3": [
+        135.20093191247437,
+        66.94245271323861,
+        31.096512930674514,
+        4.4044996774075775e-05,
+        1.1910884695479428e-06,
+        3.4528673357904543e-07,
+        3.373518802670444e-07,
+        4.2612194982338986e-07,
+        4.821282594843199e-07
+      ],
+      "acid_plateau_surface_pH_mean": 1.183535667704559,
+      "alk_plateau_surface_pH_mean": 8.983533312661974,
+      "beta_local_fd": [
+        0.8722230418113738,
+        0.9118114197680085,
+        2.064198312810122,
+        3.6745381213840203,
+        2.598683883562387,
+        2.118100728024362,
+        -0.06728617793753244,
+        -0.1345048737290533,
+        -0.1375094420767964
+      ],
+      "beta_max_local": 3.6745381213840203
+    },
+    "0.50": {
+      "bulk_pH": [
+        1.65,
+        2.0,
+        2.35,
+        3.42,
+        4.0,
+        4.21,
+        5.21,
+        6.0,
+        6.39
+      ],
+      "surface_pH": [
+        1.058730924323725,
+        1.3496141690998888,
+        1.6521968074000657,
+        2.657078535828489,
+        4.81140340887278,
+        5.637382645737739,
+        6.3977526538150435,
+        7.9543296347409775,
+        7.953905382893459
+      ],
+      "surface_cH_mol_m3": [
+        87.35124025323533,
+        44.708060597077505,
+        22.274255274855683,
+        2.2025281319210555,
+        0.015438197449969868,
+        0.0023047156679821394,
+        0.00040017259742695726,
+        1.1108882296674652e-05,
+        1.1119739599207993e-05
+      ],
+      "acid_plateau_surface_pH_mean": 1.3535139669412264,
+      "alk_plateau_surface_pH_mean": 5.901975376981415,
+      "beta_local_fd": [
+        0.8310949850747534,
+        0.847808404394772,
+        0.8829140719501201,
+        2.738824364097042,
+        3.8750508426620254,
+        3.382572035502432,
+        1.4363368241050702,
+        0.6504892842979633,
+        -0.0010878252500476867
+      ],
+      "beta_max_local": 3.8750508426620254
+    }
+  },
+  "finding": "Surface c_H is a THRESHOLD function of bulk pH, NOT linear: an acidic plateau (surface pH ~0.7-1.7) for bulk pH <= 2.35 where the H+ reservoir + cathodic field enrichment hold the surface acidic, and an alkaline plateau (surface pH ~9-10) for bulk pH >= 3.42 where ORR H+-consumption outruns bulk supply. The transition sits at bulk pH ~2.3-3.4. Hence a surface-c_H-reading consumption rate (C1) is ON only at bulk pH <= ~2.3 and OFF at >= 3.4 -> reproduces the data's ring-magnitude collapse at pH 2 and survival at pH 4/6 (mechanism C/M3). The brainstorm's bulk-limiting m (beta=1) is INVALID here: beta is ~0 on each plateau and large only across the switch, so C's apparent proton ORDER is NOT identifiable as a simple c_H^m power from bulk pH."
+}

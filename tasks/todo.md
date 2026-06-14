@@ -45,7 +45,33 @@ L_eff 21.7 µm; coarse grid; enable_water_ionization=True.
       4 TRAIN+select, 6 anchor-check, 2 HELD-OUT once), raw disk+ring
       objective, one-place proton convention, single Nernst constant.
 
-## Downstream (NOT started — M-series = per-pH Firedrake campaigns, mins–hrs)
-**HOLD for scope confirmation.** M1a N0/N1a/N1b/A (onset selection on full
-disk+ring shape) · M2 G surface-pH coupling · M1b A1 · **M3 C1/C2 (LEAD)** ·
-M4 pH-2 held-out · M5 slide-15 + write-up.
+## M-series (full plan order; user-approved, commit-to-main)
+
+### M1a — onset selection N0/N1a/N1b/A  ⏳ RUNNING
+- `scripts/studies/phase7p3_m1a_onset_selection.py` — reuses cached N0
+  (pH-series), runs N1b (solver OCP shift) + A (SHE frame) at pH 2/4/6,
+  scores disk+ring RMS + ring-peak vs digitized. Preview: N0 ring peak flat
+  ~0.36 while data collapses to 0.025 at pH 2 → no frame variant fixes the
+  magnitude (expected: A = gauge question, C load-bearing).
+
+### M2 (G) — surface-pH kinetic coupling  ✅
+- `scripts/studies/phase7p3_m2_surface_ph_coupling.py` (+ json/png). c_H
+  factors read the electrode-facet boundary trace (verified in
+  forms_logc_muh.py). β diagnostic: surface c_H is a THRESHOLD (acidic
+  ≤pH2.35 surface ~10² mol/m³; alkaline ≥pH3.42 surface ~10⁻⁷) — the switch
+  that gates C1. β is NOT a single slope ⇒ C's proton order non-identifiable
+  from bulk pH (a finding).
+
+### M3 (LEAD) — C: pH-dependent peroxide yield/loss  🔨 wiring done
+- C1 wired: `make_c1_reaction` in `_bv_common.py` (H₂O₂+2H⁺+2e⁻→2H₂O,
+  E°=1.765 V deck-consistent, reads surface c_H); driver `--routes c1`
+  + `--k0-c1-factor/--alpha-c1/--c1-h-order`; purely additive (default
+  byte-equiv). Tests `tests/test_phase7p3_c1_wiring.py` (7/7); net-peroxide
+  observable (gross − C1) validated.
+- [ ] C1 smoke (`phase7p3_m3_c1_smoke.py`): pH6.39 lock preserved + pH2 ring
+  collapse — RUN AFTER M1a (avoid kernel-cache race).
+- [ ] C1/C2 fit on pH4 + competitors (direct-4e / escape / ring-eff null) +
+  G2 multi-criterion gate. C2 (homogeneous decomposition) not yet wired.
+
+### Pending: M1b A1 (only if M1a leaves onset unexplained) · M4 pH-2 held-out
+· M5 slide-15 + write-up.

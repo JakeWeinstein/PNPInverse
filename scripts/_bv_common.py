@@ -983,6 +983,54 @@ PARALLEL_2E_4E_DUAL_PATHWAY: List[Dict[str, Any]] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Phase 7.3 M3 — C1: electrochemical H₂O₂ reduction (the peroxide consumer)
+# ---------------------------------------------------------------------------
+#
+#   H₂O₂ + 2H⁺ + 2e⁻ → 2H₂O,   n_e = 2,   cathodic_species = 1 (H₂O₂).
+#
+# E° derived deck-consistently from the parallel ladder: R2e (O₂→H₂O₂) +
+# C1 (H₂O₂→2H₂O) ≡ R4e (O₂→2H₂O), so 2·E°_C1 = 4·E_R4e − 2·E_R2e ⇒
+# E°_C1 = 2·E_R4e − E_R2e = 2·1.23 − 0.695 = 1.765 V vs RHE (≈ the standard
+# H₂O₂/H₂O couple 1.76 V; pH-independent on RHE).  The KINETIC proton order
+# p (cathodic_conc_factors c_H,surf^p) is SEPARATE from this thermodynamic
+# 2H⁺ — a protonation pre-equilibrium in the RDS — so an RHE-referenced E°
+# PLUS c_H^p is single-convention, NOT the P0.1 double-count (which is an
+# SHE E_eq shift AND a c_H factor on the SAME reaction).  C1 reads SURFACE
+# c_H via cathodic_conc_factors (electrode-facet boundary trace; Phase 7.3
+# M2/G), so it switches ON only where the surface stays acidic (bulk pH
+# ≲ 2.3) and OFF where ORR alkalizes the surface (bulk pH ≳ 3.4).
+E_EQ_C1_V: float = 2.0 * E_EQ_R4E_V - E_EQ_R2E_V    # 1.765 V vs RHE
+ALPHA_C1_DEFAULT: float = 0.5                        # pre-registered symmetric
+K0_HAT_C1: float = float(K0_HAT_R4E)                 # seed scale; driver factor
+
+
+def make_c1_reaction(*, k0_factor: float = 1.0,
+                     alpha: float = ALPHA_C1_DEFAULT,
+                     h_order: float = 1.0) -> Dict[str, Any]:
+    """C1 (electrochemical H₂O₂ reduction) reaction dict for the 3-species
+    logc_muh stack (O₂=0, H₂O₂=1, H⁺=2).  ``k0_factor``/``alpha``/``h_order``
+    are the M3 fit knobs (rate + symmetry + proton order p)."""
+    return {
+        "k0": float(K0_HAT_C1) * float(k0_factor),
+        "alpha": float(alpha),
+        "cathodic_species": 1,            # H₂O₂ consumed (→ c_H2O2,surf factor)
+        "anodic_species": None,           # irreversible (no peroxide re-oxidation)
+        "c_ref": 0.0,
+        "stoichiometry": [0, -1, -2],     # O₂ untouched, H₂O₂ −1, 2 H⁺ consumed
+        "n_electrons": 2,
+        "reversible": False,
+        "E_eq_v": float(E_EQ_C1_V),
+        "cathodic_conc_factors": [
+            {"species": 2, "power": float(h_order), "c_ref_nondim": C_HP_HAT},
+        ],
+        "label": "C1_h2o2_reduction",
+        "proton_donor": "hydronium",
+        "produces_h2o2": False,
+        "consumes_h2o2": True,
+    }
+
+
 # 4-species variant of PARALLEL_2E_4E_REACTIONS for the K2SO4 stack
 # (FOUR_SPECIES_LOGC_DYNAMIC_K2SO4 = O₂, H₂O₂, H⁺, K⁺).  K⁺ is inert
 # in both R_2e and R_4e — same stoichiometry padding pattern as the
