@@ -52,13 +52,18 @@ DIGITIZED = PH_SER / "digitized_experimental_3panel.json"
 OUT = Path(_ROOT) / "StudyResults" / "phase7p3_m3_c1_smoke"
 
 # (pH, V_OCP, N0-reuse path) — pH 6.39 reuses the P0.1 byte-test RHE run.
+# C1 with E°=1.765 V saturates (peroxide-transport-limited) at k0_factor~1;
+# the c_H gating spans ~8.5 decades (pH2 factor ~720 vs pH6.39 ~2.1e-6), so a
+# log-k0 sweep ~10⁻²²..10⁻¹⁰ brackets the window where C1 is OFF at pH 6.39
+# (lock preserved) yet ON at pH 2 (ring collapses).  Full-range ring peak
+# (the digitized ring peaks migrate to LOW V at low pH: pH2 @ V≈0.01).
 CASES = [
     {"pH": 6.39, "v_ocp": 1.019, "bulk_h": 4.07e-4,
      "n0": BYTETEST / "iv_curve_rhe.json",
-     "c1_factors": [1.0], "v_lo": 0.10, "v_hi": 0.60},
+     "c1_factors": [1e-22, 1e-18, 1e-14, 1e-10], "v_lo": 0.0, "v_hi": 0.85},
     {"pH": 2.0, "v_ocp": 0.47 + 0.197 + 0.059 * 2.0, "bulk_h": 10.0,
      "n0": PH_SER / "iv_curve_pH2.0.json",
-     "c1_factors": [1.0, 10.0], "v_lo": -0.10, "v_hi": 0.85},
+     "c1_factors": [1e-18, 1e-14], "v_lo": -0.10, "v_hi": 0.85},
 ]
 
 

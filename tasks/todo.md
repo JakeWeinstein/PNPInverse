@@ -68,10 +68,18 @@ L_eff 21.7 µm; coarse grid; enable_water_ionization=True.
   + `--k0-c1-factor/--alpha-c1/--c1-h-order`; purely additive (default
   byte-equiv). Tests `tests/test_phase7p3_c1_wiring.py` (7/7); net-peroxide
   observable (gross − C1) validated.
-- [ ] C1 smoke (`phase7p3_m3_c1_smoke.py`): pH6.39 lock preserved + pH2 ring
-  collapse — RUN AFTER M1a (avoid kernel-cache race).
-- [ ] C1/C2 fit on pH4 + competitors (direct-4e / escape / ring-eff null) +
-  G2 multi-criterion gate. C2 (homogeneous decomposition) not yet wired.
+- [x] C1 smoke: C1 VIABLE. k0_factor~1 saturates (E°=1.765→exp(53)); the
+  c_H gate spans 8.5 decades → at k0_factor=1e-18 C1 is OFF at pH6.39 (lock
+  ring 0.361≈0.367) and ON at pH2 (ring→0). Lock-preserving bracket
+  ~[1e-20,1e-15]. SUFFICIENCY shown.
+- [x] M3/M4 verdict: C is load-bearing; C1 sufficient (reproduces pH-2
+  collapse + preserves lock); **disk-side attribution CONDITIONAL** — pH-2
+  deep disk (−3.89) is between ring-only null (N0 −3.57) and full-C1
+  (−4.06), within absolute-current uncertainty → can't exclude non-faradaic
+  loss without N₂ scans/rpm. C1 NOT fit on pH2 (held-out; off at pH4 so
+  bracket from lock-preservation only). p not pinned (finding).
+- [ ] C2 (homogeneous decomposition) — needs forms-level dx sink/source; NOT
+  wired (the non-faradaic alternative; deferred).
 
-### Pending: M1b A1 (only if M1a leaves onset unexplained) · M4 pH-2 held-out
-· M5 slide-15 + write-up.
+### Pending: M5 slide-15 Cs⁺ cross-condition + honest write-up.
+(M1b A1 NOT pursued — M1a showed onset is a frame question.)

@@ -49,6 +49,20 @@ potential-axis operation, exactly as the plan predicted. ⇒ **mechanism C
 recorded as "pick the right frame," not new physics.** (M1b/A1 is therefore
 not pursued unless C fails to close the shape — plan §3.)
 
+**Scoring-window caveat (found while wiring M3).** The M1a ring scores above
+used V_RHE∈[0.20, 0.75], which *cuts off the low-V pH-2 ring peak* — the
+digitized ring peaks migrate to LOW V as pH drops (pH 6 @ V=0.282 max 0.186;
+pH 4 @ 0.197 max 0.225; **pH 2 @ 0.009 max 0.069**). Over the FULL range the
+honest magnitudes are: model N0 flat ~0.36 vs data **0.069 / 0.225 / 0.186**
+at pH 2/4/6. Two reads: (a) the pH-2 collapse (model 0.36 → data 0.069, ~5×)
+is the real frame-invariant signal C must explain; (b) the digitized pH-4/6
+ring (0.19–0.23) is LOWER than the Exp Info scalars for the same series
+(pH 4.21=0.353, pH 6.39=0.355 ≈ model 0.36), i.e. the model actually MATCHES
+the ring at pH ≳ 2.35 and the digitized pH-4/6 deficit is largely
+digitization fidelity (medium-fidelity figure, plan §1). So C only needs to
+fire in strong acid (pH ≲ 2.3) — which is exactly where the M2/G surface
+switch turns C1 ON. The M3 fit will score the ring over the full V range.
+
 ---
 
 ## M2 (G) — surface-pH kinetic coupling  ✅
@@ -96,8 +110,61 @@ SHE shift too — XOR-guarded). Tests `tests/test_phase7p3_c1_wiring.py` (7/7).
 **Net peroxide escape** = gross 2e production − C1 consumption =
 Σ_j stoich_H2O2[j]·rate_2e_units[j] (recovers gross when C1 absent).
 
-Pending: C1 smoke (lock-preservation at pH 6.39 + ring collapse at pH 2),
-then the C1/C2 fit on pH 4 with the equal-complexity competitor set
-(pH-dep direct-4e / peroxide escape / ring-collection-efficiency null) and
-the G2 multi-criterion sufficiency gate. C2 (homogeneous decomposition) not
-yet wired.
+**C1 smoke — mechanism VIABLE (lock-preservation bracket + gating).**
+`scripts/studies/phase7p3_m3_c1_smoke.py` → `StudyResults/phase7p3_m3_c1_smoke/`.
+C1 with E°=1.765 V is SATURATED (peroxide-transport-limited) at k0_factor~1
+(exp(−αn·η)≈exp(53)); it then consumes ALL peroxide at every pH (lock broken).
+This is physically correct — H₂O₂ reduction on carbon is kinetically slow, so
+the effective k0 is tiny. The surface-c_H gate (M2/G) spans ~8.5 decades
+(pH 2 c_H-factor ~720 vs pH 6.39 ~2.1×10⁻⁶), so a ~10⁸×-smaller k0 lands C1
+in the gated window. Log-k0 sweep (net ring peak):
+
+| k0_factor | pH 6.39 (lock) | pH 2.0 (collapse) |
+|---|---|---|
+| 1e-22 | 0.361 ✅ preserved | — |
+| **1e-18** | **0.361 ✅ preserved** | **0.000 ✅ collapses** |
+| 1e-14 | 0.289 (breaking) | 0.000 |
+| 1e-10 | 0.000 (broken) | — |
+
+⇒ **a single c_H-gated peroxide-reduction rate (C1), with k0 in the
+lock-preserving bracket ~[1e-20, 1e-15], reproduces the frame-invariant
+pH-2 ring collapse while preserving the pH-6.39 lock.** This is the M3/C
+**sufficiency** result the plan asked for (not identification).
+
+**Fit discipline note.** C1 cannot be trained on pH 4 — the M2/G surface
+switch puts the pH-4 surface alkaline (c_H ≈ 10⁻⁶), so C1 is OFF there and
+the pH-4 data does not constrain its rate. C1's k0 is therefore a BRACKET set
+by lock-preservation (upper ~1e-15) + physical kinetics, NOT a pH-4 fit; pH 2
+stays the held-out consistency check (opened once). The order p is not pinned
+(the brainstorm's bulk-limiting m is invalid — M2/G β is a step, not a slope).
+
+**Competitor / disk discriminator (M3 G2, pH 2 deep cathodic V≈0.002):**
+
+| | ring peak | disk plateau (deep V) |
+|---|---|---|
+| data | 0.069 | −3.89 |
+| N0 ≡ ring-only null (escape / ring-collection / pH-dep-4e — all leave the disk = N0) | 0.357 | −3.57 |
+| C1 full collapse (k=1e-18) | 0.000 | −4.06 |
+
+The data disk (−3.89) sits **between** the ring-only null (−3.57) and full C1
+(−4.06): the pH-2 ring collapse IS accompanied by some extra cathodic current
+(favoring a faradaic C1 contribution over a pure non-faradaic/ring-only loss),
+but full C1 over-predicts it. The ~0.3 mA/cm² gap is within the model's
+absolute-current uncertainty (L_eff/rpm/partition, all rpm-conditional). ⇒
+**disk-side attribution remains CONDITIONAL** — neither faradaic C1 nor a
+non-faradaic loss (C2 decomposition / peroxide escape / ring-detection
+artifact) is decisively excluded, exactly as the plan anticipated. Settling
+it needs the top data-asks (N₂ H₂O₂-reduction scans, rpm, per-pH ring
+calibration), which are unavailable (no-new-data constraint).
+
+**M3/M4 verdict.** C (pH-dependent peroxide yield/loss) is the load-bearing
+new physics (M1a); C1 (surface-c_H-gated electrochemical H₂O₂ reduction) is a
+SUFFICIENT mechanism — within a lock-preserving bracket it reproduces the
+frame-invariant pH-2 ring collapse and preserves the pH-6.39 lock — but the
+disk evidence cannot uniquely attribute the collapse to faradaic C1 vs a
+non-faradaic loss without new experiments. C2 (homogeneous decomposition, a
+volumetric H₂O₂-sink/O₂-source) is the natural non-faradaic alternative but
+requires a forms-level dx source/sink and is not yet wired.
+
+Pending: M5 (apply the frozen family to the slide-15 Cs⁺ pH-4 cross-condition
++ honest write-up).
