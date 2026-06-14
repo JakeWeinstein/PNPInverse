@@ -59,7 +59,7 @@ SUFFICIENCY, not identification.**
   is rpm-conditional, so **faradaic C1 vs a non-faradaic loss (C2 homogeneous
   decomposition / peroxide escape / ring-detection artifact) is favored but
   not cleanly separated** — an N₂ H₂O₂-reduction scan / rpm series / per-pH
-  ring calibration would settle it (the top data-asks; unavailable here).
+  ring calibration would settle it (the top data-asks; unavailable here). **Ring-shape cross-check (post-hoc):** at the matched operating point C1 reproduces the pH-2 ring HEIGHT but NOT its V-shape — it removes peroxide at low V where the data shows it survives (a spurious spike at V≈0.45), and a uniform non-faradaic suppression fits the pH-4/6 ring shape better. So disk (leans faradaic) and ring-shape (leans non-faradaic) PULL OPPOSITE WAYS — the mechanism identity is genuinely unresolved, not merely unproven. Underneath both is the frozen model's ~0.1–0.3 V too-anodic volcano offset, which must be fixed before either signal can adjudicate.
 - **C's rate magnitude and proton order p are not pinned** — C is OFF at the
   pH-4 TRAIN condition (alkaline surface), so it is a lock-derived BRACKET,
   not a pH-4 fit; the bracket is wide and p is unidentifiable (β is a step,

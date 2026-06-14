@@ -1,0 +1,35 @@
+{
+  "test": "phase7p3_M3_ring_shape_C1_vs_uniform_null",
+  "by_pH": {
+    "2.0": {
+      "null_scale": 0.1931745785284398,
+      "n0_peak": 0.3574363644202471,
+      "data_peak": 0.06904761904761905,
+      "ring_shape_rms_C1": 0.0401650935352079,
+      "ring_shape_rms_uniform_null": 0.042294106103718955,
+      "shape_winner": "C1",
+      "data_peak_V": 0.009022556390977444,
+      "n0_peak_V": 0.295833
+    },
+    "4.0": {
+      "null_scale": 0.6208538939827256,
+      "n0_peak": 0.3620206089392079,
+      "data_peak": 0.22476190476190475,
+      "ring_shape_rms_C1": 0.17358545845319104,
+      "ring_shape_rms_uniform_null": 0.0978800054890782,
+      "shape_winner": "uniform_null",
+      "data_peak_V": 0.19749373433583964,
+      "n0_peak_V": 0.295833
+    },
+    "6.0": {
+      "null_scale": 0.5089281424263478,
+      "n0_peak": 0.3649125883054548,
+      "data_peak": 0.18571428571428572,
+      "ring_shape_rms_C1": 0.16512331600135197,
+      "ring_shape_rms_uniform_null": 0.04246235952863978,
+      "shape_winner": "uniform_null",
+      "data_peak_V": 0.28170426065162907,
+      "n0_peak_V": 0.295833
+    }
+  }
+}
