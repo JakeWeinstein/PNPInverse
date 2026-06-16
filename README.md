@@ -30,25 +30,11 @@ outside git) and `docs/papers/Ruggiero2022_JCatal_source_paper.md`.
 
 ## Current State (2026-06-15)
 
-> **New here? Read [`docs/INTRO_TO_THIS_REPO.md`](docs/INTRO_TO_THIS_REPO.md)
-> first** for the broad-strokes tour (stages, where to start reading code, how
-> to call the production solver), and [`REPO_LAYOUT.md`](REPO_LAYOUT.md) for the
-> file map. This README is the detailed research narrative.
-
-> **Active frontier — Phase 7 (dual-pathway).** Phase 6β's Phase D was
-> root-caused to a transport artifact: total current was pinned at the H⁺ Levich
-> cap, so every fit knob was tuning a transport-capped current. Phase 7 pivoted to
-> **dual-pathway water-as-proton-donor kinetics + RRDE-correct `L_eff` + slide-15
-> volcano fit**. **Phase 7.2** locked a K₂SO₄ pH-6.39 disk+ring dual-series fit
-> against real LSV data (water-route model fits; kinetics transfer; ring-determined
-> partition). **Phase 7.3** (in flight) ranks the missing mechanism behind
-> pH-flatness — onset shifts +41 mV/pH on the RHE scale ⇒ a proton-uncoupled first
-> electron transfer; peroxide-consumption owns selectivity. See
-> `docs/handoffs/CHATGPT_HANDOFF_4{1..5}_*` and `tasks/todo.md`.
->
 > The repo was reorganized on **2026-06-15** (`scripts/studies/` split into
 > `drivers/ plot/ extract/`; closed-phase results archived; 225 MB `archive/`
-> moved off-git to `~/PNPInverse-archive`). Paths below reflect the new layout.
+> moved off-git to `~/PNPInverse-archive`). Paths below reflect the new layout;
+> see [`REPO_LAYOUT.md`](REPO_LAYOUT.md) for the file map. For the active plan and
+> current phase status, see `tasks/todo.md` and the latest `docs/handoffs/`.
 
 The production forward model is the **3-dynamic-species + analytic
 Bikerman counterion(s) + proton electrochemical potential + log-rate
@@ -406,7 +392,6 @@ back to the project cold:
 
 | File | Purpose |
 |---|---|
-| `docs/INTRO_TO_THIS_REPO.md` | **Start here cold.** Broad-strokes tour: research arc (phases 5→7), where to start reading code, where the production solver lives + how to call it, the mental model. |
 | `REPO_LAYOUT.md` | One-page file map (source packages, `scripts/` taxonomy, `StudyResults/`, `docs/`, `tests/`) after the 2026-06-15 reorg. |
 | `CLAUDE.md` | Project-specific conventions, hard rules (E_eq, clip, C+D vs anchor-and-grid, IC/residual saturation match, parallel 2e/4e topology, K⁺ vs Cs⁺ deck baseline, `a_nondim` discrepancy for dynamic species). |
 | `writeups/May13th/phase_6_overview.pdf` | **Short story of Phase 6α/6β:** the selectivity gap, the two hypotheses, sub-step chronology (v10a → v10a' → A.2 → step 6 → v10b → step 9/9.5 → step 10 Phase D), and the current verdict + open issues. |
