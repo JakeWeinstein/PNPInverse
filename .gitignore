@@ -15,3 +15,7 @@ data/
 *.out
 *.synctex.gz
 *.toc
+
+# Build artifacts (node + python caches, anywhere in tree)
+**/node_modules/
+**/__pycache__/
