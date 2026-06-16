@@ -2,7 +2,9 @@
 
 Operational guide for Claude. `README.md` has the research
 narrative; this file is the conventions, invariants, and
-lessons-that-cost-time. Read both.
+lessons-that-cost-time. Read both. For a cold-start tour (research
+arc, where to start reading code, how to call the solver) see
+`docs/INTRO_TO_THIS_REPO.md`; for the file map see `REPO_LAYOUT.md`.
 
 ## What this repo is
 

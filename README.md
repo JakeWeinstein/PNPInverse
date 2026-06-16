@@ -28,7 +28,27 @@ Seitz/Mangan 2019–2025 ORR datasets under
 `data/EChem Reactor Modeling-Seitz-Mangan/` (gitignored; lives
 outside git) and `docs/papers/Ruggiero2022_JCatal_source_paper.md`.
 
-## Current State (2026-05-14)
+## Current State (2026-06-15)
+
+> **New here? Read [`docs/INTRO_TO_THIS_REPO.md`](docs/INTRO_TO_THIS_REPO.md)
+> first** for the broad-strokes tour (stages, where to start reading code, how
+> to call the production solver), and [`REPO_LAYOUT.md`](REPO_LAYOUT.md) for the
+> file map. This README is the detailed research narrative.
+
+> **Active frontier — Phase 7 (dual-pathway).** Phase 6β's Phase D was
+> root-caused to a transport artifact: total current was pinned at the H⁺ Levich
+> cap, so every fit knob was tuning a transport-capped current. Phase 7 pivoted to
+> **dual-pathway water-as-proton-donor kinetics + RRDE-correct `L_eff` + slide-15
+> volcano fit**. **Phase 7.2** locked a K₂SO₄ pH-6.39 disk+ring dual-series fit
+> against real LSV data (water-route model fits; kinetics transfer; ring-determined
+> partition). **Phase 7.3** (in flight) ranks the missing mechanism behind
+> pH-flatness — onset shifts +41 mV/pH on the RHE scale ⇒ a proton-uncoupled first
+> electron transfer; peroxide-consumption owns selectivity. See
+> `docs/handoffs/CHATGPT_HANDOFF_4{1..5}_*` and `tasks/todo.md`.
+>
+> The repo was reorganized on **2026-06-15** (`scripts/studies/` split into
+> `drivers/ plot/ extract/`; closed-phase results archived; 225 MB `archive/`
+> moved off-git to `~/PNPInverse-archive`). Paths below reflect the new layout.
 
 The production forward model is the **3-dynamic-species + analytic
 Bikerman counterion(s) + proton electrochemical potential + log-rate
@@ -263,7 +283,7 @@ codepath: `writeups/May13th/forward_codepath_demo_slide15.tex`.
   `docs/phase6/PHASE_6B_V9_PHASES_A_B_RESULTS_2026-05-10.md`
   + `docs/phase6/PHASE_0_ACCEPTANCE_BUNDLE_LOCK_2026-05-10.md`.
   Also delivered: K⁺ Tafel slopes from Brianna 2019 LSV
-  (`scripts/derive/extract_k_plus_tafel_slopes.py`; pH 6.39 only,
+  (`scripts/studies/extract/extract_k_plus_tafel_slopes.py`; pH 6.39 only,
   3 cycles, 270–310 mV/decade R²>0.995; scope caveat in
   `docs/phase6/missing_data.md` M1).
 - **2026-05-09 — Phase 5γ + Phase 6α (Gate 1/2).** Phase 5γ added
@@ -386,6 +406,8 @@ back to the project cold:
 
 | File | Purpose |
 |---|---|
+| `docs/INTRO_TO_THIS_REPO.md` | **Start here cold.** Broad-strokes tour: research arc (phases 5→7), where to start reading code, where the production solver lives + how to call it, the mental model. |
+| `REPO_LAYOUT.md` | One-page file map (source packages, `scripts/` taxonomy, `StudyResults/`, `docs/`, `tests/`) after the 2026-06-15 reorg. |
 | `CLAUDE.md` | Project-specific conventions, hard rules (E_eq, clip, C+D vs anchor-and-grid, IC/residual saturation match, parallel 2e/4e topology, K⁺ vs Cs⁺ deck baseline, `a_nondim` discrepancy for dynamic species). |
 | `writeups/May13th/phase_6_overview.pdf` | **Short story of Phase 6α/6β:** the selectivity gap, the two hypotheses, sub-step chronology (v10a → v10a' → A.2 → step 6 → v10b → step 9/9.5 → step 10 Phase D), and the current verdict + open issues. |
 | `writeups/May13th/forward_codepath_demo_slide15.pdf` | Visual call graph of `solver_demo_slide15_no_speculative_cs.py`: anchor build → Stern bump ladder → grid walk + 9-layer defense-in-depth around the Newton/SNES core. |
@@ -437,22 +459,25 @@ the pre-Phase-6 state.
 | `FluxCurve/` | Adjoint-gradient curve-fitting framework for Robin and BV flux/current curves. **Inverse paused — reference only.** |
 | `Nondim/` | Physical constants, scaling transforms, and compatibility wrappers. |
 | `Surrogate/` | Surrogate models (RBF, NN, GP, PCE, POD-RBF, multistart, BCD, cascade, ISMO). **Paused with the inverse pipeline.** |
-| `scripts/studies/` | Forward-solver study scripts and diagnostics. **Current solver-baseline driver:** `solver_demo_slide15_no_speculative_cs.py` (Cs⁺/SO₄²⁻ + parallel 2e/4e, default-off Phase 6α/6β, 4-factor `K0_R4e` sweep × 25 V_RHE; visual call graph in `writeups/May13th/forward_codepath_demo_slide15.pdf`). **Phase 6β v10b drivers:** `phase6b_step10_phase_D_orchestrate.py` + `phase6b_step10_phase_D_fit_eval.py` (Δ_β fit + identifiability gate), `phase6b_v10a_phase_A2_v_kin.py` (10-rung k_hyd ramp at V_kin), `phase6b_v10a_v_sweep_diagnostic.py` (V_kin selection), `phase6b_step6_plumbing_ablation.py` (4-path wiring verification). **Phase D bridge diagnostics:** `_phase_D_bridge_corrected_a*.py` (physical-`a` for dynamic species), `_phase_D_bridge_no_hydrolysis*.py`. **Deck reference drivers:** `l_eff_transport_sweep_csplus_so4.py` (Phase 6α validation), `mangan_full_grid_csplus_so4.py` (deck-page-15 V_RHE band). **Legacy reference:** `peroxide_window_3sp_bikerman_muh.py` (ClO₄⁻ single-counterion + sequential R1/R2). `v*` are legacy inverse studies. |
-| `scripts/derive/` | Data-derivation scripts. `extract_k_plus_tafel_slopes.py` extracts Tafel slopes from Brianna 2019 LSV (Phase F output goes to `data/derived/` which is gitignored). |
-| `scripts/verification/` | MMS and BV forward strategy verification scripts. `mms_pnpbv_muh_multi_ion_stern.py` is the current production-stack MMS (~1100 LOC; muh + Cs⁺/SO₄²⁻ multi-ion + Stern Robin + parallel 2e/4e). `mms_bv_3sp_logc_boltzmann.py` covers the simpler 3sp + single-counterion stack. `WEAK_FORM_AUDIT.md` documents the weak-form structure. |
+| `scripts/_bv_common.py` | Shared constants, scales, species presets, reaction bundles, and the `make_bv_solver_params` factory. Imported by most drivers and ~30 tests. |
+| `scripts/studies/drivers/` | **Re-runnable reference drivers** (since the 2026-06-15 reorg). **Phase 6β v10b:** `phase6b_step10_phase_D_orchestrate.py` + `phase6b_step10_phase_D_fit_eval.py` (Δ_β fit + identifiability gate), `phase6b_v10a_phase_A2_v_kin.py` (k_hyd ramp at V_kin), `phase6b_v10a_v_sweep_diagnostic.py` (V_kin selection), `phase6b_step6_plumbing_ablation.py` (4-path wiring). **Deck reference:** `l_eff_transport_sweep_csplus_so4.py` (Phase 6α validation), `mangan_full_grid_csplus_so4.py` (deck-page-15 band), `pass_a_grid_driver_csplus_so4.py`. **Phase 7:** `solver_demo_slide15_dual_pathway_cs.py`. **Reproductions:** `_run_jithin_*.py`. |
+| `scripts/studies/plot/` | Plot generators (read results, write figures), e.g. `sensitivity_visualization.py`. |
+| `scripts/studies/extract/` | Experimental-data digitizers, e.g. `extract_k_plus_tafel_slopes.py` (Tafel slopes from Brianna 2019 LSV; output to gitignored `data/derived/`). |
+| `scripts/studies/*.py` (top level) | Active/ad-hoc studies not yet promoted to drivers — current **Phase 7.3** work (`phase7p3_m1a_onset_selection.py`, `phase7p3_m3_*`, …), the solver-baseline demos `solver_demo_slide15_no_speculative_cs.py` / `_ocp_shifted_cs.py`, and the ClO₄⁻ legacy reference `peroxide_window_3sp_bikerman_muh.py` (sequential R1/R2). Note: the `v*` legacy inverse studies and `_phase_D_bridge_*` throwaways were pruned in the reorg (recoverable from git history). |
+| `scripts/verification/` | MMS and BV forward strategy verification scripts — **imported by the `tests/test_mms_*` suite as the MMS engine**. `mms_pnpbv_muh_multi_ion_stern.py` is the current production-stack MMS (~1100 LOC; muh + Cs⁺/SO₄²⁻ multi-ion + Stern Robin + parallel 2e/4e). `mms_bv_3sp_logc_boltzmann.py` covers the simpler 3sp stack. |
 | `scripts/profile/` | Performance-profile runners for the production sweep. |
-| `scripts/surrogate/` | Surrogate training, validation, GP/PCE/NN drivers, ISMO drivers (paused). |
-| `scripts/Inference/` | Older master inverse entry points and wrappers. Kept for reproducibility (uppercase `Inference`). |
 | `data/` | **Gitignored.** Experimental data drop from the Seitz/Mangan group (`EChem Reactor Modeling-Seitz-Mangan/` ~273 MB) + derived outputs (`derived/`). See `docs/papers/data_folder_code_inventory.md` for the per-file inventory. |
 | `docs/` | Handoffs, plans, conventions, equations, literature inputs, and current status notes. Organized into `docs/phase6/` (Phase 6α/6β, including v10b calibration + Phase D summary + CMK-3 capacitance lit), `docs/handoffs/` (CHATGPT_HANDOFF_*), `docs/papers/` (Ruggiero, Singh, data-folder audits), `docs/realignment/` (Mangan deck alignment), `docs/solver/` (API, continuation, clipping conventions, MMS derivation), `docs/inverse/` (paused). |
 | `writeups/` | PDF/TeX reports. **`May13th/`** (current): `phase_6_overview` (selectivity-gap story + Phase D verdict), `forward_codepath_demo_slide15` (visual call graph), `analytic_counterion_derivation` (multi-ion shared-θ Bikerman closure), `stern_robin_bc_derivation` (BAB 2001), `mms_source_terms_derivation` (production-stack MMS). Earlier writeups under `WeekOfApr27/`, `ForwardSolverChangesMay26/`, `vv_report/`. |
-| `StudyResults/` | Generated results, summaries, plots, JSON, CSV, and run logs. Working research record. Phase 6β results: `phase6b_v9_*/`, `phase6b_step6_*/`, `phase6b_v10a_*/`, `phase6b_step9_B2/`, `phase6b_step10_phase_D/`. Solver-baseline: `solver_demo_slide15_no_speculative_cs/factor_{f}/iv_curve.json`. MMS artifacts: `mms_logc_muh_multi_ion_stern/`. |
+| `StudyResults/` | Generated results, summaries, plots, JSON, CSV, run logs — the working research record. Since the 2026-06-15 reorg: **active Phase 7 results stay at top level** (`phase7*`, `phase7p2_*`, `phase7p3_*`, `solver_demo_*`); closed phases are under `archive/` (`archive/phase6b/`, `archive/phase5/`, `archive/scratch/`, `archive/legacy/`); inverse series under `inverse/`, methodology under `methodology/`, simulator reproductions under `reproductions/`, loose logs under `_logs/`. |
 | `tests/` | Pytest regression and verification tests. Firedrake tests are marked `slow`. MMS suite: `test_mms_logc_muh_multi_ion_stern.py` (18 cases, ~12 s; the production-stack MMS), `test_mms_steric_boltzmann_convergence.py`, `test_mms_convergence.py`. Phase 6β v9 gates: `test_phase6b_v9_gate{1_roles,2_dynamic_k,3_gamma_machinery,4_finite_hydrolysis}.py`. Phase 6β v10a/v10b: `test_phase6b_v10a_langmuir_cap.py`, `test_phase6b_v10a_phase_A2_driver.py`, `test_phase6b_v10a_v_kin_selection.py`, `test_phase6b_v10b_calibration.py`, `test_phase6b_v10b_bracket_matrix.py`. Phase D: `test_phase6b_step10_phase_D_{plumbing,fit_eval,orchestrate}.py`. Stern: `test_stern_no_stern_snapshot.py`. Multi-ion: `test_multi_ion_csplus_so4.py`. Phase 6α: `test_water_ionization_phase_6a.py`. |
-| `archive/` | Old results/code for reference, not the active implementation surface. |
+| `~/PNPInverse-archive/` | **Off-git** (moved out of the repo in the 2026-06-15 reorg, history retained): old superseded runs + model checkpoints. Reference only, not the active surface. |
 
-There is no current `scripts/bv/` directory and no lowercase
-`scripts/inference/` directory. Use `scripts/studies/`,
-`scripts/Inference/`, `scripts/surrogate/`, and `scripts/derive/`.
+The paused inverse/surrogate **scripts** (`scripts/Inference/`,
+`scripts/surrogate/`, the `v*` studies) were pruned in the 2026-06-15 reorg and
+are recoverable from git history; the inverse **source packages** (`Inverse/`,
+`Surrogate/`, `FluxCurve/`) remain in place. Re-entry point when inverse resumes:
+`docs/inverse/CHATGPT_HANDOFF_10_LM_TIKHONOV_BASIN_GEOMETRY.md`.
 
 ## Core Forward-Solver Configuration
 
@@ -552,13 +577,13 @@ Reference drivers:
 
 | Driver | Stack |
 |---|---|
-| `scripts/studies/solver_demo_slide15_no_speculative_cs.py` | **Solver-works baseline.** Cs⁺/SO₄²⁻ + parallel 2e/4e + Stern bump, default-off Phase 6α/6β; 4-factor `K0_R4e` × 25 V_RHE. Visual call graph: `writeups/May13th/forward_codepath_demo_slide15.pdf`. |
-| `scripts/studies/phase6b_step10_phase_D_orchestrate.py` | Phase D K-only Δ_β fit + identifiability gate (`OUTCOME_C_NON_IDENTIFIABLE_flagged` on K@pH4 deck data). |
-| `scripts/studies/phase6b_v10a_phase_A2_v_kin.py` | 10-rung k_hyd ramp at V_kin = −0.10 V on v10a/v10b parameters; `--lambda-ladder` CLI per step 9.A. |
-| `scripts/studies/phase6b_v10a_v_sweep_diagnostic.py` | V_kin selection diagnostic (primary route: σ_S<0, branch active, not transport-artifact, not cap-dominated). |
-| `scripts/studies/phase6b_step6_plumbing_ablation.py` | 4-path wiring verification (form-build residual, pKa-shift context, Picard Γ update, diagnostics). |
-| `scripts/studies/l_eff_transport_sweep_csplus_so4.py` | Phase 6α validation: 8 L_eff × 13 V_RHE with `--enable-water-ionization`. |
-| `scripts/studies/mangan_full_grid_csplus_so4.py` | Cs⁺/SO₄²⁻ multi-ion + parallel 2e/4e at the deck V_RHE band. |
+| `scripts/studies/solver_demo_slide15_no_speculative_cs.py` | **Solver-works baseline.** Cs⁺/SO₄²⁻ + parallel 2e/4e + Stern bump, default-off Phase 6α/6β; 4-factor `K0_R4e` × 25 V_RHE. Visual call graph: `writeups/May13th/forward_codepath_demo_slide15.pdf`. (Stayed at `studies/` top level.) |
+| `scripts/studies/drivers/phase6b_step10_phase_D_orchestrate.py` | Phase D K-only Δ_β fit + identifiability gate (`OUTCOME_C_NON_IDENTIFIABLE_flagged` on K@pH4 deck data). |
+| `scripts/studies/drivers/phase6b_v10a_phase_A2_v_kin.py` | 10-rung k_hyd ramp at V_kin = −0.10 V on v10a/v10b parameters; `--lambda-ladder` CLI per step 9.A. |
+| `scripts/studies/drivers/phase6b_v10a_v_sweep_diagnostic.py` | V_kin selection diagnostic (primary route: σ_S<0, branch active, not transport-artifact, not cap-dominated). |
+| `scripts/studies/drivers/phase6b_step6_plumbing_ablation.py` | 4-path wiring verification (form-build residual, pKa-shift context, Picard Γ update, diagnostics). |
+| `scripts/studies/drivers/l_eff_transport_sweep_csplus_so4.py` | Phase 6α validation: 8 L_eff × 13 V_RHE with `--enable-water-ionization`. |
+| `scripts/studies/drivers/mangan_full_grid_csplus_so4.py` | Cs⁺/SO₄²⁻ multi-ion + parallel 2e/4e at the deck V_RHE band. |
 
 ### Legacy single-counterion stack (ClO₄⁻ reference)
 
@@ -777,40 +802,30 @@ Phase 6β v10b drivers (cation hydrolysis on calibrated parameters):
 
 ```bash
 # Step 10 Phase D K-only Δ_β fit (returns OUTCOME_C_NON_IDENTIFIABLE_flagged)
-python -u scripts/studies/phase6b_step10_phase_D_orchestrate.py
+python -u scripts/studies/drivers/phase6b_step10_phase_D_orchestrate.py
 
 # Step 9 B.2 — 14×10 = 140-rung k_hyd × λ ramp at V_kin
-python -u scripts/studies/phase6b_v10a_phase_A2_v_kin.py --lambda-ladder
+python -u scripts/studies/drivers/phase6b_v10a_phase_A2_v_kin.py --lambda-ladder
 
 # Step 6 plumbing ablation (4-path wiring verification at V_kin)
-python -u scripts/studies/phase6b_step6_plumbing_ablation.py
-```
-
-Bridge diagnostics (physical-`a` for dynamic species, queued
-2026-05-12 after the Phase D `a_nondim` discrepancy surfaced):
-
-```bash
-python -u scripts/studies/_phase_D_bridge_corrected_a.py
-python -u scripts/studies/_phase_D_bridge_corrected_a_cs.py
-python -u scripts/studies/_phase_D_bridge_no_hydrolysis.py
-python -u scripts/studies/_phase_D_bridge_no_hydrolysis_cs.py
+python -u scripts/studies/drivers/phase6b_step6_plumbing_ablation.py
 ```
 
 Deck-aligned reference sweeps:
 
 ```bash
 # Phase 6α validation: 8 L_eff × 13 V_RHE, --enable-water-ionization opt-in
-python -u scripts/studies/l_eff_transport_sweep_csplus_so4.py \
+python -u scripts/studies/drivers/l_eff_transport_sweep_csplus_so4.py \
     [--enable-water-ionization]
 
 # Deck-page-15 V_RHE band (Cs⁺/SO₄²⁻ + parallel 2e/4e, single L_eff)
-python -u scripts/studies/mangan_full_grid_csplus_so4.py
+python -u scripts/studies/drivers/mangan_full_grid_csplus_so4.py
 ```
 
 K⁺ Tafel slope extraction (Phase F, parallel-safe):
 
 ```bash
-python -u scripts/derive/extract_k_plus_tafel_slopes.py
+python -u scripts/studies/extract/extract_k_plus_tafel_slopes.py
 # outputs go to data/derived/ (gitignored)
 ```
 
@@ -819,13 +834,6 @@ for backward-compat checking only — **not** a deck-aligned run):
 
 ```bash
 python -u scripts/studies/peroxide_window_3sp_bikerman_muh.py
-```
-
-IC-distance diagnostic (the script that surfaced the 2026-05-07
-Stern-η + Bikerman-γ Picard bugs):
-
-```bash
-python scripts/diagnose_db_ic_distance.py
 ```
 
 Profile the production sweep:
@@ -857,8 +865,11 @@ See `docs/inverse/noise_model_conventions.md`.
   `StudyResults/` is part of the working research record, not a
   clean build-artifact directory; check existing `summary.md`
   files before regenerating.
-- `scripts/Inference/` is uppercase. Older README text and notes
-  may refer to paths that no longer exist.
+- After the 2026-06-15 reorg, re-runnable drivers live under
+  `scripts/studies/drivers/`, plotters under `scripts/studies/plot/`,
+  extractors under `scripts/studies/extract/`. Older handoff/notes may
+  cite pre-reorg paths (`scripts/studies/<driver>.py`, `scripts/Inference/`,
+  `scripts/surrogate/`, `scripts/derive/`) — recoverable from git history.
 - **Use the parallel 2e/4e ORR topology** (Ruggiero 2022 §1)
   via `bv_reactions=PARALLEL_2E_4E_REACTIONS` for any deck-aligned
   work. The legacy sequential R1/R2 (E°=0.68/1.78 V) is preserved
