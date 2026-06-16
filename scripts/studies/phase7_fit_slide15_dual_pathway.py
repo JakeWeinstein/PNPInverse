@@ -70,7 +70,7 @@ def main() -> int:
     evals_dir.mkdir(parents=True, exist_ok=True)
 
     from calibration.phase7_wls import load_target, score_iv_json
-    import scripts.studies.solver_demo_slide15_dual_pathway_cs as dp
+    import scripts.studies.drivers.solver_demo_slide15_dual_pathway_cs as dp
 
     target = load_target(
         os.path.join(_ROOT, "data", "mangan_deck_p15_h2o2_current_v2.csv")

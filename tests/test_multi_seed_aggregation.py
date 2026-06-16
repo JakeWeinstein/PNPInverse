@@ -20,7 +20,7 @@ _ROOT = os.path.dirname(_THIS_DIR)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from scripts.studies.run_multi_seed_v13 import (
+from scripts.studies.drivers.run_multi_seed_v13 import (
     aggregate_seed_results,
     parse_v13_csv,
 )

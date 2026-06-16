@@ -78,7 +78,7 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     from scripts._bv_common import setup_firedrake_env
     setup_firedrake_env()
-    import scripts.studies.solver_demo_slide15_dual_pathway_cs as dp
+    import scripts.studies.drivers.solver_demo_slide15_dual_pathway_cs as dp
 
     print("=" * 78, flush=True)
     print("  Phase 7.3 P0.1 frame byte-test — RHE (lock) vs SHE-anchored "

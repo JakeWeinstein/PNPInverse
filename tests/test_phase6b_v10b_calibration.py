@@ -150,7 +150,7 @@ def test_v10b_constants_solver_driver_metadata_consistency():
     # C_S consistency: production target == calibration constant ==
     # metadata value.  STERN_F_M2_BASELINE is in the v-sweep driver
     # module.
-    from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+    from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
         STERN_F_M2_BASELINE,
     )
     assert STERN_F_M2_BASELINE == pytest.approx(C_S_F_M2_V10B, rel=1e-15)
@@ -264,7 +264,7 @@ def test_smoke_kinetics_alias_preserved_in_v_sweep_driver():
     paths read V10B_KINETICS.
     """
     try:
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             SMOKE_KINETICS, SMOKE_KINETICS_V10A,
         )
     except ModuleNotFoundError:                                # pragma: no cover
@@ -280,10 +280,10 @@ def test_smoke_kinetics_alias_preserved_in_v_sweep_driver():
 
 
 _PRODUCTION_DRIVERS: List[str] = [
-    "scripts/studies/phase6b_v10a_phase_A2_v_kin.py",
-    "scripts/studies/phase6b_step6_plumbing_ablation.py",
-    "scripts/studies/phase6b_v10b_cs_bracket.py",
-    "scripts/studies/phase6b_v10b_gamma_kdes_matrix.py",
+    "scripts/studies/drivers/phase6b_v10a_phase_A2_v_kin.py",
+    "scripts/studies/drivers/phase6b_step6_plumbing_ablation.py",
+    "scripts/studies/drivers/phase6b_v10b_cs_bracket.py",
+    "scripts/studies/drivers/phase6b_v10b_gamma_kdes_matrix.py",
 ]
 
 
@@ -350,7 +350,7 @@ def test_v_sweep_driver_owns_smoke_kinetics_v10a_alias():
     (AST-aware; no false positives from a literal-string grep).
     """
     path = os.path.join(
-        _ROOT, "scripts/studies/phase6b_v10a_v_sweep_diagnostic.py",
+        _ROOT, "scripts/studies/drivers/phase6b_v10a_v_sweep_diagnostic.py",
     )
     with open(path) as f:
         src = f.read()
@@ -396,7 +396,7 @@ def test_convergence_audit_hard_soft_separation():
     minimal converged baseline rung and checks the audit shape.
     """
     try:
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             _convergence_audit,
         )
     except ModuleNotFoundError:                                # pragma: no cover
@@ -465,7 +465,7 @@ def test_convergence_audit_hard_soft_separation():
 def test_step6_a2_baseline_json_cli_flag():
     """Step 6 driver accepts ``--a2-baseline-json`` CLI flag."""
     try:
-        from scripts.studies.phase6b_step6_plumbing_ablation import (
+        from scripts.studies.drivers.phase6b_step6_plumbing_ablation import (
             _parse_args,
         )
     except ModuleNotFoundError:                                # pragma: no cover
@@ -488,7 +488,7 @@ def test_step6_audit_keys_include_R_net():
     """
     try:
         import inspect
-        from scripts.studies.phase6b_step6_plumbing_ablation import (
+        from scripts.studies.drivers.phase6b_step6_plumbing_ablation import (
             _baseline_reproduction_audit,
         )
     except ModuleNotFoundError:                                # pragma: no cover

@@ -45,7 +45,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 
-from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
     SIGMA_MAPPING_STERN,
     V_ANCHOR,
     V_KIN_OBS_MASK_HI,

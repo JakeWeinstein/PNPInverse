@@ -19,7 +19,7 @@ _ROOT = os.path.dirname(_THIS_DIR)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from scripts.studies.sensitivity_visualization import (
+from scripts.studies.plot.sensitivity_visualization import (
     build_sweep_factors,
     build_extended_voltage_grid,
     compute_jacobian_row,

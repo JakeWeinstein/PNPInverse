@@ -18,7 +18,7 @@ _ROOT = os.path.dirname(_THIS)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import scripts.studies.solver_demo_slide15_dual_pathway_cs as dp
+import scripts.studies.drivers.solver_demo_slide15_dual_pathway_cs as dp
 from scripts._bv_common import (
     E_EQ_C1_V, E_EQ_R2E_V, E_EQ_R4E_V, K0_HAT_C1, make_c1_reaction,
 )

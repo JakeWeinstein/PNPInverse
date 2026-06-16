@@ -127,7 +127,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     from scripts._bv_common import setup_firedrake_env
     setup_firedrake_env()
-    import scripts.studies.solver_demo_slide15_dual_pathway_cs as dp
+    import scripts.studies.drivers.solver_demo_slide15_dual_pathway_cs as dp
 
     out = {"theta_L": {"f2w": F2W, "f4w": F4W, "a2w": A2W,
                        "a4w": A4W, "l_eff_um": L_EFF_UM},

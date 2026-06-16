@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 # Import functions from the profile likelihood script
-from scripts.studies.profile_likelihood_pde import (
+from scripts.studies.drivers.profile_likelihood_pde import (
     build_profile_grid,
     assess_identifiability,
     build_fixed_bounds,

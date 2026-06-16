@@ -2,7 +2,7 @@
 
 All tests in this module run without Firedrake; they exercise the
 pure-Python helpers in
-:mod:`scripts.studies.phase6b_step6_plumbing_ablation`.
+:mod:`scripts.studies.drivers.phase6b_step6_plumbing_ablation`.
 
 Slow Firedrake-using tests live in
 :mod:`tests.test_phase6b_step6_plumbing_ablation_slow` (R5 #2).
@@ -14,7 +14,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from scripts.studies.phase6b_step6_plumbing_ablation import (
+from scripts.studies.drivers.phase6b_step6_plumbing_ablation import (
     ABLATIONS_DEFAULT,
     DELTA_C_MAX,
     DELTA_C_MIN,
@@ -396,14 +396,14 @@ def test_compute_beta_K_Cu_at_sentinel_predicts_amplification():
 
 
 def test_single_v_selectivity_gap_pp_inside_band():
-    from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+    from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
         single_v_selectivity_gap_pp,
     )
     assert single_v_selectivity_gap_pp(30.0) == pytest.approx(0.0)
 
 
 def test_single_v_selectivity_gap_pp_below_band():
-    from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+    from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
         single_v_selectivity_gap_pp,
     )
     # band low = 25 → 30 - 19.91 = 5.09
@@ -411,7 +411,7 @@ def test_single_v_selectivity_gap_pp_below_band():
 
 
 def test_single_v_selectivity_gap_pp_above_band():
-    from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+    from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
         single_v_selectivity_gap_pp,
     )
     # band high = 50 → 50 - 60 = -10

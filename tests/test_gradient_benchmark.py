@@ -62,7 +62,7 @@ def dummy_ensemble():
 
 class TestAccuracyBenchmark:
     def test_returns_dict_with_model_keys(self, dummy_ensemble):
-        from scripts.studies.gradient_benchmark import run_accuracy_benchmark
+        from scripts.studies.drivers.gradient_benchmark import run_accuracy_benchmark
 
         # Provide the ensemble under a label
         models = {"nn_ensemble": {"model": dummy_ensemble, "has_autograd": True}}
@@ -80,7 +80,7 @@ class TestAccuracyBenchmark:
         assert "nn_ensemble" in results
 
     def test_accuracy_results_contain_relative_error(self, dummy_ensemble):
-        from scripts.studies.gradient_benchmark import run_accuracy_benchmark
+        from scripts.studies.drivers.gradient_benchmark import run_accuracy_benchmark
 
         models = {"nn_ensemble": {"model": dummy_ensemble, "has_autograd": True}}
         n_eta = dummy_ensemble.n_eta
@@ -107,7 +107,7 @@ class TestAccuracyBenchmark:
 
 class TestSpeedBenchmark:
     def test_returns_timing_dict(self, dummy_ensemble):
-        from scripts.studies.gradient_benchmark import run_speed_benchmark
+        from scripts.studies.drivers.gradient_benchmark import run_speed_benchmark
 
         models = {"nn_ensemble": {"model": dummy_ensemble, "has_autograd": True}}
         n_eta = dummy_ensemble.n_eta

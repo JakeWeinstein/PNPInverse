@@ -112,7 +112,7 @@ class TestAbortToV10c:
     """No V with σ_S < 0 ⇒ abort_to_v10c=True.  Always fires first."""
 
     def test_all_anodic_aborts(self, i_lim_4e):
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         records = [
@@ -131,7 +131,7 @@ class TestAbortToV10c:
     def test_abort_wins_over_estimator_failure(self, i_lim_4e):
         """R3 nit #3: abort_to_v10c is more informative than the
         estimator-failure status when both could apply."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         # All σ_S > 0 AND all estimators bad.
@@ -161,7 +161,7 @@ class TestEstimatorValidityGate:
     locked rule."""
 
     def test_no_valid_estimator_fires_when_some_sigma_neg(self, i_lim_4e):
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         # σ_S < 0 at all V but perturbation never converged.
@@ -184,7 +184,7 @@ class TestEstimatorValidityGate:
         """R2 issue #1: even if every V's |σ_+ − σ_−| is tiny, the
         absolute floor (1e-4 C/m²) keeps unidentifiable estimators
         out of the valid set."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin, SIGMA_ABS_MIN_C_PER_M2,
         )
         # σ-gap of 1e-7 << σ_abs_min = 1e-4.
@@ -204,7 +204,7 @@ class TestEstimatorValidityGate:
     def test_per_side_floor_catches_lopsided_perturbation(self, i_lim_4e):
         """R2 issue #2: if one side has σ_+ ≈ σ_0 even though
         |σ_+ − σ_−| is healthy, the per-side floor must reject."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         # σ_low - σ_0 = -0.20 (huge), σ_high - σ_0 = +1e-7 (tiny).
@@ -224,7 +224,7 @@ class TestEstimatorValidityGate:
     def test_one_sided_disagreement_excludes_from_primary(self, i_lim_4e):
         """A V with wildly different S_+ vs S_- gets pushed out of
         the primary set (one_sided_disagreement > 0.25)."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         # Two V — one with disagreement ≈ 0.10 (clean), one ≈ 0.80
@@ -262,7 +262,7 @@ class TestLockedRuleHappyPath:
     """Three V with all filters passing; picker selects argmax score."""
 
     def test_argmax_score_picked(self, i_lim_4e):
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         # Each V has different R_low/R_high asymmetry → different
@@ -292,7 +292,7 @@ class TestLockedRuleHappyPath:
     def test_locked_filter_booleans_per_v(self, i_lim_4e):
         """Each per-V record gets explicit locked_*_filter_passed
         booleans (R2 issue #6)."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         records = [_make_record(v_rhe=-0.20)]
@@ -316,7 +316,7 @@ class TestLockedRuleFilters:
     def test_branch_filter_eliminates_outside_window(self, i_lim_4e):
         """V with R_2e/(R_2e+R_4e) outside [0.05, 0.95] should drop
         from the primary set; argmax falls to a different V."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         # V at -0.30 has the largest |slope| but pure-4e selectivity
@@ -345,7 +345,7 @@ class TestLockedRuleFilters:
 
     def test_current_filter_eliminates_levich_plateau(self, i_lim_4e):
         """V with |cd|/I_lim_4e ≥ 0.9 fails the current filter."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         # V at -0.30 hits the cathodic plateau (|cd| = 5.0 mA/cm² vs
@@ -371,7 +371,7 @@ class TestFallbackPath:
     def test_fallback_used_when_all_branch_filtered(self, i_lim_4e):
         """All V have pure-4e selectivity → primary set empty →
         fallback drops branch filter, picks argmax in fallback set."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         records = [
@@ -394,7 +394,7 @@ class TestFallbackPath:
         """Some V have σ_S < 0 (so abort doesn't fire), perturbation
         valid, but the current filter eliminates them all even after
         dropping branch."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         records = [
@@ -422,14 +422,14 @@ class TestFallbackPath:
 class TestLevichHelper:
 
     def test_i_lim_4e_at_16um(self):
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             _i_lim_4e_mA_cm2,
         )
         # 4 · 96485 · 1.9e-9 · 1.2 / 16e-6 · 0.1 ≈ 5.50 mA/cm²
         assert _i_lim_4e_mA_cm2(16e-6) == pytest.approx(5.50, rel=2e-2)
 
     def test_i_lim_4e_inverse_in_l_eff(self):
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             _i_lim_4e_mA_cm2,
         )
         # Doubling l_eff halves I_lim.
@@ -441,7 +441,7 @@ class TestLevichHelper:
         """R1 issue #4: the helper must NOT silently use 2.18e-9
         (water literature D_O2).  Verify by checking the value at
         a known l_eff against the codebase D_O2 = 1.9e-9."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             _i_lim_4e_mA_cm2,
         )
         # If D_O2 = 2.18e-9 the result would be ~6.30 mA/cm²;
@@ -458,7 +458,7 @@ class TestO2FluxLevichRatio:
 
     def test_basic_dimensional_invariance(self):
         """Doubling electrode_area halves the ratio."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             _compute_o2_flux_levich_ratio,
         )
         kwargs = dict(
@@ -473,7 +473,7 @@ class TestO2FluxLevichRatio:
     def test_ratio_in_zero_one_at_levich_limit(self):
         """At full O₂-flux Levich limit, ratio = 1 regardless of
         branch selectivity (the whole point of this indicator)."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             _compute_o2_flux_levich_ratio,
         )
         # At Levich: total O₂ consumption rate per area = D·c/l = 1/0.16 = 6.25.
@@ -497,7 +497,7 @@ class TestO2FluxLevichRatio:
 
     def test_handles_zero_area(self):
         """Defensive: bad electrode_area returns 0, doesn't crash."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             _compute_o2_flux_levich_ratio,
         )
         assert _compute_o2_flux_levich_ratio(
@@ -514,7 +514,7 @@ class TestLevichAsymmetryFlag:
     def test_warning_fires_in_2e_plateau(self, i_lim_4e):
         """Pure-2e plateau: |cd|/I_lim_4e = 0.5 (passes 0.9 filter)
         but o2_flux_levich_ratio = 1.0 (transport-limited)."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         # Pure-2e at Levich: cd contribution = R_2e (1.0 weight) + 0
@@ -547,7 +547,7 @@ class TestLevichAsymmetryFlag:
 class TestVKinDecisionShape:
 
     def test_dataclass_frozen(self, i_lim_4e):
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             VKinDecision,
         )
         d = VKinDecision(v_kin=-0.30, score=1.23)
@@ -556,7 +556,7 @@ class TestVKinDecisionShape:
 
     def test_to_json_round_trips(self, i_lim_4e):
         import json
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         records = [_make_record(v_rhe=-0.30, sigma_S_C_per_m2=-0.30)]
@@ -577,7 +577,7 @@ class TestVKinDecisionShape:
 class TestFDInformational:
 
     def test_fd_attached_central_difference(self):
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             attach_fd_sensitivity,
         )
         records = [
@@ -593,7 +593,7 @@ class TestFDInformational:
     def test_fd_handles_degenerate_step(self):
         """When σ_S is identical at neighbours, FD should be None,
         not raise."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             attach_fd_sensitivity,
         )
         records = [
@@ -608,7 +608,7 @@ class TestFDInformational:
     def test_fd_disagreement_is_NOT_a_filter(self, i_lim_4e):
         """R1 issue #3: even huge FD-vs-perturbation disagreement
         must NOT exclude a V from candidacy."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         records = [_make_record(v_rhe=-0.30)]
@@ -631,7 +631,7 @@ class TestLogStepDenominator:
 
     def test_exact_log_form(self, i_lim_4e):
         """R3 nit #1: log-step denominator uses exact form."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             select_v_kin,
         )
         records = [_make_record(v_rhe=-0.30, epsilon=0.05)]
@@ -661,7 +661,7 @@ class TestK0R4eFactorDriver:
     """
 
     def test_factor_one_preserves_K0_HAT_R4E(self):
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             _scale_k0_r4e_in_reactions,
         )
         from scripts._bv_common import (
@@ -674,7 +674,7 @@ class TestK0R4eFactorDriver:
         assert rescaled[1]["k0"] == pytest.approx(float(K0_HAT_R4E))
 
     def test_factor_1e_minus_18_scales_only_4e_branch(self):
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             _scale_k0_r4e_in_reactions,
         )
         from scripts._bv_common import (
@@ -696,7 +696,7 @@ class TestK0R4eFactorDriver:
         different factor, must rescale from the ORIGINAL k0, not the
         previously-rescaled value.  Catches aliasing into the module
         constant."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             _scale_k0_r4e_in_reactions,
         )
         from scripts._bv_common import (
@@ -723,7 +723,7 @@ class TestK0R4eFactorDriver:
         """The `cathodic_conc_factors` (list of dicts) and
         `stoichiometry` (list) must be deep-copied so a downstream
         mutation can't leak into the module constant."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             _scale_k0_r4e_in_reactions,
         )
         from scripts._bv_common import PARALLEL_2E_4E_REACTIONS_4SP
@@ -749,7 +749,7 @@ class TestK0R4eFactorDriver:
 
     def test_cli_parses_scientific_notation(self):
         """``argparse`` ``type=float`` handles ``1e-18`` natively."""
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             _parse_args,
         )
         args = _parse_args(["--k0-r4e-factor", "1e-18", "--no-plot"])

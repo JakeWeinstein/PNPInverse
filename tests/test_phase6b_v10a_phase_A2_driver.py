@@ -118,7 +118,7 @@ class TestClassifyPicardStatus:
     """All 7 documented Picard statuses per plan §Implementation notes."""
 
     def test_snes_failed_overrides_everything(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             classify_picard_status,
         )
         # Even with a perfectly-converged history, snes=False → snes_failed.
@@ -127,13 +127,13 @@ class TestClassifyPicardStatus:
         ) == "snes_failed"
 
     def test_no_iters(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             classify_picard_status,
         )
         assert classify_picard_status([], snes_converged=True) == "no_iters"
 
     def test_single_iter(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             classify_picard_status,
         )
         assert classify_picard_status(
@@ -141,7 +141,7 @@ class TestClassifyPicardStatus:
         ) == "single_iter"
 
     def test_converged_two_iters_tight(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             classify_picard_status,
         )
         # last_rel = |0.045 - 0.045000001| / max(...) ≈ 2.2e-8 < 1e-4
@@ -150,7 +150,7 @@ class TestClassifyPicardStatus:
         ) == "converged"
 
     def test_early_break_two_iters_loose(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             classify_picard_status,
         )
         # last_rel = |0.04 - 0.05| / 0.05 = 0.2 >= 1e-4, n<8 → early_break
@@ -159,7 +159,7 @@ class TestClassifyPicardStatus:
         ) == "early_break"
 
     def test_converged_at_iter_cap(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             classify_picard_status,
         )
         # n=8 and last_rel<1e-4
@@ -173,7 +173,7 @@ class TestClassifyPicardStatus:
         ) == "converged_at_iter_cap"
 
     def test_iter_cap_hit_unconverged(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             classify_picard_status,
         )
         # n=8, last two differ by >1e-4 relative.
@@ -193,7 +193,7 @@ class TestSingleVSelectivityGapPp:
     """R4 #1 — renamed from selectivity_gap_pp; signed distance to deck band."""
 
     def test_inside_band_returns_zero(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             single_v_selectivity_gap_pp,
         )
         assert single_v_selectivity_gap_pp(30.0) == 0.0
@@ -201,21 +201,21 @@ class TestSingleVSelectivityGapPp:
         assert single_v_selectivity_gap_pp(50.0) == 0.0  # boundary
 
     def test_below_band_positive(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             single_v_selectivity_gap_pp,
         )
         assert single_v_selectivity_gap_pp(20.0) == pytest.approx(+5.0)
         assert single_v_selectivity_gap_pp(0.0) == pytest.approx(+25.0)
 
     def test_above_band_negative(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             single_v_selectivity_gap_pp,
         )
         assert single_v_selectivity_gap_pp(60.0) == pytest.approx(-10.0)
         assert single_v_selectivity_gap_pp(100.0) == pytest.approx(-50.0)
 
     def test_custom_band(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             single_v_selectivity_gap_pp,
         )
         assert single_v_selectivity_gap_pp(15.0, deck_band=(20.0, 40.0)) == (
@@ -230,7 +230,7 @@ class TestSingleVSelectivityGapPp:
 
 class TestLambda1Record:
     def test_finds_lambda_one_rung(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import lambda1_record
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import lambda1_record
         rec = {"rungs": [
             {"lambda_hydrolysis": 0.5, "marker": "mid"},
             {"lambda_hydrolysis": 1.0, "marker": "final"},
@@ -240,7 +240,7 @@ class TestLambda1Record:
         assert result["marker"] == "final"
 
     def test_returns_none_when_missing(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import lambda1_record
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import lambda1_record
         rec = {"rungs": [
             {"lambda_hydrolysis": 0.5},
             {"lambda_hydrolysis": 0.75},
@@ -248,7 +248,7 @@ class TestLambda1Record:
         assert lambda1_record(rec) is None
 
     def test_empty_rungs(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import lambda1_record
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import lambda1_record
         assert lambda1_record({"rungs": []}) is None
 
 
@@ -260,7 +260,7 @@ class TestLambda1Record:
 class TestMassBalanceResidualRel:
     def test_closed_form_identity_zero(self):
         """At SS the closed-form solver makes the residual identically 0."""
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             compute_mass_balance_residual_rel,
         )
         # F0=1, λ=1, k_des=1, k_prot·c_H/δ=0.5, F0/Γ_max=10.
@@ -280,7 +280,7 @@ class TestMassBalanceResidualRel:
         assert residual < 1e-12
 
     def test_returns_none_when_missing_field(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             compute_mass_balance_residual_rel,
         )
         assert compute_mass_balance_residual_rel({}) is None
@@ -289,7 +289,7 @@ class TestMassBalanceResidualRel:
         ) is None  # missing denom_kprot + k_des
 
     def test_nonzero_residual_normalised(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             compute_mass_balance_residual_rel,
         )
         # F=1.0, denom_kprot*γ=0.1, k_des*γ=0.1, total subtracted = 0.2 →
@@ -316,7 +316,7 @@ class TestClassifyNoRouteCause:
     """Order matters per R3 #6 + R4 #6 — most-specific failure wins."""
 
     def test_no_saturated_rung(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             classify_no_route_cause,
         )
         records = [
@@ -333,7 +333,7 @@ class TestClassifyNoRouteCause:
         assert classify_no_route_cause(records) == "no_saturated_rung"
 
     def test_picard_failure_at_saturated(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             classify_no_route_cause,
         )
         records = [
@@ -371,7 +371,7 @@ class TestClassifyNoRouteCause:
         assert classify_no_route_cause(records) == "picard_failure"
 
     def test_mass_balance_failure(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             classify_no_route_cause,
         )
         records = [
@@ -391,7 +391,7 @@ class TestClassifyNoRouteCause:
         assert classify_no_route_cause(records) == "mass_balance_failure"
 
     def test_transport_only(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             classify_no_route_cause,
         )
         records = [
@@ -411,7 +411,7 @@ class TestClassifyNoRouteCause:
         assert classify_no_route_cause(records) == "transport_only"
 
     def test_grid_gap(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             classify_no_route_cause,
         )
         # All gates pass except the slope check — saturated rungs exist
@@ -439,7 +439,7 @@ class TestClassifyNoRouteCause:
 
 class TestSelectKHydRoute:
     def test_prefers_highest_passing_k_hyd(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             select_k_hyd_route,
         )
         # 1e-3: θ=0.92 (fails 0.95 strict gate)
@@ -462,7 +462,7 @@ class TestSelectKHydRoute:
         assert select_k_hyd_route(records) == pytest.approx(1e-2)
 
     def test_no_candidate_at_theta_below_min(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             select_k_hyd_route,
         )
         records = [
@@ -473,7 +473,7 @@ class TestSelectKHydRoute:
         assert select_k_hyd_route(records) is None
 
     def test_filters_transport_limited(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             select_k_hyd_route,
         )
         # Saturated but transport-limited at the high end.
@@ -501,7 +501,7 @@ class TestSelectKHydRoute:
 
 class TestBuildV10bPrioritiesBlock:
     def test_route_exists_with_low_priority(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             build_v10b_priorities_block,
         )
         records = [
@@ -528,7 +528,7 @@ class TestBuildV10bPrioritiesBlock:
 
     def test_route_exists_with_high_priority(self):
         """|gap| > 10pp triggers HIGH priority."""
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             build_v10b_priorities_block,
         )
         records = [
@@ -550,7 +550,7 @@ class TestBuildV10bPrioritiesBlock:
         assert block["kdes_gammamax_priority"] == "high"
 
     def test_no_route_classifies_cause(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             build_v10b_priorities_block,
         )
         records = [
@@ -570,7 +570,7 @@ class TestBuildV10bPrioritiesBlock:
 
 class TestParseArgs:
     def test_defaults(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             _parse_args, V_KIN_DEFAULT, K0_R4E_FACTOR_DEFAULT,
         )
         args = _parse_args(["--no-plot"])
@@ -581,17 +581,17 @@ class TestParseArgs:
         assert args.with_perturbation is False
 
     def test_v_kin_override(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import _parse_args
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import _parse_args
         args = _parse_args(["--v-kin", "-0.20", "--no-plot"])
         assert args.v_kin == pytest.approx(-0.20)
 
     def test_k0_r4e_factor_scientific(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import _parse_args
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import _parse_args
         args = _parse_args(["--k0-r4e-factor", "1e-14", "--no-plot"])
         assert args.k0_r4e_factor == pytest.approx(1e-14)
 
     def test_k_hyd_grid_passthrough(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import _parse_args
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import _parse_args
         args = _parse_args([
             "--k-hyd-grid", "1e-5,1e-4,1e-3", "--no-plot",
         ])
@@ -600,27 +600,27 @@ class TestParseArgs:
 
 class TestParseKHydGrid:
     def test_default_when_none(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             _parse_k_hyd_grid, K_HYD_GRID_DEFAULT,
         )
         assert _parse_k_hyd_grid(None) == K_HYD_GRID_DEFAULT
         assert _parse_k_hyd_grid("") == K_HYD_GRID_DEFAULT
 
     def test_default_grid_has_10_points(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             K_HYD_GRID_DEFAULT,
         )
         assert len(K_HYD_GRID_DEFAULT) == 10
 
     def test_default_grid_includes_baseline_kHyd(self):
         """1e-3 is the v10a' baseline — sanity audit can't run if missing."""
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             K_HYD_GRID_DEFAULT,
         )
         assert any(abs(k - 1e-3) <= 1e-30 for k in K_HYD_GRID_DEFAULT)
 
     def test_parses_scientific_notation(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             _parse_k_hyd_grid,
         )
         out = _parse_k_hyd_grid("1e-5,3e-5,1e-4,1e-3,1e-2,1e-1")
@@ -629,7 +629,7 @@ class TestParseKHydGrid:
         assert out[-1] == pytest.approx(1e-1)
 
     def test_whitespace_tolerant(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             _parse_k_hyd_grid,
         )
         out = _parse_k_hyd_grid(" 1e-5 , 1e-4 , 1e-3 ")
@@ -651,10 +651,10 @@ class TestParseLambdaLadder:
     def test_phase_A2_lambda_ladder_cli_default(self):
         """Flag absent -> falls back to imported LAMBDA_LADDER constant
         (0.0, 0.25, 0.50, 0.75, 1.0)."""
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             _parse_args, _parse_lambda_ladder,
         )
-        from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+        from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
             LAMBDA_LADDER,
         )
         args = _parse_args(["--no-plot"])
@@ -667,7 +667,7 @@ class TestParseLambdaLadder:
 
     def test_phase_A2_lambda_ladder_cli_custom(self):
         """--lambda-ladder 0.0,0.5,1.0 parses to the expected tuple."""
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             _parse_args, _parse_lambda_ladder,
         )
         args = _parse_args(
@@ -679,7 +679,7 @@ class TestParseLambdaLadder:
 
     def test_phase_A2_lambda_ladder_cli_b2_locked_grid(self):
         """Step 9 B.2 locked 10-point ladder parses correctly."""
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             _parse_lambda_ladder,
         )
         raw = "0.0,0.10,0.25,0.40,0.50,0.60,0.75,0.85,0.95,1.0"
@@ -693,7 +693,7 @@ class TestParseLambdaLadder:
 
     def test_phase_A2_lambda_ladder_cli_rejects_non_monotonic(self):
         """Non-monotonic input raises SystemExit."""
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             _parse_lambda_ladder,
         )
         with pytest.raises(SystemExit):
@@ -701,7 +701,7 @@ class TestParseLambdaLadder:
 
     def test_phase_A2_lambda_ladder_cli_rejects_off_endpoints(self):
         """Endpoints != 0.0 / 1.0 raise SystemExit."""
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             _parse_lambda_ladder,
         )
         with pytest.raises(SystemExit):
@@ -713,7 +713,7 @@ class TestParseLambdaLadder:
 
     def test_phase_A2_lambda_ladder_cli_rejects_out_of_range(self):
         """Values outside [0, 1] raise SystemExit."""
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             _parse_lambda_ladder,
         )
         with pytest.raises(SystemExit):
@@ -723,7 +723,7 @@ class TestParseLambdaLadder:
 
     def test_phase_A2_lambda_ladder_cli_rejects_empty(self):
         """Empty value (just commas/whitespace) raises SystemExit."""
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             _parse_lambda_ladder,
         )
         with pytest.raises(SystemExit):
@@ -741,7 +741,7 @@ class TestExceptionMessagePrefixesMatchSolver:
     rather than at runtime."""
 
     def test_solver_source_contains_all_three_prefixes(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             EXPECTED_LADDER_EXHAUSTED_PREFIXES,
         )
         solver_path = os.path.join(
@@ -762,7 +762,7 @@ class TestExceptionMessagePrefixesMatchSolver:
         """Cross-check: assert the three prefixes appear in the
         solve_lambda_ramp_from_warm_start function body, not just
         somewhere else in the file."""
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             EXPECTED_LADDER_EXHAUSTED_PREFIXES,
         )
         solver_path = os.path.join(
@@ -795,7 +795,7 @@ class TestExceptionMessagePrefixesMatchSolver:
 
 class TestAugmentRungDiagnostics:
     def test_cd_mA_cm2_uses_negative_i_scale(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             augment_rung_diagnostics,
         )
         rung = {
@@ -814,7 +814,7 @@ class TestAugmentRungDiagnostics:
         assert out["current_filter_ratio"] == pytest.approx(2.0 / 5.5)
 
     def test_x_2e_signs(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             augment_rung_diagnostics,
         )
         rung = {
@@ -833,7 +833,7 @@ class TestAugmentRungDiagnostics:
         assert out["H2O2_selectivity_pct"] == pytest.approx(20.0)
 
     def test_does_not_mutate_input(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             augment_rung_diagnostics,
         )
         rung = {"cd_observable": 0.5, "R_2e_current_nondim": 0.5,
@@ -848,7 +848,7 @@ class TestAugmentRungDiagnostics:
         assert rung == rung_copy
 
     def test_picard_status_propagated(self):
-        from scripts.studies.phase6b_v10a_phase_A2_v_kin import (
+        from scripts.studies.drivers.phase6b_v10a_phase_A2_v_kin import (
             augment_rung_diagnostics,
         )
         out = augment_rung_diagnostics(

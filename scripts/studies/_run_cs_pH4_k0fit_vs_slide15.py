@@ -186,12 +186,12 @@ def _build_sp_cs():
 
 def main() -> int:
     from scripts._bv_common import I_SCALE, L_REF
-    from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+    from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
         _walk_lambda_zero_capture_snapshots,
         _i_lim_4e_mA_cm2,
         L_EFF_M_BASELINE,
     )
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import _per_v_lambda_ramp
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import _per_v_lambda_ramp
     from Forward.bv_solver import make_graded_rectangle_mesh
 
     out_dir = Path(_ROOT) / "StudyResults" / OUT_SUBDIR

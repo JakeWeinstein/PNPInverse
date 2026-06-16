@@ -43,7 +43,7 @@ def test_step10_fit_eval_module_firedrake_free():
         import sys
         sys.path.insert(0, {_ROOT!r})
         # Whitelist scipy/numpy that may be brought in by argparse defaults.
-        import scripts.studies.phase6b_step10_phase_D_fit_eval as drv
+        import scripts.studies.drivers.phase6b_step10_phase_D_fit_eval as drv
         bad = sorted(
             m for m in sys.modules
             if m == "firedrake" or m.startswith("firedrake.")
@@ -71,7 +71,7 @@ def test_step10_fit_eval_module_firedrake_free():
 
 
 def test_step10_fit_eval_cli_parses_minimum():
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import _parse_args
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import _parse_args
 
     args = _parse_args(["--delta-beta", "0.0"])
     assert args.delta_beta == 0.0
@@ -80,7 +80,7 @@ def test_step10_fit_eval_cli_parses_minimum():
 
 
 def test_step10_fit_eval_cli_parses_all_flags():
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import _parse_args
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import _parse_args
 
     args = _parse_args([
         "--delta-beta", "-12.345",
@@ -99,7 +99,7 @@ def test_step10_fit_eval_cli_parses_all_flags():
 
 
 def test_step10_fit_eval_cli_rejects_unknown_sigma_mapping():
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import _parse_args
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import _parse_args
 
     with pytest.raises(SystemExit):
         _parse_args(["--delta-beta", "0.0", "--sigma-mapping", "weird"])
@@ -112,7 +112,7 @@ def test_step10_fit_eval_cli_rejects_unknown_sigma_mapping():
 
 def test_step10_fit_eval_v_grid_locked():
     """Production V grid: 24 unique points, V_KIN and +1.00 present."""
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         V_RHE_PRODUCTION_GRID,
     )
 
@@ -126,7 +126,7 @@ def test_step10_fit_eval_v_grid_locked():
 
 def test_step10_fit_eval_v_grid_a2_warm():
     """A.2 reproduction warm grid: 5 points, V_KIN at the end."""
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import A2_WARM_GRID
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import A2_WARM_GRID
 
     assert len(A2_WARM_GRID) == 5
     assert A2_WARM_GRID[-1] == -0.10
@@ -139,7 +139,7 @@ def test_step10_fit_eval_v_grid_a2_warm():
 
 
 def test_step10_fit_eval_observable_mask_excludes_v_kin():
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         in_observable_mask,
         V_KIN_BYTE_EQUIV_BASELINE,
     )
@@ -163,7 +163,7 @@ def test_step10_fit_eval_ring_onset_interp_synthetic_crossing():
     V=+0.30 and V=+0.20.  Linear interp must reproduce the analytic
     crossing.
     """
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         find_ring_onset_v,
     )
 
@@ -187,7 +187,7 @@ def test_step10_fit_eval_ring_onset_interp_synthetic_crossing():
 
 def test_step10_fit_eval_ring_onset_no_crossing():
     """All currents below threshold → returns None."""
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         find_ring_onset_v,
     )
     onset = find_ring_onset_v(
@@ -200,7 +200,7 @@ def test_step10_fit_eval_ring_onset_no_crossing():
 
 def test_step10_fit_eval_ring_onset_already_above_threshold():
     """Most-anodic V already above threshold → returns that V."""
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         find_ring_onset_v,
     )
     onset = find_ring_onset_v(
@@ -215,7 +215,7 @@ def test_step10_fit_eval_adaptive_refinement_inserts_inside_bracket():
     """Adaptive refinement: 4 additional points spaced 0.01 V inside
     the bracket where the crossing happens.
     """
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         adaptive_ring_onset_refinement_grid,
     )
     # Bracket (0.20, 0.30) (cathodic, anodic).  4 points at 0.01 V
@@ -237,7 +237,7 @@ def test_step10_fit_eval_adaptive_refinement_inserts_inside_bracket():
 
 def test_step10_fit_eval_selectivity_formula_matches_ruggiero():
     """``200 * (I_ring/N) / (|I_disk| + I_ring/N)``.  Synthetic check."""
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         selectivity_h2o2_pct, N_COLLECTION,
     )
     # Pure-2e ORR limit: I_ring / N == |I_disk|, selectivity = 100%.
@@ -256,14 +256,14 @@ def test_step10_fit_eval_selectivity_formula_matches_ruggiero():
 
 
 def test_step10_fit_eval_selectivity_zero_currents_returns_zero():
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         selectivity_h2o2_pct,
     )
     assert selectivity_h2o2_pct(i_disk_mA_cm2=0.0, i_ring_mA_cm2=0.0) == 0.0
 
 
 def test_step10_fit_eval_selectivity_rejects_zero_n_collection():
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         selectivity_h2o2_pct,
     )
     with pytest.raises(ValueError, match="n_collection must be > 0"):
@@ -279,7 +279,7 @@ def test_step10_fit_eval_selectivity_rejects_zero_n_collection():
 
 def test_step10_fit_eval_n_e_rrde_synthetic():
     """``4 · |I_disk| / (|I_disk| + I_ring/N)``."""
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         n_e_rrde, N_COLLECTION,
     )
     # Pure-2e: I_ring / N = |I_disk|, n_e = 4·|I_disk|/(2·|I_disk|) = 2.
@@ -294,7 +294,7 @@ def test_step10_fit_eval_n_e_rrde_synthetic():
 
 
 def test_step10_fit_eval_n_e_zero_currents_returns_4():
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import n_e_rrde
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import n_e_rrde
     assert n_e_rrde(i_disk_mA_cm2=0.0, i_ring_mA_cm2=0.0) == 4.0
 
 
@@ -307,7 +307,7 @@ def test_step10_fit_eval_max_ring_current_extraction():
     """Max ring current uses the **ring basis** field (matches deck's
     Brianna xlsx column 9 "Max Ring Current (mA/cm²)" convention).
     """
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         aggregate_observables,
     )
     recs = [
@@ -335,7 +335,7 @@ def test_step10_fit_eval_max_ring_current_extraction():
 
 def test_step10_fit_eval_unit_conversions_signed_identity():
     """signed_sigma_C_m2 ↔ signed_sigma_counts_pm2 round-trip."""
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         signed_sigma_C_m2_to_counts_pm2,
         cathodic_clamped_sigma_singh,
     )
@@ -363,7 +363,7 @@ def test_step10_fit_eval_nan_aggregation_synthetic_skips_nans():
     """Pure-synthetic NaN-skip: aggregation must SKIP records with
     NaN currents inside the mask without raising.
     """
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         aggregate_observables,
     )
     nan = float("nan")
@@ -389,7 +389,7 @@ def test_step10_fit_eval_nan_aggregation_synthetic_skips_nans():
 
 def test_step10_fit_eval_per_v_gate_status_ok():
     """Plan §D2 HARD per-V gate evaluator — the happy path."""
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         per_v_gate_status,
     )
     rec = {
@@ -404,7 +404,7 @@ def test_step10_fit_eval_per_v_gate_status_ok():
 
 
 def test_step10_fit_eval_per_v_gate_pka_shift_overflow():
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         per_v_gate_status,
         GATE_PKA_SHIFT_OVERFLOW,
     )
@@ -420,7 +420,7 @@ def test_step10_fit_eval_per_v_gate_pka_shift_overflow():
 
 
 def test_step10_fit_eval_per_v_gate_mass_balance_fail():
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         per_v_gate_status,
     )
     rec = {
@@ -433,7 +433,7 @@ def test_step10_fit_eval_per_v_gate_mass_balance_fail():
 
 
 def test_step10_fit_eval_per_v_gate_newton_unconverged():
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         per_v_gate_status,
     )
     passes, status = per_v_gate_status({"snes_converged": False})
@@ -448,7 +448,7 @@ def test_step10_fit_eval_per_v_gate_newton_unconverged():
 
 def test_step10_fit_eval_predict_pka_shift_max():
     """``|pka_shift_max| = |β_K_Cu + Δ_β| · σ_max``."""
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import (
         predict_pka_shift_max,
     )
     # Δ_β = 0, σ_max = 1e-7 → |β_K_Cu| · σ_max ≈ 4.56e-6 (small)

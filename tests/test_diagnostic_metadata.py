@@ -87,7 +87,7 @@ class TestMetadataFromScript:
     """Verify that the multi-seed script's write_metadata produces valid output."""
 
     def test_write_metadata_produces_valid_json(self, tmp_path):
-        from scripts.studies.run_multi_seed_v13 import write_metadata
+        from scripts.studies.drivers.run_multi_seed_v13 import write_metadata
 
         write_metadata(str(tmp_path))
 

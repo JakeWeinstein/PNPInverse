@@ -397,7 +397,7 @@ class TestA0ByteEquivalenceWithA2Baseline:
     def test_a0_matches_committed_a2_record(self):
         import json
 
-        from scripts.studies.phase6b_step6_plumbing_ablation import main
+        from scripts.studies.drivers.phase6b_step6_plumbing_ablation import main
 
         rc = main(["--out-subdir", "phase6b_step6_test_e2e"])
         json_path = os.path.join(

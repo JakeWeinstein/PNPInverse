@@ -89,7 +89,7 @@ class ForwardProblem:
 
     def __init__(self, opts_base):
         self.opts_base = opts_base
-        import scripts.studies.solver_demo_slide15_dual_pathway_cs as dp
+        import scripts.studies.drivers.solver_demo_slide15_dual_pathway_cs as dp
         self.dp = dp
         self.v_deck = list(dp.V_RHE_DECK_GRID_COARSE)
         self.v_solver = [round(v - dp.V_OCP_RHE, 6) for v in self.v_deck]
@@ -392,7 +392,7 @@ def main() -> int:
           f"J*={res.fun:.4f}  x*={np.round(res.x, 4)}", flush=True)
 
     # final: best theta on the fine grid via the driver (full report+score)
-    import scripts.studies.solver_demo_slide15_dual_pathway_cs as dp
+    import scripts.studies.drivers.solver_demo_slide15_dual_pathway_cs as dp
     opts_fine = fp._opts(res.x)
     opts_fine.coarse_grid = False
     report = dp._run(opts_fine)

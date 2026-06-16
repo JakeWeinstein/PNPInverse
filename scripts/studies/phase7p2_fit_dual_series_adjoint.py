@@ -100,7 +100,7 @@ class DualForwardProblem:
                  w_disk_scale=1.0, target_csv=BINNED_CSV):
         self.opts_base = opts_base
         self.w_disk_scale = float(w_disk_scale)
-        import scripts.studies.solver_demo_slide15_dual_pathway_cs as dp
+        import scripts.studies.drivers.solver_demo_slide15_dual_pathway_cs as dp
         self.dp = dp
         self.target = load_dual_target(target_csv)
         self.n_coll = float(n_coll)

@@ -2,7 +2,7 @@
 
 Covers the bracket-construction, loss-extraction, identifiability gate,
 σ-mapping divergence, and outcome-verdict logic in
-``scripts.studies.phase6b_step10_phase_D_orchestrate``.
+``scripts.studies.drivers.phase6b_step10_phase_D_orchestrate``.
 
 All tests in this module are fast (no Firedrake).  Slow integration
 tests for the full 10.B pipeline live in the orchestrator's CLI
@@ -29,7 +29,7 @@ if _ROOT not in sys.path:
 
 def test_stern_delta_beta_for_target_recovers_T():
     """Round-trip: Δ_β = (T - β·σ)/σ ⇒ T = (β + Δ_β)·σ."""
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         stern_delta_beta_for_target,
     )
     beta_K_Cu = -45.608196
@@ -43,7 +43,7 @@ def test_stern_delta_beta_for_target_recovers_T():
 
 
 def test_ablation_delta_beta_for_target_recovers_T():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         ablation_delta_beta_for_target, ABLATION_SIGMA,
     )
     beta_K_Cu = -45.608196
@@ -56,7 +56,7 @@ def test_ablation_delta_beta_for_target_recovers_T():
 
 
 def test_stern_delta_beta_for_target_rejects_zero_sigma():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         stern_delta_beta_for_target,
     )
     with pytest.raises(ZeroDivisionError):
@@ -71,7 +71,7 @@ def test_stern_delta_beta_for_target_rejects_zero_sigma():
 
 
 def test_loss_from_eval_finite_valid():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         loss_from_eval,
     )
     eval_data = {
@@ -87,7 +87,7 @@ def test_loss_from_eval_finite_valid():
 
 
 def test_loss_from_eval_solve_failed():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         loss_from_eval,
     )
     eval_data = {
@@ -110,7 +110,7 @@ def test_loss_from_eval_pka_shift_overflow_priority():
     the eval status is `pka_shift_overflow` (more specific than
     solve_failed).
     """
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         loss_from_eval,
     )
     eval_data = {
@@ -131,7 +131,7 @@ def test_loss_from_eval_pka_shift_overflow_priority():
 
 def test_loss_from_eval_sign_guard_violation_priority():
     """sign_guard_violation takes precedence over solve_failed."""
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         loss_from_eval,
     )
     eval_data = {
@@ -147,7 +147,7 @@ def test_loss_from_eval_sign_guard_violation_priority():
 
 
 def test_loss_from_eval_no_selectivity():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         loss_from_eval,
     )
     eval_data = {
@@ -170,7 +170,7 @@ def test_loss_from_eval_no_selectivity():
 def test_d7_identifiability_gate_passes_clean_unimodal():
     """Synthetic 5-point loss curve that's unimodal + above noise +
     above slope threshold + above range threshold."""
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         d7_identifiability_gate,
     )
     # Build evals at Δ_β values forming a unimodal loss curve.
@@ -190,7 +190,7 @@ def test_d7_identifiability_gate_passes_clean_unimodal():
 
 def test_d7_identifiability_gate_fails_flat_loss():
     """Flat loss curve (range < 1 pp²) → fails range criterion."""
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         d7_identifiability_gate,
     )
     evals = [
@@ -207,7 +207,7 @@ def test_d7_identifiability_gate_fails_flat_loss():
 
 def test_d7_identifiability_gate_fails_noise_floor():
     """Range > 1 pp² but < 3·noise_std → fails noise criterion."""
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         d7_identifiability_gate,
     )
     losses = [10.0, 8.0, 7.5, 8.0, 10.0]  # delta = 2.5
@@ -226,7 +226,7 @@ def test_d7_identifiability_gate_fails_noise_floor():
 
 def test_d7_identifiability_gate_fails_multi_modal():
     """Bi-modal loss (2 interior minima) → fails unimodality."""
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         d7_identifiability_gate,
     )
     losses = [10.0, 2.0, 8.0, 2.5, 10.0]  # 2 interior minima at idx 1, 3
@@ -244,7 +244,7 @@ def test_d7_identifiability_gate_fails_multi_modal():
 
 
 def test_d7_identifiability_gate_too_few_evals():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         d7_identifiability_gate,
     )
     result = d7_identifiability_gate(
@@ -260,7 +260,7 @@ def test_d7_identifiability_gate_too_few_evals():
 
 
 def test_sigma_divergence_within_threshold_ok():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         sigma_mapping_divergence,
     )
     div = sigma_mapping_divergence(
@@ -273,7 +273,7 @@ def test_sigma_divergence_within_threshold_ok():
 
 
 def test_sigma_divergence_above_threshold_flagged():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         sigma_mapping_divergence,
     )
     div = sigma_mapping_divergence(
@@ -284,7 +284,7 @@ def test_sigma_divergence_above_threshold_flagged():
 
 
 def test_sigma_divergence_zero_zero_returns_ok():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         sigma_mapping_divergence,
     )
     div = sigma_mapping_divergence(
@@ -299,7 +299,7 @@ def test_sigma_divergence_zero_zero_returns_ok():
 
 
 def test_determine_outcome_A_locked_pass():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         determine_outcome,
     )
     evals = [
@@ -317,7 +317,7 @@ def test_determine_outcome_A_locked_pass():
 
 
 def test_determine_outcome_B_falsified_primary():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         determine_outcome,
     )
     evals = [
@@ -336,7 +336,7 @@ def test_determine_outcome_B_falsified_primary():
 
 
 def test_determine_outcome_B_falsified_sign_guard():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         determine_outcome,
     )
     evals = [
@@ -353,7 +353,7 @@ def test_determine_outcome_B_falsified_sign_guard():
 
 
 def test_determine_outcome_C_non_identifiable():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         determine_outcome,
     )
     out = determine_outcome(
@@ -371,7 +371,7 @@ def test_determine_outcome_C_non_identifiable():
 
 
 def test_filter_finite_valid():
-    from scripts.studies.phase6b_step10_phase_D_orchestrate import (
+    from scripts.studies.drivers.phase6b_step10_phase_D_orchestrate import (
         filter_finite_valid,
     )
     evals = [

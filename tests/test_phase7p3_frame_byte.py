@@ -25,7 +25,7 @@ _ROOT = os.path.dirname(_THIS_DIR)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import scripts.studies.solver_demo_slide15_dual_pathway_cs as dp
+import scripts.studies.drivers.solver_demo_slide15_dual_pathway_cs as dp
 
 # pH-6.39 lock config (matches phase7p2_fit_dual_series_adjoint.py defaults).
 BULK_H_PH639 = 4.07e-4   # mol/m³ -> pH 6.39 (the anchor)

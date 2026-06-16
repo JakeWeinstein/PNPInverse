@@ -57,13 +57,13 @@ def _check_module_firedrake_free(module_dotted: str) -> None:
 
 def test_phase6b_v10b_cs_bracket_module_firedrake_free():
     _check_module_firedrake_free(
-        "scripts.studies.phase6b_v10b_cs_bracket"
+        "scripts.studies.drivers.phase6b_v10b_cs_bracket"
     )
 
 
 def test_phase6b_v10b_gamma_kdes_matrix_module_firedrake_free():
     _check_module_firedrake_free(
-        "scripts.studies.phase6b_v10b_gamma_kdes_matrix"
+        "scripts.studies.drivers.phase6b_v10b_gamma_kdes_matrix"
     )
 
 
@@ -73,7 +73,7 @@ def test_phase6b_v10b_gamma_kdes_matrix_module_firedrake_free():
 
 
 def test_phase6b_v10b_cs_bracket_cli_parses():
-    from scripts.studies.phase6b_v10b_cs_bracket import _parse_args
+    from scripts.studies.drivers.phase6b_v10b_cs_bracket import _parse_args
 
     args = _parse_args([
         "--v-kin", "-0.10",
@@ -91,7 +91,7 @@ def test_phase6b_v10b_cs_bracket_cli_parses():
 
 def test_phase6b_v10b_cs_bracket_target_grid():
     """The default C_S bracket is the 4-rung Pillai-safe-band set."""
-    from scripts.studies.phase6b_v10b_cs_bracket import CS_BRACKET, _parse_cs_bracket
+    from scripts.studies.drivers.phase6b_v10b_cs_bracket import CS_BRACKET, _parse_cs_bracket
 
     assert CS_BRACKET == (0.05, 0.10, 0.20, 0.30)
     parsed = _parse_cs_bracket("0.05,0.10,0.20,0.30")
@@ -99,7 +99,7 @@ def test_phase6b_v10b_cs_bracket_target_grid():
 
 
 def test_phase6b_v10b_cs_bracket_rejects_invalid_entries():
-    from scripts.studies.phase6b_v10b_cs_bracket import _parse_cs_bracket
+    from scripts.studies.drivers.phase6b_v10b_cs_bracket import _parse_cs_bracket
 
     with pytest.raises(ValueError, match="positive"):
         _parse_cs_bracket("0.05,-0.10,0.20")
@@ -111,7 +111,7 @@ def test_phase6b_v10b_cs_bracket_rejects_invalid_entries():
 
 def test_phase6b_v10b_cs_bracket_output_schema():
     """The hard-gate evaluator emits all required schema keys."""
-    from scripts.studies.phase6b_v10b_cs_bracket import _evaluate_hard_gates
+    from scripts.studies.drivers.phase6b_v10b_cs_bracket import _evaluate_hard_gates
 
     lam1: Dict[str, Any] = {
         "cd_mA_cm2": -3.12,
@@ -138,7 +138,7 @@ def test_phase6b_v10b_cs_bracket_output_schema():
 
 
 def test_phase6b_v10b_gamma_kdes_matrix_cli_parses():
-    from scripts.studies.phase6b_v10b_gamma_kdes_matrix import _parse_args
+    from scripts.studies.drivers.phase6b_v10b_gamma_kdes_matrix import _parse_args
 
     args = _parse_args([
         "--v-kin", "-0.10",
@@ -156,7 +156,7 @@ def test_phase6b_v10b_gamma_kdes_matrix_cli_parses():
 
 def test_phase6b_v10b_gamma_kdes_matrix_target_grid():
     """Per plan D7-D4: 3 Gamma_max x 5 k_des x 2 k_hyd = 30 rungs."""
-    from scripts.studies.phase6b_v10b_gamma_kdes_matrix import (
+    from scripts.studies.drivers.phase6b_v10b_gamma_kdes_matrix import (
         K_DES_BRACKET, K_HYD_BRACKET, GAMMA_MAX_RATIOS, _enumerate_rungs,
     )
 
@@ -184,7 +184,7 @@ def test_phase6b_v10b_gamma_kdes_matrix_target_grid():
 def test_phase6b_v10b_gamma_kdes_matrix_output_schema():
     """The matrix hard-gate evaluator emits the same schema as the
     C_S bracket evaluator."""
-    from scripts.studies.phase6b_v10b_gamma_kdes_matrix import (
+    from scripts.studies.drivers.phase6b_v10b_gamma_kdes_matrix import (
         _evaluate_hard_gates,
     )
     lam1: Dict[str, Any] = {
@@ -213,7 +213,7 @@ def test_phase6b_v10b_gamma_kdes_matrix_output_schema():
 def test_hard_gates_reject_positive_cd_at_v_kin():
     """cd_mA_cm2 must be negative at V_kin (cathodic).  Positive cd
     fails the gate."""
-    from scripts.studies.phase6b_v10b_cs_bracket import _evaluate_hard_gates
+    from scripts.studies.drivers.phase6b_v10b_cs_bracket import _evaluate_hard_gates
 
     lam1 = {
         "cd_mA_cm2": 0.5,                         # WRONG sign
@@ -231,7 +231,7 @@ def test_hard_gates_reject_positive_cd_at_v_kin():
 def test_hard_gates_reject_negative_r4_above_floor():
     """R_4e_current_nondim < 0 with magnitude above floor fails the
     sign gate."""
-    from scripts.studies.phase6b_v10b_cs_bracket import _evaluate_hard_gates
+    from scripts.studies.drivers.phase6b_v10b_cs_bracket import _evaluate_hard_gates
 
     lam1 = {
         "cd_mA_cm2": -3.12,
@@ -249,7 +249,7 @@ def test_hard_gates_reject_negative_r4_above_floor():
 def test_hard_gates_skip_r4_sign_below_floor():
     """R_4e_current_nondim with |value| below R_4E_SIGN_FLOOR is N/A
     (does not fail the gate just because magnitude is tiny)."""
-    from scripts.studies.phase6b_v10b_cs_bracket import _evaluate_hard_gates
+    from scripts.studies.drivers.phase6b_v10b_cs_bracket import _evaluate_hard_gates
 
     lam1 = {
         "cd_mA_cm2": -3.12,
@@ -267,7 +267,7 @@ def test_hard_gates_skip_r4_sign_below_floor():
 def test_hard_gates_reject_negative_r_net():
     """R_net < 0 fails (R_net = k_des * Gamma should be non-negative
     by construction)."""
-    from scripts.studies.phase6b_v10b_cs_bracket import _evaluate_hard_gates
+    from scripts.studies.drivers.phase6b_v10b_cs_bracket import _evaluate_hard_gates
 
     lam1 = {
         "cd_mA_cm2": -3.12,
@@ -284,7 +284,7 @@ def test_hard_gates_reject_negative_r_net():
 
 def test_hard_gates_reject_high_mass_balance_residual():
     """|Gamma_solver - Gamma_analytic| / max(...) > 5e-3 fails."""
-    from scripts.studies.phase6b_v10b_cs_bracket import _evaluate_hard_gates
+    from scripts.studies.drivers.phase6b_v10b_cs_bracket import _evaluate_hard_gates
 
     lam1 = {
         "cd_mA_cm2": -3.12,

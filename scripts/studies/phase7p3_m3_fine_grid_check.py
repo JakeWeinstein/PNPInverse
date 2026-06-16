@@ -82,7 +82,7 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     from scripts._bv_common import setup_firedrake_env
     setup_firedrake_env()
-    import scripts.studies.solver_demo_slide15_dual_pathway_cs as dp
+    import scripts.studies.drivers.solver_demo_slide15_dual_pathway_cs as dp
 
     runs = {}
     for tag, routes, k0c1 in [("N0_fine", "water", 1.0),

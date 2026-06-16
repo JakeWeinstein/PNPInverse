@@ -193,11 +193,11 @@ def main() -> int:
     OUT_SUBDIR = str(args.out_name)
 
     from scripts._bv_common import I_SCALE, L_REF
-    from scripts.studies.phase6b_v10a_v_sweep_diagnostic import (
+    from scripts.studies.drivers.phase6b_v10a_v_sweep_diagnostic import (
         _walk_lambda_zero_capture_snapshots,
         _i_lim_4e_mA_cm2,
     )
-    from scripts.studies.phase6b_step10_phase_D_fit_eval import _per_v_lambda_ramp
+    from scripts.studies.drivers.phase6b_step10_phase_D_fit_eval import _per_v_lambda_ramp
     from Forward.bv_solver import make_graded_rectangle_mesh
 
     factor_label = f"factor_{K0_R4E_FACTOR:.2e}".replace("+", "p").replace("-", "n")

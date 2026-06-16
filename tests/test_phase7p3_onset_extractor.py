@@ -17,7 +17,7 @@ _ROOT = os.path.dirname(_THIS)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import scripts.studies.phase7p3_p0_2_onset_extractor as ox
+import scripts.studies.drivers.phase7p3_p0_2_onset_extractor as ox
 
 
 def test_onset_clean_monotone_curve():

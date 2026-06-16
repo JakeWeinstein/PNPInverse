@@ -170,7 +170,7 @@ class TestEscapeEqualsProduction:
         # harness).  Anchor at REST, warm-walk one plateau point
         # (V_RHE 0.20 -> V_solver -0.819).
         from types import SimpleNamespace
-        import scripts.studies.solver_demo_slide15_dual_pathway_cs as dp
+        import scripts.studies.drivers.solver_demo_slide15_dual_pathway_cs as dp
 
         V_TARGET = -0.819
         opts = SimpleNamespace(
