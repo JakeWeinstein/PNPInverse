@@ -54,8 +54,9 @@ Per-investigation findings: `~/.claude/projects/.../memory/MEMORY.md`.
 
 ## Inverse status: paused
 
-Inverse scripts (`scripts/studies/v*.py`, `scripts/Inference/`) are
-non-operational. When resumed, start from
+Inverse scripts (the legacy `scripts/studies/v*.py` family, `scripts/Inference/`,
+`scripts/surrogate/`) were non-operational and were **removed in the 2026-06-15
+repo cleanup** (recoverable from git history). When resumed, start from
 `docs/inverse/CHATGPT_HANDOFF_10_LM_TIKHONOV_BASIN_GEOMETRY.md`.
 
 ## Source-of-truth docs (read before opining on status)
@@ -159,7 +160,7 @@ non-operational. When resumed, start from
    warranted, apply uniform `-V_OCP_RHE` shift to V_RHE grid AND
    both E° (R2e + R4e) — preserves η for both reactions. Same
    trick used for the Jithin reproduction (shift = -0.785 V) in
-   `scripts/studies/_run_jithin_fig_4_26_28.py`. Caveat: 0.47 V is
+   `scripts/studies/drivers/_run_jithin_fig_4_26_28.py`. Caveat: 0.47 V is
    only documented in Yash's notebook — confirm with Linsey/Niall
    before a production recalibration. Memory note:
    `project_deck_ocp_convention.md`.
@@ -202,11 +203,15 @@ Phase-1 cold-start fails 13/13 around V ≈ +0.55 V):
 
 | Driver | Stack | Use when |
 |---|---|---|
-| `scripts/studies/phase6b_step6_plumbing_ablation.py` | K⁺/SO₄²⁻ + cation hydrolysis + step 6 ablation flags | Plumbing verification at V_kin |
-| `scripts/studies/phase6b_v10a_phase_A2_v_kin.py` | K⁺/SO₄²⁻ + v10a Langmuir cap, k_hyd ramp | Phase A.2 baseline reproduction |
-| `scripts/studies/phase6b_v10a_v_sweep_diagnostic.py` | K⁺/SO₄²⁻ + v10a' V-sweep | V_kin selection diagnostic |
-| `scripts/studies/l_eff_transport_sweep_csplus_so4.py` | Cs⁺/SO₄²⁻ multi-ion + parallel 2e/4e + `--enable-water-ionization` | Phase 6α validation |
-| `scripts/studies/mangan_full_grid_csplus_so4.py` | Cs⁺/SO₄²⁻ multi-ion | Deck page-15 V_RHE band |
+| `scripts/studies/drivers/phase6b_step6_plumbing_ablation.py` | K⁺/SO₄²⁻ + cation hydrolysis + step 6 ablation flags | Plumbing verification at V_kin |
+| `scripts/studies/drivers/phase6b_v10a_phase_A2_v_kin.py` | K⁺/SO₄²⁻ + v10a Langmuir cap, k_hyd ramp | Phase A.2 baseline reproduction |
+| `scripts/studies/drivers/phase6b_v10a_v_sweep_diagnostic.py` | K⁺/SO₄²⁻ + v10a' V-sweep | V_kin selection diagnostic |
+| `scripts/studies/drivers/l_eff_transport_sweep_csplus_so4.py` | Cs⁺/SO₄²⁻ multi-ion + parallel 2e/4e + `--enable-water-ionization` | Phase 6α validation |
+| `scripts/studies/drivers/mangan_full_grid_csplus_so4.py` | Cs⁺/SO₄²⁻ multi-ion | Deck page-15 V_RHE band |
+
+After the 2026-06-15 cleanup, re-runnable reference drivers live under
+`scripts/studies/drivers/`, plotters under `scripts/studies/plot/`, data
+extractors under `scripts/studies/extract/`. See `REPO_LAYOUT.md`.
 
 ### Gotchas
 
